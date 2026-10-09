@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from contextvars import ContextVar
 from dataclasses import dataclass
 from enum import Enum
@@ -57,9 +57,10 @@ class Registration:
 
 
 class Resolver:
-    def __init__(self, container: "Container", cache: dict[str, Any]):
+    def __init__(self, container: "Container", cache: dict[str, Any], stack: ExitStack | None = None):
         self._container = container
         self._cache = cache
+        self._stack = stack
         self._resolving: set[str] = set()
 
     def resolve(self, name: str) -> Any:
@@ -75,6 +76,8 @@ class Resolver:
         self._resolving.add(name)
         try:
             instance = registration.factory(self)
+            if self._stack is not None and hasattr(instance, "__enter__") and hasattr(instance, "__exit__"):
+                instance = self._stack.enter_context(instance)
         finally:
             self._resolving.remove(name)
         if cache is not None:
@@ -86,19 +89,37 @@ class Container:
     def __init__(self) -> None:
         self._registrations: dict[str, Registration] = {}
         self._singletons: dict[str, Any] = {}
+        self._closed = False
 
     def register(self, name: str, factory: Callable[[Resolver], Any],
                  lifetime: Lifetime = Lifetime.TRANSIENT) -> None:
+        if self._closed:
+            raise DependencyError("Container is closed")
         if name in self._registrations:
             raise DependencyError(f"Duplicate registration: {name}")
         self._registrations[name] = Registration(factory, lifetime)
 
     def resolve(self, name: str) -> Any:
+        if self._closed:
+            raise DependencyError("Container is closed")
         return Resolver(self, {}).resolve(name)
+
+    def validate(self, required: tuple[str, ...] = ()) -> None:
+        """Validate explicitly required services before startup."""
+        missing = [name for name in required if name not in self._registrations]
+        if missing:
+            raise DependencyError(f"Missing required registrations: {missing}")
+
+    def close(self) -> None:
+        self._singletons.clear()
+        self._closed = True
 
     @contextmanager
     def scope(self):
-        yield Resolver(self, {})
+        if self._closed:
+            raise DependencyError("Container is closed")
+        with ExitStack() as stack:
+            yield Resolver(self, {}, stack)
 
 
 def build_container(settings: Settings | None = None) -> Container:
