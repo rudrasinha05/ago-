@@ -59,3 +59,15 @@ def create_plan(data: PlanInput, db=Depends(db_connection), actor: Principal = D
 def list_plans(db=Depends(db_connection), actor: Principal = Depends(authenticated)):
     allowed(db, actor, "brain:read")
     return PlanStore(db).list(tenant_id=actor.tenant_id)
+
+@router.post("/plans/{plan_id}/steps")
+def add_step(plan_id: UUID, data: StepInput, db=Depends(db_connection),
+             actor: Principal = Depends(authenticated)):
+    allowed(db, actor, "brain:manage")
+    try:
+        return {"id": PlanStore(db).add_step(
+            tenant_id=actor.tenant_id, plan_id=str(plan_id), action=data.action,
+            assignee_id=str(data.assignee_id),
+            depends_on=str(data.depends_on) if data.depends_on else None)}
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
