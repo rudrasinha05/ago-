@@ -6,6 +6,10 @@ on:
     branches: [develop]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  statuses: write
+
 jobs:
   foundation-and-m2:
     runs-on: ubuntu-latest
@@ -46,3 +50,14 @@ jobs:
         run: python -m ruff check ago tests
       - name: Run unit and PostgreSQL integration tests
         run: python -m pytest -q
+      - name: Report CI result to commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          RUN_STATUS: ${{ job.status }}
+        run: |
+          if [ "$RUN_STATUS" = "success" ]; then STATE=success; else STATE=failure; fi
+          gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
+            -f state="$STATE" -f context="ago/m2-backend-ci" \
+            -f description="M2 migration, lint and test gate: $RUN_STATUS"
