@@ -22,6 +22,7 @@ FOUNDER_PERMISSIONS = (
     "experiments:propose",
     "experiments:read",
     "agent:dispatch",
+    "agent:recover",
     "agent:read",
     "brain:manage",
     "brain:read",
