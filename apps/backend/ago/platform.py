@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ago.events import EventBus
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AGO_", extra="ignore")
@@ -135,4 +137,5 @@ def build_container(settings: Settings | None = None) -> Container:
     container = Container()
     container.register("settings", lambda _: settings or Settings(), Lifetime.SINGLETON)
     container.register("logger", lambda _: logging.getLogger("ago"), Lifetime.SINGLETON)
+    container.register("event_bus", lambda _: EventBus(), Lifetime.SINGLETON)
     return container
