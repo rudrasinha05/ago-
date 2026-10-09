@@ -32,3 +32,19 @@ def test_opt_in_auth_router_issues_valid_token():
     assert client.post("/auth/login", json={
         "tenant_id": "tenant-a", "email": "user@example.com", "password": "wrong"
     }).status_code == 401
+
+
+def test_login_throttling():
+    from ago.rate_limit import RateLimiter
+    app = FastAPI()
+    app.include_router(build_auth_router(AuthDependencies(
+        identity=Identity(), tokens=SessionTokens("a" * 48),
+        tenant_validator=lambda _: True,
+        limiter=RateLimiter(limit=1),
+    )))
+    client = TestClient(app)
+    payload = {
+        "tenant_id": "tenant-a", "email": "user@example.com", "password": "password"
+    }
+    assert client.post("/auth/login", json=payload).status_code == 200
+    assert client.post("/auth/login", json=payload).status_code == 429
