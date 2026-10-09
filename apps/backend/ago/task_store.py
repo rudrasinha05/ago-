@@ -83,6 +83,17 @@ class TaskStore:
             TaskStatus.RUNNING, str(task["approval_id"]),
         )
 
+    def list_tasks(self, *, tenant_id: str, limit: int = 100) -> list[dict]:
+        if not 1 <= limit <= 100:
+            raise ValueError("Invalid task list limit")
+        rows = self.connection.execute(
+            """SELECT id, action, assignee_id, approval_id, status, created_at
+               FROM ago_governed_tasks WHERE tenant_id=%s
+               ORDER BY created_at DESC, id LIMIT %s""",
+            (tenant_id, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def finish(self, *, task_id: str, tenant_id: str, success: bool) -> None:
         with self.connection.transaction():
             row = self.connection.execute(
