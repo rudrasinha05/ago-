@@ -44,3 +44,29 @@ def test_idempotent_ledger_and_hard_cap(case):
                      category="agent", operation_key="overspend")
     with pytest.raises(PermissionError):
         store.configure(tenant_id=tenant, ceiling="1")
+
+
+def test_usage_history_is_append_only(case):
+    psycopg = pytest.importorskip("psycopg")
+    db, tenant, user = case
+    store = CreditBudget(db)
+    store.configure(tenant_id=tenant, ceiling="5")
+    entry = store.charge(tenant_id=tenant, actor_id=user, amount="2",
+                         category="audit", operation_key="immutable")
+    with pytest.raises(psycopg.errors.RaiseException):
+        with db.transaction():
+            db.execute("DELETE FROM ago_credit_usage WHERE id=%s", (entry["id"],))
+
+
+def test_simulation_flags_cost_and_failure_risk():
+    result = ScenarioSimulator.estimate(
+        planned_actions=10, cost_per_action="2.5",
+        available_credits="15", failure_percent=40,
+    )
+    assert result["simulation_only"] is True
+    assert "budget_shortfall" in result["risk_flags"]
+    assert "high_failure_rate" in result["risk_flags"]
+    with pytest.raises(ValueError):
+        ScenarioSimulator.estimate(
+            planned_actions=-1, cost_per_action="1", available_credits="2",
+        )
