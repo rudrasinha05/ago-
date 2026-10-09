@@ -94,7 +94,7 @@ def db_connection():
         import psycopg
         from psycopg.rows import dict_row
 
-        with psycopg.connect(dsn, connect_timeout=3, row_factory=dict_row) as db:
+        with psycopg.connect(dsn, connect_timeout=3, row_factory=dict_row, autocommit=True) as db:
             yield db
     except ImportError as exc:
         raise HTTPException(503, "PostgreSQL driver unavailable") from exc
