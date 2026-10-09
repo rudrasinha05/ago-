@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from ago.api_m2 import router as m2_router
 from ago.platform import Settings, build_container, configure_logging, request_id
 from ago.readiness import ReadinessChecks
 
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     checks = ReadinessChecks()
     checks.register("postgres", postgres_available)
     app.state.readiness_checks = checks
+    app.include_router(m2_router)
 
     @app.middleware("http")
     async def correlate(request: Request, call_next):
