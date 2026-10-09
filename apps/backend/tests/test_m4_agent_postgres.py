@@ -82,3 +82,27 @@ def test_unregistered_handler_cannot_claim_task(case):
     assert db.execute(
         "SELECT status FROM ago_governed_tasks WHERE id=%s", (task_id,),
     ).fetchone()["status"] == "waiting_approval"
+
+
+def test_operator_can_mark_abandoned_run_failed_without_replay(case):
+    db, tenant, user, reviewer, agent = case
+    task_id = approved_task(db, tenant, user, reviewer, agent)
+    TaskStore(db).authorize_and_start(
+        task_id=task_id, principal=Principal(user.id, tenant, ("operator",)),
+    )
+    run_id = str(uuid4())
+    db.execute(
+        """INSERT INTO ago_agent_runs
+           (id,tenant_id,task_id,agent_id,executor_id,status,started_at)
+           VALUES (%s,%s,%s,%s,%s,'running',now()-interval '2 hours')""",
+        (run_id, tenant, task_id, agent.id, user.id),
+    )
+    runtime = AgentRuntime(db)
+    assert runtime.recover_stale(tenant_id=tenant) == 1
+    assert runtime.recover_stale(tenant_id=tenant) == 0
+    assert db.execute(
+        "SELECT status FROM ago_governed_tasks WHERE id=%s", (task_id,),
+    ).fetchone()["status"] == "failed"
+    assert db.execute(
+        "SELECT failure_code FROM ago_agent_runs WHERE id=%s", (run_id,),
+    ).fetchone()["failure_code"] == "worker_timeout"
