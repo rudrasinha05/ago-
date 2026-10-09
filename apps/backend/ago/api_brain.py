@@ -76,3 +76,14 @@ def add_step(plan_id: UUID, data: StepInput, db=Depends(db_connection),
 def list_steps(plan_id: UUID, db=Depends(db_connection), actor: Principal = Depends(authenticated)):
     allowed(db, actor, 'brain:read')
     return PlanStore(db).steps(tenant_id=actor.tenant_id, plan_id=str(plan_id))
+
+@router.post("/plans/{plan_id}/submit")
+def submit_plan(plan_id: UUID, db=Depends(db_connection),
+                actor: Principal = Depends(authenticated)):
+    allowed(db, actor, "brain:manage")
+    try:
+        approval_id = PlanStore(db).submit(
+            tenant_id=actor.tenant_id, plan_id=str(plan_id), requester_id=actor.subject)
+        return {"approval_id": approval_id, "status": "pending_approval"}
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
