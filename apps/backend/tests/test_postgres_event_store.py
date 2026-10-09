@@ -53,3 +53,16 @@ def test_postgres_enqueue_rollback(store):
             store.enqueue(event, connection)
             raise RuntimeError("rollback")
     assert event.id not in [item.id for item in store.pending(1000)]
+
+
+def test_postgres_dead_letter_replay(store):
+    event = Event("integration.replay", {})
+    store.enqueue(event)
+    assert event.id in [item.id for item in store.claim("replay-worker")]
+    assert store.renew_lease(event.id, "replay-worker", 30)
+    assert not store.renew_lease(event.id, "wrong-worker", 30)
+    assert store.failed(event.id, "replay-worker", "failed", max_attempts=1)
+    assert event.id in [item.id for item in store.dead_letters()]
+    assert store.replay_dead_letter(event.id)
+    assert not store.replay_dead_letter(event.id)
+    assert event.id in [item.id for item in store.pending()]
