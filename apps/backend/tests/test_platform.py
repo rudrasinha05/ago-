@@ -86,3 +86,21 @@ def test_closed_container_rejects_resolution_and_registration():
         container.resolve("unknown")
     with pytest.raises(DependencyError, match="closed"):
         container.register("new", lambda _: 1)
+
+
+def test_singleton_cannot_capture_scoped_dependency():
+    container = Container()
+    container.register("scoped", lambda _: object(), Lifetime.SCOPED)
+    container.register("singleton", lambda resolver: resolver.resolve("scoped"), Lifetime.SINGLETON)
+    with container.scope() as resolver:
+        with pytest.raises(DependencyError, match="Singleton cannot depend on scoped"):
+            resolver.resolve("singleton")
+
+
+def test_scoped_resolver_cannot_resolve_after_container_close():
+    container = Container()
+    container.register("value", lambda _: 7)
+    with container.scope() as resolver:
+        container.close()
+        with pytest.raises(DependencyError, match="closed"):
+            resolver.resolve("value")
