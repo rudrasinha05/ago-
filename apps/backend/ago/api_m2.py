@@ -6,7 +6,6 @@ tenant-scoped database grants. No caller-provided 'authorized' field is accepted
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
 from dataclasses import asdict
 from typing import Annotated
 from uuid import UUID
