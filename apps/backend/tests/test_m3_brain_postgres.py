@@ -148,3 +148,29 @@ def test_cross_tenant_parent_cannot_be_selected(case):
             tenant_id=other, created_by=author.id,
             title="Invalid child", parent_id=parent,
         )
+
+
+def test_goal_closure_blocks_plan_materialization(case):
+    db, tenant, author, reviewer, agent = case
+    goal = GoalStore(db).create(
+        tenant_id=tenant, created_by=author.id, title="Temporary objective",
+    )
+    plan = PlanStore(db).create(
+        tenant_id=tenant, proposer_id=author.id, goal_id=goal,
+        title="Retired strategy",
+    )
+    PlanStore(db).add_step(
+        tenant_id=tenant, plan_id=plan,
+        action="internal:brief", assignee_id=agent.id,
+    )
+    approval = PlanStore(db).submit(
+        tenant_id=tenant, plan_id=plan, requester_id=author.id,
+    )
+    ApprovalRepository(db).decide(
+        request_id=approval, tenant_id=tenant, reviewer_id=reviewer.id,
+        approve=True, reason="Reviewed", authorized=True,
+    )
+    PlanExecution(db).activate(tenant_id=tenant, plan_id=plan)
+    GoalStore(db).close(tenant_id=tenant, goal_id=goal, status="cancelled")
+    with pytest.raises(PermissionError):
+        PlanExecution(db).materialize(tenant_id=tenant, plan_id=plan)
