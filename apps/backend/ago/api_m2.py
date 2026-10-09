@@ -331,3 +331,58 @@ def get_memory(
         return asdict(record)
     except (PermissionError, LookupError) as exc:
         translate_error(exc)
+
+
+@router.get("/organization/departments")
+def list_departments(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+):
+    allowed(db, actor, "organization:read")
+    return [
+        asdict(d) for d in OrganizationStore(db).list_departments(tenant_id=actor.tenant_id)
+    ]
+
+
+@router.get("/organization/employees")
+def list_employees(
+    department_id: UUID, db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+):
+    allowed(db, actor, "organization:read")
+    return [
+        asdict(e) for e in OrganizationStore(db).list_employees(
+            tenant_id=actor.tenant_id, department_id=str(department_id),
+        )
+    ]
+
+
+@router.get("/governance/approvals")
+def list_approvals(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+):
+    allowed(db, actor, "approval:read")
+    return ApprovalRepository(db).list_requests(tenant_id=actor.tenant_id)
+
+
+@router.get("/tasks")
+def list_tasks(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+):
+    allowed(db, actor, "task:read")
+    return TaskStore(db).list_tasks(tenant_id=actor.tenant_id)
+
+
+@router.get("/tasks/{task_id}/review")
+def get_task_review(
+    task_id: UUID, db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+):
+    allowed(db, actor, "qa:read")
+    row = db.execute(
+        """SELECT task_id, author_id, reviewer_id, verdict, evidence, created_at
+           FROM ago_task_reviews WHERE tenant_id=%s AND task_id=%s""",
+        (actor.tenant_id, str(task_id)),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Review not found")
+    return dict(row)
