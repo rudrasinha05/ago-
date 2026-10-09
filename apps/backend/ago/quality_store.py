@@ -31,6 +31,8 @@ class QualityStore:
             ).fetchone()
             if task is None or task["status"] not in ("completed", "failed"):
                 raise PermissionError("Only finished tasks may be reviewed")
+            if verdict == Verdict.PASS and task["status"] != "completed":
+                raise PermissionError("Failed tasks cannot receive passing QA")
             human = self.connection.execute(
                 """SELECT 1 FROM ago_employees
                    WHERE tenant_id=%s AND id=%s AND kind='human'""",
