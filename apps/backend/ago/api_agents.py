@@ -32,3 +32,13 @@ def execute(task_id: UUID, db=Depends(db_connection),
         translate_error(exc)
     except RuntimeError as exc:
         raise HTTPException(502, "Agent handler failed") from exc
+
+
+@router.post("/recover-stale")
+def recover_stale(db=Depends(db_connection),
+                  actor: Principal = Depends(authenticated)):
+    allowed(db, actor, "agent:recover")
+    return {
+        "failed_runs": AgentRuntime(db).recover_stale(tenant_id=actor.tenant_id),
+        "manual_reconciliation_required": True,
+    }
