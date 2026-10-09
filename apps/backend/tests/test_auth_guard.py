@@ -36,3 +36,22 @@ def test_guard_requires_bearer_and_tenant_permission():
     assert client.get(
         "/tenants/tenant-a/tasks", headers={"Authorization": "Bearer invalid"}
     ).status_code == 401
+
+
+def test_revoked_token_is_rejected():
+    from ago.auth_guard import bearer_principal
+
+    tokens = SessionTokens("s" * 48)
+    token = tokens.issue(Principal("user", "tenant-a", ("reader",)))
+    app = FastAPI()
+
+    @app.get("/protected")
+    def protected(principal: Annotated[
+        Principal, Depends(bearer_principal(tokens, is_revoked=lambda value: value == token))
+    ]):
+        return {"subject": principal.subject}
+
+    response = TestClient(app).get(
+        "/protected", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 401
