@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import os
 from pathlib import Path
 
@@ -12,11 +11,9 @@ from ago.event_worker import EventWorker
 from ago.events import EventBus
 from ago.postgres_event_store import PostgresEventStore
 
-logger = logging.getLogger(__name__)
-
 
 def migration_directory() -> Path:
-    return Path(__file__).resolve().parents[3] / "deploy" / "sql"
+    return Path(__file__).resolve().parents[2] / "deploy" / "sql"
 
 
 def migrate(dsn: str, directory: Path | None = None) -> list[str]:
