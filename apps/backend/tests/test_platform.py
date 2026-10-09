@@ -51,3 +51,38 @@ def test_health_and_request_id():
     assert response.json() == {"status": "ok"}
     assert response.headers["x-request-id"]
     assert client.get("/health/ready").status_code == 200
+
+
+def test_required_registration_validation():
+    container = Container()
+    container.register("known", lambda _: 1)
+    container.validate(("known",))
+    with pytest.raises(DependencyError, match="Missing required"):
+        container.validate(("missing",))
+
+
+def test_scoped_context_cleanup():
+    from contextlib import contextmanager
+
+    closed = []
+
+    @contextmanager
+    def resource():
+        yield "resource"
+        closed.append(True)
+
+    container = Container()
+    container.register("resource", lambda _: resource(), Lifetime.SCOPED)
+    with container.scope() as resolver:
+        assert resolver.resolve("resource") == "resource"
+        assert closed == []
+    assert closed == [True]
+
+
+def test_closed_container_rejects_resolution_and_registration():
+    container = Container()
+    container.close()
+    with pytest.raises(DependencyError, match="closed"):
+        container.resolve("unknown")
+    with pytest.raises(DependencyError, match="closed"):
+        container.register("new", lambda _: 1)
