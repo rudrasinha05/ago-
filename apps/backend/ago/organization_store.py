@@ -56,6 +56,16 @@ class OrganizationStore:
             )
         return record
 
+    def list_departments(self, *, tenant_id: str) -> list[Department]:
+        rows = self.connection.execute(
+            "SELECT id, tenant_id, name FROM ago_departments WHERE tenant_id=%s ORDER BY name",
+            (tenant_id,),
+        ).fetchall()
+        return [
+            Department(str(row["id"]), str(row["tenant_id"]), row["name"])
+            for row in rows
+        ]
+
     def list_employees(self, *, tenant_id: str, department_id: str) -> list[Employee]:
         rows = self.connection.execute(
             """SELECT id, tenant_id, department_id, name, kind, manager_id
