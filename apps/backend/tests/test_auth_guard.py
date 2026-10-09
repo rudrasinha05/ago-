@@ -55,3 +55,20 @@ def test_revoked_token_is_rejected():
         "/protected", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 401
+
+
+def test_guard_dependency_schema_does_not_require_query_principal():
+    tokens = SessionTokens("s" * 48)
+    app = FastAPI()
+    guard = permission_guard(
+        tokens, Access(), "tasks:read", lambda request: request.path_params["tenant_id"]
+    )
+
+    @app.get("/tenants/{tenant_id}/tasks-check")
+    def check(principal: Annotated[Principal, Depends(guard)]):
+        return {"subject": principal.subject}
+
+    parameters = app.openapi()["paths"]["/tenants/{tenant_id}/tasks-check"]["get"].get(
+        "parameters", []
+    )
+    assert not any(item["name"] in {"principal", "credentials"} for item in parameters)
