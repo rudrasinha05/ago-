@@ -88,3 +88,21 @@ def test_company_plan_agent_and_economics_workflow(case):
     assert not post(client, "/v1/insights/usage", founder,
                     {"operation_key": "research-one", "amount": "4",
                      "category": "research"})["charged"]
+
+    preview = post(client, "/v1/insights/simulate", founder,
+                   {"planned_actions": 20, "cost_per_action": "2",
+                    "failure_percent": 40})
+    assert preview["simulation_only"]
+    assert "budget_shortfall" in preview["risk_flags"]
+    experiment = post(client, "/v1/insights/experiments", founder,
+                      {"hypothesis": "Try smaller groups",
+                       "baseline": "Current process",
+                       "candidate": "Small independent teams"})
+    post(client, f"/v1/governance/approvals/{experiment['approval_id']}/decision",
+         reviewer, {"approve": True, "reason": "Hypothesis approved for study"})
+    score = client.get("/v1/insights/scorecard", headers=founder)
+    assert score.status_code == 200, score.text
+    assert score.json()["counts"]["agent_runs"] == 1
+    assert score.json()["counts"]["experiments"] == 1
+    assert score.json()["virtual_credit_budget"]["consumed"] == "4.0000"
+    assert client.get("/v1/insights/experiments", headers=reviewer).status_code == 403
