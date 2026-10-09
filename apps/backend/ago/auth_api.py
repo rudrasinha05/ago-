@@ -8,10 +8,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ago.security import Principal, SessionTokens
+from ago.rate_limit import RateLimiter
 
 
 class IdentityBackend(Protocol):
@@ -35,6 +36,8 @@ class AuthDependencies:
     identity: IdentityBackend
     tokens: SessionTokens
     tenant_validator: Callable[[str], bool]
+    limiter: RateLimiter | None = None
+    audit: Callable[[str, str], None] | None = None
 
 
 def build_auth_router(dependencies: AuthDependencies) -> APIRouter:
@@ -42,7 +45,11 @@ def build_auth_router(dependencies: AuthDependencies) -> APIRouter:
     router = APIRouter(prefix="/auth", tags=["authentication"])
 
     @router.post("/login", response_model=LoginResponse)
-    def login(request: LoginRequest) -> LoginResponse:
+    def login(request: LoginRequest, http_request: Request) -> LoginResponse:
+        if dependencies.limiter is not None:
+            client = http_request.client.host if http_request.client else "unknown"
+            if not dependencies.limiter.allow(client):
+                raise HTTPException(status_code=429, detail="Too many attempts")
         if not dependencies.tenant_validator(request.tenant_id):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,6 +63,8 @@ def build_auth_router(dependencies: AuthDependencies) -> APIRouter:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
             )
+        if dependencies.audit is not None:
+            dependencies.audit("login", "success")
         return LoginResponse(
             access_token=dependencies.tokens.issue(principal),
             expires_in=dependencies.tokens.ttl_seconds,
