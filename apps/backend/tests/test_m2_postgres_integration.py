@@ -21,8 +21,9 @@ def db():
     from psycopg.rows import dict_row
 
     with psycopg.connect(dsn, row_factory=dict_row) as conn:
-        with conn.transaction():
+        try:
             yield conn
+        finally:
             conn.rollback()
 
 
