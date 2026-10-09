@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from ago.governance import ApprovalRepository
 from ago.governed_execution import GovernanceGate
 from ago.identity import IdentityRepository
+from ago.login_security import LoginThrottle
 from ago.memory import MemoryRecord
 from ago.organization_store import MemoryStore, OrganizationStore
 from ago.quality import Verdict
@@ -144,12 +145,21 @@ def translate_error(exc: Exception):
 
 @router.post("/sessions")
 def login(data: Login, db=Depends(db_connection)):
+    tokens = session_tokens()
+    tenant_id = str(data.tenant_id)
+    throttle = LoginThrottle(db)
+    if not throttle.begin(tenant_id, data.email):
+        db.commit()
+        raise HTTPException(401, "Invalid credentials")
     principal = IdentityRepository(db).authenticate(
-        str(data.tenant_id), data.email, data.password
+        tenant_id, data.email, data.password
     )
     if principal is None:
+        throttle.failure(tenant_id, data.email)
+        db.commit()  # Persist failed attempts even though HTTP returns 401.
         raise HTTPException(401, "Invalid credentials")
-    return {"access_token": session_tokens().issue(principal), "token_type": "bearer"}
+    throttle.success(tenant_id, data.email)
+    return {"access_token": tokens.issue(principal), "token_type": "bearer"}
 
 
 @router.post("/organization/departments")
