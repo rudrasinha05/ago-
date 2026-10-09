@@ -22,7 +22,9 @@ class PermissionBackend(Protocol):
 _bearer = HTTPBearer(auto_error=False)
 
 
-def bearer_principal(tokens: SessionTokens):
+def bearer_principal(
+    tokens: SessionTokens, *, is_revoked: Callable[[str], bool] | None = None
+):
     def resolve(
         credentials: Annotated[
             HTTPAuthorizationCredentials | None, Depends(_bearer)
@@ -35,7 +37,10 @@ def bearer_principal(tokens: SessionTokens):
                 headers={"WWW-Authenticate": "Bearer"},
             )
         try:
-            return tokens.verify(credentials.credentials)
+            principal = tokens.verify(credentials.credentials)
+            if is_revoked is not None and is_revoked(credentials.credentials):
+                raise AuthenticationError("Session revoked")
+            return principal
         except AuthenticationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,8 +56,9 @@ def permission_guard(
     backend: PermissionBackend,
     permission: str,
     tenant_for_request: Callable[[Request], str],
+    *, is_revoked: Callable[[str], bool] | None = None,
 ):
-    principal_dependency = bearer_principal(tokens)
+    principal_dependency = bearer_principal(tokens, is_revoked=is_revoked)
 
     def guard(
         request: Request,
