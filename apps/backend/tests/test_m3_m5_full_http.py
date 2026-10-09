@@ -67,3 +67,24 @@ def test_company_plan_agent_and_economics_workflow(case):
     post(client, url, founder)
     task = post(client, f"/v1/brain/plans/{plan['id']}/materialize", founder)
     task_id = task["task_ids"][0]
+
+    action_approval = post(client, "/v1/governance/approvals", founder,
+                           {"action": "internal:brief"})
+    post(client, f"/v1/tasks/{task_id}/approval", founder,
+         {"approval_id": action_approval["request_id"]})
+    assert client.post(f"/v1/agents/tasks/{task_id}/run", headers=founder).status_code == 403
+    post(client, f"/v1/governance/approvals/{action_approval['request_id']}/decision",
+         reviewer, {"approve": True, "reason": "Agent action reviewed"})
+    result = post(client, f"/v1/agents/tasks/{task_id}/run", founder)
+    assert result["status"] == "completed"
+    assert result["result"]["requires_human_qa"]
+    assert client.post(f"/v1/agents/tasks/{task_id}/run", headers=founder).status_code == 403
+    post(client, f"/v1/tasks/{task_id}/review", reviewer,
+         {"verdict": "pass", "evidence": "Human inspected generated brief"})
+    post(client, "/v1/insights/budget", founder, {"ceiling": "25"})
+    first = post(client, "/v1/insights/usage", founder,
+                 {"operation_key": "research-one", "amount": "4", "category": "research"})
+    assert first["charged"] is True
+    assert not post(client, "/v1/insights/usage", founder,
+                    {"operation_key": "research-one", "amount": "4",
+                     "category": "research"})["charged"]
