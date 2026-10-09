@@ -89,3 +89,38 @@ class AgentRuntime:
                 )
             raise RuntimeError("Governed agent execution failed") from exc
         return {"id": run_id, "task_id": task.id, "status": "completed", "result": result}
+
+    def recover_stale(self, *, tenant_id: str, minimum_age_seconds: int = 3600) -> int:
+        """Mark abandoned runs failed; never auto-replay possible side effects."""
+        UUID(tenant_id)
+        if not 300 <= minimum_age_seconds <= 604800:
+            raise ValueError("Stale-run threshold must be 5 minutes–7 days")
+        with self.db.transaction():
+            rows = self.db.execute(
+                """SELECT r.id,r.task_id FROM ago_agent_runs r
+                   WHERE r.tenant_id=%s AND r.status='running'
+                     AND r.started_at < now() - (%s * interval '1 second')
+                   ORDER BY r.started_at,r.id FOR UPDATE SKIP LOCKED LIMIT 100""",
+                (tenant_id, minimum_age_seconds),
+            ).fetchall()
+            for row in rows:
+                self.db.execute(
+                    """UPDATE ago_agent_runs
+                       SET status='failed',failure_code='worker_timeout',finished_at=now()
+                       WHERE id=%s AND tenant_id=%s AND status='running'""",
+                    (row["id"], tenant_id),
+                )
+                self.db.execute(
+                    """UPDATE ago_governed_tasks
+                       SET status='failed',updated_at=now()
+                       WHERE id=%s AND tenant_id=%s AND status='running'""",
+                    (row["task_id"], tenant_id),
+                )
+                self.db.execute(
+                    """INSERT INTO ago_agent_messages
+                       (id,tenant_id,run_id,kind,content)
+                       VALUES (%s,%s,%s,'evidence',%s)""",
+                    (str(uuid4()), tenant_id, row["id"],
+                     "Worker timed out; manual reconciliation required"),
+                )
+        return len(rows)
