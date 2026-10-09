@@ -33,6 +33,7 @@ def create_app() -> FastAPI:
     checks.register("postgres", postgres_available)
     app.state.readiness_checks = checks
     app.include_router(m2_router)
+    app.include_router(brain_router)
 
     try:
         import psycopg
