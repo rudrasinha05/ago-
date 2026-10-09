@@ -15,6 +15,12 @@ from ago.security_controls import SecurityControls
 
 
 FOUNDER_PERMISSIONS = (
+    "economy:manage",
+    "economy:consume",
+    "insights:read",
+    "simulation:run",
+    "experiments:propose",
+    "experiments:read",
     "agent:dispatch",
     "agent:read",
     "brain:manage",
