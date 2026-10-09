@@ -71,3 +71,8 @@ def add_step(plan_id: UUID, data: StepInput, db=Depends(db_connection),
             depends_on=str(data.depends_on) if data.depends_on else None)}
     except (ValueError, PermissionError) as exc:
         translate_error(exc)
+
+@router.get('/plans/{plan_id}/steps')
+def list_steps(plan_id: UUID, db=Depends(db_connection), actor: Principal = Depends(authenticated)):
+    allowed(db, actor, 'brain:read')
+    return PlanStore(db).steps(tenant_id=actor.tenant_id, plan_id=str(plan_id))
