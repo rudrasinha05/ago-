@@ -94,6 +94,15 @@ class ApprovalRepository:
                 reviewer_id=str(row["reviewer_id"]) if row["reviewer_id"] else None,
                 reason=row["reason"],
             )
+            human = self.connection.execute(
+                """SELECT 1 FROM ago_users u JOIN ago_employees e
+                     ON e.id=u.id AND e.tenant_id=u.tenant_id
+                   WHERE u.id=%s AND u.tenant_id=%s AND u.active=true
+                     AND e.kind='human'""",
+                (reviewer_id, tenant_id),
+            ).fetchone()
+            if human is None:
+                raise PermissionError("Active human reviewer required")
             decided = current.decide(
                 reviewer_id=reviewer_id, tenant_id=tenant_id,
                 approve=approve, reason=reason,
