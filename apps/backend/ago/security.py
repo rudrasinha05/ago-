@@ -6,6 +6,7 @@ Identity persistence, revocation, MFA, and production key management remain sepa
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -110,7 +111,7 @@ class SessionTokens:
             ):
                 raise AuthenticationError("Invalid or expired token")
             return Principal(data["sub"], data["tenant"], tuple(data["roles"]))
-        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError) as exc:
+        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError, binascii.Error) as exc:
             raise AuthenticationError("Invalid token") from exc
 
 
