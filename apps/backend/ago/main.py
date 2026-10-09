@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from ago.api_brain import router as brain_router
 from ago.api_m2 import router as m2_router
 from ago.platform import Settings, build_container, configure_logging, request_id
 from ago.readiness import ReadinessChecks
