@@ -67,5 +67,5 @@ jobs:
         run: |
           if [ "$RUN_STATUS" = "success" ]; then STATE=success; else STATE=failure; fi
           gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
-            -f state="$STATE" -f context="ago/m2-backend-ci" \
+            -f state="$STATE" -f context="ago/m2/i=$INSTALL_RESULT/d=$MIGRATION_RESULT/l=$LINT_RESULT/t=$TEST_RESULT" \
             -f description="CI $RUN_STATUS install:$INSTALL_RESULT db:$MIGRATION_RESULT lint:$LINT_RESULT tests:$TEST_RESULT"
