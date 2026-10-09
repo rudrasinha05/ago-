@@ -45,3 +45,25 @@ def post(client, path, headers, body=None):
     response = client.post(path, json=body or {}, headers=headers)
     assert response.status_code == 200, (path, response.status_code, response.text)
     return response.json()
+
+
+def test_company_plan_agent_and_economics_workflow(case):
+    client, founder, reviewer = case
+    assert client.get("/v1/brain/goals").status_code == 401
+    goal = post(client, "/v1/brain/goals", founder, {"title": "Improve research"})
+    plan = post(client, "/v1/brain/plans", founder,
+                {"goal_id": goal["id"], "title": "Research plan"})
+    departments = client.get("/v1/organization/departments", headers=founder).json()
+    employee = post(client, "/v1/organization/employees", founder,
+                    {"department_id": departments[0]["id"],
+                     "name": "AI researcher", "kind": "ai"})
+    post(client, f"/v1/brain/plans/{plan['id']}/steps", founder,
+         {"action": "internal:brief", "assignee_id": employee["id"]})
+    strategy = post(client, f"/v1/brain/plans/{plan['id']}/submit", founder)
+    url = f"/v1/brain/plans/{plan['id']}/activate"
+    assert client.post(url, headers=founder).status_code == 403
+    post(client, f"/v1/governance/approvals/{strategy['approval_id']}/decision",
+         reviewer, {"approve": True, "reason": "Independent strategy review"})
+    post(client, url, founder)
+    task = post(client, f"/v1/brain/plans/{plan['id']}/materialize", founder)
+    task_id = task["task_ids"][0]
