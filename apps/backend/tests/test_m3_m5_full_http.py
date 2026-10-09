@@ -106,3 +106,41 @@ def test_company_plan_agent_and_economics_workflow(case):
     assert score.json()["counts"]["experiments"] == 1
     assert score.json()["virtual_credit_budget"]["consumed"] == "4.0000"
     assert client.get("/v1/insights/experiments", headers=reviewer).status_code == 403
+
+
+def test_optional_model_uses_virtual_credit_limit(case, monkeypatch):
+    from ago.model_provider import ResponsesTextProvider
+
+    client, founder, reviewer = case
+    monkeypatch.setenv("AGO_ENABLE_PAID_MODELS", "true")
+    monkeypatch.setenv("AGO_LLM_API_KEY", "fake-test-key")
+    monkeypatch.setenv("AGO_LLM_MODEL", "fake-test-model")
+    monkeypatch.setattr(
+        ResponsesTextProvider, "generate", lambda self, prompt: "Mock provider result",
+    )
+    post(client, "/v1/insights/budget", founder, {"ceiling": "1"})
+    department = client.get(
+        "/v1/organization/departments", headers=founder,
+    ).json()[0]["id"]
+    ai = post(client, "/v1/organization/employees", founder, {
+        "name": "Research worker", "kind": "ai", "department_id": department,
+    })
+    for ordinal in range(2):
+        task = post(client, "/v1/tasks", founder, {
+            "action": "research:brief", "assignee_id": ai["id"],
+        })
+        approval = post(client, "/v1/governance/approvals", founder, {
+            "action": "research:brief",
+        })
+        post(client, f"/v1/tasks/{task['id']}/approval", founder, {
+            "approval_id": approval["request_id"],
+        })
+        post(client, f"/v1/governance/approvals/{approval['request_id']}/decision",
+             reviewer, {"approve": True, "reason": "Authorized study"})
+        result = client.post(
+            f"/v1/agents/tasks/{task['id']}/run", headers=founder,
+        )
+        assert result.status_code == (200 if ordinal == 0 else 502), result.text
+    budget = client.get("/v1/insights/scorecard", headers=founder).json()
+    assert budget["virtual_credit_budget"]["consumed"] == "1.0000"
+    assert budget["task_status"]["failed"] == 1
