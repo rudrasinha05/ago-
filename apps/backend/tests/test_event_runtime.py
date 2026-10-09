@@ -28,6 +28,8 @@ def test_worker_retries_unhandled_events(monkeypatch):
     import asyncio
     from ago.events import Event
 
+    stop = __import__("asyncio").Event()
+
     class Store:
         instance = None
 
@@ -41,6 +43,7 @@ def test_worker_retries_unhandled_events(monkeypatch):
 
         def failed(self, event_id, worker_id, error, max_attempts=3):
             self.failures.append(error)
+            stop.set()
             return True
 
         def delivered(self, event_id, worker_id):
@@ -52,13 +55,7 @@ def test_worker_retries_unhandled_events(monkeypatch):
     monkeypatch.setattr("ago.event_runtime.PostgresEventStore", Store)
 
     async def run():
-        stop = asyncio.Event()
-        async def finish():
-            await asyncio.sleep(0.03)
-            stop.set()
-        task = asyncio.create_task(finish())
         await serve_worker("unused", EventBus(), worker_id="worker", stop=stop)
-        await task
 
     asyncio.run(run())
     assert Store.instance.failures
