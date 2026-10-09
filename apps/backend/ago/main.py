@@ -1,8 +1,25 @@
 """AGO API entry point."""
-from fastapi import FastAPI, Request
+from __future__ import annotations
+
+import os
 from uuid import uuid4
 
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
 from ago.platform import Settings, build_container, configure_logging, request_id
+from ago.readiness import ReadinessChecks
+
+
+def postgres_available() -> bool:
+    """Verify configured PostgreSQL responds; no DSN means not ready."""
+    dsn = os.getenv("AGO_POSTGRES_DSN")
+    if not dsn:
+        return False
+    import psycopg
+
+    with psycopg.connect(dsn, connect_timeout=3) as connection:
+        return connection.execute("SELECT 1").fetchone()[0] == 1
 
 
 def create_app() -> FastAPI:
@@ -10,6 +27,9 @@ def create_app() -> FastAPI:
     configure_logging(settings)
     app = FastAPI(title="Artificial General Organization", version="0.1.0")
     app.state.container = build_container(settings)
+    checks = ReadinessChecks()
+    checks.register("postgres", postgres_available)
+    app.state.readiness_checks = checks
 
     @app.middleware("http")
     async def correlate(request: Request, call_next):
@@ -28,8 +48,19 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/health/ready")
-    def readiness() -> dict[str, str]:
-        return {"status": "ok"}
+    def readiness():
+        results = checks.run()
+        ready = bool(results) and all(result.healthy for result in results)
+        return JSONResponse(
+            status_code=200 if ready else 503,
+            content={
+                "status": "ready" if ready else "not_ready",
+                "checks": {
+                    result.name: {"healthy": result.healthy, "detail": result.detail}
+                    for result in results
+                },
+            },
+        )
 
     return app
 
