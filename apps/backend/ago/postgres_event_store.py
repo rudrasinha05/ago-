@@ -127,5 +127,38 @@ class PostgresEventStore:
             handler(db, event)
         return True
 
+    def renew_lease(self, event_id: str, worker_id: str, lease_seconds: int = 60) -> bool:
+        """Extend an active lease owned by the specified worker."""
+        if not 1 <= lease_seconds <= 3600:
+            raise ValueError("Invalid lease duration")
+        row = self.connection.execute(
+            """UPDATE event_outbox
+               SET available_at=now()+(%s * interval '1 second')
+               WHERE id=%s AND status='leased' AND lease_owner=%s
+               RETURNING id""",
+            (lease_seconds, event_id, worker_id),
+        ).fetchone()
+        return row is not None
+
+    def dead_letters(self, limit: int = 100) -> list[Event]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("limit must be between 1 and 1000")
+        rows = self.connection.execute(
+            """SELECT * FROM event_outbox WHERE status='dead'
+               ORDER BY available_at, id LIMIT %s""",
+            (limit,),
+        ).fetchall()
+        return [self._event(row) for row in rows]
+
+    def replay_dead_letter(self, event_id: str) -> bool:
+        """Operator-triggered replay; preserves attempt count and event identity."""
+        row = self.connection.execute(
+            """UPDATE event_outbox SET status='pending', available_at=now(),
+                   lease_owner=NULL, last_error=NULL
+               WHERE id=%s AND status='dead' RETURNING id""",
+            (event_id,),
+        ).fetchone()
+        return row is not None
+
     def close(self) -> None:
         self.connection.close()
