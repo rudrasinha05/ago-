@@ -62,7 +62,9 @@ def test_handler_failure_isolated():
 
 def test_duplicate_subscription_rejected():
     bus = EventBus()
-    handler = lambda event: None
+    def handler(event):
+        return None
+
     bus.subscribe("job", handler)
     with pytest.raises(ValueError, match="already subscribed"):
         bus.subscribe("job", handler)
