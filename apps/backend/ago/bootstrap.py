@@ -15,6 +15,9 @@ from ago.security_controls import SecurityControls
 
 
 FOUNDER_PERMISSIONS = (
+    "brain:manage",
+    "brain:read",
+    "brain:activate",
     "organization:manage",
     "organization:read",
     "approval:read",
