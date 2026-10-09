@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from contextlib import contextmanager, ExitStack
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from enum import Enum
@@ -62,23 +62,32 @@ class Resolver:
         self._cache = cache
         self._stack = stack
         self._resolving: set[str] = set()
+        self._singleton_depth = 0
 
     def resolve(self, name: str) -> Any:
         if name in self._resolving:
             raise DependencyError(f"Circular dependency: {name}")
+        if self._container._closed:
+            raise DependencyError("Container is closed")
         registration = self._container._registrations.get(name)
         if registration is None:
             raise DependencyError(f"Dependency not registered: {name}")
+        if self._singleton_depth and registration.lifetime is Lifetime.SCOPED:
+            raise DependencyError(f"Singleton cannot depend on scoped service: {name}")
         cache = (self._container._singletons if registration.lifetime is Lifetime.SINGLETON
                  else self._cache if registration.lifetime is Lifetime.SCOPED else None)
         if cache is not None and name in cache:
             return cache[name]
         self._resolving.add(name)
+        if registration.lifetime is Lifetime.SINGLETON:
+            self._singleton_depth += 1
         try:
             instance = registration.factory(self)
             if self._stack is not None and hasattr(instance, "__enter__") and hasattr(instance, "__exit__"):
                 instance = self._stack.enter_context(instance)
         finally:
+            if registration.lifetime is Lifetime.SINGLETON:
+                self._singleton_depth -= 1
             self._resolving.remove(name)
         if cache is not None:
             cache[name] = instance
