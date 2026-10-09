@@ -40,11 +40,14 @@ class PlanExecution:
     def materialize(self, *, tenant_id: str, plan_id: str) -> list[str]:
         with self.db.transaction():
             plan = self.db.execute(
-                """SELECT status FROM ago_strategy_plans
-                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                """SELECT p.status,g.status AS goal_status
+                   FROM ago_strategy_plans p JOIN ago_goals g
+                     ON g.tenant_id=p.tenant_id AND g.id=p.goal_id
+                   WHERE p.tenant_id=%s AND p.id=%s FOR UPDATE OF p""",
                 (tenant_id, plan_id),
             ).fetchone()
-            if plan is None or plan["status"] != "active":
+            if (plan is None or plan["status"] != "active"
+                    or plan["goal_status"] != "active"):
                 raise PermissionError("Only active approved plans may create tasks")
             rows = self.db.execute(
                 """SELECT id,action,assignee_id,task_id FROM ago_plan_steps
