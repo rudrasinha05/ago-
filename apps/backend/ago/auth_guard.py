@@ -2,8 +2,6 @@
 
 Trusted tenant IDs must come from server-side resource resolution, not request headers.
 """
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Annotated, Protocol
 
