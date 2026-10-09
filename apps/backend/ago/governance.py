@@ -121,6 +121,17 @@ class ApprovalRepository:
             )
         return decided
 
+    def list_requests(self, *, tenant_id: str, limit: int = 100) -> list[dict]:
+        if not 1 <= limit <= 100:
+            raise ValueError("Invalid approval list limit")
+        rows = self.connection.execute(
+            """SELECT id, action, requester_id, reviewer_id, status, reason, created_at
+               FROM ago_approval_requests WHERE tenant_id=%s
+               ORDER BY created_at DESC, id LIMIT %s""",
+            (tenant_id, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def assert_executable(
         self, *, request_id: str, tenant_id: str, action: str
     ) -> None:
