@@ -87,3 +87,23 @@ def submit_plan(plan_id: UUID, db=Depends(db_connection),
         return {"approval_id": approval_id, "status": "pending_approval"}
     except (ValueError, PermissionError) as exc:
         translate_error(exc)
+
+@router.post("/plans/{plan_id}/activate")
+def activate(plan_id: UUID, db=Depends(db_connection),
+             actor: Principal = Depends(authenticated)):
+    allowed(db, actor, "brain:activate")
+    try:
+        PlanExecution(db).activate(tenant_id=actor.tenant_id, plan_id=str(plan_id))
+        return {"status": "active"}
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+@router.post("/plans/{plan_id}/materialize")
+def materialize(plan_id: UUID, db=Depends(db_connection),
+                actor: Principal = Depends(authenticated)):
+    allowed(db, actor, "brain:activate")
+    try:
+        ids = PlanExecution(db).materialize(tenant_id=actor.tenant_id, plan_id=str(plan_id))
+        return {"task_ids": ids, "approval_required_per_task": True}
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
