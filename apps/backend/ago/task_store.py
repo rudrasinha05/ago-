@@ -72,6 +72,39 @@ class TaskStore:
             ).fetchone()
             if approval is None or approval["status"] != "approved" or approval["action"] != task["action"]:
                 raise PermissionError("Approved matching action required")
+            # M3 plan tasks must respect active strategy and reviewed prerequisites.
+            blocked_plan = self.connection.execute(
+                """SELECT 1 FROM ago_plan_steps s
+                   JOIN ago_strategy_plans p ON p.tenant_id=s.tenant_id
+                     AND p.id=s.plan_id
+                   JOIN ago_goals g ON g.tenant_id=p.tenant_id
+                     AND g.id=p.goal_id
+                   WHERE s.tenant_id=%s AND s.task_id=%s
+                     AND (p.status <> 'active' OR g.status <> 'active') LIMIT 1""",
+                (tenant_id, task_id),
+            ).fetchone()
+            if blocked_plan:
+                raise PermissionError("Parent strategy or goal is no longer active")
+            blocked_dependency = self.connection.execute(
+                """SELECT 1 FROM ago_plan_steps s
+                   JOIN ago_plan_steps prerequisite
+                     ON prerequisite.tenant_id=s.tenant_id
+                    AND prerequisite.plan_id=s.plan_id
+                    AND prerequisite.id=s.depends_on
+                   LEFT JOIN ago_governed_tasks previous
+                     ON previous.tenant_id=s.tenant_id
+                    AND previous.id=prerequisite.task_id
+                   LEFT JOIN ago_task_reviews review
+                     ON review.tenant_id=s.tenant_id
+                    AND review.task_id=prerequisite.task_id
+                   WHERE s.tenant_id=%s AND s.task_id=%s
+                     AND s.depends_on IS NOT NULL
+                     AND (previous.status IS DISTINCT FROM 'completed'
+                          OR review.verdict IS DISTINCT FROM 'pass') LIMIT 1""",
+                (tenant_id, task_id),
+            ).fetchone()
+            if blocked_dependency:
+                raise PermissionError("Predecessor requires completed task and passing QA")
             self.connection.execute(
                 """UPDATE ago_governed_tasks
                    SET status='running', updated_at=now()
