@@ -16,6 +16,10 @@ from ago.security_controls import SecurityControls
 
 FOUNDER_PERMISSIONS = (
     "organization:manage",
+    "organization:read",
+    "approval:read",
+    "task:read",
+    "qa:read",
     "approval:request",
     "approval:decide",
     "task:create",
