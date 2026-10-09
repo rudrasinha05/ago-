@@ -5,7 +5,6 @@ import argparse
 import asyncio
 import logging
 import os
-import signal
 from pathlib import Path
 
 from ago.event_migrations import apply_migrations
@@ -37,6 +36,8 @@ async def serve_worker(
     stop = stop or asyncio.Event()
 
     async def dispatch(event):
+        if not bus.has_subscribers(event.name):
+            raise RuntimeError(f"No handler registered for {event.name}")
         result = await bus.publish(event)
         if result.failures:
             raise RuntimeError(
