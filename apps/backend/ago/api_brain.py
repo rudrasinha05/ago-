@@ -107,3 +107,18 @@ def materialize(plan_id: UUID, db=Depends(db_connection),
         return {"task_ids": ids, "approval_required_per_task": True}
     except (ValueError, PermissionError) as exc:
         translate_error(exc)
+
+class GoalClose(BaseModel):
+    status: str
+
+
+@router.post("/goals/{goal_id}/close")
+def close_goal(goal_id: UUID, data: GoalClose, db=Depends(db_connection),
+               actor: Principal = Depends(authenticated)):
+    allowed(db, actor, "brain:manage")
+    try:
+        GoalStore(db).close(
+            tenant_id=actor.tenant_id, goal_id=str(goal_id), status=data.status)
+        return {"status": data.status}
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
