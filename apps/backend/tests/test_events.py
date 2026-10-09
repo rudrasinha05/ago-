@@ -86,3 +86,11 @@ def test_invalid_configuration():
         EventBus(max_retries=11)
     with pytest.raises(ValueError):
         asyncio.run(EventBus().publish(Event("", {})))
+
+
+def test_event_bus_registered_in_application_container():
+    from ago.platform import build_container
+
+    container = build_container()
+    assert container.resolve("event_bus") is container.resolve("event_bus")
+    assert isinstance(container.resolve("event_bus"), EventBus)
