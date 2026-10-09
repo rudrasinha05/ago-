@@ -33,6 +33,15 @@ def create_app() -> FastAPI:
     app.state.readiness_checks = checks
     app.include_router(m2_router)
 
+    try:
+        import psycopg
+
+        @app.exception_handler(psycopg.IntegrityError)
+        async def database_conflict(_request: Request, _exc: psycopg.IntegrityError):
+            return JSONResponse(status_code=409, content={"detail": "Database conflict"})
+    except ImportError:
+        pass
+
     @app.middleware("http")
     async def correlate(request: Request, call_next):
         incoming = request.headers.get("x-request-id")
