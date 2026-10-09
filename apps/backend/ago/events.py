@@ -71,6 +71,9 @@ class EventBus:
 
         return unsubscribe
 
+    def has_subscribers(self, event_name: str) -> bool:
+        return bool(self._handlers.get(event_name) or self._handlers.get("*"))
+
     async def publish(self, event: Event) -> DispatchResult:
         if not event.name:
             raise ValueError("Event name must not be empty")
