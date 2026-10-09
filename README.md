@@ -27,6 +27,8 @@ python -m uvicorn ago.main:app --reload
 
 API documentation: `http://127.0.0.1:8000/docs`. The M3–M5 APIs are under `/v1/brain`, `/v1/agents`, and `/v1/insights`.
 
+CI acceptance for M3–M5: [143-test report](docs/reports/M3_M5_FINAL_ACCEPTANCE.md).
+
 A fresh tenant must be provisioned by the **local operator** using `python -m ago.bootstrap`; an independent human reviewer must be provisioned using `python -m ago.provision`. See `docs/reports/M3_M5_OPERATOR_AND_ACCEPTANCE.md` for details.
 
 ## CI
