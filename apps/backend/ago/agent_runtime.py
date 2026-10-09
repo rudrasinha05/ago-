@@ -50,3 +50,42 @@ class AgentRuntime:
                ORDER BY started_at DESC,id LIMIT %s""",
             (tenant_id, limit),
         ).fetchall()]
+
+    def _execute(self, *, run_id: str, task, actor) -> dict:
+        """Store result or safe failure code. Never persist exception secrets."""
+        try:
+            result = self.handlers[task.action](task)
+            if not isinstance(result, dict):
+                raise ValueError("Agent result must be a dictionary")
+            payload = json.dumps(result, allow_nan=False)
+            if len(payload) > 32000:
+                raise ValueError("Agent result exceeds size limit")
+            with self.db.transaction():
+                self.db.execute(
+                    """UPDATE ago_agent_runs SET status='completed',result=%s::jsonb,
+                       finished_at=now() WHERE tenant_id=%s AND id=%s
+                       AND status='running'""",
+                    (payload, actor.tenant_id, run_id),
+                )
+                self.db.execute(
+                    """INSERT INTO ago_agent_messages
+                       (id,tenant_id,run_id,kind,content)
+                       VALUES (%s,%s,%s,'evidence',%s)""",
+                    (str(uuid4()), actor.tenant_id, run_id, "handler completed"),
+                )
+                TaskStore(self.db).finish(
+                    task_id=task.id, tenant_id=actor.tenant_id, success=True,
+                )
+        except Exception as exc:
+            with self.db.transaction():
+                self.db.execute(
+                    """UPDATE ago_agent_runs SET status='failed',
+                       failure_code='handler_error',finished_at=now()
+                       WHERE tenant_id=%s AND id=%s AND status='running'""",
+                    (actor.tenant_id, run_id),
+                )
+                TaskStore(self.db).finish(
+                    task_id=task.id, tenant_id=actor.tenant_id, success=False,
+                )
+            raise RuntimeError("Governed agent execution failed") from exc
+        return {"id": run_id, "task_id": task.id, "status": "completed", "result": result}
