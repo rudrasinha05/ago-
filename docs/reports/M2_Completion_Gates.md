@@ -1,24 +1,23 @@
-# M2 implementation and acceptance gates
+# M2 backend foundation — acceptance gates
 
-## Implemented foundations on develop
-- Corporate constitution conservative classification
-- Approval request/decision model and transactional persistence
-- Tenant RBAC check integration
-- Department and employee models with PostgreSQL adapters
-- Governed task state machine and PostgreSQL task transitions
-- Independent QA domain review
-- Tenant-scoped memory model and PostgreSQL adapter
-- Migrations 004 and 005
-- Automated unit-level security and contract tests
+## Status
+M2 defined backend implementation scope **accepted in GitHub CI**.
+The authoritative evidence and boundaries are in [M2_Final_Acceptance.md](M2_Final_Acceptance.md).
 
-## Open acceptance gates — DO NOT mark M2 complete
-- Run migrations 004 and 005 against PostgreSQL and test all foreign keys.
-- Run full lint/test suite; new tests have not been executed in the user's environment.
-- Add end-to-end PostgreSQL integration tests for organization, memory, approval, and tasks.
-- Enforce authorization on every exposed API and tool adapter, and record tamper-resistant audit.
-- Implement durable review/QA records and actual execution adapters.
-- Validate reviewer identity and role permissions against trusted authentication; avoid untrusted authorized flags.
-- Check tenant-scoped approval/task references, concurrency and rollback behavior.
-- Record HTTP readiness result for M1 if still missing.
+## Verified gates
+- PostgreSQL migrations 001–007 applied in an isolated CI database.
+- Ruff lint passed.
+- 126 pytest tests passed, zero failures/skips, one nonblocking warning.
+- Tests include HTTP approval/task/QA flow, organization and memory persistence,
+  tenant RBAC, single-use approval, human reviewer checks and append-only audit.
 
-Founder requested continued development without pull commands until they ask. No local actions are requested here.
+## Remaining product and deployment work (outside M2 milestone acceptance)
+- User's Windows instance: pull and apply migrations 004–007 when founder requests;
+  verify Python 3.14 environment and live HTTP readiness.
+- Stronger production authentication, secrets, runtime DB least privilege,
+  independent audit shipping and network rate limiting.
+- Real-world executor connectors, retries/idempotency, AI employee lifecycle and
+  organizational intelligence capabilities in future milestones.
+- Production security review, load tests and disaster recovery validation.
+
+Do not interpret passing M2 foundation tests as production readiness.
