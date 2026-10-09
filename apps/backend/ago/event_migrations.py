@@ -28,7 +28,8 @@ def apply_migrations(connection: Any, directory: Path) -> list[str]:
             )"""
         )
         existing = {
-            (row["filename"] if isinstance(row, dict) else row[0]):\n            (row["sha256"] if isinstance(row, dict) else row[1])
+            (row["filename"] if isinstance(row, dict) else row[0]):
+            (row["sha256"] if isinstance(row, dict) else row[1])
             for row in connection.execute(
                 "SELECT filename, sha256 FROM ago_schema_migrations"
             ).fetchall()
