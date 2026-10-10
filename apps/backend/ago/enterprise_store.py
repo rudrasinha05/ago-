@@ -195,7 +195,7 @@ class EnterpriseOperationsStore:
                 "status": "awaiting_independent_review"}
 
     def apply_agent_evidence(self, *, actor: Principal, intent_id: str,
-                             approval_id: str) -> dict:
+                             approval_id: str, employee_id: str) -> dict:
         identifier = str(UUID(intent_id))
         review = str(UUID(approval_id))
         with self.connection.transaction():
@@ -208,8 +208,9 @@ class EnterpriseOperationsStore:
             ).fetchone()
             if not row:
                 raise LookupError("Evidence intent not found")
-            if str(row["actor_id"]) != actor.subject or str(row["approval_id"]) != review:
-                raise PermissionError("Cannot change evidence owner or approval")
+            if (str(row["actor_id"]) != actor.subject or str(row["approval_id"]) != review
+                or str(row["employee_id"]) != str(UUID(employee_id))):
+                raise PermissionError("Cannot change evidence owner, employee or approval")
             self._approval(actor, review,
                            "enterprise:agent-evidence:" +
                            str(row["employee_id"]) + ":" + row["digest"])
@@ -428,7 +429,7 @@ class EnterpriseOperationsStore:
                 "status": "awaiting_independent_review"}
 
     def apply_plan_revision(self, *, actor: Principal, intent_id: str,
-                            approval_id: str) -> dict:
+                            approval_id: str, plan_id: str) -> dict:
         intent, approval = str(UUID(intent_id)), str(UUID(approval_id))
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
@@ -440,8 +441,9 @@ class EnterpriseOperationsStore:
             ).fetchone()
             if not row:
                 raise LookupError("Plan change request missing")
-            if str(row["actor_id"]) != actor.subject or str(row["approval_id"]) != approval:
-                raise PermissionError("Cannot substitute proposal owner/approval")
+            if (str(row["actor_id"]) != actor.subject or str(row["approval_id"]) != approval
+                or str(row["horizon_plan_id"]) != str(UUID(plan_id))):
+                raise PermissionError("Cannot substitute proposal plan owner or approval")
             plan_id = str(row["horizon_plan_id"])
             self._approval(actor, approval,
                            "enterprise:plan-revise:" + plan_id + ":" + row["digest"])
