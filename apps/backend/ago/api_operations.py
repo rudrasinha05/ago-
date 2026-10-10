@@ -1201,3 +1201,69 @@ def enterprise_plan_revision_history(
     return enterprise_call(lambda: repositories.resolve(
         EnterpriseOperationsStorePort).plan_revisions(
         tenant_id=actor.tenant_id, plan_id=str(horizon_plan_id)))
+
+
+# Section 21: durable fair queue for independently approved tasks.
+class EnterpriseQueueInput(StrictInput):
+    task_id: UUID
+    operation_key: str = Field(min_length=1, max_length=160)
+    priority: int = Field(ge=0, le=100)
+    eligible_at: datetime
+
+
+class EnterpriseQueueClaimInput(StrictInput):
+    lease_seconds: int = Field(default=600, ge=300, le=3600)
+
+
+class EnterpriseQueueCloseInput(StrictInput):
+    status: Literal["released", "reconciled"]
+    explanation: str = Field(min_length=1, max_length=1000)
+
+
+@router.get("/enterprise/work-queue")
+def enterprise_work_queue(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).work_queue(
+        tenant_id=actor.tenant_id)
+
+
+@router.post("/enterprise/work-queue")
+def enterprise_enqueue(
+    data: EnterpriseQueueInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).queue_work(
+        actor=actor, task_id=str(data.task_id),
+        operation_key=data.operation_key, priority=data.priority,
+        eligible_at=data.eligible_at))
+
+
+@router.post("/enterprise/work-queue/claim")
+def enterprise_claim_work(
+    data: EnterpriseQueueClaimInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "task:execute")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).claim_work(
+        actor=actor, lease_seconds=data.lease_seconds))
+
+
+@router.post("/enterprise/work-queue/{queue_id}/release")
+def enterprise_close_work_lease(
+    queue_id: UUID, data: EnterpriseQueueCloseInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "task:execute")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).resolve_work_lease(
+        actor=actor, queue_id=str(queue_id),
+        status=data.status, explanation=data.explanation))
