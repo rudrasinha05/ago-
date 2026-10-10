@@ -155,7 +155,7 @@ class EnterpriseToolRuntime:
                       started_at,finished_at FROM ago_tool_runs
                WHERE tenant_id=%s ORDER BY started_at DESC,id LIMIT %s""",
             (tenant_id, limit),
-        ).fetchall()
+        ).fetchall()]
 
     def evidence(self, *, tenant_id: str, run_id: str) -> list[dict]:
         UUID(run_id)
