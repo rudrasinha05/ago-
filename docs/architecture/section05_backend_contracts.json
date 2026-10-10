@@ -361,15 +361,15 @@
       "module": "enterprise_store",
       "methods": {
         "modes": {
-          "arguments": "self, *, tenant_id: str, scope_kind: str = 'company', scope_id: str | None = None",
+          "arguments": "self, *, tenant_id: str, scope_kind: str='company', scope_id: str | None=None",
           "returns": "list[dict]"
         },
         "mode_change": {
-          "arguments": "self, *, actor: Principal, target: str, approval_id: str, reason: str, expires_at: datetime, scope_kind: str = 'company', scope_id: str | None = None",
+          "arguments": "self, *, actor: Principal, target: str, approval_id: str, reason: str, expires_at: datetime, scope_kind: str='company', scope_id: str | None=None",
           "returns": "dict"
         },
         "effective_mode": {
-          "arguments": "self, *, tenant_id: str, scope_kind: str = 'company', scope_id: str | None = None",
+          "arguments": "self, *, tenant_id: str, scope_kind: str='company', scope_id: str | None=None",
           "returns": "dict"
         },
         "worker_state": {
@@ -413,7 +413,7 @@
           "returns": "dict"
         },
         "assets": {
-          "arguments": "self, *, tenant_id: str, kind: str | None = None",
+          "arguments": "self, *, tenant_id: str, kind: str | None=None",
           "returns": "list[dict]"
         },
         "asset_propose": {
@@ -437,11 +437,11 @@
           "returns": "dict"
         },
         "twin": {
-          "arguments": "self, *, actor: Principal, snapshot_id: str, actions: int, cost_per_action: str, budget: str, failure_pct: int, hiring: int = 0, layoffs: int = 0, market_shock_pct: int = 0",
+          "arguments": "self, *, actor: Principal, snapshot_id: str, actions: int, cost_per_action: str, budget: str, failure_pct: int, hiring: int=0, layoffs: int=0, market_shock_pct: int=0",
           "returns": "dict"
         },
         "worker_transition": {
-          "arguments": "self, *, actor: Principal, employee_id: str, state: str, approval_id: str, reason: str, expires_at: datetime | None = None",
+          "arguments": "self, *, actor: Principal, employee_id: str, state: str, approval_id: str, reason: str, expires_at: datetime | None=None",
           "returns": "dict"
         },
         "worker_history": {
