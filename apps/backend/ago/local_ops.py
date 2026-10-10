@@ -147,6 +147,26 @@ def provision_pilot(
     }
 
 
+
+def list_local_tenants(*, connector=None) -> list[dict[str, str]]:
+    """Operator-only list of existing local organization IDs for browser sign-in.
+
+    Names and UUIDs only; no emails, credentials, role grants or account edits.
+    """
+    status = doctor()
+    if not status.ready:
+        raise RuntimeError("Local database/schema is not ready")
+    from psycopg.rows import dict_row
+    import psycopg
+
+    connect = connector or psycopg.connect
+    with connect(_dsn(), row_factory=dict_row, connect_timeout=3) as db:
+        rows = db.execute(
+            "SELECT id,name FROM ago_tenants ORDER BY name,id LIMIT 100"
+        ).fetchall()
+    return [{"tenant_id": str(row["id"]), "organization": str(row["name"])}
+            for row in rows]
+
 def serve_local(*, port: int = 8000, run_server=None) -> None:
     """Refuse unsafe startup; run loopback Uvicorn only, no implicit SQL writes."""
     if not 1024 <= port <= 65535:
@@ -170,6 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AGO safe local operator workflow")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="Read-only environment and schema checks")
+    sub.add_parser("tenants", help="Read-only existing local organization IDs")
     sub.add_parser("init", help="Create new organization, founder and reviewer")
     server = sub.add_parser("serve", help="Launch localhost Control Center")
     server.add_argument("--port", type=int, default=8000)
@@ -179,6 +200,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(info, sort_keys=True))
         return 0 if info["ready"] else 2
     try:
+        if args.command == "tenants":
+            print(json.dumps(list_local_tenants(), sort_keys=True))
+            return 0
         if args.command == "serve":
             serve_local(port=args.port)
             return 0
