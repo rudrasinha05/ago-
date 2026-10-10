@@ -485,6 +485,8 @@ export async function handleAction(key, id, ctx) {
     return;
   }
   if (key === "new-event") {
+    let invitees=[];
+    try { invitees=(await departmentsAndPeople(ctx)).people; } catch { /* Scheduling without invitees remains possible. */ }
     const start=new Date(Date.now()+3600_000);
     const end=new Date(Date.now()+7200_000);
     const toLocal=x=>{
@@ -504,6 +506,8 @@ export async function handleAction(key, id, ctx) {
           value:toLocal(end)},
         {name:"visibility",label:"Visibility",type:"select",
           options:[choose("tenant","Organization"),choose("private","Private to creator")]},
+        {name:"employee_id",label:"Optional internal invitee",type:"select",required:false,
+          options:[choose("","No attendee"),...invitees.map(x=>choose(x.id,x.name+" — "+x.department_name))]},
       ],
       onSubmit:async v=>{
         if (!globalThis.crypto?.randomUUID) {
@@ -516,7 +520,8 @@ export async function handleAction(key, id, ctx) {
           method:"POST",body:{
             title:v.title,detail:v.detail,visibility:v.visibility,
             starts_at:startValue.toISOString(),ends_at:endValue.toISOString(),
-            operation_key:crypto.randomUUID(),employee_ids:[],
+            operation_key:crypto.randomUUID(),
+            employee_ids:v.employee_id ? [uuid(v.employee_id)] : [],
           },
         });
         return "Internal event scheduled.";
