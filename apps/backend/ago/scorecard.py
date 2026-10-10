@@ -15,6 +15,10 @@ class Scorecard:
             "agent_runs": "ago_agent_runs",
             "qa_reviews": "ago_task_reviews",
             "experiments": "ago_policy_experiments",
+            "handoffs": "ago_handoffs",
+            "calendar_events": "ago_calendar_events",
+            "knowledge_nodes": "ago_knowledge_nodes",
+            "council_motions": "ago_council_motions",
         }
         # SQL identifiers come exclusively from trusted server-owned constants.
         for label, table in entities.items():
