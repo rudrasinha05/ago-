@@ -15,6 +15,51 @@ from json import dumps
 from typing import Mapping, Sequence
 
 
+def organization_change_intent(*, change_kind: str, target_id: str,
+                               reason: str, department_id: str | None = None,
+                               name: str | None = None,
+                               manager_id: str | None = None,
+                               role_level: int | None = None) -> tuple[dict, str]:
+    """Canonical immutable HR intent, not merely a target-id approval.
+
+    The exact proposed values (including reason) are shown to the independent
+    reviewer and checked again at execution. Unexpected/unused fields fail.
+    """
+    from uuid import UUID
+
+    kind = change_kind.strip()
+    target = str(UUID(target_id))
+    reason = reason.strip()
+    if kind not in {"hired", "promoted", "terminated", "created", "closed"}:
+        raise ValueError("Unrecognized organizational action")
+    if not 1 <= len(reason) <= 2000:
+        raise ValueError("Reason required for independent review")
+    dept = str(UUID(department_id)) if department_id else None
+    manager = str(UUID(manager_id)) if manager_id else None
+    name = name.strip() if name is not None else None
+    if kind == "created":
+        if not name or not 1 <= len(name) <= 200 or any(
+            value is not None for value in (dept, manager, role_level)
+        ):
+            raise ValueError("Department creation requires name only")
+    elif kind == "hired":
+        if not dept or not name or not 1 <= len(name) <= 200 or role_level is not None:
+            raise ValueError("AI hiring requires department/name, not role promotion")
+    elif kind == "promoted":
+        if (type(role_level) is not int or not 2 <= role_level <= 5
+            or any(value is not None for value in (dept, name, manager))):
+            raise ValueError("Promotion must specify only an increased role level")
+    elif any(value is not None for value in (dept, name, manager, role_level)):
+        raise ValueError("Closure/termination cannot change other organizational fields")
+    payload = {
+        "change_kind": kind, "target_id": target, "reason": reason,
+        "department_id": dept, "name": name, "manager_id": manager,
+        "role_level": role_level,
+    }
+    encoded = dumps(payload, sort_keys=True, separators=(",", ":"))
+    return payload, sha256(encoded.encode("utf-8")).hexdigest()
+
+
 class OperatingMode(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
