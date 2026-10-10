@@ -381,3 +381,57 @@ def test_postgresql_blocks_forged_enrollment_and_finished_run_tampering(case):
                 "DELETE FROM ago_tool_run_evidence WHERE run_id=%s",
                 (run["id"],),
             )
+
+
+def test_enrolled_external_tool_is_still_disabled_without_operator_opt_in(
+    case, monkeypatch,
+):
+    from ago.tool_catalog import ReadOnlyMetricsProvider
+
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    monkeypatch.delenv("AGO_M8_EXTERNAL_ENABLED", raising=False)
+    calls = []
+    monkeypatch.setattr(
+        ReadOnlyMetricsProvider, "fetch",
+        lambda self: calls.append("unexpected_network") or {"metrics": {}},
+    )
+    enroll(client, founder, reviewer, "tool:external_metrics")
+    _, worker = create_ai(client, founder)
+    task = post(client, "/v1/tasks", founder, {
+        "action": "tool:external_metrics", "assignee_id": worker,
+    })
+    request = post(client, "/v1/governance/approvals", founder, {
+        "action": "tool:external_metrics",
+    })
+    post(client, f"/v1/tasks/{task['id']}/approval", founder, {
+        "approval_id": request["request_id"],
+    })
+    decision(client, reviewer, request["request_id"])
+    response = client.post(f"/v1/tools/tasks/{task['id']}/run", headers=founder)
+    assert response.status_code == 502, response.text
+    assert calls == []
+    runs = client.get("/v1/tools/runs", headers=founder).json()
+    assert runs[0]["status"] == "failed"
+    assert runs[0]["output"] is None
+
+
+def test_operator_disable_prevents_future_automation_scan_and_dispatch(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    enrollment = enroll(client, founder, reviewer, "tool:knowledge_digest")
+    dept, worker = create_ai(client, founder)
+    rule = post(client, "/v1/tools/automation/rules", founder, {
+        "department_id": dept, "assignee_id": worker,
+        "code": "tool:knowledge_digest", "trigger": "knowledge_verified",
+    })
+    source_id = verified_node(client, founder, reviewer)
+    post(client, f"/v1/tools/enrollments/{enrollment['id']}/disable",
+         founder, {"reason": "Operator emergency stop"})
+    scanned = post(client, "/v1/tools/automation/scan", founder, {"limit": 20})
+    assert scanned["firings"] == []
+    post(client, f"/v1/tools/automation/rules/{rule['id']}/fire",
+         founder, {"source_id": source_id}, expected=403)
+    assert client.get(
+        "/v1/tools/automation/firings", headers=founder,
+    ).json() == []
