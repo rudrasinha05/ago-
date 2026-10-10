@@ -16,6 +16,9 @@ postgres = ["psycopg[binary]>=3.2,<4"]
 [tool.setuptools.packages.find]
 include = ["ago*"]
 
+[tool.setuptools.package-data]
+ago = ["console/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
