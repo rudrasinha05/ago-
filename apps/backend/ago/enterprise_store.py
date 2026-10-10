@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.enterprise_domains import (
     ASSET_TYPES, AssetIdentity, HORIZONS, OperatingMode, WorkCandidate,
-    WorkerState, allocate, evaluate_change, operational_load,
+    WorkerState, allocate, evaluate_change, operational_load, organization_change_intent,
     transition_mode, transition_worker, twin_scenario, validate_horizon,
 )
 from ago.security import Principal
@@ -930,6 +930,51 @@ class EnterpriseOperationsStore:
                 "replan_is_advisory": True, "automatically_replanned": False}
 
 
+    def record_organization_intent(self, *, actor: Principal, approval_id: str,
+                                   payload: dict, intent_digest: str) -> dict:
+        """Persist the exact payload the other human will actually review."""
+        normalized, recalculated = organization_change_intent(**payload)
+        if recalculated != intent_digest:
+            raise PermissionError("Unverifiable organizational proposal")
+        entity = ("department" if normalized["change_kind"] in ("created","closed")
+                  else "hr")
+        expected = ("enterprise:" + entity + ":" + normalized["change_kind"] +
+                    ":" + normalized["target_id"] + ":" + intent_digest)
+        with self.connection.transaction():
+            approval = self.connection.execute(
+                """SELECT action,status,requester_id FROM ago_approval_requests
+                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            if (not approval or approval["action"] != expected
+                or approval["status"] != "pending"
+                or str(approval["requester_id"]) != actor.subject):
+                raise PermissionError("Matching pending founder proposal required")
+            encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_organization_review_intents
+                   (id,tenant_id,approval_id,actor_id,target_id,change_kind,
+                    payload_key,payload,digest)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)""",
+                (identifier, actor.tenant_id, str(UUID(approval_id)),
+                 actor.subject, normalized["target_id"], normalized["change_kind"],
+                 encoded, encoded, intent_digest),
+            )
+        return {"id": identifier, "approval_id": str(UUID(approval_id)),
+                "review_payload": normalized, "intent_digest": intent_digest}
+
+    def organization_intents(self, *, tenant_id: str) -> list[dict]:
+        return [dict(row) for row in self.connection.execute(
+            """SELECT i.id,i.approval_id,i.change_kind,i.target_id,i.payload,
+                      i.digest,i.created_at,a.status,a.reviewer_id
+               FROM ago_organization_review_intents i
+               JOIN ago_approval_requests a ON a.tenant_id=i.tenant_id
+                 AND a.id=i.approval_id
+               WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id LIMIT 100""",
+            (str(UUID(tenant_id)),),
+        ).fetchall()]
+
     def organization_change(self, *, actor: Principal, change_kind: str,
                             target_id: str, approval_id: str, reason: str,
                             department_id: str | None = None,
@@ -945,10 +990,22 @@ class EnterpriseOperationsStore:
         manager = str(UUID(manager_id)) if manager_id else None
         if role_level is not None and (type(role_level) is not int or not 1 <= role_level <= 5):
             raise ValueError("Role level out of bounds")
+        intent, digest = organization_change_intent(
+            change_kind=change_kind, target_id=target, reason=reason,
+            department_id=dept, name=name, manager_id=manager,
+            role_level=role_level)
         entity = "department" if change_kind in ("created", "closed") else "hr"
-        action = "enterprise:" + entity + ":" + change_kind + ":" + target
+        action = "enterprise:" + entity + ":" + change_kind + ":" + target + ":" + digest
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
+            review = self.connection.execute(
+                """SELECT payload,digest FROM ago_organization_review_intents
+                   WHERE tenant_id=%s AND approval_id=%s""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            if (not review or review["digest"] != digest
+                or review["payload"] != intent):
+                raise PermissionError("Organizational action differs from human-reviewed payload")
             self._approval(actor, approval_id, action)
             table = ("ago_department_lifecycle_events" if entity == "department"
                      else "ago_personnel_events")
