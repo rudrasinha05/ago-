@@ -10,9 +10,9 @@ autonomous general intelligence, a security audit or a publicly deployed service
 ## Independently observed functional evidence
 
 - Full Python/JavaScript + image + DR acceptance at commit
-  `7b86e62475a34082326fbd00d64ef73cff232f41`.
+  `4400c19fe9f9183af807662f1fc8b8002353a8d9`.
 - GitHub Actions run:
-  https://github.com/rudrasinha05/ago-/actions/runs/38022635888
+  https://github.com/rudrasinha05/ago-/actions/runs/38022872797
 - Python 3.11: **236 passed, zero failed, one nonblocking warning**.
 - Python 3.14: **236 passed, zero failed, one nonblocking warning**.
 - Node.js 22: **13 UI tests passed, zero failed** on each Python CI job.
@@ -25,7 +25,7 @@ autonomous general intelligence, a security audit or a publicly deployed service
   `ago_restore_drill` database, and re-validated SQL migration integrity.
 - Subsequent hardening restricts Docker to read-only root filesystem,
   zero Linux capabilities, no privilege escalation, bounded memory/pids;
-  a later dedicated image smoke validated this as well.
+  the final four-job CI run validated the constrained image smoke as well.
 - This release gate does not delete or migrate any founder workstation files;
   work remains on the single `develop` branch.
 
