@@ -300,6 +300,9 @@ export function renderKnowledge(data, state) {
 export 
 function renderEnterpriseSummary(data) {
   const currentMode = resource(data,"enterpriseModes")?.effective;
+  const capacity = resource(data,"enterpriseCapacity");
+  const capacityPolicies = Array.isArray(capacity?.policies) ? capacity.policies : [];
+  const orgIntents = list(data,"enterpriseOrgIntents");
   const strategicPlans = list(data,"enterprisePlans");
   const costs = list(data,"enterpriseCosts");
   const budgets = list(data,"enterpriseBudgets");
@@ -341,6 +344,13 @@ function renderEnterpriseSummary(data) {
   const comparisonRows = observed.slice(0,10).map(x=>'<tr><td>'+
     safe(shortId(x.scenario_id))+'</td><td>'+safe(shortId(x.later_snapshot_id))+
     '</td><td>Descriptive only</td><td>'+safe(dateText(x.created_at))+'</td></tr>');
+  const capacityRows = capacityPolicies.slice(0,10).map(x=>
+    '<tr><td>'+maybe(x.scope_kind)+'</td><td>'+safe(shortId(x.scope_id || "company"))+
+    '</td><td>'+num(Number(x.max_running))+'</td><td>'+maybe(x.rationale)+'</td></tr>');
+  const intentRows = orgIntents.slice(0,10).map(x=>
+    '<tr><td>'+maybe(x.change_kind)+'</td><td>'+
+    maybe(x.payload?.name || x.payload?.target_id)+'</td><td>'+
+    maybe(x.payload?.reason)+'</td><td>'+badge(x.status)+'</td></tr>');
   return section("Organizational operating system","Sections 21–27 · persisted evidence")+
     '<div class="info-strip">'+icon("shield")+
     '<span>Human approvals govern all operational changes. Costs are unverified unless independently reconciled; scenarios never apply changes.</span></div>'+
@@ -352,7 +362,15 @@ function renderEnterpriseSummary(data) {
     metric("Internal assets",resource(data,"enterpriseAssets")?num(assets.length):"—",
       "Versioned tenant catalog","layers")+
     metric("Twin scenarios",resource(data,"enterpriseTwin")?num(scenarios.length):"—",
-      "Read-only historical simulations","chart")+'</div>'+
+      "Read-only historical simulations","chart")+
+    metric("Running tasks",capacity ? num(Number(capacity.total_running)) : "—",
+      "Tenant-wide database-governed slots","layers")+'</div>'+
+    panel("Governed execution capacity",unavailable(data,"enterpriseCapacity",
+      table(["Scope","Target","Max running","Reviewed rationale"],capacityRows,
+        empty("Default company / department / employee limits apply"))))+
+    panel("Immutable organizational approval details",unavailable(data,"enterpriseOrgIntents",
+      table(["Change","Employee / department","Exact reviewed reason","Approval"],intentRows,
+        empty("No full-payload HR review requests"))))+
     panel("Multi-level plans",unavailable(data,"enterprisePlans",
       table(["Plan","Horizon","Deadline","Budget ceiling"],planRows,empty("No approved planning horizons"))))+
     panel("Observed financial evidence (not verified bills)",unavailable(data,"enterpriseCosts",
