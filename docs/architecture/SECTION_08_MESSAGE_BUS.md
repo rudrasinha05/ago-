@@ -1,6 +1,6 @@
 # Section 8 — Frozen Message Bus and Communication Contracts
 
-Baseline `30ee90f`; status in progress. Scope is the seven supplied master
+Baseline `30ee90f`; all seven gates CI-accepted. Scope is the seven supplied master
 checklist requirements; the full original blueprint remains unavailable.
 The founder authorized sequential completion of Sections 8–10 in one batch;
 the usual stop-before-next-section rule does not require another confirmation

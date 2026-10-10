@@ -39,6 +39,7 @@ from ago.knowledge_store import KnowledgeStore as _KnowledgeStore
 from ago.database_store import DatabaseStore as _DatabaseStore
 from ago.login_security import LoginThrottle as _LoginThrottle
 from ago.message_store import MessageStore as _MessageStore
+from ago.semantic_memory_store import SemanticMemoryStore as _SemanticMemoryStore
 from ago.memory import MemoryRecord
 from ago.meta_brain import MetaBrain as _MetaBrain
 from ago.meta_brain_queries import MetaBrainQueries as _MetaBrainQueries
@@ -659,7 +660,29 @@ class MessageStorePort(Protocol):
     def replay(self, *, actor: Principal, message_id: str, reason: str) -> bool: ...
 
 
+@runtime_checkable
+class SemanticMemoryStorePort(Protocol):
+    def create(self, *, actor: Principal, scope: str, scope_id: str, kind: str, content: str, source_ref: str, retention_hours: int=2160, knowledge_id: str | None=None) -> dict: ...
+
+    def get(self, *, actor: Principal, memory_id: str) -> dict: ...
+
+    def index(self, *, actor: Principal, memory_id: str) -> dict: ...
+
+    def search(self, *, actor: Principal, query: str, limit: int=10) -> dict: ...
+
+    def consolidate(self, *, actor: Principal, memory_ids: list[str]) -> dict: ...
+
+    def correct(self, *, actor: Principal, memory_id: str, content: str, expected_revision: int, reason: str) -> dict: ...
+
+    def forget(self, *, actor: Principal, memory_id: str, reason: str) -> dict: ...
+
+    def expire(self, *, actor: Principal, limit: int=100) -> dict: ...
+
+    def set_project_member(self, *, actor: Principal, goal_id: str, user_id: str, member: bool) -> dict: ...
+
+
 REPOSITORY_BINDINGS = {
+    SemanticMemoryStorePort: _SemanticMemoryStore,
     MessageStorePort: _MessageStore,
     AccessServicePort: _AccessService,
     AgentRuntimePort: _AgentRuntime,

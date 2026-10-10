@@ -61,6 +61,13 @@ Intelligence or completion of the original entire enterprise architecture.
   Evidence: `docs/reports/SECTION07_FINAL_ACCEPTANCE.md`. Graph storage reuses
   PostgreSQL; vector ranking is bounded exact cosine, not ANN; private byte
   storage runs in the existing Linux service with explicit operator preparation.
+- **Section 8 — Message Bus and Communication Contracts:** versioned five-kind
+  tenant envelopes, durable ordered PostgreSQL delivery, fenced leases,
+  transactional receipts, safe poison observability and human-audited replay.
+  All seven bounded gates CI-accepted: `cf653f5`, primary `38062604255`,
+  independent `38062604261`; 357 Python tests on all three versions plus all
+  prior browser/build/storage/image/recovery gates. Separate broker not required.
+  Evidence: `docs/reports/SECTION08_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
   Versioned manifest now maps 98 AGO root modules and 260 observed internal
@@ -74,7 +81,7 @@ Intelligence or completion of the original entire enterprise architecture.
   the repository administrator before independent human review is considered
   operationally enforced.
 - Every other unfinished section is **still separately pending**. Closure of
-  Sections 1–7 and 14 does not upgrade Sections 8–13 or 15–34, nor imply
+  Sections 1–8 and 14 does not upgrade Sections 9–13 or 15–34, nor imply
   that the full original blueprint is available.
 
 ## Evidence and provenance caveat

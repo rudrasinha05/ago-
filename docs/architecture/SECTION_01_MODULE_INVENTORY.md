@@ -64,6 +64,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [m8_permissions](../../apps/backend/ago/m8_permissions.py) | entrypoints | composition | security_controls |
 | [main](../../apps/backend/ago/main.py) | entrypoints | composition | api_agents, api_brain, api_council, api_insights, api_knowledge, api_m2, api_meta, api_operations, api_tools, console_api, console_host, http_errors, platform, readiness, release_security |
 | [memory](../../apps/backend/ago/memory.py) | knowledge | domain | None |
+| [memory_policies](../../apps/backend/ago/memory_policies.py) | knowledge | domain | None |
 | [message_contracts](../../apps/backend/ago/message_contracts.py) | platform | domain | None |
 | [message_ops](../../apps/backend/ago/message_ops.py) | entrypoints | composition | backend_contracts, message_store |
 | [message_store](../../apps/backend/ago/message_store.py) | platform | persistence | backend_contracts, message_contracts, security, security_controls |
@@ -88,12 +89,13 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [readiness](../../apps/backend/ago/readiness.py) | platform | foundation | None |
 | [release_ops](../../apps/backend/ago/release_ops.py) | entrypoints | composition | release_security |
 | [release_security](../../apps/backend/ago/release_security.py) | platform | composition | event_runtime |
-| [repository_ports](../../apps/backend/ago/repository_ports.py) | platform | service | access, agent_runtime, agent_runtime_queries, approvals, backend_contracts, calendar_store, console_service, console_store, council_store, credits, database_store, department_automation, department_automation_queries, executive_intelligence, executive_intelligence_queries, experiments, goals, governance, handoffs, identity, knowledge_store, login_security, memory, message_store, meta_brain, meta_brain_queries, organization, organization_store, organizational_dna, plan_execution, plan_execution_queries, plan_store, quality, quality_store, scorecard, scorecard_queries, security, security_controls, session_service, task_store, tool_catalog_queries, tool_enrollment, tool_enrollment_queries, tool_runtime, tool_runtime_queries, workflows |
+| [repository_ports](../../apps/backend/ago/repository_ports.py) | platform | service | access, agent_runtime, agent_runtime_queries, approvals, backend_contracts, calendar_store, console_service, console_store, council_store, credits, database_store, department_automation, department_automation_queries, executive_intelligence, executive_intelligence_queries, experiments, goals, governance, handoffs, identity, knowledge_store, login_security, memory, message_store, meta_brain, meta_brain_queries, organization, organization_store, organizational_dna, plan_execution, plan_execution_queries, plan_store, quality, quality_store, scorecard, scorecard_queries, security, security_controls, semantic_memory_store, session_service, task_store, tool_catalog_queries, tool_enrollment, tool_enrollment_queries, tool_runtime, tool_runtime_queries, workflows |
 | [scheduler](../../apps/backend/ago/scheduler.py) | platform | foundation | None |
 | [scorecard](../../apps/backend/ago/scorecard.py) | economics | service | backend_contracts, credits, scorecard_queries |
 | [scorecard_queries](../../apps/backend/ago/scorecard_queries.py) | economics | persistence | backend_contracts |
 | [security](../../apps/backend/ago/security.py) | governance | domain | None |
 | [security_controls](../../apps/backend/ago/security_controls.py) | governance | persistence | backend_contracts, security |
+| [semantic_memory_store](../../apps/backend/ago/semantic_memory_store.py) | knowledge | persistence | backend_contracts, memory_policies, security, security_controls, storage_adapters |
 | [session_service](../../apps/backend/ago/session_service.py) | governance | service | backend_contracts, identity, login_security, security |
 | [simulation](../../apps/backend/ago/simulation.py) | strategy | service | credits |
 | [storage_adapters](../../apps/backend/ago/storage_adapters.py) | platform | foundation | None |

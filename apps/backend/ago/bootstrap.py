@@ -68,6 +68,7 @@ FOUNDER_PERMISSIONS = (
     "qa:review",
     "memory:read",
     "memory:write",
+    "memory:manage",
 )
 
 

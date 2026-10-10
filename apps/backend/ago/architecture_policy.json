@@ -759,6 +759,7 @@
         "scorecard_queries",
         "security",
         "security_controls",
+        "semantic_memory_store",
         "session_service",
         "task_store",
         "tool_catalog_queries",
@@ -886,6 +887,22 @@
       "imports": [
         "backend_contracts",
         "message_store"
+      ]
+    },
+    "memory_policies": {
+      "context": "knowledge",
+      "layer": "domain",
+      "imports": []
+    },
+    "semantic_memory_store": {
+      "context": "knowledge",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "memory_policies",
+        "security",
+        "security_controls",
+        "storage_adapters"
       ]
     }
   },

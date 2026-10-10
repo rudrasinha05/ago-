@@ -193,7 +193,9 @@
     "storage_ops": "entrypoints",
     "message_contracts": "platform",
     "message_store": "platform",
-    "message_ops": "entrypoints"
+    "message_ops": "entrypoints",
+    "memory_policies": "knowledge",
+    "semantic_memory_store": "knowledge"
   },
   "sql_access": {
     "__init__": [],
@@ -347,6 +349,7 @@
     ],
     "main": [],
     "memory": [],
+    "memory_policies": [],
     "message_contracts": [],
     "message_ops": [],
     "message_store": [
@@ -418,6 +421,17 @@
       "ago_role_permissions",
       "ago_security_audit",
       "ago_user_roles",
+      "ago_users"
+    ],
+    "semantic_memory_store": [
+      "ago_employees",
+      "ago_goals",
+      "ago_knowledge_nodes",
+      "ago_memory_projects",
+      "ago_memory_sources",
+      "ago_memory_vectors",
+      "ago_scoped_memories",
+      "ago_tenants",
       "ago_users"
     ],
     "session_service": [],

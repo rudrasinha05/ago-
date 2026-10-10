@@ -14,7 +14,7 @@ from pydantic import Field, StrictBool, StrictInt
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, db_connection, repository_scope, translate_error
 from ago.backend_contracts import RepositoryScope
-from ago.repository_ports import DatabaseStorePort, KnowledgeStorePort, MessageStorePort
+from ago.repository_ports import DatabaseStorePort, KnowledgeStorePort, MessageStorePort, SemanticMemoryStorePort
 from ago.security import Principal
 from ago.storage_adapters import StorageUnavailable
 
@@ -32,6 +32,117 @@ class MessageInput(StrictInput):
 
 class ReplayInput(StrictInput):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class MemoryInput(StrictInput):
+    scope: Literal['employee', 'department', 'project', 'company']
+    scope_id: UUID
+    kind: Literal['episodic', 'working']
+    content: str = Field(min_length=1, max_length=12000)
+    source_ref: str = Field(min_length=1, max_length=1000)
+    retention_hours: StrictInt | None = Field(default=None, ge=1, le=8760)
+    knowledge_id: UUID | None = None
+
+
+class ConsolidateInput(StrictInput):
+    memory_ids: list[UUID] = Field(min_length=2, max_length=20)
+
+
+class CorrectionInput(StrictInput):
+    content: str = Field(min_length=1, max_length=12000)
+    expected_revision: StrictInt = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ProjectMemberInput(StrictInput):
+    user_id: UUID
+    member: StrictBool
+
+
+@router.post('/memory')
+def create_memory(data: MemoryInput, actor: Principal = Depends(authenticated),
+                  db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).create(actor=actor, scope=data.scope,
+            scope_id=str(data.scope_id), kind=data.kind, content=data.content, source_ref=data.source_ref,
+            retention_hours=data.retention_hours if data.retention_hours is not None else (24 if data.kind == 'working' else 2160),
+            knowledge_id=str(data.knowledge_id) if data.knowledge_id else None)
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@router.get('/memory/{memory_id}')
+def get_memory(memory_id: UUID, actor: Principal = Depends(authenticated),
+               db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).get(actor=actor, memory_id=str(memory_id))
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@router.post('/memory/{memory_id}/index')
+def index_memory(memory_id: UUID, actor: Principal = Depends(authenticated),
+                 db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).index(actor=actor, memory_id=str(memory_id))
+    except (ValueError, PermissionError, LookupError, StorageUnavailable, OSError) as exc:
+        storage_error(exc)
+
+
+@router.post('/memory/search')
+def search_memory(data: SearchInput, actor: Principal = Depends(authenticated),
+                  db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).search(actor=actor, query=data.query, limit=data.limit)
+    except (ValueError, PermissionError, LookupError, StorageUnavailable, OSError) as exc:
+        storage_error(exc)
+
+
+@router.post('/memory/consolidate')
+def consolidate_memory(data: ConsolidateInput, actor: Principal = Depends(authenticated),
+                       db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).consolidate(actor=actor, memory_ids=[str(i) for i in data.memory_ids])
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@router.post('/memory/{memory_id}/correct')
+def correct_memory(memory_id: UUID, data: CorrectionInput, actor: Principal = Depends(authenticated),
+                   db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).correct(actor=actor, memory_id=str(memory_id),
+            content=data.content, expected_revision=data.expected_revision, reason=data.reason)
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@router.post('/memory/{memory_id}/forget')
+def forget_memory(memory_id: UUID, data: ReplayInput, actor: Principal = Depends(authenticated),
+                  db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).forget(actor=actor, memory_id=str(memory_id), reason=data.reason)
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@router.post('/memory/expire')
+def expire_memory(actor: Principal = Depends(authenticated), db=Depends(db_connection),
+                  repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).expire(actor=actor)
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+
+@router.post('/memory/projects/{goal_id}/members')
+def memory_member(goal_id: UUID, data: ProjectMemberInput, actor: Principal = Depends(authenticated),
+                  db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(SemanticMemoryStorePort).set_project_member(actor=actor, goal_id=str(goal_id),
+                                                                              user_id=str(data.user_id), member=data.member)
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
 
 
 @router.post('/messages')
