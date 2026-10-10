@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.enterprise_domains import (
     ASSET_TYPES, AssetIdentity, HORIZONS, OperatingMode, WorkCandidate,
-    WorkerState, agent_evidence_intent, allocate, evaluate_change, operational_load, organization_change_intent,
+    WorkerState, agent_evidence_intent, allocate, evaluate_change, operational_load, organization_change_intent, plan_revision_intent,
     transition_mode, transition_worker, twin_scenario, validate_horizon,
 )
 from ago.security import Principal
@@ -358,6 +358,133 @@ class EnterpriseOperationsStore:
                 "unknown_dependencies": True, "not_authorized_to_start": True}
 
 
+    def normalize_plan_revision(self, *, plan_id: str, base_revision: int,
+                                title: str, starts_at: datetime, ends_at: datetime,
+                                budget_ceiling: str, evidence_ref: str,
+                                rationale: str) -> dict:
+        payload, digest = plan_revision_intent(
+            plan_id=plan_id, base_revision=base_revision, title=title,
+            starts_at=starts_at, ends_at=ends_at,
+            budget_ceiling=budget_ceiling, evidence_ref=evidence_ref,
+            rationale=rationale)
+        return {"review_payload": payload, "intent_digest": digest}
+
+    def propose_plan_revision(self, *, actor: Principal, approval_id: str,
+                              payload: dict, intent_digest: str) -> dict:
+        values, digest = plan_revision_intent(
+            plan_id=payload["plan_id"], base_revision=payload["base_revision"],
+            title=payload["title"],
+            starts_at=datetime.fromisoformat(payload["starts_at"]),
+            ends_at=datetime.fromisoformat(payload["ends_at"]),
+            budget_ceiling=payload["budget_ceiling"],
+            evidence_ref=payload["evidence_ref"], rationale=payload["rationale"])
+        if digest != intent_digest:
+            raise PermissionError("Tampered plan revision")
+        plan_id = values["plan_id"]
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            existing = self.connection.execute(
+                "SELECT 1 FROM ago_horizon_plans WHERE tenant_id=%s AND id=%s",
+                (actor.tenant_id, plan_id),
+            ).fetchone()
+            if not existing:
+                raise LookupError("Plan not found")
+            current = self.connection.execute(
+                """SELECT coalesce(max(revision),1) AS n
+                   FROM ago_horizon_plan_revisions
+                   WHERE tenant_id=%s AND horizon_plan_id=%s""",
+                (actor.tenant_id, plan_id),
+            ).fetchone()["n"]
+            if current != values["base_revision"]:
+                raise PermissionError("Base plan revision is stale")
+            matching = self.connection.execute(
+                """SELECT action,status,requester_id FROM ago_approval_requests
+                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            action = "enterprise:plan-revise:" + plan_id + ":" + digest
+            if (not matching or matching["action"] != action
+                or matching["status"] != "pending"
+                or str(matching["requester_id"]) != actor.subject):
+                raise PermissionError("Review action cannot be changed after proposal")
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_horizon_replan_intents
+                   (id,tenant_id,horizon_plan_id,actor_id,approval_id,
+                    base_revision,title,starts_at,ends_at,budget_ceiling,
+                    evidence_ref,rationale,canonical_payload,digest)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, plan_id, actor.subject,
+                 str(UUID(approval_id)), values["base_revision"], values["title"],
+                 datetime.fromisoformat(values["starts_at"]),
+                 datetime.fromisoformat(values["ends_at"]),
+                 Decimal(values["budget_ceiling"]), values["evidence_ref"],
+                 values["rationale"],
+                 json.dumps(values, sort_keys=True, separators=(",", ":")),
+                 digest),
+            )
+        return {"id": identifier, "approval_id": str(UUID(approval_id)),
+                "review_payload": values, "intent_digest": digest,
+                "status": "awaiting_independent_review"}
+
+    def apply_plan_revision(self, *, actor: Principal, intent_id: str,
+                            approval_id: str) -> dict:
+        intent, approval = str(UUID(intent_id)), str(UUID(approval_id))
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            row = self.connection.execute(
+                """SELECT horizon_plan_id,actor_id,approval_id,base_revision,digest
+                   FROM ago_horizon_replan_intents
+                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                (actor.tenant_id, intent),
+            ).fetchone()
+            if not row:
+                raise LookupError("Plan change request missing")
+            if str(row["actor_id"]) != actor.subject or str(row["approval_id"]) != approval:
+                raise PermissionError("Cannot substitute proposal owner/approval")
+            plan_id = str(row["horizon_plan_id"])
+            self._approval(actor, approval,
+                           "enterprise:plan-revise:" + plan_id + ":" + row["digest"])
+            previous = self.connection.execute(
+                """SELECT id,revision FROM ago_horizon_plan_revisions
+                   WHERE tenant_id=%s AND intent_id=%s""",
+                (actor.tenant_id, intent),
+            ).fetchone()
+            if previous:
+                return {"id": str(previous["id"]), "revision": previous["revision"],
+                        "plan_id": plan_id, "idempotent": True,
+                        "automatically_authorizes_tasks": False}
+            revision = int(row["base_revision"]) + 1
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_horizon_plan_revisions
+                   (id,tenant_id,horizon_plan_id,intent_id,revision,approval_id,actor_id)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, plan_id, intent, revision,
+                 approval, actor.subject),
+            )
+        return {"id": identifier, "plan_id": plan_id, "revision": revision,
+                "idempotent": False, "automatically_authorizes_tasks": False}
+
+    def plan_revisions(self, *, tenant_id: str, plan_id: str) -> list[dict]:
+        plan, tenant = str(UUID(plan_id)), str(UUID(tenant_id))
+        if not self.connection.execute(
+            "SELECT 1 FROM ago_horizon_plans WHERE tenant_id=%s AND id=%s",
+            (tenant, plan),
+        ).fetchone():
+            raise LookupError("Plan not found")
+        return [dict(x) for x in self.connection.execute(
+            """SELECT r.id,r.revision,i.title,i.starts_at,i.ends_at,
+                      i.budget_ceiling,i.evidence_ref,i.rationale,
+                      r.created_at,r.approval_id
+               FROM ago_horizon_plan_revisions r
+               JOIN ago_horizon_replan_intents i
+                 ON i.tenant_id=r.tenant_id AND i.id=r.intent_id
+               WHERE r.tenant_id=%s AND r.horizon_plan_id=%s
+               ORDER BY r.revision DESC LIMIT 100""",
+            (tenant, plan),
+        ).fetchall()]
+
     def plan(self, *, actor: Principal, identifier: str, horizon: str,
              parent_id: str | None, title: str, starts_at: datetime,
              ends_at: datetime, budget_ceiling: str, approval_id: str,
@@ -377,8 +504,20 @@ class EnterpriseOperationsStore:
             self._approval(actor, approval_id, "enterprise:plan:" + identifier)
             if parent_id:
                 parent = self.connection.execute(
-                    """SELECT horizon,starts_at,ends_at,budget_ceiling
-                       FROM ago_horizon_plans WHERE tenant_id=%s AND id=%s""",
+                    """SELECT p.horizon,
+                        coalesce(i.starts_at,p.starts_at) AS starts_at,
+                        coalesce(i.ends_at,p.ends_at) AS ends_at,
+                        coalesce(i.budget_ceiling,p.budget_ceiling) AS budget_ceiling
+                       FROM ago_horizon_plans p
+                       LEFT JOIN LATERAL (
+                         SELECT ri.starts_at,ri.ends_at,ri.budget_ceiling
+                         FROM ago_horizon_plan_revisions r
+                         JOIN ago_horizon_replan_intents ri
+                           ON ri.tenant_id=r.tenant_id AND ri.id=r.intent_id
+                         WHERE r.tenant_id=p.tenant_id AND r.horizon_plan_id=p.id
+                         ORDER BY r.revision DESC LIMIT 1
+                       ) i ON true
+                       WHERE p.tenant_id=%s AND p.id=%s""",
                     (actor.tenant_id, str(UUID(parent_id))),
                 ).fetchone()
                 if parent is None:
@@ -403,10 +542,26 @@ class EnterpriseOperationsStore:
 
     def plans(self, *, tenant_id: str) -> list[dict]:
         return [dict(r) for r in self.connection.execute(
-            """SELECT id,parent_id,owner_id,horizon,title,starts_at,ends_at,
-                 budget_ceiling,revision,evidence_ref,created_at
-                 FROM ago_horizon_plans WHERE tenant_id=%s
-                 ORDER BY created_at,id LIMIT 500""",
+            """SELECT p.id,p.parent_id,p.owner_id,p.horizon,
+                 coalesce(i.title,p.title) AS title,
+                 coalesce(i.starts_at,p.starts_at) AS starts_at,
+                 coalesce(i.ends_at,p.ends_at) AS ends_at,
+                 coalesce(i.budget_ceiling,p.budget_ceiling) AS budget_ceiling,
+                 coalesce(i.revision,p.revision) AS revision,
+                 coalesce(i.evidence_ref,p.evidence_ref) AS evidence_ref,
+                 p.created_at
+                 FROM ago_horizon_plans p
+                 LEFT JOIN LATERAL (
+                   SELECT r.revision,ri.title,ri.starts_at,ri.ends_at,
+                          ri.budget_ceiling,ri.evidence_ref
+                   FROM ago_horizon_plan_revisions r
+                   JOIN ago_horizon_replan_intents ri
+                     ON ri.tenant_id=r.tenant_id AND ri.id=r.intent_id
+                   WHERE r.tenant_id=p.tenant_id AND r.horizon_plan_id=p.id
+                   ORDER BY r.revision DESC LIMIT 1
+                 ) i ON true
+                 WHERE p.tenant_id=%s
+                 ORDER BY p.created_at,p.id LIMIT 500""",
             (str(UUID(tenant_id)),),
         ).fetchall()]
 
@@ -1078,8 +1233,18 @@ class EnterpriseOperationsStore:
             self._approval(actor, approval_id,
                            "enterprise:plan-task:" + horizon + ":" + task)
             plan = self.connection.execute(
-                """SELECT starts_at,ends_at FROM ago_horizon_plans
-                   WHERE tenant_id=%s AND id=%s""",
+                """SELECT coalesce(ri.starts_at,p.starts_at) AS starts_at,
+                          coalesce(ri.ends_at,p.ends_at) AS ends_at
+                   FROM ago_horizon_plans p
+                   LEFT JOIN LATERAL (
+                     SELECT intent.starts_at,intent.ends_at
+                     FROM ago_horizon_plan_revisions r
+                     JOIN ago_horizon_replan_intents intent
+                       ON intent.tenant_id=r.tenant_id AND intent.id=r.intent_id
+                     WHERE r.tenant_id=p.tenant_id AND r.horizon_plan_id=p.id
+                     ORDER BY r.revision DESC LIMIT 1
+                   ) ri ON true
+                   WHERE p.tenant_id=%s AND p.id=%s""",
                 (actor.tenant_id, horizon),
             ).fetchone()
             work = self.connection.execute(
