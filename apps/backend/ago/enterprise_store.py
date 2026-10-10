@@ -244,6 +244,57 @@ class EnterpriseOperationsStore:
             (str(UUID(tenant_id)), str(UUID(employee_id))),
         ).fetchall()]
 
+    def autonomy_assessment(self, *, tenant_id: str, employee_id: str) -> dict:
+        """Evidence-based advisory maturity, never authorization or AI privilege."""
+        tenant, employee = str(UUID(tenant_id)), str(UUID(employee_id))
+        worker = self.connection.execute(
+            """SELECT kind FROM ago_employees WHERE tenant_id=%s AND id=%s""",
+            (tenant, employee),
+        ).fetchone()
+        if not worker or worker["kind"] != "ai":
+            raise LookupError("Registered tenant AI worker required")
+        reviews = self.connection.execute(
+            """SELECT t.id,t.status,r.verdict
+               FROM ago_governed_tasks t
+               JOIN ago_task_reviews r ON r.tenant_id=t.tenant_id AND r.task_id=t.id
+               WHERE t.tenant_id=%s AND t.assignee_id=%s
+               ORDER BY t.created_at DESC,t.id LIMIT 100""",
+            (tenant, employee),
+        ).fetchall()
+        seen = set()
+        passed = failed = 0
+        for row in reviews:
+            if row["id"] in seen:
+                continue
+            seen.add(row["id"])
+            if row["status"] == "completed" and row["verdict"] == "pass":
+                passed += 1
+            elif row["status"] == "failed" or row["verdict"] == "fail":
+                failed += 1
+        observed = passed + failed
+        open_blocking = [
+            h for h in self.assistance(tenant_id=tenant, employee_id=employee)
+            if h["severity"] == "blocking" and h["outcome"] != "resolved"
+        ]
+        state = self.worker_history(tenant_id=tenant, employee_id=employee)
+        available = not state or state[0]["state"] in ("available", "idle")
+        score = int(passed * 100 / observed) if observed else None
+        tier = (2 if observed >= 20 and score is not None and score >= 95
+                else 1 if observed >= 5 and score is not None and score >= 90
+                else 0)
+        if open_blocking or not available:
+            tier = 0
+        return {
+            "employee_id": employee, "advisory_autonomy_tier": tier,
+            "reviewed_task_samples": observed, "qa_passed": passed, "qa_failed": failed,
+            "observed_pass_rate_pct": score,
+            "sample_capped_at": 100, "has_active_blocking_escalations": bool(open_blocking),
+            "worker_available": available, "delegation_granted": False,
+            "task_approval_required": True, "human_escalation": "independent_reviewer",
+            "uncertainty": "high" if observed < 20 else "observed_task_qa_only",
+            "subjective_consciousness": False,
+        }
+
     def worker_state(self, *, tenant_id: str, employee_id: str) -> dict:
         tenant, employee = str(UUID(tenant_id)), str(UUID(employee_id))
         row = self.connection.execute(
