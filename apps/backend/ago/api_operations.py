@@ -226,7 +226,6 @@ def calendar_history(
 # Sections 21–27: authorized application calls only, never SQL in transport.
 from typing import Literal
 from decimal import Decimal
-from fastapi import Query
 from ago.repository_ports import EnterpriseOperationsStorePort, ApprovalRepositoryPort
 
 
