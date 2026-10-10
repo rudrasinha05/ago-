@@ -216,3 +216,25 @@ test("calendar RSVP action appears only for an invited employee", () => {
   const html=renderPage("calendar",calendar,state);
   assert.equal((html.match(/data-action="calendar-rsvp"/g)||[]).length,1);
 });
+
+
+test("Strategy activation waits for an independently approved real DB plan status", () => {
+  const planId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const approvalId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const result = {
+    goals: loaded([{id:TENANT,title:"Pilot objective",status:"active"}]),
+    plans: loaded([{id:planId,goal_id:TENANT,approval_id:approvalId,
+      title:"Pilot plan",status:"pending_approval"}]),
+    approvals: loaded([{id:approvalId,status:"pending"}]),
+  };
+  const state = mockState(["brain:manage","brain:activate"]);
+  const pending = renderPage("strategy",result,state);
+  assert.match(pending,/pending approval/);
+  assert.doesNotMatch(pending,/data-action="plan-activate"/);
+  result.approvals = loaded([{id:approvalId,status:"approved"}]);
+  assert.match(renderPage("strategy",result,state),/data-action="plan-activate"/);
+  result.approvals = loaded([{id:approvalId,status:"rejected"}]);
+  const rejected = renderPage("strategy",result,state);
+  assert.match(rejected,/rejected/);
+  assert.doesNotMatch(rejected,/data-action="plan-activate"/);
+});
