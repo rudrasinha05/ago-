@@ -6,11 +6,13 @@ Intelligence or completion of the original entire enterprise architecture.
 
 ## Section-level implementation ledger (independent of M1–M12 milestones)
 
-- **Section 1 — Overall System Architecture:** seven bounded checklist gates
-  implemented with a complete source-linked module inventory, layer/context
+- **Section 1 — Overall System Architecture:** all seven bounded checklist gates
+  **CI-accepted** with a complete source-linked module inventory, layer/context
   responsibilities, reviewed dependency direction, synchronous/asynchronous
   contracts, governed lifecycle, tenancy, fault and scaling boundaries.
   Read-only traceability gate and anonymous-perimeter negative tests are in CI.
+  Commit `2229ca9`: 278 Python tests per 3.11/3.14, 14 JS, six Chromium,
+  Docker and PostgreSQL restore gates passed in CI run `38034834604`.
   Acceptance evidence: `docs/reports/SECTION01_FINAL_ACCEPTANCE.md`.
   This is not proof of parity with the missing full original blueprint.
 - **Section 14 — Module Dependency Rules:** engineering implementation
