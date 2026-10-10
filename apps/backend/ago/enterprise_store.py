@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.enterprise_domains import (
     ASSET_TYPES, AssetIdentity, HORIZONS, OperatingMode, WorkCandidate,
-    WorkerState, allocate, budget_guard, evaluate_change, operational_load,
+    WorkerState, allocate, evaluate_change, operational_load,
     transition_mode, transition_worker, twin_scenario, validate_horizon,
 )
 from ago.security import Principal
