@@ -986,6 +986,106 @@ class EnterpriseOperationsStore:
             (str(UUID(tenant_id)),),
         ).fetchall()]
 
+    def capacity_limits(self, *, tenant_id: str) -> dict:
+        tenant = str(UUID(tenant_id))
+        policies = [dict(row) for row in self.connection.execute(
+            """SELECT id,scope_kind,scope_id,max_running,actor_id,approval_id,
+                      rationale,created_at FROM ago_oos_capacity_policies
+               WHERE tenant_id=%s ORDER BY created_at DESC,id DESC LIMIT 100""",
+            (tenant,),
+        ).fetchall()]
+        current: dict[tuple[str, str | None], int] = {}
+        for policy in policies:
+            scope = (policy["scope_kind"],
+                     str(policy["scope_id"]) if policy["scope_id"] else None)
+            current.setdefault(scope, int(policy["max_running"]))
+        running = [dict(x) for x in self.connection.execute(
+            """SELECT e.department_id,t.assignee_id,count(*) AS running
+               FROM ago_governed_tasks t
+               JOIN ago_employees e ON e.tenant_id=t.tenant_id AND e.id=t.assignee_id
+               WHERE t.tenant_id=%s AND t.status='running'
+               GROUP BY e.department_id,t.assignee_id""",
+            (tenant,),
+        ).fetchall()]
+        return {
+            "defaults": {"company": 12, "department": 4, "employee": 1},
+            "policies": policies, "running": running,
+            "total_running": sum(int(item["running"]) for item in running),
+            "max_policies_returned": 100,
+            "changes_require_independent_review": True,
+        }
+
+    def set_capacity(self, *, actor: Principal, approval_id: str,
+                     scope_kind: str, scope_id: str | None, max_running: int,
+                     rationale: str) -> dict:
+        if scope_kind not in ("company","department","employee") or (
+            (scope_kind == "company") != (scope_id is None)
+        ):
+            raise ValueError("Invalid capacity scope")
+        if type(max_running) is not int or not 1 <= max_running <= 1000:
+            raise ValueError("Invalid bounded running capacity")
+        if not 1 <= len(rationale.strip()) <= 1500:
+            raise ValueError("Reviewed capacity rationale required")
+        scope = str(UUID(scope_id)) if scope_id else None
+        action = ("enterprise:capacity:" + scope_kind + ":" +
+                  (scope or "company") + ":" + str(max_running))
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            self._approval(actor, approval_id, action)
+            previously = self.connection.execute(
+                """SELECT id,scope_kind,scope_id,max_running,rationale
+                   FROM ago_oos_capacity_policies
+                   WHERE tenant_id=%s AND approval_id=%s""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            if previously:
+                if (previously["scope_kind"] != scope_kind
+                    or (str(previously["scope_id"]) if previously["scope_id"] else None) != scope
+                    or previously["max_running"] != max_running
+                    or previously["rationale"] != rationale.strip()):
+                    raise PermissionError("Approval already bound to a different capacity")
+                return {"id": str(previously["id"]),
+                        "max_running": max_running, "idempotent": True}
+            department_id = None
+            if scope:
+                source = ("ago_departments" if scope_kind == "department"
+                          else "ago_employees")
+                row = self.connection.execute(
+                    f"SELECT * FROM {source} WHERE tenant_id=%s AND id=%s",
+                    (actor.tenant_id, scope),
+                ).fetchone()
+                if row is None:
+                    raise LookupError("Capacity target does not belong to tenant")
+                if scope_kind == "employee":
+                    department_id = str(row["department_id"])
+            def cap(level: str, identifier: str | None, fallback: int) -> int:
+                found = self.connection.execute(
+                    """SELECT max_running FROM ago_oos_capacity_policies
+                       WHERE tenant_id=%s AND scope_kind=%s
+                         AND scope_id IS NOT DISTINCT FROM %s::uuid
+                       ORDER BY created_at DESC,id DESC LIMIT 1""",
+                    (actor.tenant_id, level, identifier),
+                ).fetchone()
+                return int(found["max_running"]) if found else fallback
+            if scope_kind == "department" and max_running > cap("company", None, 12):
+                raise PermissionError("Department capacity exceeds company cap")
+            if scope_kind == "employee" and (
+                max_running > cap("department", department_id, 4)
+                or max_running > cap("company", None, 12)
+            ):
+                raise PermissionError("Employee capacity exceeds parent scope")
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_oos_capacity_policies
+                   (id,tenant_id,scope_kind,scope_id,max_running,actor_id,approval_id,rationale)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, scope_kind, scope, max_running,
+                 actor.subject, str(UUID(approval_id)), rationale.strip()),
+            )
+        return {"id": identifier, "max_running": max_running,
+                "scope_kind": scope_kind, "idempotent": False,
+                "effective_on_next_task_admission": True}
+
     def organization_change(self, *, actor: Principal, change_kind: str,
                             target_id: str, approval_id: str, reason: str,
                             department_id: str | None = None,
