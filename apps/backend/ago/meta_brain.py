@@ -135,7 +135,7 @@ class MetaBrain:
             """SELECT id,snapshot_id,proposer_id,category,summary,evidence,
                       approval_id,status,decided_at,created_at
                FROM ago_meta_recommendations WHERE tenant_id=%s"""
-            + extra + " ORDER BY created_at,id LIMIT %s",
+            + extra + " ORDER BY recommendation_order LIMIT %s",
             tuple(args),
         ).fetchall()
         return [
