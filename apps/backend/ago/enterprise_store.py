@@ -930,6 +930,17 @@ class EnterpriseOperationsStore:
                 "replan_is_advisory": True, "automatically_replanned": False}
 
 
+    def normalize_organization_intent(self, *, change_kind: str, target_id: str,
+                                      reason: str, department_id: str | None = None,
+                                      name: str | None = None,
+                                      manager_id: str | None = None,
+                                      role_level: int | None = None) -> dict:
+        payload, digest = organization_change_intent(
+            change_kind=change_kind, target_id=target_id, reason=reason,
+            department_id=department_id, name=name,
+            manager_id=manager_id, role_level=role_level)
+        return {"review_payload": payload, "intent_digest": digest}
+
     def record_organization_intent(self, *, actor: Principal, approval_id: str,
                                    payload: dict, intent_digest: str) -> dict:
         """Persist the exact payload the other human will actually review."""
