@@ -303,6 +303,7 @@
       "ago_marketplace_assets",
       "ago_marketplace_lifecycle_events",
       "ago_observed_costs",
+      "ago_oos_capacity_policies",
       "ago_oos_mode_events",
       "ago_organization_review_intents",
       "ago_personnel_events",
