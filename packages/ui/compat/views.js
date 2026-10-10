@@ -306,6 +306,11 @@ function renderEnterpriseSummary(data) {
   const assets = list(data,"enterpriseAssets");
   const consumption = list(data,"enterpriseAssetUsage");
   const scenarios = list(data,"enterpriseTwin");
+  const requests = list(data,"enterpriseAssistance");
+  const hr = resource(data,"enterpriseOrgHistory");
+  const orgEvents = Array.isArray(hr?.personnel) ? hr.personnel : [];
+  const decisions = list(data,"enterpriseEvolutionReviews");
+  const observed = list(data,"enterpriseTwinComparisons");
   const moneyRows = costs.slice(0,10).map(x=>'<tr><td class="primary">'+maybe(x.category)+
     '</td><td>'+maybe(x.provider)+'</td><td>'+maybe(x.observed_amount)+
     ' '+maybe(x.currency)+'</td><td>'+badge(x.evidence_state)+'</td></tr>');
@@ -324,6 +329,18 @@ function renderEnterpriseSummary(data) {
     '</td><td>'+safe(shortId(x.snapshot_id))+'</td><td>'+
     (x.calibrated?'Calibrated':'Uncalibrated')+'</td><td>'+
     maybe(x.data_coverage)+'</td></tr>');
+  const helpRows = requests.slice(0,10).map(x=>'<tr><td>'+safe(shortId(x.employee_id))+
+    '</td><td>'+maybe(x.reason)+'</td><td>'+badge(x.severity)+
+    '</td><td>'+badge(x.outcome || "open")+'</td></tr>');
+  const hrRows = orgEvents.slice(0,10).map(x=>'<tr><td>'+safe(shortId(x.employee_id))+
+    '</td><td>'+badge(x.change_kind)+'</td><td>'+maybe(x.role_level)+
+    '</td><td>'+safe(dateText(x.created_at))+'</td></tr>');
+  const evolutionRows = decisions.slice(0,10).map(x=>'<tr><td>'+
+    safe(shortId(x.observation_id))+'</td><td>'+badge(x.decision)+
+    '</td><td>'+safe(dateText(x.created_at))+'</td></tr>');
+  const comparisonRows = observed.slice(0,10).map(x=>'<tr><td>'+
+    safe(shortId(x.scenario_id))+'</td><td>'+safe(shortId(x.later_snapshot_id))+
+    '</td><td>Descriptive only</td><td>'+safe(dateText(x.created_at))+'</td></tr>');
   return section("Organizational operating system","Sections 21–27 · persisted evidence")+
     '<div class="info-strip">'+icon("shield")+
     '<span>Human approvals govern all operational changes. Costs are unverified unless independently reconciled; scenarios never apply changes.</span></div>'+
@@ -348,7 +365,19 @@ function renderEnterpriseSummary(data) {
       table(["Asset","Recorded uses"],usageRows,empty("No asset reuse recorded"))))+
     panel("Digital Twin provenance",unavailable(data,"enterpriseTwin",
       table(["Captured","Source snapshot","Calibration","Coverage"],simRows,
-        empty("No saved what-if scenarios"))));
+        empty("No saved what-if scenarios"))))+
+    panel("AI employee safety and assistance",unavailable(data,"enterpriseAssistance",
+      table(["Employee","Reason","Severity","Review"],helpRows,
+        empty("No recorded assistance requests"))))+
+    panel("Reviewed AI employee lifecycle",unavailable(data,"enterpriseOrgHistory",
+      table(["Employee","Change","Level","Recorded"],hrRows,
+        empty("No independently approved HR changes"))))+
+    panel("Governed evolution reviews",unavailable(data,"enterpriseEvolutionReviews",
+      table(["Observation","Decision","Recorded"],evolutionRows,
+        empty("No reviewed evolution proposals"))))+
+    panel("Observed Digital Twin follow-ups",unavailable(data,"enterpriseTwinComparisons",
+      table(["Scenario","Actual snapshot","Evidence type","Recorded"],comparisonRows,
+        empty("No independently reviewed outcome comparisons"))));
 }
 
 function renderTools(data, state) {
