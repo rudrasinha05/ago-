@@ -355,7 +355,10 @@ def test_real_browser_governed_plan_two_humans_execution_and_qa(
         )
 
         reviewer.locator("#refresh").click()
-        task_row = task_rows(reviewer)
+        task_row = reviewer.locator(".panel").filter(
+            has=reviewer.locator("h3", has_text="Pending QA"),
+        ).locator("tr").filter(has_text="internal:brief")
+        expect(task_row).to_be_visible()
         task_row.get_by_role("button", name="Review outcome").click()
         reviewer.locator("#dlg-evidence").fill(
             "Independent quality inspection of the completed pilot brief",
