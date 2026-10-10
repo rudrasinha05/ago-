@@ -1,6 +1,6 @@
 # AGO — Artificial General Organization
 
-AGO is a **governed, multi-tenant AI-native organizational operating system**, currently implemented as a modular Python/FastAPI backend, PostgreSQL and a first-party web console. Its milestone foundations M1–M11 are present; **this is not a production-ready autonomous organization**.
+AGO is a **governed, multi-tenant AI-native organizational operating system**, currently implemented as a modular Python/FastAPI backend, PostgreSQL and a first-party web console. Its milestone foundations M1–M12 are present; **this is not a production-ready autonomous organization**.
 
 ## Implemented software milestones
 - **M1 — Enterprise platform foundation:** configuration, logging, DI, outbox/inbox events, identity/RBAC, plugins, scheduler, observability.
@@ -17,6 +17,22 @@ AGO is a **governed, multi-tenant AI-native organizational operating system**, c
 - **M9 — Control Center & Digital Twin:** responsive same-origin console, secure tab-memory sessions, real governance/operations UI, role-based actions, evidence-backed what-if assessments and independently protected task workflows.
 - **M10 — Release Engineering & Security Gates:** fail-closed production configuration, HTTPS/host/body boundaries, schema-integrity readiness, non-root read-only Docker image, SHA-256 logical backups and isolated PostgreSQL recovery drills. **Not authorized for public production without separately approved operational controls.**
 - **M11 — Pilot Browser Acceptance:** real Chromium against live FastAPI/PostgreSQL, founder/reviewer workflow and mobile navigation, corrected approval-driven strategy activation, least-privilege independent QA queue, evidence screenshots and guarded logouts.
+- **M12 — Local Founder Onboarding:** read-only redacted environment/schema doctor, existing tenant UUID listing, atomic local founder + independent reviewer provisioning, loopback-only one-command launch and safe Windows PowerShell operator helper. No destructive automatic migrations or password storage.
+
+## Fast local start (Windows)
+
+From `apps/backend` after setting your own **localhost** `AGO_POSTGRES_DSN` and applying any reviewed development migrations:
+
+```powershell
+python -m ago.local_ops doctor    # Read-only environment/schema check
+python -m ago.local_ops tenants   # Find your existing organization login UUID
+python -m ago.local_ops init      # ONLY for a brand-new organization, explicit consent
+python -m ago.local_ops serve     # Open http://127.0.0.1:8000/console/
+```
+
+From repo root you can instead run `.\\scripts\\ago.ps1 doctor`, `tenants`, `init`, or `serve`. Session secrets are never written to files and paid model/external tools are not enabled automatically. Review the [full Windows quickstart](docs/reports/M12_LOCAL_QUICKSTART.md) before changing a database.
+
+Read the [architecture gap register](docs/ARCHITECTURE_STATUS_AND_BACKLOG.md): the original 35-section blueprint is not fully implemented and M0 historical source parity is unverified. **M1–M12 accepted slices do not mean the full AGO research vision or public production is finished.**
 
 ## Developer quick start
 Requires Python 3.11+ and PostgreSQL 15+:
