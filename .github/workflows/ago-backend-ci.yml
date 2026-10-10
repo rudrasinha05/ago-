@@ -55,7 +55,7 @@ jobs:
       - name: Verify console assets in packaged wheel
         id: wheel
         run: |
-          python -m pip wheel . --no-deps --no-build-isolation -w /tmp/ago-wheels
+          python -m pip wheel . --no-deps -w /tmp/ago-wheels
           python -c 'from pathlib import Path; import zipfile; w=next(Path("/tmp/ago-wheels").glob("ago_backend-*.whl")); z=zipfile.ZipFile(w); a={"index.html","styles.css","core.js","views.js","actions.js","app.js"}; assert {"ago/console/"+p for p in a} <= set(z.namelist()), "Missing packaged console assets"'
       - name: Apply PostgreSQL migrations
         id: migration
