@@ -55,14 +55,16 @@ def check_release() -> dict:
     report = {"configuration": False, "schema": False,
               "external_egress_disabled": False, "passed": False}
     try:
-        policy = ReleasePolicy.from_environment("production")
+        if os.getenv("AGO_ENVIRONMENT") != "production":
+            return report
+        policy = ReleasePolicy.from_environment()
         report["configuration"] = policy.production
         report["external_egress_disabled"] = (
             os.getenv("AGO_M8_EXTERNAL_ENABLED") != "true" and
             os.getenv("AGO_ENABLE_PAID_MODELS") != "true"
         )
         report["schema"] = schema_integrity(os.environ["AGO_POSTGRES_DSN"])
-    except (ValueError, KeyError, OSError, Exception):
+    except Exception:
         # Never propagate DB connection parameters into terminal/CI reports.
         pass
     report["passed"] = all((
