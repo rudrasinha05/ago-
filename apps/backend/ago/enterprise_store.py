@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.enterprise_domains import (
     ASSET_TYPES, AssetIdentity, HORIZONS, OperatingMode, WorkCandidate,
-    WorkerState, allocate, evaluate_change, operational_load, organization_change_intent,
+    WorkerState, agent_evidence_intent, allocate, evaluate_change, operational_load, organization_change_intent,
     transition_mode, transition_worker, twin_scenario, validate_horizon,
 )
 from ago.security import Principal
@@ -145,6 +145,104 @@ class EnterpriseOperationsStore:
         return {"mode": latest["mode"], "source": "approved_event",
                 "expires_at": latest["expires_at"], "sequence": latest["sequence"]}
 
+    def normalize_agent_evidence(self, *, employee_id: str, kind: str,
+                                 label: str, value_int: int | None,
+                                 evidence_ref: str, note: str) -> dict:
+        payload, digest = agent_evidence_intent(
+            employee_id=employee_id, kind=kind, label=label,
+            value_int=value_int, evidence_ref=evidence_ref, note=note)
+        return {"review_payload": payload, "intent_digest": digest}
+
+    def propose_agent_evidence(self, *, actor: Principal, approval_id: str,
+                               payload: dict, intent_digest: str) -> dict:
+        normalized, digest = agent_evidence_intent(**payload)
+        if digest != intent_digest:
+            raise PermissionError("Agent evidence intent integrity failure")
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            worker = self.connection.execute(
+                """SELECT kind FROM ago_employees WHERE tenant_id=%s AND id=%s""",
+                (actor.tenant_id, normalized["employee_id"]),
+            ).fetchone()
+            if not worker or worker["kind"] != "ai":
+                raise LookupError("Tenant AI worker not found")
+            pending = self.connection.execute(
+                """SELECT action,status,requester_id FROM ago_approval_requests
+                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            expected = ("enterprise:agent-evidence:" + normalized["employee_id"] +
+                        ":" + digest)
+            if (not pending or pending["action"] != expected
+                or pending["status"] != "pending"
+                or str(pending["requester_id"]) != actor.subject):
+                raise PermissionError("Exact pending employee evidence approval missing")
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_agent_evidence_intents
+                   (id,tenant_id,employee_id,actor_id,approval_id,kind,label,
+                    value_int,evidence_ref,note,canonical_payload,digest)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, normalized["employee_id"],
+                 actor.subject, str(UUID(approval_id)), normalized["kind"],
+                 normalized["label"], normalized["value_int"],
+                 normalized["evidence_ref"], normalized["note"],
+                 json.dumps(normalized, sort_keys=True, separators=(",", ":")),
+                 digest),
+            )
+        return {"id": identifier, "approval_id": str(UUID(approval_id)),
+                "review_payload": normalized, "intent_digest": digest,
+                "status": "awaiting_independent_review"}
+
+    def apply_agent_evidence(self, *, actor: Principal, intent_id: str,
+                             approval_id: str) -> dict:
+        identifier = str(UUID(intent_id))
+        review = str(UUID(approval_id))
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            row = self.connection.execute(
+                """SELECT employee_id,actor_id,approval_id,digest
+                   FROM ago_agent_evidence_intents
+                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                (actor.tenant_id, identifier),
+            ).fetchone()
+            if not row:
+                raise LookupError("Evidence intent not found")
+            if str(row["actor_id"]) != actor.subject or str(row["approval_id"]) != review:
+                raise PermissionError("Cannot change evidence owner or approval")
+            self._approval(actor, review,
+                           "enterprise:agent-evidence:" +
+                           str(row["employee_id"]) + ":" + row["digest"])
+            existing = self.connection.execute(
+                """SELECT id FROM ago_agent_evidence_events
+                   WHERE tenant_id=%s AND intent_id=%s""",
+                (actor.tenant_id, identifier),
+            ).fetchone()
+            if existing:
+                return {"id": str(existing["id"]), "intent_id": identifier,
+                        "idempotent": True, "permissions_granted": False}
+            event_id = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_agent_evidence_events
+                   (id,tenant_id,intent_id,approval_id,applied_by)
+                   VALUES(%s,%s,%s,%s,%s)""",
+                (event_id, actor.tenant_id, identifier, review, actor.subject),
+            )
+        return {"id": event_id, "intent_id": identifier,
+                "idempotent": False, "permissions_granted": False}
+
+    def agent_evidence(self, *, tenant_id: str, employee_id: str) -> list[dict]:
+        return [dict(x) for x in self.connection.execute(
+            """SELECT i.id,i.kind,i.label,i.value_int,i.evidence_ref,i.note,
+                      i.digest,e.created_at AS reviewed_at,e.approval_id
+               FROM ago_agent_evidence_events e
+               JOIN ago_agent_evidence_intents i
+                 ON i.tenant_id=e.tenant_id AND i.id=e.intent_id
+               WHERE e.tenant_id=%s AND i.employee_id=%s
+               ORDER BY e.created_at DESC,e.id DESC LIMIT 100""",
+            (str(UUID(tenant_id)), str(UUID(employee_id))),
+        ).fetchall()]
+
     def worker_state(self, *, tenant_id: str, employee_id: str) -> dict:
         tenant, employee = str(UUID(tenant_id)), str(UUID(employee_id))
         row = self.connection.execute(
@@ -164,6 +262,9 @@ class EnterpriseOperationsStore:
         future = [str(t["id"]) for t in tasks if t["status"] in (
             "proposed", "waiting_approval", "ready")]
         capacity = None  # no measured worker-unit capacity exists in legacy schema
+        competence = self.agent_evidence(tenant_id=tenant, employee_id=employee)
+        confidence = next((x["value_int"] for x in competence
+                           if x["kind"] == "confidence"), None)
         open_help = [h for h in self.assistance(tenant_id=tenant, employee_id=employee)
                      if h["outcome"] != "resolved"]
         blocking_help = [h for h in open_help if h["severity"] == "blocking"]
@@ -176,9 +277,17 @@ class EnterpriseOperationsStore:
             "manager_id": str(row["manager_id"]) if row["manager_id"] else None,
             "current_tasks": current, "future_tasks": future,
             "active_count": active, "queued_count": queued,
-            "capacity_units": capacity, "confidence": None, "knowledge_level": None,
+            "capacity_units": capacity, "confidence": confidence,
+            "confidence_calibrated": False,
+            "skill_evidence": [x["label"] for x in competence if x["kind"] == "skill"],
+            "knowledge_evidence": [x["label"] for x in competence
+                                   if x["kind"] == "knowledge"],
             "permission_awareness": "requires_runtime_policy_evaluation",
-            "learning_evidence": None, "risk": "unassessed",
+            "learning_evidence": [x["evidence_ref"] for x in competence
+                                  if x["kind"] == "learning"],
+            "risk": "needs_policy_review" if any(
+                x["kind"] == "risk" for x in competence) else "unassessed",
+            "competence_evidence_count": len(competence),
             "stress": "operational_load_only", "subjective_consciousness": False,
             "help_needed": bool(open_help), "blocking_assistance": len(blocking_help),
             "open_assistance_count": len(open_help),
