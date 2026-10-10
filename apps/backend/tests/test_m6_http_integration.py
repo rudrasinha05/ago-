@@ -100,3 +100,27 @@ def test_handoff_reviewer_boundary(case):
     assert [event["event"] for event in history.json()] == [
         "requested", "accepted", "completed",
     ]
+
+
+def test_private_calendar_and_append_only_responses(case):
+    client, headers, ids = case
+    begins = datetime.now(timezone.utc) + timedelta(days=2)
+    ends = begins + timedelta(minutes=45)
+    event = post(client, "/v1/operations/calendar", headers["founder"], {
+        "title": "Private planning",
+        "starts_at": begins.isoformat(), "ends_at": ends.isoformat(),
+        "visibility": "private", "operation_key": "private-m6-event",
+        "employee_ids": [ids["reviewer1"]],
+    })
+    route = "/v1/operations/calendar"
+    params = {"start": (begins-timedelta(minutes=1)).isoformat(),
+              "end": (ends+timedelta(minutes=1)).isoformat()}
+    assert len(client.get(route, headers=headers["founder"], params=params).json()) == 1
+    assert len(client.get(route, headers=headers["reviewer1"], params=params).json()) == 1
+    assert client.get(route, headers=headers["reviewer2"], params=params).json() == []
+    post(client, f"/v1/operations/calendar/{event['id']}/rsvp",
+         headers["reviewer1"], {"response": "accepted"})
+    post(client, f"/v1/operations/calendar/{event['id']}/cancel",
+         headers["reviewer1"], expected=403)
+    post(client, f"/v1/operations/calendar/{event['id']}/cancel",
+         headers["founder"])
