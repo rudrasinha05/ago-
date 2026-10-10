@@ -1118,6 +1118,18 @@ def enterprise_agent_evidence_apply(
         approval_id=str(data.approval_id), employee_id=str(employee_id)))
 
 
+@router.get("/enterprise/agents/{employee_id}/autonomy")
+def enterprise_agent_autonomy(
+    employee_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).autonomy_assessment(
+        tenant_id=actor.tenant_id, employee_id=str(employee_id)))
+
+
 @router.get("/enterprise/agents/{employee_id}/evidence")
 def enterprise_agent_evidence_list(
     employee_id: UUID,
