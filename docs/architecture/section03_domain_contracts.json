@@ -1,0 +1,395 @@
+{
+  "version": 1,
+  "contexts": {
+    "entrypoints": {
+      "purpose": "Compose adapters and operator commands",
+      "aggregates": "Application composition; not a business aggregate",
+      "value_objects": "Settings and validated CLI options",
+      "repositories": "No independent repository ownership",
+      "services": "create_app; bootstrap; provisioning; event/release/local CLIs",
+      "invariants": "No implied authority or destructive auto-reset",
+      "published_language": "Operator commands and health response contracts",
+      "consistency": "Explicit operator transactions; no global transaction"
+    },
+    "transport": {
+      "purpose": "Validate and expose context operations",
+      "aggregates": "Request/response DTOs; no aggregate ownership",
+      "value_objects": "Pydantic inputs and server-derived Principal",
+      "repositories": "Use reviewed stores; never introduce unregistered SQL access",
+      "services": "api_* and console_* route adapters",
+      "invariants": "Authentication, tenant derivation, permission checks, bounded inputs",
+      "published_language": "Versioned /v1 REST OpenAPI; status/error semantics",
+      "consistency": "Each request commits owned operation; no implicit cross-request unit of work"
+    },
+    "governance": {
+      "purpose": "Identity, human authorization, council and independent QA",
+      "aggregates": "User/session/RBAC; ApprovalRequest; council proposal; Review",
+      "value_objects": "Principal; Risk; Decision; Verdict; scoped identity",
+      "repositories": "identity; login_security; governance; council_store; quality_store; security_controls",
+      "services": "GovernanceGate; approval/QA decision coordination",
+      "invariants": "Independent approver, tenant scope, active human, append-only audit, no caller authority flag",
+      "published_language": "Approval IDs/status; decision reasons; QA verdict/evidence; signed sessions",
+      "consistency": "Approval/review plus audit atomic in database transaction; recheck before execution"
+    },
+    "strategy": {
+      "purpose": "Company Brain, advisory Meta Brain and governed policy versions",
+      "aggregates": "Goal and plan/step records; DNA version; experiment proposal; executive snapshot",
+      "value_objects": "Plan dependency IDs; immutable digest; validated threshold profile",
+      "repositories": "goals; plan_store; organizational_dna; meta_brain; executive_intelligence; experiments",
+      "services": "PlanExecution; MetaBrain; ScenarioSimulator",
+      "invariants": "Tenant references, acyclic prerequisites, independent activation, no autonomous policy mutation",
+      "published_language": "Goal/plan IDs and status; approval reference; scenario_only; advisory evidence",
+      "consistency": "Plan activation/materialization transactions; per-task approval remains separate"
+    },
+    "workforce": {
+      "purpose": "Organization, task ownership and bounded execution",
+      "aggregates": "Department; Employee; governed Task; agent Run",
+      "value_objects": "Employee kind; manager_id; task action/state",
+      "repositories": "organization_store; task_store; agent_runtime",
+      "services": "AgentRuntime; execution handlers; model_handlers",
+      "invariants": "Same-department manager, active assignee, per-task authorization, single-use run, allowlist",
+      "published_language": "Tenant/task/employee IDs; task/run states; evidence result",
+      "consistency": "Claim transaction then bounded handler then result transaction; crash is not automatic replay"
+    },
+    "knowledge": {
+      "purpose": "Private organizational memory and reviewed facts",
+      "aggregates": "MemoryRecord; proposed knowledge node and edge",
+      "value_objects": "Visibility scope; provenance reference; relation/verdict type",
+      "repositories": "MemoryStore in organization_store; knowledge_store",
+      "services": "MemoryRecord privacy checks; KnowledgeStore review/relate",
+      "invariants": "Tenant/private access, independent fact verification, provenance; no fabricated RAG",
+      "published_language": "Memory records; node/edge IDs; evidence references",
+      "consistency": "Record/review transactions; graph-memory consolidation is not currently automatic"
+    },
+    "operations": {
+      "purpose": "Internal collaboration, reviewed tools and departmental triggers",
+      "aggregates": "Handoff; calendar event/attendee; tool enrollment; trigger run",
+      "value_objects": "Invitation response; bounded tool code; source provenance",
+      "repositories": "handoffs; calendar_store; tool_enrollment; tool_runtime; department_automation",
+      "services": "Read-only tool catalog; ToolRuntime; trigger reconciliation",
+      "invariants": "Same-tenant references, approved enrollment, one-use task execution, invitee-only RSVP",
+      "published_language": "Handoff states; event/attendee IDs; reviewed read-only tool/evidence contract",
+      "consistency": "Owned transactions; external opt-in work cannot share PostgreSQL atomic commit"
+    },
+    "economics": {
+      "purpose": "Internal quota and operational measurements",
+      "aggregates": "Budget; usage ledger; scorecard read model",
+      "value_objects": "Decimal credits; idempotency key; bounded cost/failure inputs",
+      "repositories": "credits; scorecard",
+      "services": "Scorecard; virtual quota reconciliation",
+      "invariants": "Finite nonnegative credits, tenant scope, unique consumption; no monetary settlement claim",
+      "published_language": "Credit ledger and risk/scorecard records; not currency",
+      "consistency": "Quota and ledger consistency in owned transactions; scorecards are snapshots"
+    },
+    "platform": {
+      "purpose": "Shared technical infrastructure without business authority",
+      "aggregates": "Event; inbox/outbox entry; plugin registration; scheduled job",
+      "value_objects": "Event ID/name/time/correlation; version; lease identity",
+      "repositories": "event_store; postgres_event_store; migration checksum metadata",
+      "services": "EventBus; EventWorker; IntervalScheduler; readiness; DI; release perimeter",
+      "invariants": "Idempotence, owned leases, checksum migrations, fail-closed readiness, no permission bypass",
+      "published_language": "Event envelope and EventRegistry validation; health; config; dispatch report",
+      "consistency": "At least once durable delivery; explicit producer/outbox transaction; process-local bus is not durable"
+    }
+  },
+  "modules": {
+    "__init__": "entrypoints",
+    "access": "governance",
+    "agent_handlers": "workforce",
+    "agent_runtime": "workforce",
+    "api_agents": "transport",
+    "api_brain": "transport",
+    "api_council": "transport",
+    "api_insights": "transport",
+    "api_knowledge": "transport",
+    "api_m2": "transport",
+    "api_meta": "transport",
+    "api_operations": "transport",
+    "api_tools": "transport",
+    "approvals": "governance",
+    "architecture_guard": "entrypoints",
+    "auth_api": "transport",
+    "auth_guard": "transport",
+    "bootstrap": "entrypoints",
+    "calendar_store": "operations",
+    "console_api": "transport",
+    "console_host": "transport",
+    "council_store": "governance",
+    "credits": "economics",
+    "department_automation": "operations",
+    "event_contracts": "platform",
+    "event_migrations": "platform",
+    "event_runtime": "entrypoints",
+    "event_store": "platform",
+    "event_worker": "platform",
+    "events": "platform",
+    "execution": "workforce",
+    "executive_intelligence": "strategy",
+    "experiments": "strategy",
+    "feature_flags": "platform",
+    "goals": "strategy",
+    "governance": "governance",
+    "governed_execution": "governance",
+    "handoffs": "operations",
+    "identity": "governance",
+    "knowledge_store": "knowledge",
+    "local_ops": "entrypoints",
+    "login_security": "governance",
+    "m6_permissions": "entrypoints",
+    "m7_permissions": "entrypoints",
+    "m8_permissions": "entrypoints",
+    "main": "entrypoints",
+    "memory": "knowledge",
+    "meta_brain": "strategy",
+    "metrics": "platform",
+    "model_handlers": "workforce",
+    "model_provider": "workforce",
+    "organization": "workforce",
+    "organization_store": "workforce",
+    "organizational_dna": "strategy",
+    "plan_execution": "strategy",
+    "plan_store": "strategy",
+    "platform": "platform",
+    "plugins": "platform",
+    "postgres_event_store": "platform",
+    "provision": "entrypoints",
+    "quality": "governance",
+    "quality_store": "governance",
+    "rate_limit": "governance",
+    "readiness": "platform",
+    "release_ops": "entrypoints",
+    "release_security": "platform",
+    "scheduler": "platform",
+    "scorecard": "economics",
+    "security": "governance",
+    "security_controls": "governance",
+    "simulation": "strategy",
+    "task_store": "workforce",
+    "tool_catalog": "operations",
+    "tool_enrollment": "operations",
+    "tool_runtime": "operations",
+    "workflows": "workforce"
+  },
+  "sql_access": {
+    "__init__": [],
+    "access": [
+      "ago_user_roles",
+      "ago_users"
+    ],
+    "agent_handlers": [],
+    "agent_runtime": [
+      "ago_agent_messages",
+      "ago_agent_runs",
+      "ago_employees",
+      "ago_governed_tasks"
+    ],
+    "api_agents": [],
+    "api_brain": [],
+    "api_council": [],
+    "api_insights": [],
+    "api_knowledge": [],
+    "api_m2": [
+      "ago_task_reviews",
+      "ago_users"
+    ],
+    "api_meta": [],
+    "api_operations": [],
+    "api_tools": [],
+    "approvals": [],
+    "architecture_guard": [],
+    "auth_api": [],
+    "auth_guard": [],
+    "bootstrap": [
+      "ago_employees"
+    ],
+    "calendar_store": [
+      "ago_calendar_attendees",
+      "ago_calendar_audit",
+      "ago_calendar_events"
+    ],
+    "console_api": [
+      "ago_employees",
+      "ago_governed_tasks",
+      "ago_role_permissions",
+      "ago_task_reviews",
+      "ago_user_roles",
+      "ago_users"
+    ],
+    "console_host": [],
+    "council_store": [
+      "ago_council_motions",
+      "ago_council_votes",
+      "ago_employees",
+      "ago_role_permissions",
+      "ago_user_roles",
+      "ago_users"
+    ],
+    "credits": [
+      "ago_credit_budgets",
+      "ago_credit_usage"
+    ],
+    "department_automation": [
+      "ago_automation_firings",
+      "ago_automation_rules",
+      "ago_employees",
+      "ago_governed_tasks",
+      "ago_knowledge_nodes",
+      "ago_task_reviews",
+      "ago_tool_enrollments"
+    ],
+    "event_contracts": [],
+    "event_migrations": [
+      "ago_schema_migrations"
+    ],
+    "event_runtime": [],
+    "event_store": [],
+    "event_worker": [],
+    "events": [],
+    "execution": [],
+    "executive_intelligence": [
+      "ago_agent_runs",
+      "ago_approval_requests",
+      "ago_credit_budgets",
+      "ago_dna_versions",
+      "ago_executive_snapshots",
+      "ago_governed_tasks",
+      "ago_handoffs",
+      "ago_knowledge_nodes",
+      "ago_task_reviews"
+    ],
+    "experiments": [
+      "ago_approval_requests",
+      "ago_policy_experiments"
+    ],
+    "feature_flags": [],
+    "goals": [
+      "ago_goals"
+    ],
+    "governance": [
+      "ago_approval_audit",
+      "ago_approval_requests",
+      "ago_employees",
+      "ago_users"
+    ],
+    "governed_execution": [],
+    "handoffs": [
+      "ago_employees",
+      "ago_handoff_events",
+      "ago_handoffs"
+    ],
+    "identity": [
+      "ago_tenants",
+      "ago_user_roles",
+      "ago_users"
+    ],
+    "knowledge_store": [
+      "ago_employees",
+      "ago_knowledge_edges",
+      "ago_knowledge_nodes",
+      "ago_users"
+    ],
+    "local_ops": [
+      "ago_tenants"
+    ],
+    "login_security": [
+      "ago_login_attempts",
+      "ago_tenants"
+    ],
+    "m6_permissions": [
+      "ago_user_roles"
+    ],
+    "m7_permissions": [
+      "ago_user_roles"
+    ],
+    "m8_permissions": [
+      "ago_user_roles"
+    ],
+    "main": [],
+    "memory": [],
+    "meta_brain": [
+      "ago_approval_requests",
+      "ago_executive_snapshots",
+      "ago_meta_recommendations"
+    ],
+    "metrics": [],
+    "model_handlers": [],
+    "model_provider": [],
+    "organization": [],
+    "organization_store": [
+      "ago_departments",
+      "ago_employees",
+      "ago_memory_records"
+    ],
+    "organizational_dna": [
+      "ago_approval_requests",
+      "ago_dna_versions",
+      "ago_tenants"
+    ],
+    "plan_execution": [
+      "ago_goals",
+      "ago_plan_steps",
+      "ago_strategy_plans"
+    ],
+    "plan_store": [
+      "ago_employees",
+      "ago_goals",
+      "ago_plan_steps",
+      "ago_strategy_plans"
+    ],
+    "platform": [],
+    "plugins": [],
+    "postgres_event_store": [],
+    "provision": [
+      "ago_departments",
+      "ago_employees"
+    ],
+    "quality": [],
+    "quality_store": [
+      "ago_employees",
+      "ago_governed_tasks",
+      "ago_task_reviews"
+    ],
+    "rate_limit": [],
+    "readiness": [],
+    "release_ops": [],
+    "release_security": [
+      "ago_schema_migrations"
+    ],
+    "scheduler": [],
+    "scorecard": [
+      "ago_governed_tasks"
+    ],
+    "security": [],
+    "security_controls": [
+      "ago_revoked_sessions",
+      "ago_role_permissions",
+      "ago_security_audit",
+      "ago_user_roles",
+      "ago_users"
+    ],
+    "simulation": [],
+    "task_store": [
+      "ago_approval_requests",
+      "ago_goals",
+      "ago_governed_tasks",
+      "ago_plan_steps",
+      "ago_strategy_plans",
+      "ago_task_reviews"
+    ],
+    "tool_catalog": [
+      "ago_knowledge_nodes"
+    ],
+    "tool_enrollment": [
+      "ago_approval_requests",
+      "ago_tenants",
+      "ago_tool_enrollment_audit",
+      "ago_tool_enrollments"
+    ],
+    "tool_runtime": [
+      "ago_governed_tasks",
+      "ago_tool_run_evidence",
+      "ago_tool_runs"
+    ],
+    "workflows": []
+  }
+}

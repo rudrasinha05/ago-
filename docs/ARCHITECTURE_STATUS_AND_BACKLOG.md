@@ -22,6 +22,10 @@ Intelligence or completion of the original entire enterprise architecture.
   / independent QA / audit regression. Commit `937254b`: 288 Python tests
   per 3.11/3.14 and independent 3.12, 14 JS, six Chromium, Docker and restore
   passed; run `38035714985`. Evidence: `docs/reports/SECTION02_FINAL_ACCEPTANCE.md`.
+- **Section 3 — Domain-Driven Design:** nine complete context contracts,
+  all-module ownership and reviewed SQL-access enforcement; source-linked
+  aggregates/repositories/services/invariants and explicit transaction/event
+  semantics. CI acceptance pending; `docs/reports/SECTION03_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
   Versioned manifest maps 76 AGO root modules and 145 observed internal
@@ -35,7 +39,7 @@ Intelligence or completion of the original entire enterprise architecture.
   the repository administrator before independent human review is considered
   operationally enforced.
 - Every other unfinished section is **still separately pending**. Closure of
-  Sections 1, 2 and 14 does not upgrade Sections 3–13 or 15–34, nor imply
+  Sections 1–3 and 14 does not upgrade Sections 4–13 or 15–34, nor imply
   that the full original blueprint is available.
 
 ## Evidence and provenance caveat

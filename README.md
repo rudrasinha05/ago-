@@ -49,6 +49,14 @@ Read [Section 2 component architecture](docs/architecture/SECTION_02_HIGH_LEVEL_
 [acceptance evidence](docs/reports/SECTION02_FINAL_ACCEPTANCE.md).
 No missing subsystem is marked implemented because it appears in a diagram.
 
+## Architecture section 3 — Domain-Driven Design
+
+Nine context contracts describe aggregates, repositories, services, invariants,
+published languages and consistency. CI checks complete module ownership and
+reviewed SQL-access boundaries in addition to Section 14 imports.
+Read [Section 3 contracts](docs/architecture/SECTION_03_DOMAIN_DRIVEN_DESIGN.md)
+and [acceptance evidence](docs/reports/SECTION03_FINAL_ACCEPTANCE.md).
+
 ## Completed architecture section: 14 — Module Dependency Rules
 
 The original 1–34 architecture checklist is tracked **separately** from
