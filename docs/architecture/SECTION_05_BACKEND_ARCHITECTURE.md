@@ -17,8 +17,8 @@ this is bounded source-backed acceptance, not a claim of exact source parity.
 
 The registered root-module layout is intentionally preserved. Stores such as
 `governance` re-export pure values for compatibility, while their SQL implementation
-is registered as persistence. The source inventory covers all 95 modules and
-252 internal dependency edges. Section 14 forbids cycles and protects approval,
+is registered as persistence. With the Section 7 storage extension, the source
+inventory covers all 98 modules and 260 internal dependency edges. Section 14 forbids cycles and protects approval,
 approval-audit and QA writes. Section 3 independently checks complete module/context
 ownership and reviewed SQL table access. No schema or migration changed.
 
@@ -40,7 +40,7 @@ tenant predicates and single-use governed task execution remain mandatory.
 ## Dependency injection and repository contracts
 
 `backend_contracts.DatabaseConnection` and `Cursor` define the caller-owned DB
-port. `repository_ports` defines 38 structural component protocols and trusted
+port. `repository_ports` defines 39 structural component protocols and trusted
 default constructor bindings. `section05_backend_contracts.json` records every
 public method signature for every connection-backed component. The guard compares
 source methods, port signatures, constructor types and binding rosters; drift

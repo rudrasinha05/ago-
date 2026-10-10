@@ -1,7 +1,10 @@
 # Section 7 — Database Architecture: Frozen Acceptance Scope
 
-Status: **In progress; not accepted**. Baseline: `9328086` on `develop`.
-Section 6 is accepted independently; this document does not complete Section 7.
+Status: **All eight bounded gates CI-accepted**, implementation `82a5d22`,
+primary run `38054373301`, independent run `38054373266`.
+Frozen baseline: `9328086` on `develop`. Evidence is recorded in
+`docs/reports/SECTION07_FINAL_ACCEPTANCE.md`; the frozen requirements below
+remain separate from their actual test results.
 
 ## Source and bounded scope
 
@@ -203,4 +206,5 @@ Dedicated CI runs the actual offline ONNX model, disposable PostgreSQL/Redis,
 signed-session storage negatives and a populated database-plus-object recovery
 drill. The ordinary Python matrix uses a clearly labelled injected test encoder
 for API/persistence coverage; it is not substituted for real-model evidence.
-Actual final-commit acceptance remains pending until those logs are inspected.
+Implementation acceptance logs were inspected for all nine successful jobs;
+closing documentation commit CI is verified separately before final delivery.

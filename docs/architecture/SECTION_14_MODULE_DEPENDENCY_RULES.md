@@ -8,7 +8,7 @@
 
 This implements **Section 14's modular boundaries**; it does not claim that
 Sections 1–13 or 15–34, or the historical original 0–35 blueprint, are
-implemented. Source inventory includes 95 root Python modules and 252
+implemented. Source inventory includes 98 root Python modules and 260
 recorded internal import edges at the accepted pre-change baseline.
 This project remains a governed **modular monolith first** (BDR);
 neither a new fleet of microservices nor a new database is introduced.

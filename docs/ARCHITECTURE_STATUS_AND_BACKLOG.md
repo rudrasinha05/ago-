@@ -50,9 +50,20 @@ Intelligence or completion of the original entire enterprise architecture.
   passed, plus six existing Chromium, all builds/exports, Docker and real restore.
   Evidence: `docs/reports/SECTION06_FINAL_ACCEPTANCE.md`. Physical-device UAT
   and expert assistive-technology certification remain outside this scoped gate.
+- **Section 7 — Database Architecture:** existing PostgreSQL extended with
+  indexed bounded knowledge traversal, optional signed/versioned Redis caching,
+  actual offline CPU embeddings and a persisted tenant/model vector index,
+  private document objects, retention and coordinated database/object recovery.
+  All eight bounded gates CI-accepted: `82a5d22`, run `38054373301` and independent
+  `38054373266`; 343 Python tests each on 3.11/3.14/3.12, 18 dedicated actual
+  model/Redis/storage tests and populated graph/vector/object restore passed.
+  All earlier JavaScript/browser/build/image/recovery gates remain green.
+  Evidence: `docs/reports/SECTION07_FINAL_ACCEPTANCE.md`. Graph storage reuses
+  PostgreSQL; vector ranking is bounded exact cosine, not ANN; private byte
+  storage runs in the existing Linux service with explicit operator preparation.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
-  Versioned manifest now maps 95 AGO root modules and 252 observed internal
+  Versioned manifest now maps 98 AGO root modules and 260 observed internal
   imports, enforces layering and cycle bans, protects approval/QA write
   ownership, documents extraction contracts and requires bounded reviewed
   exception records. Graphviz diagrams and negative tests are generated
@@ -63,7 +74,7 @@ Intelligence or completion of the original entire enterprise architecture.
   the repository administrator before independent human review is considered
   operationally enforced.
 - Every other unfinished section is **still separately pending**. Closure of
-  Sections 1–6 and 14 does not upgrade Sections 7–13 or 15–34, nor imply
+  Sections 1–7 and 14 does not upgrade Sections 8–13 or 15–34, nor imply
   that the full original blueprint is available.
 
 ## Evidence and provenance caveat
