@@ -16,6 +16,10 @@ services:
       retries: 12
     networks: [ago_internal]
   api:
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
