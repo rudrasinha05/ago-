@@ -148,5 +148,12 @@ def check(root: Path = ROOT) -> list[str]:
 
 if __name__ == "__main__":
     errors = check()
+    if "repository-contract-drift" in errors:
+        expected = json.loads((ROOT / CONTRACT).read_text()).get("components", {})
+        observed = components(ROOT)
+        drift = {name: {"expected": expected.get(name), "observed": observed.get(name)}
+                 for name in sorted(set(expected) | set(observed))
+                 if expected.get(name) != observed.get(name)}
+        print(json.dumps({"repository_contract_drift_details": drift}, default=str))
     print(json.dumps({"section": 5, "passed": not errors, "violations": errors}))
     raise SystemExit(2 if errors else 0)
