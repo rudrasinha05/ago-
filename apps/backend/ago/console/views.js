@@ -154,26 +154,53 @@ export function renderStrategy(data, state) {
     ))));
 }
 export function renderGovernance(data, state) {
-  const approvals = list(data,"approvals"), tasks = list(data,"tasks"), motions = list(data,"motions");
+  const approvals = list(data,"approvals"), tasks = list(data,"tasks");
+  const motions = list(data,"motions"), reviews = list(data,"reviews");
+  const approvedIds = new Set(approvals.filter(x=>x.status==="approved").map(x=>x.id));
+  const reviewedIds = new Set(reviews.map(x=>x.task_id));
   const aRows = approvals.map(x => '<tr><td class="primary">' + maybe(x.action) +
     '<div class="text-mono">' + safe(shortId(x.id)) + '</div></td><td>' +
     badge(x.status) + '</td><td>' + safe(dateText(x.created_at)) +
-    '</td><td>' + (x.status==="pending" && x.requester_id !== state.me?.id && capability(state,"approval:decide")
+    '</td><td>' + (x.status==="pending" &&
+      x.requester_id !== state.me?.id && capability(state,"approval:decide")
       ? '<div class="inline-actions">' + action("Approve","approve",x.id,"primary") +
         action("Reject","reject",x.id,"danger") + "</div>"
       : '<span class="muted">—</span>') + '</td></tr>');
+  const nextAction = x => {
+    if (x.status==="proposed" &&
+        capability(state,"task:create") && capability(state,"approval:request")) {
+      return action("Request approval","task-request-approval",x.id,"primary");
+    }
+    if (x.status==="waiting_approval" && approvedIds.has(x.approval_id)) {
+      if (String(x.action).startsWith("tool:") && capability(state,"tool:dispatch"))
+        return action("Run approved tool","tool-run",x.id,"primary");
+      if (["internal:brief","research:brief"].includes(String(x.action)) &&
+        capability(state,"agent:dispatch"))
+        return action("Run approved AI","agent-run",x.id,"primary");
+    }
+    if (x.status==="completed" && !reviewedIds.has(x.id) &&
+        resource(data,"reviews") !== null && capability(state,"qa:review"))
+      return action("Review outcome","qa-review",x.id,"primary");
+    return '<span class="muted">—</span>';
+  };
   const tRows = tasks.map(x => '<tr><td class="primary">' + maybe(x.action) +
     '</td><td>' + badge(x.status) + '</td><td><span class="text-mono">' +
-    safe(shortId(x.assignee_id)) + '</span></td><td>' + (
-      x.approval_id ? '<span class="text-mono">' + safe(shortId(x.approval_id)) + '</span>' : "—"
-    ) + '</td></tr>');
+    safe(shortId(x.assignee_id)) + '</span></td><td>' +
+    (x.approval_id ? '<span class="text-mono">' + safe(shortId(x.approval_id)) +
+    '</span>' : "—") + '</td><td>' + nextAction(x) + '</td></tr>');
+  const qaRows = reviews.map(x=>'<tr><td class="primary"><span class="text-mono">' +
+    safe(shortId(x.task_id)) + '</span></td><td>' + badge(x.verdict) +
+    '</td><td><span class="text-mono">' + safe(shortId(x.reviewer_id)) +
+    '</span></td><td>' + safe(dateText(x.created_at)) + '</td></tr>');
   const councilRows = motions.map(x => '<tr><td class="primary">' + maybe(x.title) +
     '<div class="muted">' + maybe(x.rationale) + '</div></td><td>' + badge(x.status) +
     '</td><td>' + num(Number(x.yes_votes)||0) + "/" + num(x.required_votes) +
     ' yes</td><td><div class="inline-actions">' +
-    (x.status==="open" ? (x.proposer_id !== state.me?.id && capability(state,"council:vote") ? action("Vote","council-vote",x.id) : "") +
-      (capability(state,"council:finalize") ? action("Finalize","council-finalize",x.id,"primary") : "")
-      : "") + "</div></td></tr>");
+    (x.status==="open" ? (x.proposer_id !== state.me?.id &&
+      capability(state,"council:vote") ? action("Vote","council-vote",x.id) : "") +
+      (capability(state,"council:finalize") ?
+        action("Finalize","council-finalize",x.id,"primary") : "") : "") +
+    "</div></td></tr>");
   return layout("governance",capability(state,"council:propose") ?
     action("Propose motion","new-motion","","primary") : "",
     '<div class="info-strip">' + icon("shield") +
@@ -181,9 +208,13 @@ export function renderGovernance(data, state) {
     section("Independent review","Human decisions") +
     panel("Approvals",unavailable(data,"approvals",table(
       ["Request","Status","Created","Decision"],aRows,empty("Review queue is clear"),
-    ))) + section("Task control","Backend-governed") +
+    ))) + section("Task control","Governed execution") +
     panel("Task register",unavailable(data,"tasks",table(
-      ["Action","State","Assignee","Approval"],tRows,empty("No governed tasks"),
+      ["Action","State","Assignee","Approval","Next step"],tRows,
+      empty("No governed tasks"),
+    ))) + section("Independent quality assurance",num(reviews.length)+" reviews") +
+    panel("QA outcomes",unavailable(data,"reviews",table(
+      ["Task","Verdict","Reviewer","Recorded"],qaRows,empty("No QA verdicts yet"),
     ))) + section("Executive council","Human quorum") +
     panel("Council motions",unavailable(data,"motions",table(
       ["Motion","Status","Votes","Action"],councilRows,empty("No motions recorded"),
