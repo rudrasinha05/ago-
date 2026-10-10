@@ -780,6 +780,14 @@ class EnterpriseOperationsStorePort(Protocol):
 
     def plan_feedback(self, *, tenant_id: str, horizon_plan_id: str) -> dict: ...
 
+    def organization_change(self, *, actor: Principal, change_kind: str,
+                            target_id: str, approval_id: str, reason: str,
+                            department_id: str | None = None,
+                            name: str | None = None, manager_id: str | None = None,
+                            role_level: int | None = None) -> dict: ...
+
+    def organization_history(self, *, tenant_id: str) -> dict: ...
+
     def twin_runs(self, *, tenant_id: str) -> list[dict]: ...
 
 
