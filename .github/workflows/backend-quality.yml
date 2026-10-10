@@ -4,17 +4,46 @@ on:
     branches: [develop, main]
   pull_request:
     branches: [develop, main]
+
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ago_test
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: ago_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ago_test -d ago_test"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      AGO_ENVIRONMENT: development
+      AGO_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_TEST_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_SESSION_SECRET: ci_only_signing_key_change_outside_ci_123456789
+      AGO_ENABLE_PAID_MODELS: "false"
+      AGO_M8_EXTERNAL_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Install
-        run: python -m pip install -e './apps/backend[dev]'
+          python-version: "3.12"
+      - name: Install backend and PostgreSQL driver
+        run: python -m pip install -e './apps/backend[dev,postgres]'
+      - name: Apply isolated PostgreSQL migrations
+        working-directory: apps/backend
+        run: python -m ago.event_runtime migrate
+      - name: Enforce frozen Section 14 module boundaries
+        working-directory: apps/backend
+        run: python -m ago.architecture_guard check
       - name: Tests
         run: python -m pytest -q apps/backend/tests
       - name: Lint
-        run: python -m ruff check apps/backend/ago apps/backend/tests
+        run: python -m ruff check apps/backend/ago apps/backend/tests apps/backend/tests_browser
