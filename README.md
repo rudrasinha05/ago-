@@ -1,6 +1,6 @@
 # AGO — Artificial General Organization
 
-AGO is a **governed, multi-tenant AI-native organizational operating system**, currently implemented as a modular Python/FastAPI backend with PostgreSQL. Its milestone foundations M1–M7 are present; **this is not a production-ready autonomous organization**.
+AGO is a **governed, multi-tenant AI-native organizational operating system**, currently implemented as a modular Python/FastAPI backend with PostgreSQL. Its milestone foundations M1–M8 are present; **this is not a production-ready autonomous organization**.
 
 ## Implemented backend milestones
 - **M1 — Enterprise platform foundation:** configuration, logging, DI, outbox/inbox events, identity/RBAC, plugins, scheduler, observability.
@@ -10,6 +10,7 @@ AGO is a **governed, multi-tenant AI-native organizational operating system**, c
 - **M5 — Analytics/economics:** virtual credit caps, idempotent usage ledger, tenant scorecard, deterministic scenario simulation, human-approved *proposals* for experiments (never applied automatically).
 - **M6 — Organizational collaboration:** cross-department handoffs, privacy-scoped calendar and audit, evidence-based human-reviewed knowledge graph, executive council voting with quorum and a second human approval, operational analytics and explicit permission upgrades.
 - **M7 — Meta Brain & Organizational DNA:** tenant-scoped immutable operating-threshold versions, independent human review, executive evidence/fitness snapshots, verifiable digests, deterministic advisory recommendations, what-if evaluation and least-privilege APIs.
+- **M8 — Enterprise Tools & Department Automation:** independent human-reviewed read-only enterprise tool enrollment, single-use M2-approved execution, provenance-based departmental triggers, bounded optional HTTPS telemetry, immutable evidence and operator-controlled rollback/reconciliation.
 
 **Completed backend work is not equivalent to self-improving AGI, autonomous consequential actions, hosted UI, live external tools, production security or release readiness.** The larger enterprise architecture remains in `docs/PROJECT_HANDOVER.md` and `docs/M3_M5_IMPLEMENTATION_SCOPE.md`.
 
@@ -27,9 +28,9 @@ python -m pytest -q
 python -m uvicorn ago.main:app --reload
 ```
 
-API documentation: `http://127.0.0.1:8000/docs`. The M3–M7 APIs are under `/v1/brain`, `/v1/agents`, `/v1/insights`, `/v1/operations`, `/v1/knowledge`, `/v1/council` and `/v1/meta`.
+API documentation: `http://127.0.0.1:8000/docs`. The M3–M8 APIs are under `/v1/brain`, `/v1/agents`, `/v1/insights`, `/v1/operations`, `/v1/knowledge`, `/v1/council`, `/v1/meta` and `/v1/tools`.
 
-CI acceptance: [M3–M5 evidence](docs/reports/M3_M5_FINAL_ACCEPTANCE.md). M6 CI evidence: [155-test acceptance](docs/reports/M6_FINAL_ACCEPTANCE.md). [M7 CI evidence: 175-test acceptance](docs/reports/M7_FINAL_ACCEPTANCE.md). Operator setup: [M6 Guide](docs/reports/M6_OPERATOR_GUIDE.md) and [M7 Guide](docs/reports/M7_OPERATOR_GUIDE.md).
+CI acceptance: [M3–M5 evidence](docs/reports/M3_M5_FINAL_ACCEPTANCE.md). M6 CI evidence: [155-test acceptance](docs/reports/M6_FINAL_ACCEPTANCE.md). [M7 CI evidence: 175-test acceptance](docs/reports/M7_FINAL_ACCEPTANCE.md). [M8 CI evidence: 202-test acceptance](docs/reports/M8_FINAL_ACCEPTANCE.md). Operator setup: [M6 Guide](docs/reports/M6_OPERATOR_GUIDE.md), [M7 Guide](docs/reports/M7_OPERATOR_GUIDE.md) and [M8 Guide](docs/reports/M8_OPERATOR_GUIDE.md).
 
 A fresh tenant must be provisioned by the **local operator** using `python -m ago.bootstrap`; an independent human reviewer must be provisioned using `python -m ago.provision`. See `docs/reports/M3_M5_OPERATOR_AND_ACCEPTANCE.md` for details.
 
