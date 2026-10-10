@@ -67,6 +67,14 @@ class DepartmentAutomation:
         self, *, tenant_id: str, trigger: str, source_id: str,
     ) -> bool:
         if trigger == "qa_pass":
+            # Never recursively trigger on work materialized by an automation.
+            automation_output = self.db.execute(
+                """SELECT 1 FROM ago_automation_firings
+                   WHERE tenant_id=%s AND task_id=%s""",
+                (tenant_id, source_id),
+            ).fetchone()
+            if automation_output is not None:
+                return False
             result = self.db.execute(
                 """SELECT 1 FROM ago_governed_tasks t
                    JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id
@@ -169,8 +177,9 @@ class DepartmentAutomation:
                          AND q.verdict='pass'
                          AND NOT EXISTS (
                            SELECT 1 FROM ago_automation_firings f
-                           WHERE f.tenant_id=t.tenant_id AND f.rule_id=%s
-                             AND f.source_id=t.id)
+                           WHERE f.tenant_id=t.tenant_id AND
+                             (f.task_id=t.id OR
+                              (f.rule_id=%s AND f.source_id=t.id)))
                        ORDER BY source_id LIMIT %s""",
                     (tenant_id, rule["id"], limit - len(fired)),
                 ).fetchall()
