@@ -388,6 +388,10 @@
           "arguments": "self, *, tenant_id: str, employee_id: str",
           "returns": "list[dict]"
         },
+        "autonomy_assessment": {
+          "arguments": "self, *, tenant_id: str, employee_id: str",
+          "returns": "dict"
+        },
         "worker_state": {
           "arguments": "self, *, tenant_id: str, employee_id: str",
           "returns": "dict"
