@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +14,7 @@ from ago.release_security import ReleasePolicy, schema_integrity
 @pytest.fixture
 def prod(monkeypatch):
     monkeypatch.setenv("AGO_ENVIRONMENT", "production")
-    monkeypatch.setenv("AGO_SESSION_SECRET", "V8Ux4zL9!tK3-Qv2#Yw7rP0_mH5Gc6XJ6uDsN1oB9aAF82z")
+    monkeypatch.setenv("AGO_SESSION_SECRET", "V8Ux4zL9!tK3-Qv2#Yw7rP0_mH5Gc6XJ6uDsN1oB9aAF82zQ")
     monkeypatch.setenv("AGO_ALLOWED_HOSTS", "ago.example.com")
     monkeypatch.setenv("AGO_POSTGRES_DSN",
         "postgresql://ago:placeholder@db.example.com:5432/company"
@@ -34,7 +33,7 @@ def test_production_rejects_missing_hosts_weak_secrets_and_non_tls_database(prod
     monkeypatch.setenv("AGO_SESSION_SECRET", "ci_only_signing_key_change_outside_ci_123456789")
     with pytest.raises(ValueError, match="SECRET"):
         ReleasePolicy.from_environment()
-    monkeypatch.setenv("AGO_SESSION_SECRET", "V8Ux4zL9!tK3-Qv2#Yw7rP0_mH5Gc6XJ6uDsN1oB9aAF82z")
+    monkeypatch.setenv("AGO_SESSION_SECRET", "V8Ux4zL9!tK3-Qv2#Yw7rP0_mH5Gc6XJ6uDsN1oB9aAF82zQ")
     monkeypatch.setenv("AGO_POSTGRES_DSN", "postgresql://user:pass@db.example.com/company")
     with pytest.raises(ValueError, match="TLS"):
         ReleasePolicy.from_environment()
