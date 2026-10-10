@@ -55,6 +55,13 @@ def check(root: Path = ROOT) -> list[str]:
 def main() -> int:
     argparse.ArgumentParser(description=__doc__).parse_args()
     errors = check()
+    if 'unreviewed-sql-access' in errors:
+        expected = json.loads((ROOT / CONTRACT).read_text())['sql_access']
+        observed = sql_access(ROOT)
+        changed = {name: {'expected': expected.get(name, []), 'observed': observed.get(name, [])}
+                   for name in sorted(set(expected) | set(observed))
+                   if expected.get(name) != observed.get(name)}
+        print(json.dumps({'sql_access_drift_details': changed}))
     print(json.dumps({'section': 3, 'passed': not errors, 'violations': errors}))
     return 2 if errors else 0
 
