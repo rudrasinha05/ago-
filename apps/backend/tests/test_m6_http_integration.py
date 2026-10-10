@@ -240,3 +240,18 @@ def test_council_negative_ballot_rejects_without_execution(case):
     assert closed["execution_permitted"] is False
     post(client, f"/v1/council/motions/{motion['id']}/finalize",
          headers["founder"], expected=403)
+
+
+def test_council_db_enforces_quorum(case):
+    client, headers, ids = case
+    psycopg = pytest.importorskip("psycopg")
+    motion = post(client, "/v1/council/motions", headers["founder"], {
+        "title": "Council security", "rationale": "Validate stored council rules",
+        "required_votes": 2,
+    })
+    with pytest.raises(psycopg.errors.RaiseException):
+        with ids["db"].transaction():
+            ids["db"].execute(
+                "UPDATE ago_council_motions SET status='passed', finalized_at=now() WHERE id=%s",
+                (motion["id"],),
+            )
