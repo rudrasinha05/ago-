@@ -170,3 +170,14 @@ def calendar_attendees(
         return CalendarStore(db).attendees(actor=actor, event_id=str(event_id))
     except PermissionError as exc:
         translate_error(exc)
+
+@router.get("/calendar/{event_id}/history")
+def calendar_history(
+    event_id: UUID, db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+):
+    allowed(db, actor, "calendar:read")
+    try:
+        return CalendarStore(db).history(actor=actor, event_id=str(event_id))
+    except PermissionError as exc:
+        translate_error(exc)
