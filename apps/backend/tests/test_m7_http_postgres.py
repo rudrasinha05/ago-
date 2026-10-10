@@ -326,3 +326,28 @@ def test_dna_change_without_decision_is_blocked_by_postgres(case):
     assert client.get("/v1/meta/dna/active", headers=headers["founder"]).json()[
         "source"
     ] == "baseline"
+
+
+def test_historical_snapshot_digest_verifies_before_and_after_dna_change(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    baseline = post(client, "/v1/meta/snapshots", founder)
+    before = client.get(
+        f"/v1/meta/snapshots/{baseline['id']}/verify", headers=founder,
+    )
+    assert before.status_code == 200 and before.json()["verified"] is True
+    candidate = post(client, "/v1/meta/dna", founder, {
+        "profile": profile(backlog_limit=0, budget_alert_pct=95),
+        "rationale": "Test historical scoring evidence preservation.",
+    })
+    decide(client, reviewer, candidate["approval_id"])
+    post(client, f"/v1/meta/dna/{candidate['id']}/reconcile", founder)
+    new_snapshot = post(client, "/v1/meta/snapshots", founder)
+    assert new_snapshot["dna_id"] == candidate["id"]
+    for item in (baseline, new_snapshot):
+        response = client.get(
+            f"/v1/meta/snapshots/{item['id']}/verify", headers=reviewer,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["verified"] is True
+        assert response.json()["expected_digest"] == response.json()["recomputed_digest"]
