@@ -1,0 +1,12 @@
+# AGO M8 — Governed Enterprise Tools & Department Automation (frozen scope)
+
+One consolidated modular-monolith backend milestone on the established `develop` branch, without changing M1–M7 architectural constraints. M8 includes six acceptance gates:
+
+1. **Trusted enterprise tool catalog:** exactly three server-owned, read-only actions: `tool:scorecard`, `tool:knowledge_digest` and `tool:external_metrics`. No dynamic code, arbitrary URLs, shell, payment, email, deployment, writes or other side-effecting connectors.
+2. **Scoped tenant enrollment:** tenant tool proposal requests a precisely scoped M2 approval; another authorized active human must approve. Enrollment history is durable, audit-tracked and immutable aside from an approved status transition or explicit administrator disable.
+3. **Governed execution:** M2-approved `ago_governed_tasks` must be run by an authorized human against an *active* tenant tool; atomic claim, unique run, capped results, terminal states, immutable run evidence, no automatic replay, and safe stale-run reconciliation.
+4. **Department automation:** enabled rules scoped to a department and AI assignee, triggered only by genuinely verified source events (`qa_pass` or `knowledge_verified`). Deterministic source polling creates idempotent **proposed** tasks with their *own pending M2 approvals*. Neither firing nor approval bypasses the action execution gate.
+5. **External read-only adapter:** optional `tool:external_metrics` GET to an operator-configured HTTPS FQDN and fixed path; no client-provided URLs or redirects, finite timeouts, bounded JSON, zero external network in CI and disabled by default unless operator config plus separate enrollment approval are present. No external write connectors in M8.
+6. **Secure HTTP, operations and acceptance:** signed-session tenant RBAC, explicit existing-tenant permission upgrade, positive + adversarial PostgreSQL integration tests (cross-tenant, exact action, human independence, duplicate replay, stale uncertainty, tampering and privileges), migrations, Ruff and complete Python 3.11/3.14 CI. One local pull only on founder request.
+
+**Boundaries:** Enrolling a tool is NOT approving any task. Completing a tool run is NOT QA acceptance. Triggering an automation is NOT acting on its result. External GET is a read-only telemetry retrieval, not a live business-system integration certification. Untrusted provider data remains untrusted evidence. M9 GUI and M10 production gates remain separate.
