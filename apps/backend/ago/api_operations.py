@@ -827,15 +827,15 @@ def enterprise_plan_feedback(
 class EnterpriseOrganizationApproval(StrictInput):
     change_kind: Literal["hired","promoted","terminated","created","closed"]
     target_id: UUID
-
-
-class EnterpriseOrganizationChange(EnterpriseOrganizationApproval):
-    approval_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
     department_id: UUID | None = None
     name: str | None = Field(default=None, max_length=200)
     manager_id: UUID | None = None
     role_level: int | None = Field(default=None, ge=1, le=5)
+
+
+class EnterpriseOrganizationChange(EnterpriseOrganizationApproval):
+    approval_id: UUID
 
 
 @router.post("/enterprise/organization/approval")
@@ -845,10 +845,25 @@ def enterprise_organization_approval(
     repositories: RepositoryScope = Depends(repository_scope),
 ):
     allowed(repositories, actor, "organization:manage")
-    entity = ("department" if data.change_kind in ("created","closed") else "hr")
-    return issue_enterprise_approval(
-        repositories, actor,
-        "enterprise:" + entity + ":" + data.change_kind + ":" + str(data.target_id))
+    store = repositories.resolve(EnterpriseOperationsStorePort)
+    normalized = enterprise_call(lambda: store.normalize_organization_intent(
+        change_kind=data.change_kind, target_id=str(data.target_id),
+        reason=data.reason,
+        department_id=str(data.department_id) if data.department_id else None,
+        name=data.name,
+        manager_id=str(data.manager_id) if data.manager_id else None,
+        role_level=data.role_level))
+    payload, digest = normalized["review_payload"], normalized["intent_digest"]
+    entity = "department" if data.change_kind in ("created","closed") else "hr"
+    action = ("enterprise:" + entity + ":" + data.change_kind +
+              ":" + str(data.target_id) + ":" + digest)
+    with db.transaction():
+        approval = issue_enterprise_approval(repositories, actor, action)
+        intent = store.record_organization_intent(
+            actor=actor, approval_id=approval["approval_id"],
+            payload=payload, intent_digest=digest)
+    return {**approval, "intent_id": intent["id"],
+            "review_payload": payload, "intent_digest": digest}
 
 
 @router.post("/enterprise/organization/apply")
@@ -865,6 +880,16 @@ def enterprise_organization_change(
         department_id=str(data.department_id) if data.department_id else None,
         name=data.name, manager_id=str(data.manager_id) if data.manager_id else None,
         role_level=data.role_level))
+
+
+@router.get("/enterprise/organization/intents")
+def enterprise_reviewed_organization_intents(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).organization_intents(
+        tenant_id=actor.tenant_id)
 
 
 @router.get("/enterprise/organization/history")
