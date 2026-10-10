@@ -1,4 +1,4 @@
-name: AGO Architecture Sections 1-11 & 14 and M1-M12 CI
+name: AGO Architecture Sections 1-20 local scope and M1-M12 CI
 on:
   push:
     branches: [develop]
@@ -166,7 +166,9 @@ jobs:
           node --test tests_web/*.test.mjs
       - name: Run unit and PostgreSQL integration tests
         id: tests
-        run: python -m pytest -q
+        run: python -m pytest -q --cov=ago --cov-report=json:/tmp/ago-coverage.json
+      - name: Enforce decisions API compatibility and coverage floors
+        run: python ../../scripts/check_engineering_quality.py --coverage /tmp/ago-coverage.json
       - name: Report CI result to commit status
         if: always()
         env:

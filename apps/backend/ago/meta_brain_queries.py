@@ -32,7 +32,7 @@ class MetaBrainQueries:
 
     def select_ago_meta_recommendations_04(self, parameters: Any = None) -> Cursor:
         return self.connection.execute(
-            "SELECT status,approval_id FROM ago_meta_recommendations\n                   WHERE tenant_id=%s AND id=%s FOR UPDATE",
+            "SELECT status,approval_id,snapshot_id,decided_at FROM ago_meta_recommendations\n                   WHERE tenant_id=%s AND id=%s FOR UPDATE",
             parameters,
         )
 
@@ -44,7 +44,7 @@ class MetaBrainQueries:
 
     def update_ago_meta_recommendations_06(self, parameters: Any = None) -> Cursor:
         return self.connection.execute(
-            "UPDATE ago_meta_recommendations SET status=%s,decided_at=now()\n                   WHERE tenant_id=%s AND id=%s",
+            "UPDATE ago_meta_recommendations SET status=%s,decided_at=clock_timestamp()\n                   WHERE tenant_id=%s AND id=%s",
             parameters,
         )
 
@@ -56,4 +56,31 @@ class MetaBrainQueries:
             + extra
             + " ORDER BY recommendation_order LIMIT %s",
             parameters,
+        )
+
+    def insert_evaluation(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """INSERT INTO ago_meta_evaluations
+               (id,tenant_id,recommendation_id,before_id,after_id,proposer_id,
+                approval_id,change_evidence,assessment)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""", parameters,
+        )
+
+    def evaluations(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT id,recommendation_id,before_id,after_id,approval_id,change_evidence,
+               assessment,status,created_at,decided_at FROM ago_meta_evaluations
+               WHERE tenant_id=%s ORDER BY created_at DESC,id LIMIT 100""", parameters,
+        )
+
+    def evaluation_for_review(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            "SELECT status,approval_id FROM ago_meta_evaluations WHERE tenant_id=%s AND id=%s FOR UPDATE",
+            parameters,
+        )
+
+    def finalize_evaluation(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """UPDATE ago_meta_evaluations SET status=%s,decided_at=clock_timestamp()
+               WHERE tenant_id=%s AND id=%s""", parameters,
         )

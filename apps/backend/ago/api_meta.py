@@ -6,14 +6,17 @@ This router does not execute policies, tools, code or organizational changes.
 from __future__ import annotations
 
 from uuid import UUID
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import ConfigDict, Field
 
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, db_connection, repository_scope, translate_error
 from ago.backend_contracts import RepositoryScope
-from ago.repository_ports import ExecutiveIntelligencePort, GenomeStorePort, MetaBrainPort
+from ago.repository_ports import (
+    ApprovalRepositoryPort, ExecutiveIntelligencePort, GenomeStorePort, MetaBrainPort,
+)
 from ago.security import Principal
 
 router = APIRouter(prefix="/v1/meta", tags=["M7 Meta Brain"])
@@ -31,6 +34,9 @@ class DNACandidate(StrictInput):
     model_config = ConfigDict(extra="forbid")
     profile: DNAThresholds
     rationale: str = Field(min_length=1, max_length=3000)
+    charter: dict[str, str] | None = None
+    scope_kind: Literal["company", "department", "employee"] = "company"
+    scope_id: UUID | None = None
 
 
 class ScenarioInput(StrictInput):
@@ -78,7 +84,8 @@ def propose_dna(
             tenant_id=actor.tenant_id,
             proposer_id=actor.subject,
             profile=data.profile.model_dump(),
-            rationale=data.rationale,
+            rationale=data.rationale, charter=data.charter,
+            scope_kind=data.scope_kind, scope_id=str(data.scope_id) if data.scope_id else None,
         )
     )
 
@@ -222,3 +229,97 @@ def verify_snapshot(
             snapshot_id=str(snapshot_id),
         )
     )
+
+
+class EvaluationInput(StrictInput):
+    recommendation_id: UUID
+    after_id: UUID
+    change_evidence: str = Field(min_length=1, max_length=3000)
+
+
+class ArchitectureInput(StrictInput):
+    change_key: str = Field(pattern=r"^ARCH-[0-9]{3,8}$")
+    specification: dict
+
+
+@router.get("/dna/effective")
+def effective_dna(
+    department_id: UUID | None = None, employee_id: UUID | None = None,
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:dna:read")
+    return call(lambda: repositories.resolve(GenomeStorePort).effective(
+        tenant_id=actor.tenant_id, department_id=str(department_id) if department_id else None,
+        employee_id=str(employee_id) if employee_id else None))
+
+
+@router.get("/reflection")
+def reflection(
+    limit: int = Query(default=20, ge=2, le=100),
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:read")
+    return call(lambda: repositories.resolve(MetaBrainPort).reflect(tenant_id=actor.tenant_id, limit=limit))
+
+
+@router.post("/evaluations")
+def propose_evaluation(
+    data: EvaluationInput, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:recommend")
+    return call(lambda: repositories.resolve(MetaBrainPort).propose_evaluation(
+        tenant_id=actor.tenant_id, author_id=actor.subject,
+        recommendation_id=str(data.recommendation_id), after_id=str(data.after_id),
+        change_evidence=data.change_evidence))
+
+
+@router.get("/evaluations")
+def evaluations(
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:read")
+    return repositories.resolve(MetaBrainPort).evaluations(tenant_id=actor.tenant_id)
+
+
+@router.post("/evaluations/{evaluation_id}/reconcile")
+def finalize_evaluation(
+    evaluation_id: UUID, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:finalize")
+    return call(lambda: repositories.resolve(MetaBrainPort).reconcile_evaluation(
+        tenant_id=actor.tenant_id, evaluation_id=str(evaluation_id)))
+
+
+@router.post("/architecture/changes")
+def propose_architecture(
+    data: ArchitectureInput, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "brain:manage")
+    return call(lambda: repositories.resolve(ApprovalRepositoryPort).propose_architecture(
+        tenant_id=actor.tenant_id, requester_id=actor.subject,
+        change_key=data.change_key, specification=data.specification))
+
+
+@router.get("/architecture/changes")
+def architecture_changes(
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "approval:read")
+    return repositories.resolve(ApprovalRepositoryPort).architecture_changes(tenant_id=actor.tenant_id)
+
+
+@router.post("/architecture/changes/{change_id}/reconcile")
+def finalize_architecture(
+    change_id: UUID, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "brain:manage")
+    return call(lambda: repositories.resolve(ApprovalRepositoryPort).reconcile_architecture(
+        tenant_id=actor.tenant_id, change_id=str(change_id)))

@@ -183,3 +183,143 @@ class MetaBrain:
             "advisory_only": True,
             "automatic_execution": False,
         }
+
+
+    def reflect(self, *, tenant_id: str, limit: int = 20) -> dict:
+        if not 2 <= limit <= 100:
+            raise ValueError("Reflection requires a 2–100 snapshot window")
+        intelligence = self.repositories.resolve(ExecutiveIntelligence)
+        history = intelligence.list(tenant_id=tenant_id, limit=limit)
+        history.reverse()
+        sources = []
+        for item in history:
+            if not intelligence.verify(tenant_id=tenant_id, snapshot_id=item["id"])["verified"]:
+                raise PermissionError("Unverified reflection source")
+            sources.append(intelligence.get(tenant_id=tenant_id, snapshot_id=item["id"]))
+        latest = sources[-1] if sources else None
+        metrics = latest["metrics"] if latest else {}
+        organization = metrics.get("organization_observation")
+        architecture = metrics.get("architecture_observation")
+        dimensions = {
+            "organization": organization or {"status": "needs_extended_snapshot"},
+            "architecture": architecture or {"status": "needs_extended_snapshot"},
+            "departments": organization.get("departments", []) if organization else [],
+            "workforce": {"ai_employees": organization.get("ai_employees"),
+                          "human_employees": organization.get("human_employees"),
+                          "failed_agent_runs": metrics.get("failed_agent_runs")}
+                         if organization else {"status": "needs_extended_snapshot"},
+            "workflows": {key: metrics.get(key) for key in
+                          ("total_tasks", "completed_tasks", "backlog_tasks", "open_handoffs")},
+        }
+        findings = []
+        if len(sources) >= 2:
+            first = sources[0]["metrics"]
+            for key, concern, suggestion in (
+                ("backlog_tasks", "workflow backlog increased", "Review task ownership and dependencies."),
+                ("failed_agent_runs", "failed runs increased", "Inspect failure evidence before changing handlers."),
+                ("pending_approvals", "pending decisions increased", "Review independent reviewer capacity."),
+                ("open_handoffs", "unresolved handoffs increased", "Review department coordination."),
+            ):
+                delta = metrics[key] - first[key]
+                if delta > 0:
+                    findings.append({"metric": key, "observed_delta": delta,
+                                     "concern": concern, "proposal": suggestion})
+            if architecture and not architecture["passed"]:
+                findings.append({"metric": "architecture_violations",
+                                 "concern": "packaged dependency contract failed",
+                                 "proposal": "Review the frozen module contract before approving changes."})
+        recommendations = self.list(tenant_id=tenant_id)
+        return {
+            "decision_review": {"proposed": sum(r["status"] == "proposed" for r in recommendations),
+                                "endorsed": sum(r["status"] == "endorsed" for r in recommendations),
+                                "rejected": sum(r["status"] == "rejected" for r in recommendations),
+                                "scope": "latest 100 tenant recommendations"},
+            "reflection_findings": findings,
+            "optimization_policy": "Propose bounded experiments; compare reviewed outcomes before adoption.",
+            "status": "observed" if len(sources) >= 2 else "insufficient_history",
+            "sample_count": len(sources), "window_limit": limit,
+            "source_ids": [s["id"] for s in sources],
+            "source_digests": [s["digest"] for s in sources],
+            "dimensions": dimensions,
+            "timeline": [{"snapshot_id": s["id"], "captured_at": s["created_at"],
+                          "dna_id": s["dna_id"], "metrics": s["metrics"],
+                          "fitness": s["fitness"]} for s in sources],
+            "reviewed_evaluations": [e for e in self.evaluations(tenant_id=tenant_id)
+                                      if e["status"] == "verified"],
+            "advisory_only": True, "automatic_execution": False,
+            "causal_effect_proven": False,
+        }
+
+    def propose_evaluation(self, *, tenant_id: str, author_id: str,
+                           recommendation_id: str, after_id: str, change_evidence: str) -> dict:
+        from decimal import Decimal
+        tenant_id, author_id, recommendation_id, after_id = map(str, map(UUID,
+            (tenant_id, author_id, recommendation_id, after_id)))
+        if not 1 <= len(change_evidence.strip()) <= 3000:
+            raise ValueError("Actual organizational change evidence is required")
+        queries = self.repositories.resolve(MetaBrainQueries)
+        intelligence = self.repositories.resolve(ExecutiveIntelligence)
+        with self.db.transaction():
+            rec = queries.select_ago_meta_recommendations_04((tenant_id, recommendation_id)).fetchone()
+            if rec is None:
+                raise LookupError("Recommendation not found")
+            if rec["status"] != "endorsed":
+                raise PermissionError("An independently endorsed recommendation is required")
+            before_id = str(rec["snapshot_id"])
+            before = intelligence.get(tenant_id=tenant_id, snapshot_id=before_id)
+            after = intelligence.get(tenant_id=tenant_id, snapshot_id=after_id)
+            if (after["capture_order"] <= before["capture_order"]
+                    or after["created_at"] < rec["decided_at"]):
+                raise PermissionError("After evidence must follow the endorsement")
+            for snapshot in (before, after):
+                if not intelligence.verify(tenant_id=tenant_id,
+                                           snapshot_id=snapshot["id"])["verified"]:
+                    raise PermissionError("Source digest mismatch")
+            from ago.organizational_dna import BASELINE_PROFILE
+            # Fixed scoring profile eliminates threshold-change scoring artifacts.
+            from ago.executive_intelligence import evaluate
+            scored_before = evaluate(before["metrics"], BASELINE_PROFILE)
+            scored_after = evaluate(after["metrics"], BASELINE_PROFILE)
+            delta = {key: str(Decimal(scored_after[key]) - Decimal(scored_before[key]))
+                     for key in ("quality_pct", "completion_pct", "credit_utilization_pct")}
+            assessment = {
+                "before_digest": before["digest"], "after_digest": after["digest"],
+                "before": scored_before, "after": scored_after, "observed_delta": delta,
+                "scoring_profile": dict(BASELINE_PROFILE),
+                "sufficient_outcomes": not (scored_before["insufficient_evidence"]
+                                            or scored_after["insufficient_evidence"]),
+                "causal_effect_proven": False, "applied": False,
+                "interpretation": "Cumulative observational comparison; independent review required.",
+            }
+            identifier = str(uuid4())
+            approval = self.repositories.resolve(ApprovalRepository).propose(
+                tenant_id=tenant_id, requester_id=author_id, action=f"meta:evaluate:{identifier}")
+            queries.insert_evaluation((identifier, tenant_id, recommendation_id, before_id,
+                after_id, author_id, approval.request_id, change_evidence.strip(),
+                json.dumps(assessment, sort_keys=True)))
+        return {"id": identifier, "approval_id": approval.request_id,
+                "status": "proposed", "assessment": assessment}
+
+    def evaluations(self, *, tenant_id: str) -> list[dict]:
+        return [dict(row) for row in self.repositories.resolve(MetaBrainQueries)
+                .evaluations((str(UUID(tenant_id)),)).fetchall()]
+
+    def reconcile_evaluation(self, *, tenant_id: str, evaluation_id: str) -> dict:
+        tenant_id, evaluation_id = str(UUID(tenant_id)), str(UUID(evaluation_id))
+        queries = self.repositories.resolve(MetaBrainQueries)
+        with self.db.transaction():
+            row = queries.evaluation_for_review((tenant_id, evaluation_id)).fetchone()
+            if row is None:
+                raise LookupError("Evaluation not found")
+            if row["status"] != "proposed":
+                raise PermissionError("Evaluation already finalized")
+            decision = queries.select_ago_approval_requests_05((tenant_id, row["approval_id"])).fetchone()
+            if not decision or decision["action"] != f"meta:evaluate:{evaluation_id}":
+                raise PermissionError("Exact evaluation review required")
+            statuses = {"approved": "verified", "rejected": "rejected"}
+            if decision["status"] not in statuses:
+                raise PermissionError("Human evidence review pending")
+            state = statuses[decision["status"]]
+            queries.finalize_evaluation((state, tenant_id, evaluation_id))
+        return {"id": evaluation_id, "status": state,
+                "automatic_execution": False, "causal_effect_proven": False}

@@ -422,6 +422,18 @@
         "assert_executable": {
           "arguments": "self, *, request_id: str, tenant_id: str, action: str",
           "returns": "None"
+        },
+        "propose_architecture": {
+          "arguments": "self, *, tenant_id: str, requester_id: str, change_key: str, specification: dict",
+          "returns": "dict"
+        },
+        "architecture_changes": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "reconcile_architecture": {
+          "arguments": "self, *, tenant_id: str, change_id: str",
+          "returns": "dict"
         }
       }
     },
@@ -621,6 +633,22 @@
         "brief": {
           "arguments": "self, *, tenant_id: str",
           "returns": "dict"
+        },
+        "reflect": {
+          "arguments": "self, *, tenant_id: str, limit: int=20",
+          "returns": "dict"
+        },
+        "propose_evaluation": {
+          "arguments": "self, *, tenant_id: str, author_id: str, recommendation_id: str, after_id: str, change_evidence: str",
+          "returns": "dict"
+        },
+        "evaluations": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "reconcile_evaluation": {
+          "arguments": "self, *, tenant_id: str, evaluation_id: str",
+          "returns": "dict"
         }
       }
     },
@@ -653,6 +681,22 @@
         },
         "select_ago_meta_recommendations_07": {
           "arguments": "self, parameters: Any=None, *, extra: str",
+          "returns": "Cursor"
+        },
+        "insert_evaluation": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "evaluations": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "evaluation_for_review": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "finalize_evaluation": {
+          "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         }
       }
@@ -695,7 +739,7 @@
       "module": "organizational_dna",
       "methods": {
         "propose": {
-          "arguments": "self, *, tenant_id: str, proposer_id: str, profile: dict, rationale: str",
+          "arguments": "self, *, tenant_id: str, proposer_id: str, profile: dict, rationale: str, charter: dict | None=None, scope_kind: str='company', scope_id: str | None=None",
           "returns": "dict"
         },
         "reconcile": {
@@ -709,6 +753,10 @@
         "list": {
           "arguments": "self, *, tenant_id: str, limit: int=100",
           "returns": "list[dict]"
+        },
+        "effective": {
+          "arguments": "self, *, tenant_id: str, department_id: str | None=None, employee_id: str | None=None, exclude_kind: str | None=None",
+          "returns": "dict"
         }
       }
     },

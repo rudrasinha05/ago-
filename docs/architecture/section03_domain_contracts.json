@@ -295,11 +295,15 @@
       "ago_agent_runs",
       "ago_approval_requests",
       "ago_credit_budgets",
+      "ago_departments",
       "ago_dna_versions",
+      "ago_employees",
       "ago_executive_snapshots",
+      "ago_goals",
       "ago_governed_tasks",
       "ago_handoffs",
       "ago_knowledge_nodes",
+      "ago_strategy_plans",
       "ago_task_reviews"
     ],
     "experiments": [
@@ -313,6 +317,7 @@
     "governance": [
       "ago_approval_audit",
       "ago_approval_requests",
+      "ago_architecture_changes",
       "ago_employees",
       "ago_users"
     ],
@@ -381,6 +386,7 @@
     "meta_brain_queries": [
       "ago_approval_requests",
       "ago_executive_snapshots",
+      "ago_meta_evaluations",
       "ago_meta_recommendations"
     ],
     "metrics": [],
@@ -394,7 +400,9 @@
     ],
     "organizational_dna": [
       "ago_approval_requests",
+      "ago_departments",
       "ago_dna_versions",
+      "ago_employees",
       "ago_tenants"
     ],
     "plan_execution": [],

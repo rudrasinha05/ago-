@@ -11,6 +11,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
+from ago.architecture_guard import MODULE_DIR, load_policy, verify
 from ago.executive_intelligence_queries import ExecutiveIntelligenceQueries
 from ago.organizational_dna import GenomeStore, validate_profile
 
@@ -101,7 +102,7 @@ class ExecutiveIntelligence:
         # One SQL statement provides a statement-level consistent operational view.
         row = (
             self.repositories.resolve(ExecutiveIntelligenceQueries)
-            .select_ago_governed_tasks_01((tenant_id,) * 10)
+            .select_ago_governed_tasks_01((tenant_id,) * 16)
             .fetchone()
         )
         if row is None:
@@ -122,6 +123,8 @@ class ExecutiveIntelligence:
             "budget_configured": row["budget_ceiling"] is not None,
             "budget_ceiling": str(row["budget_ceiling"] or "0"),
             "budget_consumed": str(row["budget_consumed"] or "0"),
+            "organization_observation": {k: row[k] for k in
+                ("goals", "plans", "departments", "ai_employees", "human_employees", "failed_tasks")},
         }
 
     def capture(self, *, tenant_id: str, analyst_id: str) -> dict:
@@ -129,6 +132,15 @@ class ExecutiveIntelligence:
         with self.db.transaction():
             active = self.repositories.resolve(GenomeStore).active(tenant_id=tenant_id)
             metrics = self._metrics(tenant_id)
+            policy = load_policy()
+            architecture = verify(MODULE_DIR, policy)
+            metrics["architecture_observation"] = {
+                "policy_version": policy["schema_version"], "modules": architecture.modules,
+                "edges": len(architecture.edges), "passed": architecture.passed,
+                "violations": len(architecture.violations),
+                "policy_digest": hashlib.sha256(json.dumps(policy, sort_keys=True).encode()).hexdigest(),
+                "source": "packaged_static_dependency_audit",
+            }
             assessment = evaluate(metrics, active["profile"])
             evidence = {
                 "metrics": metrics,

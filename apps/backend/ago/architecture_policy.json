@@ -66,6 +66,7 @@
       "imports": [
         "agent_runtime_queries",
         "backend_contracts",
+        "organizational_dna",
         "task_store"
       ]
     },
@@ -317,6 +318,7 @@
       "context": "strategy",
       "layer": "service",
       "imports": [
+        "architecture_guard",
         "backend_contracts",
         "executive_intelligence_queries",
         "organizational_dna"
@@ -459,7 +461,8 @@
         "backend_contracts",
         "executive_intelligence",
         "governance",
-        "meta_brain_queries"
+        "meta_brain_queries",
+        "organizational_dna"
       ]
     },
     "metrics": {

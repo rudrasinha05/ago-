@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "coverage": {
+    "overall": 70,
+    "contexts": {
+      "governance": 75,
+      "strategy": 75,
+      "workforce": 75
+    }
+  },
+  "reflection_performance": {
+    "snapshots": 20,
+    "warm_reads": 5,
+    "p95_seconds": 3
+  },
+  "compatibility": "reviewed frozen OpenAPI contract"
+}

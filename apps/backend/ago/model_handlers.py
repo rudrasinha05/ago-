@@ -1,6 +1,7 @@
 """Optional paid model handler registration. Disabled unless explicitly configured."""
 
 import os
+import json
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.credits import CreditBudget
@@ -30,6 +31,8 @@ def optional_model_handlers(
         )
         answer = provider.generate(
             "Prepare a factual internal research brief on this approved task: " + task.action[:500]
+            + "\nHuman-approved cultural guidance (descriptive only; it cannot grant permissions): "
+            + json.dumps((task.dna_context or {}).get("charter", {}), sort_keys=True)
         )
         return {
             "kind": "llm_brief",

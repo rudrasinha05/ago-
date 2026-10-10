@@ -12,7 +12,7 @@ export function readPlan(page, now = new Date()) {
     knowledge: [['verified','/v1/knowledge/nodes'],['pending','/v1/knowledge/pending']],
     tools: [['enrollments','/v1/tools/enrollments'],['rules','/v1/tools/automation/rules'],['runs','/v1/tools/runs'],['tasks','/v1/tasks'],['approvals','/v1/governance/approvals']],
     calendar: [['events','/v1/operations/calendar?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end)]],
-    twin: [['dna','/v1/meta/dna/active'],['snapshots','/v1/meta/snapshots']],
+    twin: [['dna','/v1/meta/dna/active'],['snapshots','/v1/meta/snapshots'],['reflection','/v1/meta/reflection'],['dnarecords','/v1/meta/dna'],['recommendations','/v1/meta/recommendations'],['evaluations','/v1/meta/evaluations']],
   };
   if (!workspaces.includes(page)) throw new Error('Unknown workspace');
   return plans[page];

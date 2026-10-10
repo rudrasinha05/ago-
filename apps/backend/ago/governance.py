@@ -129,3 +129,58 @@ class ApprovalRepository:
         ).fetchone()
         if row is None or row["action"] != action or row["status"] != "approved":
             raise PermissionError("Approved action not found for tenant and scope")
+
+    def propose_architecture(self, *, tenant_id: str, requester_id: str,
+                             change_key: str, specification: dict) -> dict:
+        from uuid import uuid4
+        from ago.governance_domain import validate_architecture_change
+
+        specification = validate_architecture_change(change_key, specification)
+        identifier = str(uuid4())
+        with self.connection.transaction():
+            approval = self.propose(tenant_id=tenant_id, requester_id=requester_id,
+                                    action=f"architecture:review:{identifier}")
+            import json
+            self.connection.execute(
+                """INSERT INTO ago_architecture_changes
+                   (id,tenant_id,proposer_id,approval_id,change_key,specification)
+                   VALUES (%s,%s,%s,%s,%s,%s::jsonb)""",
+                (identifier, tenant_id, requester_id, approval.request_id,
+                 change_key, json.dumps(specification, sort_keys=True)),
+            )
+        return {"id": identifier, "approval_id": approval.request_id,
+                "status": "proposed", "applied": False}
+
+    def architecture_changes(self, *, tenant_id: str) -> list[dict]:
+        return [dict(row) for row in self.connection.execute(
+            """SELECT id,change_key,specification,approval_id,status,created_at,decided_at
+               FROM ago_architecture_changes WHERE tenant_id=%s
+               ORDER BY created_at DESC,id LIMIT 100""", (str(UUID(tenant_id)),),
+        ).fetchall()]
+
+    def reconcile_architecture(self, *, tenant_id: str, change_id: str) -> dict:
+        with self.connection.transaction():
+            row = self.connection.execute(
+                """SELECT status,approval_id FROM ago_architecture_changes
+                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                (str(UUID(tenant_id)), str(UUID(change_id))),
+            ).fetchone()
+            if row is None:
+                raise LookupError("Architecture change not found")
+            if row["status"] != "proposed":
+                raise PermissionError("Change already finalized")
+            decision = self.connection.execute(
+                "SELECT status,action FROM ago_approval_requests WHERE tenant_id=%s AND id=%s",
+                (tenant_id, row["approval_id"]),
+            ).fetchone()
+            if decision is None or decision["action"] != f"architecture:review:{change_id}":
+                raise PermissionError("Exact architecture review required")
+            states = {"approved": "accepted", "rejected": "rejected"}
+            if decision["status"] not in states:
+                raise PermissionError("Independent review is pending")
+            state = states[decision["status"]]
+            self.connection.execute(
+                """UPDATE ago_architecture_changes SET status=%s,decided_at=clock_timestamp()
+                   WHERE tenant_id=%s AND id=%s""", (state, tenant_id, change_id),
+            )
+        return {"id": change_id, "status": state, "applied": False}

@@ -7,6 +7,43 @@ from psycopg.rows import dict_row
 from test_m11_browser import PASSWORD_FOUNDER
 
 
+def test_next_company_culture_requires_distinct_human_review(page, browser, app_url, tenant):
+    context = browser.new_context(viewport={"width": 1330, "height": 900})
+    reviewer = context.new_page()
+    try:
+        sign_in_next(page, app_url, tenant)
+        navigate_next(page, "Digital Twin", "Organization Digital Twin")
+        page.get_by_role("button", name="Propose company DNA", exact=True).click()
+        expect(page.locator("#dlg-quality_philosophy")).to_be_visible()
+        page.locator("#dlg-mission").fill("My independently reviewed personal research culture")
+        page.locator("#dlg-rationale").fill("Keep sourced local research and clear human review")
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("#screen")).to_contain_text("company · v1")
+        # Proposal does not silently activate its words.
+        with psycopg.connect(os.environ["AGO_TEST_POSTGRES_DSN"], row_factory=dict_row) as db:
+            row = db.execute("SELECT status FROM ago_dna_versions WHERE tenant_id=%s",
+                             (tenant["id"],)).fetchone()
+            assert row["status"] == "proposed"
+        sign_in_next(reviewer, app_url, tenant, "reviewer")
+        navigate_next(reviewer, "Digital Twin", "Organization Digital Twin")
+        expect(reviewer.get_by_role("button", name="Propose company DNA", exact=True)).to_have_count(0)
+        navigate_next(reviewer, "Governance", "Governance & oversight")
+        review = reviewer.locator("tr").filter(has_text="dna:activate:")
+        review.get_by_role("button", name="Approve", exact=True).click()
+        reviewer.locator("#dlg-reason").fill("Distinct human reviewed all cultural guidance")
+        reviewer.locator("#operation-submit").click()
+        expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        page.get_by_role("button", name="Refresh", exact=True).click()
+        page.get_by_role("button", name="Finalize reviewed DNA", exact=True).click()
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("#screen")).to_contain_text("My independently reviewed personal research culture")
+        expect(page.get_by_role("button", name="Finalize reviewed DNA", exact=True)).to_have_count(0)
+    finally:
+        context.close()
+
+
 def sign_in_next(page, app_url, tenant, role='founder'):
     email, password, _ = tenant[role]
     page.goto(app_url+'/workspace/', wait_until='domcontentloaded')

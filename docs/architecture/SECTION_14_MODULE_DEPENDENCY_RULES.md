@@ -205,3 +205,8 @@ new monorepo, new broker or premature microservice split in this section.
 Section 14 source of truth: the committed policy + checker + tests + CI
 status + documented human review requirements. The user retains the final
 decision on architectural amendments and future project scope.
+
+
+## Sections12–20 revalidation
+
+The historical counts above remain historical. Current source policy registers107 root Python modules and296 exact import edges, including runtime DNA and packaged audit dependencies. The generated Section1 inventory is current source authority. Domain/SQL/port/API manifests were explicitly updated for migration023 and reviewed bounded methods; no exception or cycle waiver was added. Local delegated implementation is covered by CI and CODEOWNERS; actual required GitHub independent review remains unverified and is not a personal-localhost acceptance gate. Service extraction remains a future reviewed compatibility decision, not a new deployed service.

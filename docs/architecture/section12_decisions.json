@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "decisions": [
+    {
+      "id": "ADR-001",
+      "family": "Backend",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-001.md",
+      "source": "apps/backend/pyproject.toml",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-002",
+      "family": "Frontend",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-002.md",
+      "source": "apps/web/package.json",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-003",
+      "family": "Database",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-003.md",
+      "source": "deploy/sql/019_database_architecture.sql",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-004",
+      "family": "Broker",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-004.md",
+      "source": "apps/backend/ago/postgres_event_store.py",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-005",
+      "family": "Vector search",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-005.md",
+      "source": "apps/backend/ago/storage_adapters.py",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-006",
+      "family": "Graph",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-006.md",
+      "source": "apps/backend/ago/knowledge_store.py",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-007",
+      "family": "Cache",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-007.md",
+      "source": "apps/backend/ago/storage_adapters.py",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-008",
+      "family": "Objects",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-008.md",
+      "source": "apps/backend/ago/storage_adapters.py",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-009",
+      "family": "Deployment",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-009.md",
+      "source": "deploy/docker/Dockerfile",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-010",
+      "family": "Auth/security",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-010.md",
+      "source": "apps/backend/ago/auth_guard.py",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-011",
+      "family": "Observability",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-011.md",
+      "source": "apps/backend/ago/local_ops.py",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-012",
+      "family": "Workflow",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-012.md",
+      "source": "apps/backend/ago/task_store.py",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-013",
+      "family": "Quality/CI",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-013.md",
+      "source": ".github/workflows/ago-backend-ci.yml",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    },
+    {
+      "id": "ADR-014",
+      "family": "Governance/DNA",
+      "status": "selected-local-baseline",
+      "record": "docs/decisions/ADR-014.md",
+      "source": "deploy/sql/023_architecture_meta_dna.sql",
+      "supersedes": null,
+      "approval": "delegated engineering task; independent adoption review required for future replacements"
+    }
+  ]
+}

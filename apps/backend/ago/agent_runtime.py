@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from uuid import UUID, uuid4
 
 from ago.agent_runtime_queries import AgentRuntimeQueries
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.task_store import TaskStore
+from ago.organizational_dna import GenomeStore
 
 
 class AgentRuntime:
@@ -39,9 +41,13 @@ class AgentRuntime:
                 task_id=task_id,
                 principal=actor,
             )
+            dna = self.repositories.resolve(GenomeStore).effective(
+                tenant_id=actor.tenant_id, employee_id=str(row["assignee_id"]))
+            task = replace(task, dna_context=dna)
             run_id = str(uuid4())
             self.repositories.resolve(AgentRuntimeQueries).insert_ago_agent_runs_03(
-                (run_id, actor.tenant_id, task_id, row["assignee_id"], actor.subject)
+                (run_id, actor.tenant_id, task_id, row["assignee_id"], actor.subject,
+                 json.dumps(dna, sort_keys=True))
             )
         return self._execute(run_id=run_id, task=task, actor=actor)
 

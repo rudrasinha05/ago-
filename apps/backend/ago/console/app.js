@@ -111,6 +111,10 @@ function endpoints(page) {
     twin: [
       ["dna","/v1/meta/dna/active"],
       ["snapshots","/v1/meta/snapshots"],
+      ["reflection","/v1/meta/reflection"],
+      ["dnarecords","/v1/meta/dna"],
+      ["recommendations","/v1/meta/recommendations"],
+      ["evaluations","/v1/meta/evaluations"],
     ],
   };
   return entries[page] || [];

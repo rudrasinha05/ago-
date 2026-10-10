@@ -1,5 +1,8 @@
 name: Backend quality
 on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1'
   push:
     branches: [develop, main]
   pull_request:
@@ -53,6 +56,15 @@ jobs:
       - name: Enforce frozen Section 14 module boundaries
         working-directory: apps/backend
         run: python -m ago.architecture_guard check
+      - name: Read-only periodic architecture and engineering audit
+        run: |
+          python scripts/check_system_architecture.py
+          python scripts/check_component_diagrams.py
+          python scripts/check_domain_contexts.py
+          python scripts/check_monorepo.py
+          python scripts/check_backend_architecture.py
+          python scripts/check_frontend_architecture.py
+          python scripts/check_engineering_quality.py
       - name: Tests
         run: python -m pytest -q apps/backend/tests
       - name: Lint

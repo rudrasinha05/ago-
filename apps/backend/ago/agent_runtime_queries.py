@@ -26,13 +26,13 @@ class AgentRuntimeQueries:
 
     def insert_ago_agent_runs_03(self, parameters: Any = None) -> Cursor:
         return self.connection.execute(
-            "INSERT INTO ago_agent_runs\n                   (id,tenant_id,task_id,agent_id,executor_id,status)\n                   VALUES (%s,%s,%s,%s,%s,'running')",
+            "INSERT INTO ago_agent_runs\n                   (id,tenant_id,task_id,agent_id,executor_id,status,dna_context)\n                   VALUES (%s,%s,%s,%s,%s,'running',%s::jsonb)",
             parameters,
         )
 
     def select_ago_agent_runs_04(self, parameters: Any = None) -> Cursor:
         return self.connection.execute(
-            "SELECT id,task_id,agent_id,status,result,failure_code,started_at\n               FROM ago_agent_runs WHERE tenant_id=%s\n               ORDER BY started_at DESC,id LIMIT %s",
+            "SELECT id,task_id,agent_id,status,result,failure_code,started_at,dna_context\n               FROM ago_agent_runs WHERE tenant_id=%s\n               ORDER BY started_at DESC,id LIMIT %s",
             parameters,
         )
 

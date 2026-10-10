@@ -556,6 +556,48 @@ export async function handleAction(key, id, ctx) {
     });
     return;
   }
+  if (['reconcile-dna','reconcile-evaluation','reconcile-recommendation'].includes(key)) {
+    const folder={'reconcile-dna':'dna','reconcile-evaluation':'evaluations','reconcile-recommendation':'recommendations'}[key];
+    confirmation(ctx,'Finalize independent review','The matching human approval must already be decided in Governance.',async()=>{
+      const out=await api.request('/v1/meta/'+folder+'/'+uuid(id)+'/reconcile',{method:'POST'});
+      return 'Review finalized: '+out.status;
+    });return;
+  }
+  if (key === 'propose-company-dna' || key === 'propose-scoped-dna') {
+    const scoped=key==='propose-scoped-dna', active=resource(state.data,'dna');
+    const charters=scoped?['communication_style','documentation_philosophy','meeting_philosophy','learning_philosophy']:Object.keys(active?.charter || {});
+    const targets=scoped?await departmentsAndPeople(ctx):null;
+    const options=targets?[...targets.departments.map(d=>choose('department:'+d.id,'Department: '+d.name)),...targets.people.map(e=>choose('employee:'+e.id,'Employee: '+e.name))]:[];
+    if(scoped)mustHave(options,'Create a department or employee first.');
+    openDialog(ctx,{title:scoped?'Propose inherited guidance':'Propose company culture',description:'Creates a version for independent human review. Child thresholds must preserve or strengthen the parent. These words never grant permissions.',button:'Submit for review',fields:[
+      ...(scoped?[{name:'target',label:'Scope',type:'select',options}]:[]),
+      ...['qa_target_pct','backlog_limit','budget_alert_pct'].map(name=>({name,label:name.replaceAll('_',' '),type:'number',value:active?.profile?.[name],min:name==='backlog_limit'?0:name==='qa_target_pct'?50:1,max:name==='backlog_limit'?10000:100})),
+      ...charters.map(name=>({name,label:name.replaceAll('_',' '),type:'textarea',maxLength:2000,value:active?.charter?.[name]})),
+      {name:'rationale',label:'Why should this change?',type:'textarea',maxLength:3000}],onSubmit:async v=>{
+        const [scope_kind,scope_id]=scoped?v.target.split(':'):['company',null];
+        const profile=validateProfile(Object.fromEntries(['qa_target_pct','backlog_limit','budget_alert_pct'].map(k=>[k,Number(v[k])])));
+        await api.request('/v1/meta/dna',{method:'POST',body:{profile,charter:Object.fromEntries(charters.map(k=>[k,v[k]])),scope_kind,scope_id,rationale:v.rationale}});
+        return 'DNA proposal recorded. Ask an independent reviewer to decide in Governance.';
+      }});return;
+  }
+  if(key==='inspect-dna') {
+    const {people}=await departmentsAndPeople(ctx);mustHave(people,'Create an employee first.');
+    openDialog(ctx,{title:'Inspect inherited DNA',description:'Reads company, department and employee guidance.',refresh:false,fields:[{name:'employee',label:'Employee',type:'select',options:choices(people,x=>x.name)}],onSubmit:async v=>{
+      const out=await api.request('/v1/meta/dna/effective?employee_id='+uuid(v.employee));
+      return 'Inherited '+out.lineage.map(x=>x.scope+' v'+(x.version??'default')).join(' → ')+'. Quality target: '+out.profile.qa_target_pct+'%. Mission: '+out.charter.mission;
+    }});return;
+  }
+  if(key==='propose-evaluation') {
+    const recs=(resource(state.data,'recommendations')||[]).filter(x=>x.status==='endorsed'), snaps=resource(state.data,'snapshots')||[];
+    mustHave(recs,'Independently endorse a recommendation first.');mustHave(snaps,'Capture later evidence first.');
+    openDialog(ctx,{title:'Evaluate an observed change',description:'Compare the original evidence with a later snapshot. Independent review validates the observation; it does not establish causation.',button:'Submit comparison',fields:[
+      {name:'recommendation',label:'Endorsed recommendation',type:'select',options:choices(recs,x=>x.summary)},
+      {name:'after',label:'Later evidence',type:'select',options:choices(snaps,x=>String(x.created_at))},
+      {name:'evidence',label:'What actually changed?',type:'textarea',maxLength:3000}],onSubmit:async v=>{
+        await api.request('/v1/meta/evaluations',{method:'POST',body:{recommendation_id:uuid(v.recommendation),after_id:uuid(v.after),change_evidence:v.evidence}});
+        return 'Observed comparison recorded for independent review.';
+      }});return;
+  }
   if (key === "capture-snapshot") {
     confirmation(ctx,"Capture live executive evidence",
       "Create an immutable M7 snapshot from existing tenant tasks, QA and virtual credits. This does not produce a prediction or execute any work.",

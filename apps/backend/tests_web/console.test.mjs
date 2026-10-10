@@ -17,6 +17,21 @@ const mockState = (permissions = []) => ({
 const loaded = data => ({ status: "ok", data });
 const forbidden = { status: "forbidden", data: null };
 
+test("culture and reflection escape untrusted guidance and obey permissions", () => {
+  const data={dna:loaded({profile:{qa_target_pct:85,backlog_limit:5,budget_alert_pct:80},
+    charter:{mission:'<img src=x onerror=alert(1)>'}}),
+    reflection:loaded({sample_count:2,status:'observed',reflection_findings:[
+      {concern:'<script>bad</script>',proposal:'Review evidence'}]}),
+    snapshots:loaded([]),dnarecords:loaded([]),recommendations:loaded([]),evaluations:loaded([])};
+  const denied=renderPage('twin',data,mockState());
+  assert.equal(denied.includes('<img'),false);
+  assert.equal(denied.includes('<script>'),false);
+  assert.equal(denied.includes('data-action="propose-company-dna"'),false);
+  const allowed=renderPage('twin',data,mockState(['meta:dna:propose','meta:dna:read']));
+  assert.equal(allowed.includes('data-action="propose-company-dna"'),true);
+  assert.match(allowed,/Observed differences do not prove/);
+});
+
 test("untrusted string is always escaped before entering a template", () => {
   const payload = '<img src=x onerror="alert(1)"> & \' x';
   const output = escapeHTML(payload);

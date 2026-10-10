@@ -366,6 +366,28 @@ export function renderCalendar(data, state) {
     panel("Shared commitments",unavailable(data,"events",rows ||
       empty("No upcoming events","Schedule the first organizational event."))));
 }
+function renderCulture(data,state) {
+  const dna=resource(data,"dna"), reflection=resource(data,"reflection");
+  const rows=Object.entries(dna?.charter || {}).map(([key,value])=>
+    '<div class="keyval"><span>'+safe(key.replaceAll('_',' '))+'</span><strong>'+safe(value)+'</strong></div>').join('');
+  const pending=list(data,"dnarecords").filter(x=>x.status==='proposed').map(x=>
+    '<div class="list-row"><div class="row-main"><strong>'+safe(x.scope_kind)+' · v'+safe(x.version)+'</strong><small>'+safe(x.rationale)+'</small></div>'+badge(x.status)+
+    (capability(state,'meta:dna:activate')?action('Finalize reviewed DNA','reconcile-dna',x.id):'')+'</div>').join('');
+  const evals=list(data,'evaluations').map(x=>'<div class="list-row"><div class="row-main"><strong>Observed quality change: '+safe(x.assessment?.observed_delta?.quality_pct ?? 'N/A')+'</strong><small>'+safe(x.change_evidence)+'</small></div>'+badge(x.status)+
+    (x.status==='proposed'&&capability(state,'meta:finalize')?action('Finalize reviewed outcome','reconcile-evaluation',x.id):'')+'</div>').join('');
+  const recs=list(data,'recommendations').map(x=>'<div class="list-row"><div class="row-main"><strong>'+safe(x.summary)+'</strong></div>'+badge(x.status)+
+    (x.status==='proposed'&&capability(state,'meta:finalize')?action('Finalize reviewed recommendation','reconcile-recommendation',x.id):'')+'</div>').join('');
+  const actions=(capability(state,'meta:dna:propose')?action('Propose company DNA','propose-company-dna')+action('Propose team or employee DNA','propose-scoped-dna'):'')+
+    (capability(state,'meta:dna:read')?action('Inspect employee inheritance','inspect-dna'):'')+
+    (capability(state,'meta:recommend')?action('Evaluate observed change','propose-evaluation'):'');
+  return section('Company culture and reviewed learning')+panel('Organizational DNA',
+    '<div class="panel-body"><p>These are default guidance unless a company version has been approved. Independent approval, permissions and tenant isolation remain mandatory.</p><div class="page-actions">'+actions+'</div>'+unavailable(data,'dna',rows)+pending+'</div>')+
+    panel('Historical reflection','<div class="panel-body">'+unavailable(data,'reflection',
+      '<p>'+safe(reflection?.sample_count ?? 0)+' verified snapshots. '+safe(reflection?.status || 'No history')+'.</p><p>Observed differences do not prove that a recommendation caused a change.</p>'+
+      (reflection?.reflection_findings || []).map(x=>'<p>'+safe(x.concern)+': '+safe(x.proposal)+'</p>').join(''))+'</div>')+
+    panel('Recommendations',unavailable(data,'recommendations',recs || empty('No recommendations','Capture evidence and propose a review.')))+
+    panel('Observed outcome reviews',unavailable(data,'evaluations',evals || empty('No reviewed comparisons','Record a later snapshot after an endorsed change.')));
+}
 export function renderTwin(data, state) {
   const active = resource(data,"dna");
   const snapshots = list(data,"snapshots");
@@ -442,7 +464,7 @@ export function renderTwin(data, state) {
     '<div class="keyval"><span>Authoritative execution</span><strong>None</strong></div>' +
     '<div class="page-actions" style="justify-content:flex-start">' +
     (recorded ? action("Verify evidence fingerprint","verify-snapshot") : "") +
-    '</div></div>'));
+    '</div></div>')) + renderCulture(data,state);
 }
 export function renderPage(page,data,state) {
   const fn = {

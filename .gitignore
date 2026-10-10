@@ -38,3 +38,6 @@ playwright-report/
 test-results/
 tests/frontend/tests/
 build/
+
+coverage.json
+htmlcov/

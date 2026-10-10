@@ -8,7 +8,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [__init__](../../apps/backend/ago/__init__.py) | entrypoints | composition | None |
 | [access](../../apps/backend/ago/access.py) | governance | persistence | backend_contracts, security |
 | [agent_handlers](../../apps/backend/ago/agent_handlers.py) | workforce | service | workflows |
-| [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, task_store |
+| [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, organizational_dna, task_store |
 | [agent_runtime_queries](../../apps/backend/ago/agent_runtime_queries.py) | workforce | persistence | backend_contracts |
 | [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, model_handlers, repository_ports, security |
 | [api_brain](../../apps/backend/ago/api_brain.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
@@ -45,7 +45,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [event_worker](../../apps/backend/ago/event_worker.py) | platform | service | events |
 | [events](../../apps/backend/ago/events.py) | platform | domain | None |
 | [execution](../../apps/backend/ago/execution.py) | workforce | service | security, workflows |
-| [executive_intelligence](../../apps/backend/ago/executive_intelligence.py) | strategy | service | backend_contracts, executive_intelligence_queries, organizational_dna |
+| [executive_intelligence](../../apps/backend/ago/executive_intelligence.py) | strategy | service | architecture_guard, backend_contracts, executive_intelligence_queries, organizational_dna |
 | [executive_intelligence_queries](../../apps/backend/ago/executive_intelligence_queries.py) | strategy | persistence | backend_contracts |
 | [experiments](../../apps/backend/ago/experiments.py) | strategy | persistence | backend_contracts, governance |
 | [feature_flags](../../apps/backend/ago/feature_flags.py) | platform | foundation | None |
@@ -70,7 +70,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [message_contracts](../../apps/backend/ago/message_contracts.py) | platform | domain | None |
 | [message_ops](../../apps/backend/ago/message_ops.py) | entrypoints | composition | backend_contracts, message_store |
 | [message_store](../../apps/backend/ago/message_store.py) | platform | persistence | backend_contracts, message_contracts, security, security_controls |
-| [meta_brain](../../apps/backend/ago/meta_brain.py) | strategy | service | backend_contracts, executive_intelligence, governance, meta_brain_queries |
+| [meta_brain](../../apps/backend/ago/meta_brain.py) | strategy | service | backend_contracts, executive_intelligence, governance, meta_brain_queries, organizational_dna |
 | [meta_brain_queries](../../apps/backend/ago/meta_brain_queries.py) | strategy | persistence | backend_contracts |
 | [metrics](../../apps/backend/ago/metrics.py) | platform | foundation | None |
 | [model_handlers](../../apps/backend/ago/model_handlers.py) | workforce | service | backend_contracts, credits, model_provider |
