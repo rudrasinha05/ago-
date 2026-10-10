@@ -111,6 +111,9 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm -d --name ago-m10-smoke -p 127.0.0.1:18765:8000 \
+            --read-only --tmpfs /tmp:rw,nosuid,noexec,size=64m \
+            --cap-drop=ALL --security-opt=no-new-privileges \
+            --pids-limit=128 --memory=512m \
             -e AGO_ENVIRONMENT=development \
             -e AGO_ENABLE_PAID_MODELS=false \
             -e AGO_M8_EXTERNAL_ENABLED=false ago-m10:ci
