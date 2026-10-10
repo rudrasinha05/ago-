@@ -367,6 +367,8 @@
       "context": "entrypoints",
       "layer": "composition",
       "imports": [
+        "bootstrap",
+        "provision",
         "release_security"
       ]
     },
@@ -542,8 +544,10 @@
     },
     "release_security": {
       "context": "platform",
-      "layer": "foundation",
-      "imports": []
+      "layer": "composition",
+      "imports": [
+        "event_runtime"
+      ]
     },
     "scheduler": {
       "context": "platform",
