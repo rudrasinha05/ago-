@@ -25,7 +25,9 @@ Intelligence or completion of the original entire enterprise architecture.
 - **Section 3 — Domain-Driven Design:** nine complete context contracts,
   all-module ownership and reviewed SQL-access enforcement; source-linked
   aggregates/repositories/services/invariants and explicit transaction/event
-  semantics. CI acceptance pending; `docs/reports/SECTION03_FINAL_ACCEPTANCE.md`.
+  semantics. All seven gates CI-accepted: `17729d5`, run `38036353999`,
+  293 Python tests per matrix version, JS/browser/image/recovery green.
+  Evidence: `docs/reports/SECTION03_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
   Versioned manifest maps 76 AGO root modules and 145 observed internal
