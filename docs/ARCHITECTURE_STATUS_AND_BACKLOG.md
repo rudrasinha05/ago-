@@ -16,11 +16,12 @@ Intelligence or completion of the original entire enterprise architecture.
   Acceptance evidence: `docs/reports/SECTION01_FINAL_ACCEPTANCE.md`.
   This is not proof of parity with the missing full original blueprint.
 - **Section 2 — High-Level Component Diagram:** all seven supplied gates
-  have deliverables: six source-linked component views with explicit capability
+  **CI-accepted**: six source-linked component views with explicit capability
   status and relationship evidence, deterministic catalog/diagram generation,
   Mermaid syntax checks and a real integrated Company Brain / approvals / agent
-  / independent QA / audit regression. Acceptance is pending the new commit's
-  CI; evidence: `docs/reports/SECTION02_FINAL_ACCEPTANCE.md`.
+  / independent QA / audit regression. Commit `937254b`: 288 Python tests
+  per 3.11/3.14 and independent 3.12, 14 JS, six Chromium, Docker and restore
+  passed; run `38035714985`. Evidence: `docs/reports/SECTION02_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
   Versioned manifest maps 76 AGO root modules and 145 observed internal

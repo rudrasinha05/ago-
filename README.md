@@ -38,6 +38,8 @@ independent status.
 
 ## Architecture section 2 — High-Level Component Diagram
 
+All seven supplied Section 2 checklist gates are CI-accepted: 288 Python
+tests per matrix version, 14 JS, six Chromium, Docker and restore passed.
 Six source-linked Mermaid views cover leadership, organization, orchestration,
 knowledge/communication, execution/evidence and infrastructure/security. Current
 and proposed relationships are explicitly distinguished. CI validates source

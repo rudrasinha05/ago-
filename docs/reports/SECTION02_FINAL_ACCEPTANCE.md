@@ -15,7 +15,7 @@ No subsystem is marked fully engineered merely because it is diagrammed.
 - [x] S2-04: Private memory, evidence-reviewed graph, internal handoffs/calendar/audit and future external communication view.
 - [x] S2-05: Execution, tasks, QA, audit, dashboard, scorecard and simulation view.
 - [x] S2-06: Same-origin dashboard, API, signed-session/RBAC, PostgreSQL, outbox, provider and infrastructure view.
-- [ ] S2-07: Real integrated Company Brain → independent strategic and task approvals → employee run → independent QA → captured evidence/audit regression passes on CI PostgreSQL.
+- [x] S2-07: Real integrated Company Brain → independent strategic and task approvals → employee run → independent QA → captured evidence/audit regression passes on CI PostgreSQL.
 
 ## Artifacts and local verification
 
@@ -37,9 +37,29 @@ No subsystem is marked fully engineered merely because it is diagrammed.
 
 ## CI closure
 
-In progress until actual pushed-commit Python matrix, PostgreSQL integration,
-Mermaid parser, JavaScript, Chromium, wheel, Docker and backup/restore evidence
-is verified. Final evidence is recorded here before closure.
+**All seven supplied Section 2 requirements are accepted.**
+Implementation commit: `937254b0e09fd7886cceca1bbd0b392f7ea7ded0`.
+Primary run: https://github.com/rudrasinha05/ago-/actions/runs/38035714985
+Independent backend run: https://github.com/rudrasinha05/ago-/actions/runs/38035715016
+
+| Gate | Actual verified evidence |
+|---|---|
+| Python 3.11 + PostgreSQL | 288 passed, no skips, one dependency warning |
+| Python 3.14 + PostgreSQL | 288 passed, no skips, one dependency warning |
+| Independent Python 3.12 backend workflow | 288 passed, no skips, one dependency warning |
+| Section 2 source/diagram checker and Mermaid | Passed; all six Mermaid views parsed on both matrix versions |
+| Section 1 / Section 14 guards | Passed unchanged |
+| Wheel, migrations, operator doctor, Ruff | Passed |
+| JavaScript unit/security | 14 passed on both matrix versions |
+| Real Chromium with live PostgreSQL | Six journeys passed |
+| Non-root Docker / HTTP smoke | Passed |
+| PostgreSQL backup / checksum / actual restore | Passed |
+
+Job conclusions and decoded logs were checked for this exact commit. The new
+combined integration test passed as part of each 288-test suite; its local skip
+was not used as acceptance. Closure documentation commit CI is checked
+separately in the final handover. No source-parity or subsystem-completeness
+claim extends beyond this seven-gate diagram section.
 
 ## Rollback and scope protection
 
