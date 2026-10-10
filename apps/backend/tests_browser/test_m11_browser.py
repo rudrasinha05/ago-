@@ -251,3 +251,110 @@ def test_mobile_menu_and_keyboard_access(browser, tenant, app_url):
         assert not errors, "Browser exceptions on mobile: " + repr(errors)
     finally:
         context.close()
+
+
+def test_real_browser_governed_plan_two_humans_execution_and_qa(
+    page, browser, tenant, app_url,
+):
+    """Founder never approves their own strategic plan or governed execution."""
+    reviewer_context = browser.new_context(
+        viewport={"width": 1330, "height": 900}, reduced_motion="reduce",
+    )
+    reviewer = reviewer_context.new_page()
+    try:
+        sign_in(page, app_url, tenant)
+        sign_in(reviewer, app_url, tenant, role="reviewer")
+
+        navigate(page, "organization", "People & departments")
+        page.get_by_role("button", name="Add AI employee").click()
+        page.locator("#dlg-name").fill("Pilot AI Analyst")
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("#screen")).to_contain_text("Pilot AI Analyst")
+
+        navigate(page, "strategy", "Strategy & execution")
+        page.get_by_role("button", name="New goal").click()
+        page.locator("#dlg-title").fill("Governed pilot strategy")
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("#screen")).to_contain_text("Governed pilot strategy")
+        page.get_by_role("button", name="New plan").click()
+        page.locator("#dlg-title").fill("Pilot single-step brief")
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+
+        plan = page.locator("tr").filter(has_text="Pilot single-step brief")
+        expect(plan).to_be_visible()
+        plan.get_by_role("button", name="Add step").click()
+        page.locator("#dlg-action").fill("internal:brief")
+        page.locator("#dlg-assignee_id").select_option(
+            label="Pilot AI Analyst — Executive (ai)",
+        )
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        plan = page.locator("tr").filter(has_text="Pilot single-step brief")
+        plan.get_by_role("button", name="Submit", exact=True).click()
+        expect(page.locator("#action-dialog")).to_be_visible()
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("tr").filter(has_text="Pilot single-step brief")).to_contain_text(
+            "submitted",
+        )
+
+        navigate(reviewer, "governance", "Governance & oversight")
+        review_row = reviewer.locator("tr").filter(has_text="brain:activate:")
+        expect(review_row).to_be_visible()
+        review_row.get_by_role("button", name="Approve", exact=True).click()
+        reviewer.locator("#dlg-reason").fill("Independent human strategy review")
+        reviewer.locator("#operation-submit").click()
+        expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
+
+        page.locator("#refresh").click()
+        plan = page.locator("tr").filter(has_text="Pilot single-step brief")
+        plan.get_by_role("button", name="Activate").click()
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        plan = page.locator("tr").filter(has_text="Pilot single-step brief")
+        plan.get_by_role("button", name="Create tasks").click()
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+
+        navigate(page, "governance", "Governance & oversight")
+        task_row = page.locator("tr").filter(has_text="internal:brief")
+        expect(task_row).to_be_visible()
+        task_row.get_by_role("button", name="Request approval").click()
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+
+        reviewer.locator("#refresh").click()
+        task_review = reviewer.locator("tr").filter(has_text="internal:brief")
+        expect(task_review).to_be_visible()
+        task_review.get_by_role("button", name="Approve", exact=True).click()
+        reviewer.locator("#dlg-reason").fill("Independent task execution authorization")
+        reviewer.locator("#operation-submit").click()
+        expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
+
+        page.locator("#refresh").click()
+        task_row = page.locator("tr").filter(has_text="internal:brief")
+        task_row.get_by_role("button", name="Run approved AI").click()
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("tr").filter(has_text="internal:brief")).to_contain_text(
+            "completed",
+        )
+
+        reviewer.locator("#refresh").click()
+        task_row = reviewer.locator("tr").filter(has_text="internal:brief")
+        task_row.get_by_role("button", name="Review outcome").click()
+        reviewer.locator("#dlg-evidence").fill(
+            "Independent quality inspection of the completed pilot brief",
+        )
+        reviewer.locator("#operation-submit").click()
+        expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        expect(reviewer.locator("#screen")).to_contain_text("pass")
+        ARTIFACTS.mkdir(parents=True, exist_ok=True)
+        reviewer.screenshot(
+            path=str(ARTIFACTS / "two-human-governance.png"), full_page=True,
+        )
+    finally:
+        reviewer_context.close()
