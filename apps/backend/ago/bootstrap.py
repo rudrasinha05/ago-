@@ -15,6 +15,13 @@ from ago.security_controls import SecurityControls
 
 
 FOUNDER_PERMISSIONS = (
+    "tool:enroll",
+    "tool:read",
+    "tool:dispatch",
+    "tool:recover",
+    "automation:manage",
+    "automation:read",
+    "automation:run",
     "meta:dna:propose",
     "meta:dna:read",
     "meta:dna:activate",
