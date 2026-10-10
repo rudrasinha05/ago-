@@ -20,6 +20,7 @@ from ago.platform import Settings, build_container, configure_logging, request_i
 from ago.console_host import console_headers, register_console
 from ago.console_api import router as console_router
 from ago.readiness import ReadinessChecks
+from ago.release_security import (ReleasePolicy, install_release_perimeter, schema_integrity)
 
 
 def postgres_available() -> bool:
@@ -35,11 +36,19 @@ def postgres_available() -> bool:
 
 def create_app() -> FastAPI:
     settings = Settings()
+    policy = ReleasePolicy.from_environment(settings.environment)
     configure_logging(settings)
-    app = FastAPI(title="Artificial General Organization", version="0.1.0")
+    app = FastAPI(
+        title="Artificial General Organization", version="0.1.0",
+        docs_url=None if policy.production else "/docs",
+        redoc_url=None if policy.production else "/redoc",
+        openapi_url=None if policy.production else "/openapi.json",
+    )
     app.state.container = build_container(settings)
     checks = ReadinessChecks()
     checks.register("postgres", postgres_available)
+    if policy.production:
+        checks.register("migrations", lambda: schema_integrity(os.environ["AGO_POSTGRES_DSN"]))
     app.state.readiness_checks = checks
     app.include_router(m2_router)
     app.include_router(brain_router)
@@ -65,7 +74,10 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def correlate(request: Request, call_next):
         incoming = request.headers.get("x-request-id")
-        correlation_id = incoming if incoming and len(incoming) <= 128 else str(uuid4())
+        correlation_id = (incoming if incoming and len(incoming) <= 128
+                          and incoming.isascii() and incoming.isprintable()
+                          and all(ch not in incoming for ch in ("\\r", "\\n"))
+                          else str(uuid4()))
         token = request_id.set(correlation_id)
         try:
             response = await call_next(request)
@@ -95,6 +107,7 @@ def create_app() -> FastAPI:
             },
         )
 
+    install_release_perimeter(app, policy)
     return app
 
 
