@@ -875,3 +875,87 @@ def enterprise_organization_history(
     allowed(repositories, actor, "operations:read")
     return repositories.resolve(EnterpriseOperationsStorePort).organization_history(
         tenant_id=actor.tenant_id)
+
+
+# Sections 26–27: independent evaluations only, never autonomous promotion.
+class EvolutionReviewInput(StrictInput):
+    approval_id: UUID
+    decision: Literal["endorsed","rejected"]
+    rollback_plan: str = Field(min_length=1, max_length=3000)
+    evidence_ref: str = Field(min_length=1, max_length=1024)
+
+
+class TwinComparisonInput(StrictInput):
+    approval_id: UUID
+    rationale: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/enterprise/evolution/{observation_id}/approval")
+def evolution_review_approval(
+    observation_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return issue_enterprise_approval(
+        repositories, actor, "enterprise:evolution:review:" + str(observation_id))
+
+
+@router.post("/enterprise/evolution/{observation_id}/review")
+def evolution_review(
+    observation_id: UUID, data: EvolutionReviewInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).review_evolution(
+        actor=actor, observation_id=str(observation_id),
+        approval_id=str(data.approval_id), decision=data.decision,
+        rollback_plan=data.rollback_plan, evidence_ref=data.evidence_ref))
+
+
+@router.get("/enterprise/evolution/reviews")
+def evolution_review_history(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).evolution_reviews(
+        tenant_id=actor.tenant_id)
+
+
+@router.post("/enterprise/twin/{scenario_id}/compare/{later_snapshot_id}/approval")
+def twin_comparison_approval(
+    scenario_id: UUID, later_snapshot_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return issue_enterprise_approval(
+        repositories, actor,
+        "enterprise:twin:compare:" + str(scenario_id) + ":" + str(later_snapshot_id))
+
+
+@router.post("/enterprise/twin/{scenario_id}/compare/{later_snapshot_id}")
+def twin_outcome_comparison(
+    scenario_id: UUID, later_snapshot_id: UUID, data: TwinComparisonInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).compare_twin_outcome(
+        actor=actor, scenario_id=str(scenario_id),
+        later_snapshot_id=str(later_snapshot_id),
+        approval_id=str(data.approval_id), rationale=data.rationale))
+
+
+@router.get("/enterprise/twin/comparisons")
+def twin_outcome_history(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).twin_comparisons(
+        tenant_id=actor.tenant_id)
