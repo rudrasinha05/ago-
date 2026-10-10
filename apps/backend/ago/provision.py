@@ -52,6 +52,7 @@ def add_reviewer(
             "knowledge:review", "knowledge:read",
             "council:vote", "council:read",
             "meta:dna:read", "meta:read",
+            "tool:read", "automation:read",
         ):
             security.grant(tenant_id, "reviewer", permission)
         return reviewer.user_id
