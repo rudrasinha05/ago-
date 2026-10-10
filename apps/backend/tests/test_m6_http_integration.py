@@ -89,3 +89,14 @@ def test_handoff_reviewer_boundary(case):
     post(client, url, headers["reviewer2"], data, expected=403)
     post(client, url, headers["reviewer1"], data)
     post(client, url, headers["reviewer1"], data, expected=403)
+    assert post(client, url, headers["reviewer1"], {
+        "decision": "completed", "note": "Completed peer review",
+    })["status"] == "completed"
+    history = client.get(
+        f"/v1/operations/handoffs/{request['id']}/history",
+        headers=headers["reviewer1"],
+    )
+    assert history.status_code == 200, history.text
+    assert [event["event"] for event in history.json()] == [
+        "requested", "accepted", "completed",
+    ]
