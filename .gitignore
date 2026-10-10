@@ -30,3 +30,11 @@ backups/
 # Section 4 generated frontend exports and incremental compiler state
 out/
 *.tsbuildinfo
+
+# Section 6 generated, reproducible Next.js Python wheel assets
+apps/backend/ago/frontend/
+tests/frontend/artifacts/
+playwright-report/
+test-results/
+tests/frontend/tests/
+build/

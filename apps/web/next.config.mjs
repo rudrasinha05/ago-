@@ -1,1 +1,1 @@
-export default {output: 'export', transpilePackages: ['@ago/ui', '@ago/shared'], experimental: {cpus: 2}};
+export default {output: 'export', basePath: '/workspace', trailingSlash: true, transpilePackages: ['@ago/ui', '@ago/shared', '@ago/sdk'], experimental: {cpus: 2}};

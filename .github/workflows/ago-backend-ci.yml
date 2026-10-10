@@ -1,4 +1,4 @@
-name: AGO Architecture Sections 1-5 & 14 and M1-M12 CI
+name: AGO Architecture Sections 1-6 & 14 and M1-M12 CI
 on:
   push:
     branches: [develop]
@@ -52,11 +52,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,postgres]"
+      - name: Build and package same-origin Next.js workspace
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          cd ../..
+          npm ci --no-audit --no-fund
+          npm run build --workspace @ago/web
+          python scripts/package_frontend.py
       - name: Verify console assets in packaged wheel
         id: wheel
         run: |
           python -m pip wheel . --no-deps -w /tmp/ago-wheels
-          python -c 'from pathlib import Path; import zipfile; w=next(Path("/tmp/ago-wheels").glob("ago_backend-*.whl")); z=zipfile.ZipFile(w); a={"index.html","styles.css","core.js","views.js","actions.js","app.js"}; assert {"ago/console/"+p for p in a} | {"ago/architecture_policy.json"} <= set(z.namelist()), "Missing packaged console or architecture contract"'
+          python -c 'from pathlib import Path; import zipfile; w=next(Path("/tmp/ago-wheels").glob("ago_backend-*.whl")); z=zipfile.ZipFile(w); a={"index.html","styles.css","core.js","views.js","actions.js","app.js"}; assert {"ago/console/"+p for p in a} | {"ago/architecture_policy.json", "ago/frontend/index.html", "ago/frontend/csp.json", "ago/frontend/strategy/index.html"} <= set(z.namelist()), "Missing packaged console or architecture contract"'
       - name: Enforce Section 14 module architecture and export dependency graph
         id: architecture
         run: python -m ago.architecture_guard check --json --dot section14-dependency-graph.dot
@@ -82,6 +90,8 @@ jobs:
         run: python ../../scripts/check_monorepo.py
       - name: Enforce Section 5 backend ports and strict layers
         run: python ../../scripts/check_backend_architecture.py
+      - name: Enforce Section 6 frontend state and canonical adapters
+        run: python ../../scripts/check_frontend_architecture.py
       - name: Apply PostgreSQL migrations
         id: migration
         run: python -m ago.event_runtime migrate
@@ -92,7 +102,7 @@ jobs:
           python -m ago.local_ops tenants
       - name: Lint
         id: lint
-        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py ../../scripts/check_domain_contexts.py ../../scripts/check_monorepo.py ../../scripts/smoke_workspace_exports.py ../../scripts/check_backend_architecture.py
+        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py ../../scripts/check_domain_contexts.py ../../scripts/check_monorepo.py ../../scripts/smoke_workspace_exports.py ../../scripts/check_backend_architecture.py ../../scripts/check_frontend_architecture.py ../../scripts/package_frontend.py ../../scripts/sync_console_adapters.py
       - name: Validate first-party console JS and UI unit tests
         id: javascript
         run: |
@@ -161,6 +171,10 @@ jobs:
           test "$passed" = "1"
           curl --retry 5 --retry-connrefused --retry-delay 1 -fsS -o /tmp/ago-console-smoke.html http://127.0.0.1:18765/console/
           grep -q 'login-form' /tmp/ago-console-smoke.html
+          curl -fsS -o /tmp/ago-workspace-smoke.html http://127.0.0.1:18765/workspace/
+          grep -q 'Organization ID' /tmp/ago-workspace-smoke.html
+          curl -fsS -o /tmp/ago-strategy-smoke.html http://127.0.0.1:18765/workspace/strategy/
+          grep -q 'Work email' /tmp/ago-strategy-smoke.html
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18765/v1/console/me)" = "401"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18765/health/ready)" = "503"
       - name: Publish image gate
@@ -326,9 +340,70 @@ jobs:
         run: python scripts/check_monorepo.py
       - name: SDK origin and privacy regression
         run: npm test
-      - name: Build all Next.js application shells
+      - name: Build all Next.js applications
         env:
           NEXT_TELEMETRY_DISABLED: '1'
         run: npm run build
       - name: Serve actual exports and verify all workspace homepages
         run: python scripts/smoke_workspace_exports.py
+
+  frontend-browser:
+    name: Section 6 Next.js Browser and Accessibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ago_test
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: ago_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ago_test -d ago_test"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      AGO_ENVIRONMENT: development
+      AGO_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_TEST_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_SESSION_SECRET: ci_only_signing_key_change_outside_ci_123456789
+      AGO_ENABLE_PAID_MODELS: "false"
+      AGO_M8_EXTERNAL_ENABLED: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install verified browser and application dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium firefox webkit
+          python -m pip install -e 'apps/backend[dev,postgres]' 'playwright==1.55.0'
+      - name: Build and package actual Next.js export
+        run: |
+          npm run build --workspace @ago/web
+          python scripts/package_frontend.py
+          python scripts/check_frontend_architecture.py
+      - name: Execute six browser/device projects and WCAG scans
+        run: npx playwright test --config tests/frontend/playwright.config.mjs
+      - name: Apply actual PostgreSQL migrations
+        run: python -m ago.event_runtime migrate
+      - name: Real signed-session Next.js and independent-human journeys
+        working-directory: apps/backend
+        run: python -m pytest -q tests_next
+      - name: Retain frontend browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ago-section06-browser-accessibility
+          path: tests/frontend/artifacts/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -78,6 +78,17 @@ status/detail with safe correlation metadata. See
 [acceptance evidence](docs/reports/SECTION05_FINAL_ACCEPTANCE.md).
 Run `python scripts/check_backend_architecture.py` for the source guard.
 
+## Architecture section 6 — Next.js workspace
+
+Eight Next.js routes now use AGO's signed-session APIs at `/workspace/`, with
+executive, department and employee dashboards, shared React components and
+canonical governed workflow adapters. The existing nonroot backend image serves
+the static export on its own API origin. Tokens stay in tab memory; reload signs
+out. Build locally with `npm ci`, `npm run build` and
+`python scripts/package_frontend.py`, then use the existing backend quickstart.
+See [frontend architecture](docs/architecture/SECTION_06_FRONTEND_ARCHITECTURE.md)
+and [acceptance evidence](docs/reports/SECTION06_FINAL_ACCEPTANCE.md).
+
 ## Completed architecture section: 14 — Module Dependency Rules
 
 The original 1–34 architecture checklist is tracked **separately** from

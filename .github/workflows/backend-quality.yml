@@ -35,6 +35,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Package the actual frontend runtime
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build --workspace @ago/web
+          python scripts/package_frontend.py
       - name: Install backend and PostgreSQL driver
         run: python -m pip install -e './apps/backend[dev,postgres]'
       - name: Apply isolated PostgreSQL migrations

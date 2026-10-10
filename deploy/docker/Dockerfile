@@ -1,9 +1,25 @@
+# Build the static workspace; no Node process is added to the runtime.
+FROM node:22-slim AS frontend
+WORKDIR /src
+COPY package.json package-lock.json ./
+COPY packages ./packages/
+COPY apps/web ./apps/web/
+COPY apps/admin/package.json ./apps/admin/package.json
+COPY apps/docs/package.json ./apps/docs/package.json
+RUN npm ci --no-audit --no-fund
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build --workspace @ago/web
+
 # M10 pinned major/minor Python runtime; the final production rollout must pin base image digests.
 FROM python:3.11-slim AS build
 ENV PYTHONDONTWRITEBYTECODE=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /src/apps/backend
 COPY apps/backend/pyproject.toml ./
 COPY apps/backend/ago ./ago/
+COPY --from=frontend /src/apps/web/out ./ago/frontend/
+COPY scripts/package_frontend.py /src/scripts/package_frontend.py
+COPY --from=frontend /src/apps/web/out /src/apps/web/out/
+RUN python /src/scripts/package_frontend.py
 RUN python -m pip wheel --no-deps --wheel-dir=/wheels .
 
 FROM python:3.11-slim AS runtime
@@ -15,7 +31,7 @@ RUN groupadd --gid 10001 ago && \
 COPY --from=build /wheels /tmp/wheels
 RUN python -m pip install --no-cache-dir '/tmp/wheels/'*.whl 'psycopg[binary]>=3.2,<4' && \
     rm -rf /tmp/wheels && \
-    python -c 'from importlib.resources import files; p=files("ago").joinpath("console","index.html"); assert p.is_file()'
+    python -c 'from importlib.resources import files; p=files("ago").joinpath("console","index.html"); assert p.is_file(); assert files("ago").joinpath("frontend","index.html").is_file()'
 COPY --chown=ago:ago deploy/sql/ /app/deploy/sql/
 WORKDIR /app
 USER 10001:10001

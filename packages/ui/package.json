@@ -5,10 +5,16 @@
   "type": "module",
   "exports": {
     ".": "./index.jsx",
-    "./styles.css": "./styles.css"
+    "./styles.css": "./styles.css",
+    "./workspace.css": "./workspace.css",
+    "./compat/views": "./compat/views.js",
+    "./compat/actions": "./compat/actions.js",
+    "./sprite": "./sprite.js",
+    "./components": "./components.jsx"
   },
   "dependencies": {
-    "@ago/shared": "0.1.0"
+    "@ago/shared": "0.1.0",
+    "@ago/sdk": "0.1.0"
   },
   "peerDependencies": {
     "react": "19.3.0"

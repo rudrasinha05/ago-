@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "deployment": "modular-monolith-static-export",
+  "base_path": "/workspace",
+  "session_storage": "tab-memory",
+  "workspaces": ["overview", "strategy", "governance", "organization", "knowledge", "tools", "calendar", "twin"],
+  "dashboards": ["executive", "department", "employee"],
+  "browser_projects": ["chromium-desktop", "firefox-desktop", "webkit-desktop", "chromium-phone", "firefox-tablet", "webkit-phone"],
+  "accessibility": "Automated WCAG 2.1 A/AA axe scans, keyboard dialog/escape and responsive viewport checks; no physical-device or human assistive-technology certification",
+  "canonical_sources": ["packages/sdk/session.js", "packages/sdk/workspace.js", "packages/ui/components.jsx", "packages/ui/compat/views.js", "packages/ui/compat/actions.js", "packages/ui/workspace.css"],
+  "authorization": "Existing signed-session tenant-scoped /v1 endpoints remain authoritative; dashboard choice changes presentation only"
+}

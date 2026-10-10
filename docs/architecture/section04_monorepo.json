@@ -5,7 +5,8 @@
       "path": "apps/web",
       "allowed": [
         "@ago/ui",
-        "@ago/shared"
+        "@ago/shared",
+        "@ago/sdk"
       ]
     },
     "@ago/admin": {
@@ -25,7 +26,8 @@
     "@ago/ui": {
       "path": "packages/ui",
       "allowed": [
-        "@ago/shared"
+        "@ago/shared",
+        "@ago/sdk"
       ]
     },
     "@ago/sdk": {

@@ -20,5 +20,9 @@
     "dev:web": "npm run dev --workspace @ago/web",
     "dev:admin": "npm run dev --workspace @ago/admin",
     "dev:docs": "npm run dev --workspace @ago/docs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.0",
+    "axe-core": "4.10.3"
   }
 }

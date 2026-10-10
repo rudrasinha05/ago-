@@ -2,7 +2,7 @@
 import {
   safe, num, amount, dateText, shortId, statusTone, percent,
   resource, errorMessage, formatRisk, fitnessDelta, validateProfile,
-} from "./core.js";
+} from "@ago/sdk/session";
 
 export const PAGES = Object.freeze({
   overview: { title: "Overview", heading: "Your organization at a glance", eyebrow: "COMMAND OVERVIEW",

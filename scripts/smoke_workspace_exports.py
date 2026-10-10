@@ -19,8 +19,15 @@ for app, title in [('web', 'AGO Workspace'), ('admin', 'AGO Administration'),
             with urlopen(f'http://127.0.0.1:{server.server_port}/', timeout=5) as response:
                 html = response.read().decode()
                 assert response.status == 200 and title in html
-                assert 'Open existing Control Center' in html
-                assert 'http://127.0.0.1:8000/console/' in html
+                if app == 'web':
+                    assert 'Organization ID' in html and 'Work email' in html
+                    assert '/workspace/_next/' in html and '/console/' in html
+                    for route in ['strategy', 'governance', 'organization', 'knowledge',
+                                  'tools', 'calendar', 'twin']:
+                        assert (folder/route/'index.html').is_file(), route
+                else:
+                    assert 'Open existing Control Center' in html
+                    assert 'http://127.0.0.1:8000/console/' in html
             print(f'{app}: real exported homepage served and verified')
         finally:
             server.shutdown()
