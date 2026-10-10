@@ -306,6 +306,9 @@ class SearchInput(StrictInput):
 
 
 def storage_error(exc):
+    # PermissionError inherits OSError: preserve authorization status first.
+    if isinstance(exc, PermissionError):
+        translate_error(exc)
     if isinstance(exc, (StorageUnavailable, OSError)):
         raise HTTPException(503, 'Knowledge storage unavailable') from exc
     translate_error(exc)
