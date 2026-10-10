@@ -11,7 +11,8 @@ import pytest
 from ago.enterprise_domains import (
     ASSET_TYPES, HORIZONS, AssetIdentity, OperatingMode, WorkCandidate,
     WorkerState, allocate, allow_asset_use, budget_guard, evaluate_change,
-    evidence_digest, operational_load, rollup_outcomes, transition_mode,
+    evidence_digest, operational_load, organization_change_intent,
+    rollup_outcomes, transition_mode,
     transition_worker, twin_scenario, validate_horizon,
 )
 
@@ -275,3 +276,34 @@ def test_oos_admission_never_overcommits_employee_capacity():
     accepted = allocate(batch, mode=OperatingMode.ACTIVE)
     assert [x.task_id for x in accepted] == ["task-a", "task-b"]
     assert sum(x.required_units for x in accepted) <= 2
+
+
+def test_human_review_intent_identifies_every_consequential_field():
+    from uuid import uuid4
+
+    target, department = str(uuid4()), str(uuid4())
+    base = {"change_kind": "hired", "target_id": target,
+            "reason": "Verified for internal AI work",
+            "department_id": department, "name": "Worker A"}
+    first, fingerprint = organization_change_intent(**base)
+    assert first["department_id"] == department
+    assert len(fingerprint) == 64
+    assert organization_change_intent(**{**base, "name": "Worker A "})[1] == fingerprint
+    assert organization_change_intent(**{**base, "name": "Worker B"})[1] != fingerprint
+    assert organization_change_intent(**{**base, "reason": "Unreviewed"})[1] != fingerprint
+    assert organization_change_intent(**{**base, "department_id": str(uuid4())})[1] != fingerprint
+
+
+def test_human_review_intent_refuses_irrelevant_fields_and_unsafe_levels():
+    from uuid import uuid4
+
+    target = str(uuid4())
+    with pytest.raises(ValueError):
+        organization_change_intent(change_kind="terminated", target_id=target,
+                                   reason="Reviewed termination", name="unapproved")
+    with pytest.raises(ValueError):
+        organization_change_intent(change_kind="promoted", target_id=target,
+                                   reason="Reviewed", role_level=1)
+    with pytest.raises(ValueError):
+        organization_change_intent(change_kind="created", target_id=target,
+                                   reason="Reviewed", name="")
