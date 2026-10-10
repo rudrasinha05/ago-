@@ -102,18 +102,31 @@ def db_connection():
         raise HTTPException(503, "Database unavailable") from exc
 
 
-def authenticated(
-    db=Depends(db_connection),
+def verified_bearer(
     credential: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
-) -> Principal:
+) -> tuple[Principal, str]:
+    """Reject missing/invalid HMAC bearer before opening a database connection."""
     if credential is None or credential.scheme.lower() != "bearer":
         raise HTTPException(401, "Bearer token required", headers={"WWW-Authenticate": "Bearer"})
     try:
         principal = session_tokens().verify(credential.credentials)
         UUID(principal.tenant_id)
         UUID(principal.subject)
+        return principal, credential.credentials
+    except (AuthenticationError, ValueError) as exc:
+        raise HTTPException(
+            401, "Invalid session", headers={"WWW-Authenticate": "Bearer"}
+        ) from exc
+
+
+def authenticated(
+    verified: Annotated[tuple[Principal, str], Depends(verified_bearer)],
+    db=Depends(db_connection),
+) -> Principal:
+    principal, token = verified
+    try:
         security = SecurityControls(db)
-        if security.is_revoked(credential.credentials):
+        if security.is_revoked(token):
             raise AuthenticationError("Revoked token")
         active = db.execute(
             "SELECT 1 FROM ago_users WHERE id=%s AND tenant_id=%s AND active=true",
