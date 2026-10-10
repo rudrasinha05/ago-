@@ -6,6 +6,8 @@ local/tenant-scoped software, not a financial settlement or autonomous authority
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -484,6 +486,91 @@ class EnterpriseOperationsStore:
             (str(UUID(tenant_id)), kind, kind),
         ).fetchall()]
 
+    def asset_payload_upload(self, *, actor: Principal, asset_id: str,
+                             content_base64: str, content_type: str) -> dict:
+        allowed_types = {"text/plain", "text/markdown", "application/json",
+                         "application/octet-stream"}
+        if content_type not in allowed_types or len(content_base64) > 1400000:
+            raise ValueError("Unsupported or oversized internal asset content")
+        try:
+            raw = base64.b64decode(content_base64, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("Payload must be strict base64") from exc
+        if not 1 <= len(raw) <= 1048576:
+            raise ValueError("Internal asset payload limited to 1 MiB")
+        from hashlib import sha256
+        digest = sha256(raw).hexdigest()
+        identifier = str(UUID(asset_id))
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            asset = self.connection.execute(
+                """SELECT publisher_id,status,digest FROM ago_marketplace_assets
+                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                (actor.tenant_id, identifier),
+            ).fetchone()
+            if not asset:
+                raise LookupError("Internal asset not found")
+            if asset["status"] != "draft" or str(asset["publisher_id"]) != actor.subject:
+                raise PermissionError("Only draft publisher can upload asset bytes")
+            if digest != asset["digest"]:
+                raise PermissionError("Payload digest differs from immutable catalog identity")
+            previous = self.connection.execute(
+                """SELECT id,content_type,digest FROM ago_marketplace_payloads
+                   WHERE tenant_id=%s AND asset_id=%s""",
+                (actor.tenant_id, identifier),
+            ).fetchone()
+            if previous:
+                if previous["content_type"] != content_type or previous["digest"] != digest:
+                    raise PermissionError("Immutable internal asset payload already exists")
+                return {"id": str(previous["id"]), "asset_id": identifier,
+                        "digest": digest, "idempotent": True}
+            row_id = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_marketplace_payloads
+                   (id,tenant_id,asset_id,publisher_id,content_type,payload,digest)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                (row_id, actor.tenant_id, identifier, actor.subject,
+                 content_type, raw, digest),
+            )
+        return {"id": row_id, "asset_id": identifier,
+                "bytes": len(raw), "digest": digest, "idempotent": False,
+                "execution_granted": False}
+
+    def asset_payload_read(self, *, actor: Principal, asset_id: str) -> dict:
+        identifier = str(UUID(asset_id))
+        meta = self.connection.execute(
+            """SELECT publisher_id,status FROM ago_marketplace_assets
+               WHERE tenant_id=%s AND id=%s""",
+            (actor.tenant_id, identifier),
+        ).fetchone()
+        if not meta:
+            raise LookupError("Asset not found")
+        if str(meta["publisher_id"]) != actor.subject:
+            if meta["status"] != "published":
+                raise PermissionError("Unpublished or retired content inaccessible")
+            permission = self.connection.execute(
+                """SELECT 1 FROM ago_asset_consumptions WHERE tenant_id=%s
+                   AND asset_id=%s AND actor_id=%s LIMIT 1""",
+                (actor.tenant_id, identifier, actor.subject),
+            ).fetchone()
+            if not permission:
+                raise PermissionError("Independent asset consumption approval required")
+        saved = self.connection.execute(
+            """SELECT content_type,payload,digest FROM ago_marketplace_payloads
+               WHERE tenant_id=%s AND asset_id=%s""",
+            (actor.tenant_id, identifier),
+        ).fetchone()
+        if not saved:
+            raise LookupError("No verifiable local payload available")
+        content = bytes(saved["payload"])
+        from hashlib import sha256
+        if sha256(content).hexdigest() != saved["digest"]:
+            raise PermissionError("Historical content failed digest verification")
+        return {"asset_id": identifier, "content_type": saved["content_type"],
+                "digest": saved["digest"], "bytes": len(content),
+                "content_base64": base64.b64encode(content).decode("ascii"),
+                "execution_granted": False}
+
     def asset_propose(self, *, actor: Principal, asset_id: str, approval_id: str) -> dict:
         with self.connection.transaction():
             asset = self.connection.execute(
@@ -526,6 +613,12 @@ class EnterpriseOperationsStore:
             self._verify_marketplace_dependencies(
                 tenant_id=actor.tenant_id, manifest=asset["manifest"],
                 require_published=True)
+            if asset["manifest"].get("payload_required") is True and not self.connection.execute(
+                """SELECT 1 FROM ago_marketplace_payloads
+                   WHERE tenant_id=%s AND asset_id=%s""",
+                (actor.tenant_id, str(UUID(asset_id))),
+            ).fetchone():
+                raise PermissionError("Checksum-verified payload required to publish")
             self.connection.execute(
                 """UPDATE ago_marketplace_assets SET status='published'
                    WHERE tenant_id=%s AND id=%s""",
