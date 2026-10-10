@@ -361,15 +361,15 @@
       "module": "enterprise_store",
       "methods": {
         "modes": {
-          "arguments": "self, *, tenant_id: str, scope_kind: str=\"company\", scope_id: str | None=None",
+          "arguments": "self, *, tenant_id: str, scope_kind: str='company', scope_id: str | None=None",
           "returns": "list[dict]"
         },
         "mode_change": {
-          "arguments": "self, *, actor: Principal, target: str, approval_id: str, reason: str, expires_at: datetime, scope_kind: str=\"company\", scope_id: str | None=None",
+          "arguments": "self, *, actor: Principal, target: str, approval_id: str, reason: str, expires_at: datetime, scope_kind: str='company', scope_id: str | None=None",
           "returns": "dict"
         },
         "effective_mode": {
-          "arguments": "self, *, tenant_id: str, scope_kind: str=\"company\", scope_id: str | None=None",
+          "arguments": "self, *, tenant_id: str, scope_kind: str='company', scope_id: str | None=None",
           "returns": "dict"
         },
         "worker_state": {
