@@ -54,6 +54,8 @@ API documentation: `http://127.0.0.1:8000/docs`. The M3–M9 APIs are under `/v1
 
 CI acceptance: [M3–M5 evidence](docs/reports/M3_M5_FINAL_ACCEPTANCE.md). M6 CI evidence: [155-test acceptance](docs/reports/M6_FINAL_ACCEPTANCE.md). [M7 CI evidence: 175-test acceptance](docs/reports/M7_FINAL_ACCEPTANCE.md). [M8 CI evidence: 202-test acceptance](docs/reports/M8_FINAL_ACCEPTANCE.md). Operator setup: [M6 Guide](docs/reports/M6_OPERATOR_GUIDE.md), [M7 Guide](docs/reports/M7_OPERATOR_GUIDE.md) and [M8 Guide](docs/reports/M8_OPERATOR_GUIDE.md). M9: [212 Python + 13 JS test evidence](docs/reports/M9_FINAL_ACCEPTANCE.md) and [control center operator guide](docs/reports/M9_OPERATOR_GUIDE.md).
 
+M12: [254 Python + 14 JS + 6 real browser tests](docs/reports/M12_FINAL_ACCEPTANCE.md), [first-run Windows guide](docs/reports/M12_LOCAL_QUICKSTART.md) and [original blueprint gap register](docs/ARCHITECTURE_STATUS_AND_BACKLOG.md).
+
 M11: [236 Python + 14 JS + 6 real browser tests](docs/reports/M11_FINAL_ACCEPTANCE.md) and [pilot operator guide](docs/reports/M11_PILOT_OPERATOR_GUIDE.md). Browser automation uses disposable PostgreSQL and never accesses production accounts.
 
 M10: [software acceptance and external release blockers](docs/reports/M10_FINAL_ACCEPTANCE.md), [operator runbook](docs/reports/M10_RELEASE_RUNBOOK.md) and [non-root preview stack](deploy/docker/compose.preview.yml). The real production preflight requires `AGO_ENVIRONMENT=production`, configured TLS, non-default secrets and verified migrations: `python -m ago.release_ops check`. A successful CI build is not a public deployment authorization.
