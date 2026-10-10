@@ -20,7 +20,7 @@ Release evidence and rollback instructions will be recorded after verification.
 
 Local verification: all three optimized Next.js builds/served exports, all
 Section 1–6/14 guards, wheel with 71 actual frontend files, Ruff, 14 console JS,
-eight SDK tests, three frontend HTTP/CSP tests and eight Chromium desktop/phone
+eight SDK tests, three frontend HTTP/CSP tests and ten Chromium desktop/phone
 browser journeys passed. Axe found and verified fixes for selected-button hover
 contrast and keyboard-focusable horizontal tables. Local WebKit lacks system
 libraries and Firefox acceptance could not finish; CI installs browser system
@@ -30,3 +30,13 @@ Local full Python execution has the established readiness failure without a
 PostgreSQL DSN, and 60 database-dependent skips. One source-copy test raced with
 concurrent generated build output; it passed when rerun after the build completed.
 Final full Python/real-PostgreSQL and release-image CI are required before closure.
+
+Initial implementation `214a408` passed primary CI `38051573247`, including
+24 cross-browser UI/axe journeys and four real Next.js/PostgreSQL journeys,
+326 Python tests per matrix version and all established release gates.
+An additional simulation regression caught unmanaged range inputs not reaching
+React state. Native compatibility input/change listeners now bridge those values;
+a fifth UI contract journey and fifth real PostgreSQL journey cover simulation.
+Ten final local Chromium desktop/phone journeys passed with the corrected bridge.
+The superseding implementation commit and its complete CI are verified before
+marking the frozen requirements accepted.

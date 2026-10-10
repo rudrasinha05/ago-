@@ -7,7 +7,7 @@ const tenant='10000000-0000-4000-8000-000000000001';
 const user='10000000-0000-4000-8000-000000000002';
 const department='10000000-0000-4000-8000-000000000003';
 const other='10000000-0000-4000-8000-000000000004';
-const permissions=['brain:manage','approval:decide','organization:manage','calendar:write','knowledge:write','tool:manage','council:propose','meta:manage'];
+const permissions=['brain:manage','approval:decide','organization:manage','calendar:write','knowledge:write','tool:manage','council:propose','meta:manage','meta:simulate'];
 async function fixtures(page,{reviewer=false}={}) {
   const calls=[],errors=[],goals=[];
   page.on('pageerror',e=>errors.push(String(e)));
@@ -94,4 +94,20 @@ test('direct route refresh, expired session and failed resource isolation',async
   await navigate(page,'Overview');await expect(page.locator('#screen')).toContainText('Not available to your role');await expect(page.locator('#screen')).toContainText('2');
   await page.route('**/v1/insights/scorecard',route=>route.fulfill({status:401,json:{detail:'Expired'}}));
   await page.getByRole('button',{name:'Refresh',exact:true}).click();await expect(page.locator('#login-form')).toBeVisible();await expect(page.locator('#login-form [role=alert]')).toContainText('session expired');
+});
+test('hypothetical thresholds reach simulation without applying live policy',async({page})=>{
+  const {calls}=await fixtures(page);
+  await page.route('**/v1/meta/snapshots',route=>route.fulfill({status:200,json:[{id:other,created_at:'2026-10-10T10:00:00Z',fitness:null,digest:'test-only',risk_flags:['insufficient_data']}]}));
+  await page.route('**/v1/meta/simulate',route=>{
+    calls.push({path:'/v1/meta/simulate',method:'POST',body:route.request().postDataJSON()});
+    return route.fulfill({status:200,json:{assessment:{fitness:null,risk_flags:['insufficient_data']}}});
+  });
+  await login(page);await navigate(page,'Digital Twin');
+  await page.locator('#range-qa_target_pct').evaluate(node=>{node.value='90';node.dispatchEvent(new Event('input',{bubbles:true}));node.dispatchEvent(new Event('change',{bubbles:true}));});
+  await expect(page.locator('#output-qa_target_pct')).toHaveText('90%');
+  await page.getByRole('button',{name:'Run comparison',exact:true}).click();
+  await expect(page.locator('.workspace-announcement')).toContainText('No changes were applied');
+  expect(calls.find(x=>x.path==='/v1/meta/simulate').body.profile.qa_target_pct).toBe(90);
+  expect(calls.some(x=>x.method==='POST'&&x.path.includes('/dna'))).toBeFalsy();
+  await accessibility(page);
 });

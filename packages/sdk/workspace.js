@@ -30,7 +30,7 @@ export async function loadWorkspace(api, page) {
   return data;
 }
 export function twinDefaults(data) {
-  return {profile:validateProfile(resource(data,'dna')?.profile || {qa_target_pct:85,backlog_limit:50,budget_alert_pct:80}),snapshotId:resource(data,'snapshots')?.[0]?.id || '',simulation:null};
+  return {profile:validateProfile(resource(data,'dna')?.profile || {qa_target_pct:85,backlog_limit:5,budget_alert_pct:80}),snapshotId:resource(data,'snapshots')?.[0]?.id || '',simulation:null};
 }
 /** Views change presentation only; API permissions remain the authority. */
 export function dashboardRecords(data, me, departmentId) {

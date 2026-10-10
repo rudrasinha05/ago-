@@ -1,5 +1,9 @@
 """Shipped Next.js frontend against real signed sessions and PostgreSQL."""
+import os
+
+import psycopg
 from playwright.sync_api import expect
+from psycopg.rows import dict_row
 from test_m11_browser import PASSWORD_FOUNDER
 
 
@@ -196,3 +200,29 @@ def test_next_governed_plan_two_humans_execution_and_qa(
 
     finally:
         reviewer_context.close()
+
+
+def test_next_real_digital_twin_never_applies_thresholds(page, tenant, app_url):
+    sign_in_next(page, app_url, tenant)
+    navigate_next(page, "Digital Twin", "Organization Digital Twin")
+    expect(page.get_by_text("Simulation only.")).to_be_visible()
+    page.get_by_role("button", name="Capture current evidence").click()
+    expect(page.locator("#action-dialog")).to_be_visible()
+    page.locator("#operation-submit").click()
+    expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+    expect(page.locator("#snapshot-select option")).to_have_count(1)
+    page.locator("#range-qa_target_pct").evaluate("""node => {
+      node.value = '90';
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }""")
+    page.get_by_role("button", name="Run comparison").click()
+    expect(page.get_by_text("Scenario evaluated. No changes were applied to AGO.")).to_be_visible()
+    expect(page.locator("#screen")).to_contain_text("HYPOTHETICAL SCENARIO")
+    # No new live DNA versions are created by a simulation.
+    with psycopg.connect(os.environ["AGO_TEST_POSTGRES_DSN"], row_factory=dict_row) as db:
+        n = db.execute(
+            "SELECT count(*) AS n FROM ago_dna_versions WHERE tenant_id=%s",
+            (tenant["id"],),
+        ).fetchone()["n"]
+        assert n == 0

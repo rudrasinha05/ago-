@@ -404,6 +404,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ago-section06-browser-accessibility
-          path: tests/frontend/artifacts/
+          path: |
+            tests/frontend/artifacts/
+            apps/backend/tests_browser/artifacts/
           retention-days: 7
           if-no-files-found: ignore

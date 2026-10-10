@@ -30,6 +30,27 @@ export function Workspace({page}) {
     return ()=>{active.current=false;sequence.current++;clearTimeout(timer.current);dialog.current?.close();};
   },[refresh]);
   useEffect(()=>{if(data!==null)screen.current?.focus({preventScroll:true});},[page,data]);
+  useEffect(()=>{
+    const host=screen.current?.querySelector('.workspace-view');
+    if(!host)return;
+    // Compatibility controls are unmanaged DOM: native events bridge into React state.
+    const update=event=>{
+      const target=event.target, key=target.dataset.twinField;
+      if(key){try{
+        const hadSimulation=Boolean(state.current.twin.simulation);
+        state.current.twin.profile=validateProfile({...state.current.twin.profile,[key]:Number(target.value)});
+        state.current.twin.simulation=null;
+        const output=host.querySelector('#output-'+key);
+        if(output)output.textContent=String(target.value)+(key==='backlog_limit'?' tasks':'%');
+        if(hadSimulation)setRevision(x=>x+1);
+      }catch(e){notify(e.message);}}
+      if(target.id==='snapshot-select'&&event.type==='change'){
+        state.current.twin.snapshotId=target.value;state.current.twin.simulation=null;setRevision(x=>x+1);
+      }
+    };
+    host.addEventListener('input',update);host.addEventListener('change',update);
+    return ()=>{host.removeEventListener('input',update);host.removeEventListener('change',update);};
+  },[data,revision,page,notify]);
   if(!me)return null;
   async function action(event) {
     const button=event.target.closest('button[data-action]');if(!button)return;
@@ -44,18 +65,13 @@ export function Workspace({page}) {
     catch(e){if(valid())notify(e.message || 'Action unavailable.');}
     finally{if(button.isConnected)button.disabled=false;}
   }
-  function change(event) {
-    const target=event.target, key=target.dataset.twinField;
-    if(key){try{state.current.twin.profile=validateProfile({...state.current.twin.profile,[key]:Number(target.value)});state.current.twin.simulation=null;setRevision(x=>x+1);}catch(e){notify(e.message);}}
-    if(target.id==='snapshot-select'){state.current.twin.snapshotId=target.value;state.current.twin.simulation=null;setRevision(x=>x+1);}
-  }
   return <div id="workspace" className="next-workspace">
     <div dangerouslySetInnerHTML={{__html:sprite}} />
     <header className="workspace-header"><Link href="/" className="brand">AGO <span>Workspace</span></Link><p>{me.display_name}<span className="member-role">{me.roles?.join(' · ')}</span></p><Button onClick={()=>setOpen(x=>!x)} aria-expanded={open} aria-controls="primary-nav" className="btn nav-toggle">Menu</Button><Button onClick={logout}>Sign out</Button></header>
     <div className="workspace-body"><nav id="primary-nav" className={open?'workspace-nav open':'workspace-nav'} aria-label="Workspaces">{Object.entries(PAGES).map(([key,value])=><Link key={key} href={key==='overview'?'/':'/'+key+'/'} aria-current={page===key?'page':undefined} onClick={()=>setOpen(false)}>{value.title}</Link>)}<a href="/console/">Control Center</a></nav>
       <main id="screen" ref={screen} tabIndex={-1} className="screen">
         <div className="workspace-toolbar"><p className="muted">{PAGES[page].title} · Your organization</p><Button onClick={()=>refresh().catch(()=>notify('Unable to refresh.'))} disabled={data===null}>Refresh</Button></div>
-        {data===null?<Loading />:<><div key={revision} className="workspace-view" onClick={action} onChange={change} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current)}} />{page==='overview'&&<Dashboard key={me.id} api={api} me={me} data={data}/>}</>}
+        {data===null?<Loading />:<><div key={revision} className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current)}} />{page==='overview'&&<Dashboard key={me.id} api={api} me={me} data={data}/>}</>}
       </main>
     </div>
     <dialog id="action-dialog" ref={dialog} aria-labelledby="dialog-title" onClick={e=>{if(e.target===dialog.current)dialog.current.close();}}><div id="dialog-content" className="dialog-content" /></dialog>
