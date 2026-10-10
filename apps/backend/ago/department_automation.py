@@ -159,9 +159,11 @@ class DepartmentAutomation:
         if not 1 <= limit <= 100:
             raise ValueError("Automation scan limit must be 1–100")
         rules = self.db.execute(
-            """SELECT id,trigger_kind FROM ago_automation_rules
-               WHERE tenant_id=%s AND status='active'
-               ORDER BY created_at,id LIMIT 100""",
+            """SELECT r.id,r.trigger_kind FROM ago_automation_rules r
+               JOIN ago_tool_enrollments e ON e.tenant_id=r.tenant_id
+                 AND e.tool_code=r.tool_code AND e.status='active'
+               WHERE r.tenant_id=%s AND r.status='active'
+               ORDER BY r.created_at,r.id LIMIT 100""",
             (tenant_id,),
         ).fetchall()
         fired = []
