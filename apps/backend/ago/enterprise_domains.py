@@ -15,6 +15,35 @@ from json import dumps
 from typing import Mapping, Sequence
 
 
+def plan_revision_intent(*, plan_id: str, base_revision: int, title: str,
+                         starts_at: datetime, ends_at: datetime,
+                         budget_ceiling: str, evidence_ref: str,
+                         rationale: str) -> tuple[dict, str]:
+    """Immutable, independently reviewed plan amendment identity."""
+    from uuid import UUID
+
+    identifier = str(UUID(plan_id))
+    if type(base_revision) is not int or base_revision < 1:
+        raise ValueError("Valid base planning revision required")
+    if not 1 <= len(title.strip()) <= 300:
+        raise ValueError("Reviewed title required")
+    if starts_at.tzinfo is None or ends_at.tzinfo is None or starts_at >= ends_at:
+        raise ValueError("Timezone-aware planning window required")
+    if not 1 <= len(evidence_ref.strip()) <= 1024 or not (
+        1 <= len(rationale.strip()) <= 2000
+    ):
+        raise ValueError("Real planning evidence and justification required")
+    limit = _amount(budget_ceiling)
+    record = {
+        "plan_id": identifier, "base_revision": base_revision,
+        "title": title.strip(), "starts_at": starts_at.isoformat(),
+        "ends_at": ends_at.isoformat(), "budget_ceiling": str(limit),
+        "evidence_ref": evidence_ref.strip(), "rationale": rationale.strip(),
+    }
+    encoded = dumps(record, sort_keys=True, separators=(",", ":"))
+    return record, sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def organization_change_intent(*, change_kind: str, target_id: str,
                                reason: str, department_id: str | None = None,
                                name: str | None = None,
