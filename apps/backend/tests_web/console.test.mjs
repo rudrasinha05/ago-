@@ -156,3 +156,63 @@ test("Digital Twin is explicitly hypothetical and cannot execute code or alter D
   assert.match(html,/data-action="compare-twin"/);
   assert.doesNotMatch(html,/automatic_execution.*true/);
 });
+
+
+test("governance reveals only authorized independently approved task actions", () => {
+  const approved="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const own="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const cases={
+    approvals:loaded([
+      {id:approved,action:"internal:brief",requester_id:own,status:"approved"},
+      {id:own,action:"private:change",requester_id:TENANT,status:"pending"},
+    ]),
+    tasks:loaded([
+      {id:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        action:"internal:brief",status:"proposed",assignee_id:TENANT},
+      {id:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        action:"internal:brief",status:"waiting_approval",approval_id:approved,
+        assignee_id:TENANT},
+      {id:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        action:"internal:brief",status:"completed",assignee_id:TENANT},
+    ]),
+    motions:loaded([]),reviews:loaded([]),
+  };
+  const state=mockState([
+    "approval:decide","task:create","approval:request",
+    "agent:dispatch","qa:review",
+  ]);
+  const html=renderPage("governance",cases,state);
+  assert.match(html,/data-action="task-request-approval"/);
+  assert.match(html,/data-action="agent-run"/);
+  assert.match(html,/data-action="qa-review"/);
+  assert.doesNotMatch(html,/data-action="approve"/); // Owner cannot self-review.
+});
+
+test("enterprise tool dispatch button is hidden until the M2 request is approved", () => {
+  const approvalId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const data={
+    enrollments:loaded([]),rules:loaded([]),runs:loaded([]),
+    tasks:loaded([{
+      id:TENANT,action:"tool:scorecard",status:"waiting_approval",
+      approval_id:approvalId,
+    }]),
+    approvals:loaded([{id:approvalId,status:"pending"}]),
+  };
+  const state=mockState(["tool:dispatch"]);
+  assert.doesNotMatch(renderPage("tools",data,state),/data-action="tool-run"/);
+  data.approvals=loaded([{id:approvalId,status:"approved"}]);
+  assert.match(renderPage("tools",data,state),/data-action="tool-run"/);
+});
+
+test("calendar RSVP action appears only for an invited employee", () => {
+  const state=mockState(["calendar:read","calendar:respond"]);
+  const calendar={events:loaded([
+    {id:TENANT,title:"Public event",status:"scheduled",invited:false,
+      starts_at:"2026-10-12T08:00:00Z",ends_at:"2026-10-12T09:00:00Z"},
+    {id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      title:"Invited meeting",status:"scheduled",invited:true,
+      starts_at:"2026-10-12T10:00:00Z",ends_at:"2026-10-12T11:00:00Z"},
+  ])};
+  const html=renderPage("calendar",calendar,state);
+  assert.equal((html.match(/data-action="calendar-rsvp"/g)||[]).length,1);
+});
