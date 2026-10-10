@@ -14,13 +14,18 @@ from ago.identity import IdentityRepository
 from ago.security_controls import SecurityControls
 
 
-def add_reviewer(connection, *, tenant_id: str, email: str, password: str) -> str:
+def add_reviewer(
+    connection, *, tenant_id: str, email: str, password: str,
+    department_id: str | None = None,
+) -> str:
     tenant_id = str(UUID(tenant_id))
     with connection.transaction():
         department = connection.execute(
-            """SELECT id FROM ago_departments
-               WHERE tenant_id=%s ORDER BY name, id LIMIT 1""",
-            (tenant_id,),
+            """SELECT id FROM ago_departments WHERE tenant_id=%s
+               AND (%s::uuid IS NULL OR id=%s::uuid)
+               ORDER BY name, id LIMIT 1""",
+            (tenant_id, str(UUID(department_id)) if department_id else None,
+             str(UUID(department_id)) if department_id else None),
         ).fetchone()
         if department is None:
             raise ValueError("Tenant has no department; bootstrap first")
@@ -55,6 +60,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Provision independent AGO reviewer")
     parser.add_argument("--tenant-id", required=True)
     parser.add_argument("--email", required=True)
+    parser.add_argument("--department-id")
     args = parser.parse_args()
     dsn = os.getenv("AGO_POSTGRES_DSN")
     if not dsn:
@@ -66,7 +72,7 @@ def main() -> None:
     with psycopg.connect(dsn, row_factory=dict_row) as db:
         user_id = add_reviewer(
             db, tenant_id=args.tenant_id, email=args.email,
-            password=password,
+            password=password, department_id=args.department_id,
         )
     print(f"Independent reviewer created: {user_id}")
 
