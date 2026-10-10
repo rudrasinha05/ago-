@@ -255,3 +255,21 @@ def test_council_db_enforces_quorum(case):
                 "UPDATE ago_council_motions SET status='passed', finalized_at=now() WHERE id=%s",
                 (motion["id"],),
             )
+
+
+def test_reviewed_knowledge_is_database_immutable(case):
+    client, headers, ids = case
+    psycopg = pytest.importorskip("psycopg")
+    node = post(client, "/v1/knowledge/nodes", headers["founder"], {
+        "kind": "fact", "label": "Baseline evidence",
+        "statement": "Recorded evidence requires review",
+        "source_ref": "internal:baseline",
+    })
+    post(client, f"/v1/knowledge/nodes/{node['id']}/review",
+         headers["reviewer1"], {"approve": True, "note": "Checked source"})
+    with pytest.raises(psycopg.errors.RaiseException):
+        with ids["db"].transaction():
+            ids["db"].execute(
+                "UPDATE ago_knowledge_nodes SET statement='changed' WHERE id=%s",
+                (node["id"],),
+            )
