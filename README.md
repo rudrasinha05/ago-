@@ -89,11 +89,27 @@ out. Build locally with `npm ci`, `npm run build` and
 See [frontend architecture](docs/architecture/SECTION_06_FRONTEND_ARCHITECTURE.md)
 and [acceptance evidence](docs/reports/SECTION06_FINAL_ACCEPTANCE.md).
 
+## Architecture sections 7–10 — Data, messages, memory and security
+
+Sections 7–9 are accepted against their supplied checklists. PostgreSQL owns
+knowledge, scoped semantic memory and ordered durable messages; private objects,
+actual offline embeddings and optional Redis remain explicitly configured.
+Section 10 implements encrypted MFA, single-use invitation/recovery, pinned
+OIDC with PKCE, credential revocation and verified external-vault startup/rotation.
+All nine CI jobs passed at `9dd3da1`: 394 backend tests on each of three Python
+versions, actual model/storage, browser, build, Docker and restore gates.
+**Section 10 remains partial:** actual production vault/rotation, trusted HTTPS
+and database encryption operations, and independent security assessment require
+real external evidence. No public deployment or certification is claimed.
+Read [message acceptance](docs/reports/SECTION08_FINAL_ACCEPTANCE.md),
+[memory acceptance](docs/reports/SECTION09_FINAL_ACCEPTANCE.md) and
+[security acceptance and remaining gates](docs/reports/SECTION10_FINAL_ACCEPTANCE.md).
+
 ## Completed architecture section: 14 — Module Dependency Rules
 
 The original 1–34 architecture checklist is tracked **separately** from
 M1–M12 implementation milestones. **Section 14** now has an enforceable,
-versioned architecture baseline: 76 owned root modules, 145 reviewed
+versioned architecture baseline: 107 owned root modules, 292 reviewed
 existing internal import edges, a six-layer dependency matrix, cycle bans,
 three protected approval/QA SQL ownership boundaries, a time-limited
 exception process, service extraction/event contract specifications and

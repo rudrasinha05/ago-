@@ -19,8 +19,11 @@ available. This is an evidence/access gap, not authorization to invent success.
 | External assessment/threat/compliance | Deliver concrete threat model, abuse tests, control/evidence matrix and independent assessment handoff; **independent assessor findings and closure cannot be replaced by self-authored tests** |
 | Fail-closed production configuration | Missing/invalid vault, MFA key and enforced identity policy prevent startup/login; no password fallback when production SSO/MFA is required |
 
-Implementation acceptance and production/external acceptance will be reported
-separately. Existing original checkboxes will stay open wherever actual external
+Implementation is CI-accepted at `9dd3da1` (runs `38065558141` and
+`38065558142`, all nine jobs passed). Overall Section 10 remains partial: three
+original production/external gates are blocked on actual evidence. See
+`docs/reports/SECTION10_FINAL_ACCEPTANCE.md`. Implementation acceptance and
+production/external acceptance are reported separately. Existing original checkboxes will stay open wherever actual external
 evidence is unavailable. No new paid account/service, public deployment or invented
 certification is authorized or claimed. No secrets are printed or committed.
 Rollout preserves existing development login compatibility; production requires

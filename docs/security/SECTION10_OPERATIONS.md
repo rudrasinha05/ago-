@@ -1,7 +1,8 @@
 # Section 10 — Concrete Identity and Secret Operations
 
-Status: implementation verification pending; actual production setup/evidence is
-unavailable. This runbook is not a claim that a vault, HTTPS ingress, encrypted
+Status: implementation verified at `9dd3da1` by primary CI `38065558141`
+and independent CI `38065558142` (all nine jobs passed); actual production
+setup/evidence is unavailable. This runbook is not a claim that a vault, HTTPS ingress, encrypted
 database or identity provider has been deployed. No secrets belong in GitHub,
 these documents, chat, build arguments or a committed environment file.
 

@@ -75,9 +75,19 @@ Intelligence or completion of the original entire enterprise architecture.
   `38063636007`; 371 Python tests on each version, 31 dedicated real model/storage
   tests and all prior browser/build/image/recovery gates.
   Evidence: `docs/reports/SECTION09_FINAL_ACCEPTANCE.md`.
+- **Section 10 — Security Architecture:** engineering implementation CI-accepted
+  at `9dd3da1`, primary `38065558141`, independent `38065558142`; 394 Python tests
+  each on 3.11/3.14/3.12 with no skips and all nine jobs passed. Encrypted/replay-safe
+  MFA, bounded session/factor rotation, reviewed invitation/recovery, pinned
+  OIDC+PKCE/browser-bound single-use handoff, live DB roles/session epochs and
+  verified HTTPS Vault KV-v2 bootstrap are implemented. **Overall partial:**
+  actual production vault/rotation, trusted HTTPS/DB encryption operations and
+  independent assessment/compliance findings remain externally unverified.
+  Evidence: `docs/reports/SECTION10_FINAL_ACCEPTANCE.md`; concrete operations
+  and internal threat model are under `docs/security/SECTION10_*`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
-  Versioned manifest now maps 98 AGO root modules and 260 observed internal
+  Versioned manifest now maps 107 AGO root modules and 292 observed internal
   imports, enforces layering and cycle bans, protects approval/QA write
   ownership, documents extraction contracts and requires bounded reviewed
   exception records. Graphviz diagrams and negative tests are generated
@@ -88,7 +98,8 @@ Intelligence or completion of the original entire enterprise architecture.
   the repository administrator before independent human review is considered
   operationally enforced.
 - Every other unfinished section is **still separately pending**. Closure of
-  Sections 1–9 and 14 does not upgrade Sections 10–13 or 15–34, nor imply
+  Sections 1–9 and 14 does not upgrade the remaining Section 10
+  external gates, Sections 11–13 or 15–34, nor imply
   that the full original blueprint is available.
 
 ## Evidence and provenance caveat
@@ -112,7 +123,7 @@ not the whole blueprint.
 |---|---|---|
 | M0 / M0.1 original repository foundation | Current GitHub repository has an operational Python package, Docker, SQL and CI; old original M0/0.1 handover records exist | Original local source/lockfiles/full blueprint not proven identical or fully imported |
 | M1 platform 1.1–1.9 | Settings, DI, logging, outbox/inbox, auth/RBAC, plugin registry, scheduler, metrics/readiness and migration verification in CI | In-process scheduler/worker and trusted plugins are not distributed durable production orchestration |
-| M2 governance | Tenant accounts, human approval, task life cycle, reviewer independence, memory and QA | Production SSO, MFA, large-enterprise governance/admin and external audit assurance |
+| M2 governance | Tenant accounts, human approval, task life cycle, reviewer independence, memory and QA | Actual production IdP/MFA rollout, large-enterprise governance/admin and external audit assurance |
 | M3 strategy | Hierarchical goals, plan DAG and approval-bound task materialization | No unrestricted autonomous strategy discovery or market intelligence |
 | M4 AI workforce | Task-bound single-use AI run and allowlisted handlers; optional bounded provider | Not an always-on multi-agent workforce; no tool-executing LLM autonomy |
 | M5 economics | Virtual credit cap, usage ledger, deterministic simulations, immutable experiment proposals | No real currency billing, tax, payouts, marketplace settlement |
