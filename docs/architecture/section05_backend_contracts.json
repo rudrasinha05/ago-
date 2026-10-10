@@ -528,6 +528,22 @@
           "arguments": "self, *, tenant_id: str",
           "returns": "list[dict]"
         },
+        "work_queue": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "queue_work": {
+          "arguments": "self, *, actor: Principal, task_id: str, operation_key: str, priority: int, eligible_at: datetime",
+          "returns": "dict"
+        },
+        "claim_work": {
+          "arguments": "self, *, actor: Principal, lease_seconds: int",
+          "returns": "dict"
+        },
+        "resolve_work_lease": {
+          "arguments": "self, *, actor: Principal, queue_id: str, explanation: str, status: str",
+          "returns": "dict"
+        },
         "capacity_limits": {
           "arguments": "self, *, tenant_id: str",
           "returns": "dict"
