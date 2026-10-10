@@ -22,7 +22,7 @@ router = APIRouter(prefix="/v1/console", tags=["M9 Control Center"])
 
 
 @router.get("/me")
-def me(db=Depends(db_connection), actor: Principal = Depends(authenticated)):
+def me(actor: Principal = Depends(authenticated), db=Depends(db_connection)):
     row = db.execute(
         """SELECT u.email,e.name FROM ago_users u
            LEFT JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
@@ -54,8 +54,8 @@ def me(db=Depends(db_connection), actor: Principal = Depends(authenticated)):
 
 @router.post("/logout")
 def logout(
-    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    db=Depends(db_connection),
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Security(bearer)
     ] = None,
@@ -71,8 +71,8 @@ def logout(
 
 @router.post("/tasks/{task_id}/request-approval")
 def request_task_approval(
-    task_id: UUID, db=Depends(db_connection),
-    actor: Principal = Depends(authenticated),
+    task_id: UUID, actor: Principal = Depends(authenticated),
+    db=Depends(db_connection),
 ):
     """Atomically propose the exact task action and attach its M2 approval."""
     allowed(db, actor, "task:create")
@@ -103,7 +103,7 @@ def request_task_approval(
 
 @router.get("/task-reviews")
 def task_reviews(
-    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    actor: Principal = Depends(authenticated), db=Depends(db_connection),
 ):
     allowed(db, actor, "qa:read")
     return [dict(row) for row in db.execute(
