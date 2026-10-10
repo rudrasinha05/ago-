@@ -929,6 +929,142 @@ class EnterpriseOperationsStore:
                 "source": "governed_tasks_and_independent_QA",
                 "replan_is_advisory": True, "automatically_replanned": False}
 
+
+    def organization_change(self, *, actor: Principal, change_kind: str,
+                            target_id: str, approval_id: str, reason: str,
+                            department_id: str | None = None,
+                            name: str | None = None, manager_id: str | None = None,
+                            role_level: int | None = None) -> dict:
+        """Apply a reviewed organizational change, preserving prior records."""
+        if change_kind not in ("hired", "promoted", "terminated", "created", "closed"):
+            raise ValueError("Unknown organizational change")
+        if not 1 <= len(reason.strip()) <= 2000:
+            raise ValueError("Bounded organizational reason required")
+        target = str(UUID(target_id))
+        dept = str(UUID(department_id)) if department_id else None
+        manager = str(UUID(manager_id)) if manager_id else None
+        if role_level is not None and (type(role_level) is not int or not 1 <= role_level <= 5):
+            raise ValueError("Role level out of bounds")
+        entity = "department" if change_kind in ("created", "closed") else "hr"
+        action = "enterprise:" + entity + ":" + change_kind + ":" + target
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            self._approval(actor, approval_id, action)
+            table = ("ago_department_lifecycle_events" if entity == "department"
+                     else "ago_personnel_events")
+            earlier = self.connection.execute(
+                f"""SELECT id,reason FROM {table}
+                   WHERE tenant_id=%s AND approval_id=%s""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            if earlier:
+                if earlier["reason"] != reason.strip():
+                    raise PermissionError("Cannot replay altered organizational approval")
+                return {"id": str(earlier["id"]), "target_id": target,
+                        "change_kind": change_kind, "idempotent": True}
+            if change_kind == "created":
+                if not name or not 1 <= len(name.strip()) <= 200:
+                    raise ValueError("Department name required")
+                self.connection.execute(
+                    "INSERT INTO ago_departments(id,tenant_id,name) VALUES(%s,%s,%s)",
+                    (target, actor.tenant_id, name.strip()),
+                )
+            elif change_kind == "closed":
+                if not self.connection.execute(
+                    "SELECT 1 FROM ago_departments WHERE tenant_id=%s AND id=%s",
+                    (actor.tenant_id, target),
+                ).fetchone():
+                    raise LookupError("Department not found")
+                if self.connection.execute(
+                    """SELECT 1 FROM ago_employees WHERE tenant_id=%s AND department_id=%s
+                       LIMIT 1""", (actor.tenant_id, target),
+                ).fetchone():
+                    raise PermissionError("Cannot close department containing employees")
+            elif change_kind == "hired":
+                if not dept or not name or not 1 <= len(name.strip()) <= 200:
+                    raise ValueError("AI hire requires department and name")
+                if self.connection.execute(
+                    """SELECT 1 FROM ago_department_lifecycle_events
+                       WHERE tenant_id=%s AND department_id=%s AND action='closed'""",
+                    (actor.tenant_id, dept),
+                ).fetchone():
+                    raise PermissionError("Cannot hire into closed department")
+                if not self.connection.execute(
+                    "SELECT 1 FROM ago_departments WHERE tenant_id=%s AND id=%s",
+                    (actor.tenant_id, dept),
+                ).fetchone():
+                    raise LookupError("Department does not exist")
+                if manager and not self.connection.execute(
+                    """SELECT 1 FROM ago_employees WHERE tenant_id=%s
+                       AND department_id=%s AND id=%s""",
+                    (actor.tenant_id, dept, manager),
+                ).fetchone():
+                    raise PermissionError("Manager must belong to same department")
+                self.connection.execute(
+                    """INSERT INTO ago_employees(id,tenant_id,department_id,
+                       name,kind,manager_id) VALUES(%s,%s,%s,%s,'ai',%s)""",
+                    (target, actor.tenant_id, dept, name.strip(), manager),
+                )
+            else:
+                employee = self.connection.execute(
+                    """SELECT id,kind FROM ago_employees
+                       WHERE tenant_id=%s AND id=%s""",
+                    (actor.tenant_id, target),
+                ).fetchone()
+                if not employee or employee["kind"] != "ai":
+                    raise LookupError("AI employee not found")
+            if entity == "department":
+                record = str(uuid4())
+                self.connection.execute(
+                    """INSERT INTO ago_department_lifecycle_events
+                       (id,tenant_id,department_id,action,actor_id,approval_id,reason)
+                       VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                    (record, actor.tenant_id, target, change_kind,
+                     actor.subject, str(UUID(approval_id)), reason.strip()),
+                )
+            else:
+                last = self.connection.execute(
+                    """SELECT role_level FROM ago_personnel_events
+                       WHERE tenant_id=%s AND employee_id=%s
+                       ORDER BY created_at DESC,id DESC LIMIT 1""",
+                    (actor.tenant_id, target),
+                ).fetchone()
+                previous_level = int(last["role_level"]) if last else 1
+                next_level = (role_level if change_kind == "promoted"
+                              else (1 if change_kind == "hired" else previous_level))
+                if change_kind == "promoted" and (
+                    next_level is None or next_level <= previous_level
+                ):
+                    raise ValueError("Promotion requires strictly higher role level")
+                record = str(uuid4())
+                self.connection.execute(
+                    """INSERT INTO ago_personnel_events
+                       (id,tenant_id,employee_id,change_kind,role_level,
+                        actor_id,approval_id,reason)
+                       VALUES(%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (record, actor.tenant_id, target, change_kind, next_level,
+                     actor.subject, str(UUID(approval_id)), reason.strip()),
+                )
+        return {"id": record, "target_id": target, "change_kind": change_kind,
+                "idempotent": False, "independently_approved": True}
+
+    def organization_history(self, *, tenant_id: str) -> dict:
+        tenant = str(UUID(tenant_id))
+        personnel = [dict(x) for x in self.connection.execute(
+            """SELECT id,employee_id,change_kind,role_level,reason,created_at
+               FROM ago_personnel_events WHERE tenant_id=%s
+               ORDER BY created_at DESC,id DESC LIMIT 100""",
+            (tenant,),
+        ).fetchall()]
+        departments = [dict(x) for x in self.connection.execute(
+            """SELECT id,department_id,action,reason,created_at
+               FROM ago_department_lifecycle_events WHERE tenant_id=%s
+               ORDER BY created_at DESC,id DESC LIMIT 100""",
+            (tenant,),
+        ).fetchall()]
+        return {"personnel": personnel, "departments": departments,
+                "historical_records_retained": True}
+
     def twin_runs(self, *, tenant_id: str) -> list[dict]:
         return [dict(row) for row in self.connection.execute(
             """SELECT id,snapshot_id,assumptions,result,calibrated,data_coverage,
