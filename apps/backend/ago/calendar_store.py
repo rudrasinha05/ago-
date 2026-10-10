@@ -177,6 +177,6 @@ class CalendarStore:
         return [dict(row) for row in self.db.execute(
             """SELECT actor_id,event,note,occurred_at FROM ago_calendar_audit
                WHERE tenant_id=%s AND event_id=%s
-               ORDER BY occurred_at,id LIMIT 500""",
+               ORDER BY event_order LIMIT 500""",
             (actor.tenant_id, event_id),
         ).fetchall()]
