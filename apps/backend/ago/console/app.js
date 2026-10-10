@@ -84,6 +84,7 @@ function endpoints(page) {
     strategy: [
       ["goals","/v1/brain/goals"],
       ["plans","/v1/brain/plans"],
+      ["approvals","/v1/governance/approvals"],
     ],
     governance: [
       ["approvals","/v1/governance/approvals"],
