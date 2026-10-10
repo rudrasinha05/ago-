@@ -32,3 +32,33 @@
 No source commit is acceptance without green **final-head** backend, CI Python matrix, real PostgreSQL migrations and negative tests, frontend/JS/browser, Docker/backup/restore, independent QA and local founder acceptance. Never automatically migrate the user's Windows/PostgreSQL instance: take verified backup, explicit operator review, then manually apply additive 024–025. Full financial/provider and calibration gates remain marked external-data blocked until genuine invoices/observations exist. **No cloud account or paid model is required for the remaining local engineering steps.**
 
 This report is intentionally conservative: a successful CI run certifies the tested implementation scope, **not** the unimplemented remaining checklist items above.
+
+
+## 2026-10-11 subsequent implementation and CI evidence
+
+The initial report above is preserved as a historical state, **not the latest missing-feature list**. This release-candidate implementation adds the following source-linked capabilities without changing Section 29 authority, tenant/RBAC controls, existing M1-M12 endpoints or the frozen architecture:
+
+| Section | New tested implementation |
+|---|---|
+| 21 | Migration `027_governed_hr_lifecycle.sql`; independent-action-reviewed department creation and safe closure, AI hiring, strict promotion levels, immutable termination, database task/agent dispatch interlock for terminated staff and closed departments, HR history and authenticated API |
+| 22 | Migration `026_agent_escalation_planning_feedback.sql`; immutable tenant-bound AI overload/safety/permission assistance requests, independently approved resolution and actual PostgreSQL dispatch blocking until resolved; live worker state includes active help status |
+| 23 | The same migration records an immutable, independently approved horizon-plan-to-governed-task link; read-only QA aggregation reports passed/failed/awaiting evidence and does not auto-activate tasks or rewrite plans |
+| 24 | Original bounded virtual-credit and separate observed-cost/budget evidence retained; no unsupported claim of externally authenticated invoices or real ROI |
+| 25 | Internal catalog publication/reuse enforces exact tenant-owned semver/digest dependencies, bounded manifests and denial of subsequent reuse when a dependency is deprecated/revoked |
+| 26 | Migration `028_evolution_and_twin_outcomes.sql`; independent human-reviewed evolution outcomes, immutable decision/rollback evidence, advisory-only applied=false, previous MetaBrain review gates preserved |
+| 27 | Scenario now uses **snapshot-captured** workforce rather than mutable live count; immutable independently reviewed later-snapshot comparisons show descriptive observed task deltas and explicit uncalibrated limitations |
+
+**Integrations:** `apps/backend/ago/enterprise_store.py`, `api_operations.py`, port/source/API fingerprint contracts, Next.js/console Tools page (actual safety, HR, evolution and twin evidence), and tests:
+- `test_enterprise_assistance_feedback.py`
+- `test_enterprise_hr_21.py`
+- `test_marketplace_dependency_25.py`
+- `test_enterprise_evolution_twin.py`
+- updated `test_enterprise_http_21_27.py`.
+
+**Backend quality CI:** source commit `4e0ab58dbc9139ac34f710ad8590bcaf209aa64f`; `https://github.com/rudrasinha05/ago-/actions/runs/38090372467` **SUCCESS**, including 509 passed real PostgreSQL/backend tests, 1 warning, successful lint and architecture audits. The full cross-browser/CI matrix run `38090372397` was still queued at this update; no final-head full acceptance is implied. The earlier commit `9bcf6060` had the same 509 tests pass but failed an unused-import lint rule; that failure was fixed without disabling checks.
+
+**Remaining ORIGINAL gates:** actual fair crash-recoverable cross-department scheduler, binding all HR intent fields to independently reviewed approval details, comprehensive operational agent skill/knowledge/permission evidence and automated safe learning, approved live goal-to-task replanning and calendars, real provider-verified invoices/bank/revenue ROI, stored transferable/reusable asset payloads and end-user lifecycle UI, executed approved policy/prompt changes with genuinely tested rollback, full Digital Twin project/deadline calibration against held-out real observations. These must **remain pending** until implemented and demonstrated. External production Vault/TLS/auditor are separately deferred per owner personal/local-use decision.
+
+**Windows safety:** migrations 023–028 are additive in the repo but **have not been applied on the owner's Windows PostgreSQL**. Existing local data must be backed up, code fast-forward pulled once, stopped writers confirmed, isolated-restore evidence reviewed and explicit migration executed only with founder consent.
+
+**Do not label Sections 21–27 fully complete.** Source/test progress is substantial; full original scoped acceptance and real-world evidence gates remain open.
