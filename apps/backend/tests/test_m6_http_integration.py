@@ -170,3 +170,22 @@ def test_independent_knowledge_review_and_graph(case):
     assert edges.status_code == 200 and len(edges.json()) == 1
     post(client, first_review, headers["reviewer2"],
          {"approve": False, "note": "Replay"}, expected=403)
+
+
+def test_council_needs_two_humans_and_m2_approval(case):
+    client, headers, ids = case
+    motion = post(client, "/v1/council/motions", headers["founder"], {
+        "title": "Approve internal review policy",
+        "rationale": "Review process should have independent evidence",
+        "required_votes": 2,
+    })
+    vote_url = f"/v1/council/motions/{motion['id']}/votes"
+    finalize_url = f"/v1/council/motions/{motion['id']}/finalize"
+    post(client, vote_url, headers["founder"],
+         {"vote": "yes", "reason": "Self vote"}, expected=403)
+    post(client, finalize_url, headers["founder"], expected=403)
+    post(client, vote_url, headers["reviewer1"],
+         {"vote": "yes", "reason": "Reviewed evidence"})
+    post(client, vote_url, headers["reviewer2"],
+         {"vote": "yes", "reason": "Second independent review"})
+    post(client, finalize_url, headers["founder"], expected=403)
