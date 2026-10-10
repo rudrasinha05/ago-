@@ -178,3 +178,65 @@ def test_snapshot_and_meta_brain_advice_require_separate_human_endorsement(case)
                 "UPDATE ago_meta_recommendations SET summary=%s WHERE id=%s",
                 ("unreviewed change", recommendation["id"]),
             )
+
+
+def test_meta_brain_detects_real_backlog_qa_and_budget_risk(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    dna = post(client, "/v1/meta/dna", founder, {
+        "profile": profile(backlog_limit=0),
+        "rationale": "Evaluate task quality and credit consumption.",
+    })
+    decide(client, reviewer, dna["approval_id"])
+    post(client, f"/v1/meta/dna/{dna['id']}/reconcile", founder)
+    departments = client.get(
+        "/v1/organization/departments", headers=founder,
+    ).json()
+    agent = post(client, "/v1/organization/employees", founder, {
+        "department_id": departments[0]["id"], "name": "Meta Research AI",
+        "kind": "ai",
+    })
+    finished = post(client, "/v1/tasks", founder, {
+        "assignee_id": agent["id"], "action": "internal:brief",
+    })
+    post(client, "/v1/tasks", founder, {
+        "assignee_id": agent["id"], "action": "internal:brief",
+    })
+    approval = post(client, "/v1/governance/approvals", founder, {
+        "action": "internal:brief",
+    })
+    post(client, f"/v1/tasks/{finished['id']}/approval", founder, {
+        "approval_id": approval["request_id"],
+    })
+    decide(client, reviewer, approval["request_id"])
+    assert post(
+        client, f"/v1/agents/tasks/{finished['id']}/run", founder,
+    )["status"] == "completed"
+    post(client, "/v1/insights/budget", founder, {"ceiling": "10"})
+    post(client, "/v1/insights/usage", founder, {
+        "operation_key": "m7-evidence-charge", "amount": "9",
+        "category": "model_eval",
+    })
+    snapshot = post(client, "/v1/meta/snapshots", founder)
+    assert snapshot["dna_id"] == dna["id"]
+    assert snapshot["metrics"]["completed_tasks"] == 1
+    assert snapshot["metrics"]["total_tasks"] == 2
+    assert snapshot["metrics"]["qa_pass"] == 0
+    assert snapshot["metrics"]["backlog_tasks"] == 1
+    assert snapshot["metrics"]["budget_configured"] is True
+    assert snapshot["fitness"] == "19.50"
+    assert set(snapshot["risk_flags"]) == {
+        "qa_below_target", "backlog_over_limit", "budget_alert",
+    }
+    hypothetical = post(client, "/v1/meta/simulate", founder, {
+        "snapshot_id": snapshot["id"],
+        "profile": profile(backlog_limit=5, budget_alert_pct=95),
+    })
+    assert hypothetical["assessment"]["risk_flags"] == ["qa_below_target"]
+    assert hypothetical["assessment"]["fitness"] == snapshot["fitness"]
+    recommendations = post(
+        client, f"/v1/meta/snapshots/{snapshot['id']}/recommendations",
+        founder,
+    )
+    assert len(recommendations) == 3
+    assert {r["category"] for r in recommendations} == set(snapshot["risk_flags"])
