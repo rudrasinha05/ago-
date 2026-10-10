@@ -124,3 +124,13 @@ def test_private_calendar_and_append_only_responses(case):
          headers["reviewer1"], expected=403)
     post(client, f"/v1/operations/calendar/{event['id']}/cancel",
          headers["founder"])
+    post(client, f"/v1/operations/calendar/{event['id']}/rsvp",
+         headers["reviewer1"], {"response": "declined"}, expected=403)
+    history = client.get(
+        f"/v1/operations/calendar/{event['id']}/history",
+        headers=headers["founder"],
+    )
+    assert history.status_code == 200, history.text
+    assert [item["event"] for item in history.json()] == [
+        "scheduled", "accepted", "cancelled",
+    ]
