@@ -297,7 +297,61 @@ export function renderKnowledge(data, state) {
     panel("Review queue",unavailable(data,"pending",pendingRows ||
       empty("No pending evidence"))));
 }
-export function renderTools(data, state) {
+export 
+function renderEnterpriseSummary(data) {
+  const currentMode = resource(data,"enterpriseModes")?.effective;
+  const strategicPlans = list(data,"enterprisePlans");
+  const costs = list(data,"enterpriseCosts");
+  const budgets = list(data,"enterpriseBudgets");
+  const assets = list(data,"enterpriseAssets");
+  const consumption = list(data,"enterpriseAssetUsage");
+  const scenarios = list(data,"enterpriseTwin");
+  const moneyRows = costs.slice(0,10).map(x=>'<tr><td class="primary">'+maybe(x.category)+
+    '</td><td>'+maybe(x.provider)+'</td><td>'+maybe(x.observed_amount)+
+    ' '+maybe(x.currency)+'</td><td>'+badge(x.evidence_state)+'</td></tr>');
+  const planRows = strategicPlans.slice(0,10).map(x=>'<tr><td class="primary">'+maybe(x.title)+
+    '</td><td>'+maybe(x.horizon)+'</td><td>'+safe(dateText(x.ends_at))+
+    '</td><td>'+maybe(x.budget_ceiling)+'</td></tr>');
+  const assetRows = assets.slice(0,10).map(x=>'<tr><td class="primary">'+maybe(x.name)+
+    '</td><td>'+maybe(x.asset_kind)+'</td><td>'+maybe(x.version)+
+    '</td><td>'+badge(x.status)+'</td></tr>');
+  const budgetRows = budgets.slice(0,10).map(x=>'<tr><td>'+maybe(x.scope_kind)+
+    '</td><td>'+maybe(x.approved_ceiling)+' '+maybe(x.currency)+
+    '</td><td>'+safe(shortId(x.approval_id))+'</td></tr>');
+  const usageRows = consumption.slice(0,10).map(x=>'<tr><td>'+safe(shortId(x.asset_id))+
+    '</td><td>'+num(Number(x.consumptions))+'</td></tr>');
+  const simRows = scenarios.slice(0,10).map(x=>'<tr><td>'+safe(dateText(x.created_at))+
+    '</td><td>'+safe(shortId(x.snapshot_id))+'</td><td>'+
+    (x.calibrated?'Calibrated':'Uncalibrated')+'</td><td>'+
+    maybe(x.data_coverage)+'</td></tr>');
+  return section("Organizational operating system","Sections 21–27 · persisted evidence")+
+    '<div class="info-strip">'+icon("shield")+
+    '<span>Human approvals govern all operational changes. Costs are unverified unless independently reconciled; scenarios never apply changes.</span></div>'+
+    '<div class="metric-grid">'+
+    metric("Effective operating mode",currentMode?.mode || "Unavailable",
+      "Company scope · source "+String(currentMode?.source || "not authorized"),"shield")+
+    metric("Planning horizons",resource(data,"enterprisePlans") ? num(strategicPlans.length) : "—",
+      "Approved strategy hierarchy records","layers")+
+    metric("Internal assets",resource(data,"enterpriseAssets")?num(assets.length):"—",
+      "Versioned tenant catalog","layers")+
+    metric("Twin scenarios",resource(data,"enterpriseTwin")?num(scenarios.length):"—",
+      "Read-only historical simulations","chart")+'</div>'+
+    panel("Multi-level plans",unavailable(data,"enterprisePlans",
+      table(["Plan","Horizon","Deadline","Budget ceiling"],planRows,empty("No approved planning horizons"))))+
+    panel("Observed financial evidence (not verified bills)",unavailable(data,"enterpriseCosts",
+      table(["Category","Provider","Amount","Evidence"],moneyRows,empty("No observed costs"))))+
+    panel("Governed departmental budgets",unavailable(data,"enterpriseBudgets",
+      table(["Scope","Ceiling","Approval"],budgetRows,empty("No financial envelopes"))))+
+    panel("Internal marketplace catalog",unavailable(data,"enterpriseAssets",
+      table(["Asset","Type","Version","Lifecycle"],assetRows,empty("No published or draft assets"))))+
+    panel("Approved asset consumption",unavailable(data,"enterpriseAssetUsage",
+      table(["Asset","Recorded uses"],usageRows,empty("No asset reuse recorded"))))+
+    panel("Digital Twin provenance",unavailable(data,"enterpriseTwin",
+      table(["Captured","Source snapshot","Calibration","Coverage"],simRows,
+        empty("No saved what-if scenarios"))));
+}
+
+function renderTools(data, state) {
   const enrollments = list(data,"enrollments"), runs = list(data,"runs");
   const rules = list(data,"rules"), tasks = list(data,"tasks");
   const approvals = list(data,"approvals");
@@ -344,7 +398,7 @@ export function renderTools(data, state) {
     section("Execution evidence",num(runs.length)+" runs") +
     panel("Enterprise tool runs",unavailable(data,"runs",table(
       ["Tool","State","Started","Run ID"],runsRows,empty("No tool runs recorded"),
-    ))));
+    ))) + renderEnterpriseSummary(data));
 }
 export function renderCalendar(data, state) {
   const events = list(data,"events");
