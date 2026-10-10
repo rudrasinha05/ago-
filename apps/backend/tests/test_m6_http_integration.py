@@ -224,3 +224,19 @@ def test_m6_records_remain_tenant_scoped(case):
     assert client.get("/v1/council/motions", headers=outsider).json() == []
     post(client, f"/v1/knowledge/nodes/{node['id']}/review", outsider,
          {"approve": True, "note": "Cross tenant"}, expected=404)
+
+
+def test_council_negative_ballot_rejects_without_execution(case):
+    client, headers, ids = case
+    motion = post(client, "/v1/council/motions", headers["founder"], {
+        "title": "Contested action", "rationale": "Evaluate risk",
+        "required_votes": 2,
+    })
+    post(client, f"/v1/council/motions/{motion['id']}/votes",
+         headers["reviewer1"], {"vote": "no", "reason": "Evidence insufficient"})
+    closed = post(client, f"/v1/council/motions/{motion['id']}/finalize",
+                  headers["founder"])
+    assert closed["status"] == "rejected"
+    assert closed["execution_permitted"] is False
+    post(client, f"/v1/council/motions/{motion['id']}/finalize",
+         headers["founder"], expected=403)
