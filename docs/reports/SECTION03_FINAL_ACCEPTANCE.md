@@ -19,5 +19,5 @@ Independent backend: https://github.com/rudrasinha05/ago-/actions/runs/380363540
 Python 3.11/3.14: 293 tests each, no skips; 14 JS; six Chromium;
 Mermaid/source/context guards, wheel, migrations, Ruff, Docker and actual
 PostgreSQL backup/restore passed. Conclusions and decoded logs checked.
-Closing documentation commit CI is verified before Section 4 begins.
+Closing commit `b6de17b` also passed primary CI [38036498508](https://github.com/rudrasinha05/ago-/actions/runs/38036498508) and independent CI [38036498170](https://github.com/rudrasinha05/ago-/actions/runs/38036498170) before Section 4 began.
 Rollback reverts this section's contract/checker/tests/docs/CI invocation.

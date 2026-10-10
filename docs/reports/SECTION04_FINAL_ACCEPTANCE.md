@@ -17,7 +17,7 @@ Implementation commit `4845502`, primary CI [38037327542](https://github.com/rud
 All six primary jobs passed: Python 3.11/3.14 (298 tests each), 14 console JS,
 six Chromium journeys, nonroot Docker, real PostgreSQL restore, and three
 Next.js production builds with served-export smoke plus three SDK tests.
-The closing documentation commit must also be verified green before Section 5.
+Closing commit `ee76a41` passed all six primary jobs in [38037489301](https://github.com/rudrasinha05/ago-/actions/runs/38037489301) and independent backend [38037489284](https://github.com/rudrasinha05/ago-/actions/runs/38037489284) before Section 5 began.
 The HTTP smoke initially caught a missing local web export; rebuilding that workspace
 restored the homepage, and all three served outputs then passed. Dependencies use exact versions and committed lockfile; no new deployed service,
 database, private frontend authority or schema change. Full Section 6 UI and

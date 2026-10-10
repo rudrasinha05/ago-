@@ -9,14 +9,28 @@ baseline `ee76a41`. Complete original blueprint fidelity remains unverified.
 - [x] Strict typed inputs and safe, uniform business exceptions with correlation.
 - [x] Preserve governance, brain, AI execution, enterprise tools and analytics routes.
 - [x] Version source-backed bounded context and future-extraction contracts.
-- [ ] Verify complete PostgreSQL principal/tenant/governance regression on final CI.
+- [x] Verify complete PostgreSQL principal/tenant/governance regression on final CI.
 
 Local targeted HTTP/architecture tests passed (25 new tests). Local full suite:
 262 passed, 60 PostgreSQL-dependent tests skipped; the existing platform readiness
 test expected 200 but received 503 because this host has no PostgreSQL DSN/server.
-That environment-dependent gate must pass against actual PostgreSQL in CI. Full pushed-commit acceptance is
-pending: Python matrix, PostgreSQL, source guards, JS, Chromium, wheel, nonroot
-Docker, actual restore, SDK and all Next.js build/HTTP export checks.
+This environment-dependent gate passed against actual PostgreSQL in CI below.
+
+Implementation acceptance: `9a5960e26e0793ff817c0b6e173c76e4b53cf1e2`.
+Primary CI [38038876307](https://github.com/rudrasinha05/ago-/actions/runs/38038876307)
+and independent backend CI [38038876254](https://github.com/rudrasinha05/ago-/actions/runs/38038876254)
+passed. Python 3.11/3.14: 323 tests each, no skips; independent backend: 323.
+All source guards, migrations, wheel and Ruff passed; 14 console JS, three SDK,
+six real Chromium journeys, nonroot Docker, real PostgreSQL backup/restore,
+and all three Next.js optimized builds/served exports passed. Job conclusions
+and decoded test/build logs were inspected. Closing documentation commit CI
+is verified before the final delivery.
+
+Initial CI caught one old handler test substitute that did not accept the new
+scope keyword. The fixture now asserts its connection is the injected scope's
+connection; actual handler failure still returns 502, records terminal failure,
+redacts provider text and prohibits replay. The complete PostgreSQL suite passed
+with that regression intact.
 
 The runtime change includes request-local cascading constructor injection,
 38 structural interfaces and nine context-owned query repositories. Routes,

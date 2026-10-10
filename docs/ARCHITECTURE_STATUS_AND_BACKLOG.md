@@ -37,7 +37,9 @@ Intelligence or completion of the original entire enterprise architecture.
 - **Section 5 — Backend Architecture:** strict route/application/domain separation,
   context-owned SQL repositories, 38 typed structural component ports and request
   scope injection; strict request inputs and correlated safe exception envelopes.
-  Local targeted gates passed; full PostgreSQL/matrix/browser/image CI pending.
+  All seven gates CI-accepted: `9a5960e`, run `38038876307`; 323 Python tests
+  on each matrix version plus independent backend, 14 JS, three SDK, six
+  Chromium, Docker/restore and actual Next.js builds/exports passed.
   Evidence: `docs/reports/SECTION05_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
@@ -52,7 +54,7 @@ Intelligence or completion of the original entire enterprise architecture.
   the repository administrator before independent human review is considered
   operationally enforced.
 - Every other unfinished section is **still separately pending**. Closure of
-  Sections 1–4 and 14 does not upgrade Sections 5–13 or 15–34, nor imply
+  Sections 1–5 and 14 does not upgrade Sections 6–13 or 15–34, nor imply
   that the full original blueprint is available.
 
 ## Evidence and provenance caveat
