@@ -80,6 +80,39 @@
         }
       }
     },
+    "ApprovalRepository": {
+      "module": "governance",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, tenant_id: str, action: str, requester_id: str",
+          "returns": "ApprovalRequest"
+        },
+        "decide": {
+          "arguments": "self, *, request_id: str, tenant_id: str, reviewer_id: str, approve: bool, reason: str, authorized: bool=False",
+          "returns": "ApprovalRequest"
+        },
+        "list_requests": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "assert_executable": {
+          "arguments": "self, *, request_id: str, tenant_id: str, action: str",
+          "returns": "None"
+        },
+        "propose_architecture": {
+          "arguments": "self, *, tenant_id: str, requester_id: str, change_key: str, specification: dict",
+          "returns": "dict"
+        },
+        "architecture_changes": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "reconcile_architecture": {
+          "arguments": "self, *, tenant_id: str, change_id: str",
+          "returns": "dict"
+        }
+      }
+    },
     "CalendarStore": {
       "module": "calendar_store",
       "methods": {
@@ -324,6 +357,116 @@
         }
       }
     },
+    "EnterpriseOperationsStore": {
+      "module": "enterprise_store",
+      "methods": {
+        "modes": {
+          "arguments": "self, *, tenant_id: str, scope_kind: str = 'company', scope_id: str | None = None",
+          "returns": "list[dict]"
+        },
+        "mode_change": {
+          "arguments": "self, *, actor: Principal, target: str, approval_id: str, reason: str, expires_at: datetime, scope_kind: str = 'company', scope_id: str | None = None",
+          "returns": "dict"
+        },
+        "effective_mode": {
+          "arguments": "self, *, tenant_id: str, scope_kind: str = 'company', scope_id: str | None = None",
+          "returns": "dict"
+        },
+        "worker_state": {
+          "arguments": "self, *, tenant_id: str, employee_id: str",
+          "returns": "dict"
+        },
+        "capture_worker": {
+          "arguments": "self, *, actor: Principal, employee_id: str, available_units: int, source_ref: str",
+          "returns": "dict"
+        },
+        "allocate_preview": {
+          "arguments": "self, *, tenant_id: str, employee_id: str, available_units: int",
+          "returns": "dict"
+        },
+        "plan": {
+          "arguments": "self, *, actor: Principal, identifier: str, horizon: str, parent_id: str | None, title: str, starts_at: datetime, ends_at: datetime, budget_ceiling: str, approval_id: str, evidence_ref: str",
+          "returns": "dict"
+        },
+        "plans": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "record_cost": {
+          "arguments": "self, *, actor: Principal, operation_key: str, category: str, provider: str, source_ref: str, amount: str, currency: str, period_start: datetime, period_end: datetime",
+          "returns": "dict"
+        },
+        "costs": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "create_budget": {
+          "arguments": "self, *, actor: Principal, identifier: str, approval_id: str, scope_kind: str, scope_id: str | None, ceiling: str, currency: str",
+          "returns": "dict"
+        },
+        "budgets": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "asset_draft": {
+          "arguments": "self, *, actor: Principal, department_id: str, name: str, kind: str, version: str, license_id: str, digest: str, manifest: dict",
+          "returns": "dict"
+        },
+        "assets": {
+          "arguments": "self, *, tenant_id: str, kind: str | None = None",
+          "returns": "list[dict]"
+        },
+        "asset_propose": {
+          "arguments": "self, *, actor: Principal, asset_id: str, approval_id: str",
+          "returns": "dict"
+        },
+        "asset_publish": {
+          "arguments": "self, *, actor: Principal, asset_id: str",
+          "returns": "dict"
+        },
+        "asset_consume": {
+          "arguments": "self, *, actor: Principal, asset_id: str, department_id: str, approval_id: str, evidence_ref: str",
+          "returns": "dict"
+        },
+        "asset_usage": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "evolution_observation": {
+          "arguments": "self, *, actor: Principal, baseline: list[str], candidate: list[str], evidence: list[dict], source_snapshot_id: str",
+          "returns": "dict"
+        },
+        "twin": {
+          "arguments": "self, *, actor: Principal, snapshot_id: str, actions: int, cost_per_action: str, budget: str, failure_pct: int, hiring: int = 0, layoffs: int = 0, market_shock_pct: int = 0",
+          "returns": "dict"
+        },
+        "twin_runs": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "EnterpriseToolRuntime": {
+      "module": "tool_runtime",
+      "methods": {
+        "run": {
+          "arguments": "self, *, task_id: str, actor",
+          "returns": "dict"
+        },
+        "recover_stale": {
+          "arguments": "self, *, tenant_id: str, minimum_age_seconds: int=3600",
+          "returns": "int"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "evidence": {
+          "arguments": "self, *, tenant_id: str, run_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
     "ExecutiveIntelligence": {
       "module": "executive_intelligence",
       "methods": {
@@ -387,6 +530,31 @@
         }
       }
     },
+    "GenomeStore": {
+      "module": "organizational_dna",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, tenant_id: str, proposer_id: str, profile: dict, rationale: str, charter: dict | None=None, scope_kind: str='company', scope_id: str | None=None",
+          "returns": "dict"
+        },
+        "reconcile": {
+          "arguments": "self, *, tenant_id: str, genome_id: str",
+          "returns": "dict"
+        },
+        "active": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "effective": {
+          "arguments": "self, *, tenant_id: str, department_id: str | None=None, employee_id: str | None=None, exclude_kind: str | None=None",
+          "returns": "dict"
+        }
+      }
+    },
     "GoalStore": {
       "module": "goals",
       "methods": {
@@ -401,39 +569,6 @@
         "list": {
           "arguments": "self, *, tenant_id: str",
           "returns": "list[dict]"
-        }
-      }
-    },
-    "ApprovalRepository": {
-      "module": "governance",
-      "methods": {
-        "propose": {
-          "arguments": "self, *, tenant_id: str, action: str, requester_id: str",
-          "returns": "ApprovalRequest"
-        },
-        "decide": {
-          "arguments": "self, *, request_id: str, tenant_id: str, reviewer_id: str, approve: bool, reason: str, authorized: bool=False",
-          "returns": "ApprovalRequest"
-        },
-        "list_requests": {
-          "arguments": "self, *, tenant_id: str, limit: int=100",
-          "returns": "list[dict]"
-        },
-        "assert_executable": {
-          "arguments": "self, *, request_id: str, tenant_id: str, action: str",
-          "returns": "None"
-        },
-        "propose_architecture": {
-          "arguments": "self, *, tenant_id: str, requester_id: str, change_key: str, specification: dict",
-          "returns": "dict"
-        },
-        "architecture_changes": {
-          "arguments": "self, *, tenant_id: str",
-          "returns": "list[dict]"
-        },
-        "reconcile_architecture": {
-          "arguments": "self, *, tenant_id: str, change_id: str",
-          "returns": "dict"
         }
       }
     },
@@ -582,6 +717,19 @@
         }
       }
     },
+    "MemoryStore": {
+      "module": "organization_store",
+      "methods": {
+        "save": {
+          "arguments": "self, record: MemoryRecord",
+          "returns": "None"
+        },
+        "get": {
+          "arguments": "self, *, record_id: str, tenant_id: str, reader_id: str",
+          "returns": "MemoryRecord"
+        }
+      }
+    },
     "MessageStore": {
       "module": "message_store",
       "methods": {
@@ -719,44 +867,6 @@
         "list_employees": {
           "arguments": "self, *, tenant_id: str, department_id: str",
           "returns": "list[Employee]"
-        }
-      }
-    },
-    "MemoryStore": {
-      "module": "organization_store",
-      "methods": {
-        "save": {
-          "arguments": "self, record: MemoryRecord",
-          "returns": "None"
-        },
-        "get": {
-          "arguments": "self, *, record_id: str, tenant_id: str, reader_id: str",
-          "returns": "MemoryRecord"
-        }
-      }
-    },
-    "GenomeStore": {
-      "module": "organizational_dna",
-      "methods": {
-        "propose": {
-          "arguments": "self, *, tenant_id: str, proposer_id: str, profile: dict, rationale: str, charter: dict | None=None, scope_kind: str='company', scope_id: str | None=None",
-          "returns": "dict"
-        },
-        "reconcile": {
-          "arguments": "self, *, tenant_id: str, genome_id: str",
-          "returns": "dict"
-        },
-        "active": {
-          "arguments": "self, *, tenant_id: str",
-          "returns": "dict"
-        },
-        "list": {
-          "arguments": "self, *, tenant_id: str, limit: int=100",
-          "returns": "list[dict]"
-        },
-        "effective": {
-          "arguments": "self, *, tenant_id: str, department_id: str | None=None, employee_id: str | None=None, exclude_kind: str | None=None",
-          "returns": "dict"
         }
       }
     },
@@ -1058,27 +1168,6 @@
         "select_ago_tool_enrollment_audit_12": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
-        }
-      }
-    },
-    "EnterpriseToolRuntime": {
-      "module": "tool_runtime",
-      "methods": {
-        "run": {
-          "arguments": "self, *, task_id: str, actor",
-          "returns": "dict"
-        },
-        "recover_stale": {
-          "arguments": "self, *, tenant_id: str, minimum_age_seconds: int=3600",
-          "returns": "int"
-        },
-        "list": {
-          "arguments": "self, *, tenant_id: str, limit: int=100",
-          "returns": "list[dict]"
-        },
-        "evidence": {
-          "arguments": "self, *, tenant_id: str, run_id: str",
-          "returns": "list[dict]"
         }
       }
     },
