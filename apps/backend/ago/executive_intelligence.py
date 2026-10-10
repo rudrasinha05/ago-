@@ -167,7 +167,7 @@ class ExecutiveIntelligence:
         rows = self.db.execute(
             """SELECT id,dna_id,fitness,risk_flags,digest,created_at
                FROM ago_executive_snapshots WHERE tenant_id=%s
-               ORDER BY created_at DESC,id LIMIT %s""",
+               ORDER BY capture_order DESC LIMIT %s""",
             (tenant_id, limit),
         ).fetchall()
         return [
