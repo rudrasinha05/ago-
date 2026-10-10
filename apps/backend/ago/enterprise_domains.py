@@ -91,19 +91,24 @@ class WorkCandidate:
 
 def allocate(candidates: Sequence[WorkCandidate], *,
              mode: OperatingMode) -> tuple[WorkCandidate, ...]:
-    """Read-only, deterministic admission order; never starts actual tasks."""
+    """Stable, capacity-bounded advisory admission; no execution is authorized."""
     if mode is not OperatingMode.ACTIVE:
         return ()
-    admitted = [
+    eligible = sorted((
         c for c in candidates
         if c.task_approved and c.dependency_qa_passed
-        and c.worker_state is WorkerState.AVAILABLE
+        and c.worker_state in (WorkerState.AVAILABLE, WorkerState.IDLE)
         and 0 < c.required_units <= c.available_units
         and 0 <= c.priority <= 100 and c.oldest_wait_seconds >= 0
-    ]
-    return tuple(sorted(admitted, key=lambda x: (
-        -x.priority, -x.oldest_wait_seconds, x.task_id, x.employee
-    )))
+    ), key=lambda x: (-x.priority, -x.oldest_wait_seconds, x.task_id, x.employee))
+    remaining: dict[str, int] = {}
+    chosen: list[WorkCandidate] = []
+    for candidate in eligible:
+        units = remaining.setdefault(candidate.employee, candidate.available_units)
+        if candidate.required_units <= units:
+            remaining[candidate.employee] -= candidate.required_units
+            chosen.append(candidate)
+    return tuple(chosen)
 
 
 def operational_load(*, running: int, queued: int, capacity: int) -> dict:
