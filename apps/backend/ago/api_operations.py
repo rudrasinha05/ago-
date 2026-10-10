@@ -630,3 +630,82 @@ def enterprise_twin_history(
     allowed(repositories, actor, "meta:read")
     return repositories.resolve(EnterpriseOperationsStorePort).twin_runs(
         tenant_id=actor.tenant_id)
+
+
+class EnterpriseWorkerApproval(StrictInput):
+    state: Literal["available","idle","paused","sleeping","interrupted","unavailable","terminated"]
+
+
+class EnterpriseWorkerTransition(EnterpriseWorkerApproval):
+    approval_id: UUID
+    reason: str = Field(min_length=1, max_length=3000)
+    expires_at: datetime | None = None
+
+
+class EnterpriseAssetLifecycleApproval(StrictInput):
+    target_state: Literal["deprecated", "revoked"]
+
+
+class EnterpriseAssetLifecycle(EnterpriseAssetLifecycleApproval):
+    approval_id: UUID
+    reason: str = Field(min_length=1, max_length=3000)
+
+
+@router.get("/enterprise/agents/{employee_id}/history")
+def enterprise_worker_history(
+    employee_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).worker_history(
+        tenant_id=actor.tenant_id, employee_id=str(employee_id))
+
+
+@router.post("/enterprise/agents/{employee_id}/approval")
+def enterprise_worker_approval(
+    employee_id: UUID, data: EnterpriseWorkerApproval,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return issue_enterprise_approval(
+        repositories, actor, "enterprise:worker:" + str(employee_id) + ":" + data.state)
+
+
+@router.post("/enterprise/agents/{employee_id}/transition")
+def enterprise_worker_transition(
+    employee_id: UUID, data: EnterpriseWorkerTransition,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).worker_transition(
+        actor=actor, employee_id=str(employee_id), state=data.state,
+        approval_id=str(data.approval_id), reason=data.reason,
+        expires_at=data.expires_at))
+
+
+@router.post("/enterprise/marketplace/{asset_id}/lifecycle/approval")
+def enterprise_asset_retirement_approval(
+    asset_id: UUID, data: EnterpriseAssetLifecycleApproval,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return issue_enterprise_approval(
+        repositories, actor, "enterprise:asset:" + str(asset_id) + ":" + data.target_state)
+
+
+@router.post("/enterprise/marketplace/{asset_id}/lifecycle")
+def enterprise_asset_retirement(
+    asset_id: UUID, data: EnterpriseAssetLifecycle,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).asset_retire(
+        actor=actor, asset_id=str(asset_id), target_state=data.target_state,
+        approval_id=str(data.approval_id), reason=data.reason))
