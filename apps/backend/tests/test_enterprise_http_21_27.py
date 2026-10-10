@@ -250,3 +250,24 @@ def test_published_asset_retirement_halts_new_usage_without_erasing_history(case
           "evidence_ref": "test:post-retirement"}, expected=403)
     listed = client.get("/v1/operations/enterprise/marketplace", headers=founder).json()
     assert next(a["status"] for a in listed if str(a["id"]) == item["id"]) == "deprecated"
+
+
+def test_digital_twin_uses_frozen_snapshot_not_live_workforce(case):
+    client, headers, info = case
+    founder = headers["founder"]
+    snapshot = post(client, "/v1/meta/snapshots", founder)
+    historical = info["db"].execute(
+        "SELECT metrics FROM ago_executive_snapshots WHERE tenant_id=%s AND id=%s",
+        (info["tenant"], snapshot["id"]),
+    ).fetchone()["metrics"]["organization_observation"]["ai_employees"]
+    dept = department(client, founder)
+    employee(client, founder, dept)
+    scenario = post(client, "/v1/operations/enterprise/twin", founder, {
+        "snapshot_id": snapshot["id"], "actions": 5,
+        "cost_per_action": "1", "budget": "20", "failure_pct": 10,
+        "hiring": 0, "layoffs": 0, "market_shock_pct": 0,
+    })
+    assert scenario["snapshot_workers"] == historical
+    assert scenario["hypothetical_workers"] == historical
+    assert scenario["snapshot_source"] == "immutable_executive_metrics"
+    assert scenario["read_only"] is True and scenario["applied"] is False
