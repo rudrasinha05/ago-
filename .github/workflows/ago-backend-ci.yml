@@ -1,4 +1,4 @@
-name: AGO Backend M1-M6 CI
+name: AGO Backend M1-M7 CI
 on:
   push:
     branches: [develop]
@@ -11,7 +11,7 @@ permissions:
   statuses: write
 
 jobs:
-  foundation-through-m6:
+  foundation-through-m7:
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +72,6 @@ jobs:
         run: |
           if [ "$RUN_STATUS" = "success" ]; then STATE=success; else STATE=failure; fi
           gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
-            -f state="$STATE" -f context="ago/m1-m6/py${{ matrix.python }}/i=$INSTALL_RESULT/d=$MIGRATION_RESULT/l=$LINT_RESULT/t=$TEST_RESULT" \
+            -f state="$STATE" -f context="ago/m1-m7/py${{ matrix.python }}/i=$INSTALL_RESULT/d=$MIGRATION_RESULT/l=$LINT_RESULT/t=$TEST_RESULT" \
             -f description="CI $RUN_STATUS install:$INSTALL_RESULT db:$MIGRATION_RESULT lint:$LINT_RESULT tests:$TEST_RESULT" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/$CI_RUN_ID"
