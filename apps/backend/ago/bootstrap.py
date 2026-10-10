@@ -15,6 +15,14 @@ from ago.security_controls import SecurityControls
 
 
 FOUNDER_PERMISSIONS = (
+    "meta:dna:propose",
+    "meta:dna:read",
+    "meta:dna:activate",
+    "meta:observe",
+    "meta:read",
+    "meta:simulate",
+    "meta:recommend",
+    "meta:finalize",
     "economy:manage",
     "economy:consume",
     "insights:read",
