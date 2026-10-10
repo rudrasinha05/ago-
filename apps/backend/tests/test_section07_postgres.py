@@ -77,6 +77,9 @@ def test_reviewed_graph_cycles_bounds_direction_cache_invalidation_and_tenant(ca
         DatabaseStore(info['db']).graph(tenant_id=str(uuid4()), root_id=nodes[0])
     if os.getenv('AGO_S7_REAL_REDIS') == 'true':
         import redis
+        # Rejected-node creation/review also invalidates the tenant source version.
+        current = client.get(url, headers=headers['founder'], params={'depth': 4}).json()
+        assert len(current['nodes']) == 4 and current['version'] > graph['version']
         cache = redis.Redis.from_url(os.environ['AGO_GRAPH_REDIS_URL'])
         keys = list(cache.scan_iter(f"ago:graph:v1:{info['tenant']}:*"))
         assert keys and all(0 < cache.ttl(key) <= 60 for key in keys)
@@ -128,9 +131,16 @@ def test_private_documents_auth_corruption_backup_restore_and_retention(case, tm
     url = '/v1/knowledge/documents/' + identifier
     assert client.get(url).status_code == 401
     downloaded = client.get(url, headers=headers['founder'])
-    assert downloaded.content == content and downloaded.headers['cache-control'] == 'no-store'
+    assert downloaded.content == content
+    assert downloaded.headers['cache-control'] == 'no-store, private'
     assert downloaded.headers['content-type'] == 'application/octet-stream'
     store = DatabaseStore(info['db'])
+    import psycopg
+    for query in ('UPDATE ago_document_objects SET filename=\'rewritten\' WHERE id=%s',
+                  'DELETE FROM ago_document_objects WHERE id=%s'):
+        with pytest.raises(psycopg.errors.RaiseException):
+            with info['db'].transaction():
+                info['db'].execute(query, (identifier,))
     with pytest.raises(LookupError):
         store.download(tenant_id=str(uuid4()), object_id=identifier)
     backup = tmp_path.parent / ('backup-' + str(uuid4()))
