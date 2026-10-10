@@ -708,3 +708,116 @@ def enterprise_asset_retirement(
         EnterpriseOperationsStorePort).asset_retire(
         actor=actor, asset_id=str(asset_id), target_state=data.target_state,
         approval_id=str(data.approval_id), reason=data.reason))
+
+
+# Sections 22-23: escalation and evidence-backed planning feedback.
+class AssistanceInput(StrictInput):
+    employee_id: UUID
+    task_id: UUID | None = None
+    reason: Literal["overload", "low_confidence", "missing_permission",
+                    "dependency", "safety_risk", "assistance"]
+    severity: Literal["advisory", "blocking"]
+    summary: str = Field(min_length=1, max_length=1500)
+    evidence_ref: str = Field(min_length=1, max_length=1024)
+
+
+class AssistanceDecision(StrictInput):
+    approval_id: UUID
+    outcome: Literal["resolved", "rejected"]
+    explanation: str = Field(min_length=1, max_length=1500)
+
+
+class PlanTaskEvidence(StrictInput):
+    approval_id: UUID
+    evidence_ref: str = Field(min_length=1, max_length=1024)
+
+
+@router.post("/enterprise/assistance")
+def enterprise_request_assistance(
+    data: AssistanceInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).request_assistance(
+        actor=actor, employee_id=str(data.employee_id),
+        task_id=str(data.task_id) if data.task_id else None,
+        reason=data.reason, severity=data.severity,
+        summary=data.summary, evidence_ref=data.evidence_ref))
+
+
+@router.get("/enterprise/assistance")
+def enterprise_assistance_list(
+    employee_id: UUID | None = None,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).assistance(
+        tenant_id=actor.tenant_id,
+        employee_id=str(employee_id) if employee_id else None))
+
+
+@router.post("/enterprise/assistance/{request_id}/approval")
+def enterprise_assistance_approval(
+    request_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return issue_enterprise_approval(
+        repositories, actor, "enterprise:help:resolve:" + str(request_id))
+
+
+@router.post("/enterprise/assistance/{request_id}/resolve")
+def enterprise_assistance_resolution(
+    request_id: UUID, data: AssistanceDecision,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).resolve_assistance(
+        actor=actor, request_id=str(request_id),
+        approval_id=str(data.approval_id), outcome=data.outcome,
+        explanation=data.explanation))
+
+
+@router.post("/enterprise/plans/{horizon_plan_id}/tasks/{task_id}/approval")
+def enterprise_plan_task_approval(
+    horizon_plan_id: UUID, task_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return issue_enterprise_approval(
+        repositories, actor, "enterprise:plan-task:" +
+        str(horizon_plan_id) + ":" + str(task_id))
+
+
+@router.post("/enterprise/plans/{horizon_plan_id}/tasks/{task_id}/link")
+def enterprise_plan_task_link(
+    horizon_plan_id: UUID, task_id: UUID, data: PlanTaskEvidence,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).link_plan_task(
+        actor=actor, horizon_plan_id=str(horizon_plan_id),
+        task_id=str(task_id), approval_id=str(data.approval_id),
+        evidence_ref=data.evidence_ref))
+
+
+@router.get("/enterprise/plans/{horizon_plan_id}/feedback")
+def enterprise_plan_feedback(
+    horizon_plan_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).plan_feedback(
+        tenant_id=actor.tenant_id, horizon_plan_id=str(horizon_plan_id)))
