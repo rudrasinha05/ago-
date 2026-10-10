@@ -472,6 +472,18 @@
           "arguments": "self, *, tenant_id: str, horizon_plan_id: str",
           "returns": "dict"
         },
+        "normalize_organization_intent": {
+          "arguments": "self, *, change_kind: str, target_id: str, reason: str, department_id: str | None=None, name: str | None=None, manager_id: str | None=None, role_level: int | None=None",
+          "returns": "dict"
+        },
+        "record_organization_intent": {
+          "arguments": "self, *, actor: Principal, approval_id: str, payload: dict, intent_digest: str",
+          "returns": "dict"
+        },
+        "organization_intents": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
         "organization_change": {
           "arguments": "self, *, actor: Principal, change_kind: str, target_id: str, approval_id: str, reason: str, department_id: str | None=None, name: str | None=None, manager_id: str | None=None, role_level: int | None=None",
           "returns": "dict"
