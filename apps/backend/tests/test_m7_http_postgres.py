@@ -240,3 +240,55 @@ def test_meta_brain_detects_real_backlog_qa_and_budget_risk(case):
     )
     assert len(recommendations) == 3
     assert {r["category"] for r in recommendations} == set(snapshot["risk_flags"])
+
+
+def test_cross_tenant_evidence_isolation_and_immediate_rbac_revocation(case):
+    from ago.bootstrap import bootstrap as new_tenant
+    from ago.security_controls import SecurityControls
+
+    client, headers, info = case
+    source = post(client, "/v1/meta/snapshots", headers["founder"])
+    other, _ = new_tenant(
+        info["db"], organization=f"Other-{uuid4()}",
+        email="outsider@example.test", password="outsider-password-123",
+    )
+    outsider = info["login"](
+        "outsider@example.test", "outsider-password-123", other,
+    )
+    assert client.get("/v1/meta/snapshots", headers=outsider).json() == []
+    assert client.get(
+        f"/v1/meta/snapshots/{source['id']}", headers=outsider,
+    ).status_code == 404
+    post(client, f"/v1/meta/snapshots/{source['id']}/recommendations",
+         outsider, expected=404)
+    assert client.get("/v1/meta/brief", headers=outsider).json()["status"] == (
+        "needs_snapshot"
+    )
+    SecurityControls(info["db"]).revoke_grant(
+        info["tenant"], "founder", "meta:observe",
+    )
+    post(client, "/v1/meta/snapshots", headers["founder"], expected=403)
+
+
+def test_rejected_dna_cannot_be_activated(case):
+    client, headers, info = case
+    candidate = post(client, "/v1/meta/dna", headers["founder"], {
+        "profile": profile(),
+        "rationale": "Not automatically allowed to alter team operating thresholds.",
+    })
+    decide(client, headers["reviewer"], candidate["approval_id"], approve=False)
+    rejected = post(
+        client, f"/v1/meta/dna/{candidate['id']}/reconcile",
+        headers["founder"],
+    )
+    assert rejected["status"] == "rejected"
+    assert client.get("/v1/meta/dna/active", headers=headers["founder"]).json()[
+        "source"
+    ] == "baseline"
+    post(client, f"/v1/meta/dna/{candidate['id']}/reconcile",
+         headers["founder"], expected=403)
+    invalid = client.post("/v1/meta/dna", headers=headers["founder"], json={
+        "profile": {**profile(), "disable_governance": True},
+        "rationale": "Unknown key",
+    })
+    assert invalid.status_code == 422
