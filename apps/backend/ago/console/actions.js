@@ -609,5 +609,48 @@ export async function handleAction(key, id, ctx) {
       },"Generate proposals");
     return;
   }
+  if (key === "task-request-approval") {
+    id=uuid(id);
+    confirmation(ctx,"Request independent task approval",
+      "Create one exact M2 approval for this proposed task. It cannot execute until another authorized human approves.",
+      async()=>{
+        const out=await api.request(
+          "/v1/console/tasks/"+id+"/request-approval",{method:"POST"});
+        return "Approval request "+out.approval_id.slice(0,8)+"… created.";
+      },"Request review");
+    return;
+  }
+  if (key === "agent-run") {
+    id=uuid(id);
+    confirmation(ctx,"Run approved AI employee task",
+      "Only an independently approved task with a registered handler can execute. The output requires separate human QA.",
+      async()=>{
+        const out=await api.request("/v1/agents/tasks/"+id+"/run",{
+          method:"POST",timeoutMs:20000,
+        });
+        return out.status==="completed" ?
+          "AI task completed; independent QA is now required." : "AI task status: "+out.status;
+      },"Run approved AI");
+    return;
+  }
+  if (key === "qa-review") {
+    id=uuid(id);
+    openDialog(ctx,{
+      title:"Independent QA outcome",
+      description:"Review the completed task's actual evidence. This verdict is immutable and cannot be submitted by its executor.",
+      button:"Record QA verdict",
+      fields:[
+        {name:"verdict",label:"Quality verdict",type:"select",
+          options:[choose("pass","Pass"),choose("fail","Fail")]},
+        {name:"evidence",label:"Review evidence and rationale",type:"textarea",
+          maxLength:5000,placeholder:"Describe what was inspected and why…"},
+      ],
+      onSubmit:async v=>{
+        await api.request("/v1/tasks/"+id+"/review",{method:"POST",body:v});
+        return "Independent QA verdict recorded.";
+      },
+    });
+    return;
+  }
   throw new Error("The requested action is not supported.");
 }
