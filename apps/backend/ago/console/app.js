@@ -102,6 +102,7 @@ function endpoints(page) {
       ["rules","/v1/tools/automation/rules"],
       ["runs","/v1/tools/runs"],
       ["tasks","/v1/tasks"],
+      ["approvals","/v1/governance/approvals"],
     ],
     calendar: [["events", dateRange()]],
     twin: [
