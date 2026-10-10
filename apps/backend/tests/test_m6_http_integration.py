@@ -200,3 +200,27 @@ def test_council_needs_two_humans_and_m2_approval(case):
          {"vote": "yes", "reason": "Late replay"}, expected=403)
     motions = client.get("/v1/council/motions", headers=headers["founder"])
     assert motions.status_code == 200 and motions.json()[0]["yes_votes"] == 2
+
+
+def test_m6_records_remain_tenant_scoped(case):
+    client, headers, ids = case
+    node = post(client, "/v1/knowledge/nodes", headers["founder"], {
+        "kind": "fact", "label": "Private research",
+        "statement": "A private internal observation",
+        "source_ref": "internal:private-evidence",
+    })
+    other_tenant, _ = bootstrap(
+        ids["db"], organization=f"External-{uuid4()}",
+        email="outside@example.test", password="outside-password-123",
+    )
+    login = client.post("/v1/sessions", json={
+        "tenant_id": other_tenant, "email": "outside@example.test",
+        "password": "outside-password-123",
+    })
+    assert login.status_code == 200, login.text
+    outsider = {"Authorization": "Bearer " + login.json()["access_token"]}
+    assert client.get("/v1/knowledge/pending", headers=outsider).json() == []
+    assert client.get("/v1/operations/handoffs", headers=outsider).json() == []
+    assert client.get("/v1/council/motions", headers=outsider).json() == []
+    post(client, f"/v1/knowledge/nodes/{node['id']}/review", outsider,
+         {"approve": True, "note": "Cross tenant"}, expected=404)
