@@ -1,6 +1,6 @@
 # AGO — Artificial General Organization
 
-AGO is a **governed, multi-tenant AI-native organizational operating system**, currently implemented as a modular Python/FastAPI backend with PostgreSQL. Its milestone foundations M1–M8 are present; **this is not a production-ready autonomous organization**.
+AGO is a **governed, multi-tenant AI-native organizational operating system**, currently implemented as a modular Python/FastAPI backend, PostgreSQL and a first-party web console. Its milestone foundations M1–M9 are present; **this is not a production-ready autonomous organization**.
 
 ## Implemented backend milestones
 - **M1 — Enterprise platform foundation:** configuration, logging, DI, outbox/inbox events, identity/RBAC, plugins, scheduler, observability.
@@ -13,6 +13,8 @@ AGO is a **governed, multi-tenant AI-native organizational operating system**, c
 - **M8 — Enterprise Tools & Department Automation:** independent human-reviewed read-only enterprise tool enrollment, single-use M2-approved execution, provenance-based departmental triggers, bounded optional HTTPS telemetry, immutable evidence and operator-controlled rollback/reconciliation.
 
 **Completed backend work is not equivalent to self-improving AGI, autonomous consequential actions, hosted UI, live external tools, production security or release readiness.** The larger enterprise architecture remains in `docs/PROJECT_HANDOVER.md` and `docs/M3_M5_IMPLEMENTATION_SCOPE.md`.
+
+- **M9 — Control Center & Digital Twin:** responsive same-origin console, secure tab-memory sessions, real governance/operations UI, role-based actions, evidence-backed what-if assessments and independently protected task workflows.
 
 ## Developer quick start
 Requires Python 3.11+ and PostgreSQL 15+:
@@ -28,14 +30,16 @@ python -m pytest -q
 python -m uvicorn ago.main:app --reload
 ```
 
-API documentation: `http://127.0.0.1:8000/docs`. The M3–M8 APIs are under `/v1/brain`, `/v1/agents`, `/v1/insights`, `/v1/operations`, `/v1/knowledge`, `/v1/council`, `/v1/meta` and `/v1/tools`.
+Open the AGO Control Center at **`http://127.0.0.1:8000/console/`** after starting Uvicorn and signing in with an existing tenant UUID and credentials. No npm is needed to serve the web console. Optional JavaScript tests use `node --test tests_web/console.test.mjs` (Node 22+).
 
-CI acceptance: [M3–M5 evidence](docs/reports/M3_M5_FINAL_ACCEPTANCE.md). M6 CI evidence: [155-test acceptance](docs/reports/M6_FINAL_ACCEPTANCE.md). [M7 CI evidence: 175-test acceptance](docs/reports/M7_FINAL_ACCEPTANCE.md). [M8 CI evidence: 202-test acceptance](docs/reports/M8_FINAL_ACCEPTANCE.md). Operator setup: [M6 Guide](docs/reports/M6_OPERATOR_GUIDE.md), [M7 Guide](docs/reports/M7_OPERATOR_GUIDE.md) and [M8 Guide](docs/reports/M8_OPERATOR_GUIDE.md).
+API documentation: `http://127.0.0.1:8000/docs`. The M3–M9 APIs are under `/v1/brain`, `/v1/agents`, `/v1/insights`, `/v1/operations`, `/v1/knowledge`, `/v1/council`, `/v1/meta`, `/v1/tools` and `/v1/console`.
+
+CI acceptance: [M3–M5 evidence](docs/reports/M3_M5_FINAL_ACCEPTANCE.md). M6 CI evidence: [155-test acceptance](docs/reports/M6_FINAL_ACCEPTANCE.md). [M7 CI evidence: 175-test acceptance](docs/reports/M7_FINAL_ACCEPTANCE.md). [M8 CI evidence: 202-test acceptance](docs/reports/M8_FINAL_ACCEPTANCE.md). Operator setup: [M6 Guide](docs/reports/M6_OPERATOR_GUIDE.md), [M7 Guide](docs/reports/M7_OPERATOR_GUIDE.md) and [M8 Guide](docs/reports/M8_OPERATOR_GUIDE.md). M9: [212 Python + 13 JS test evidence](docs/reports/M9_FINAL_ACCEPTANCE.md) and [control center operator guide](docs/reports/M9_OPERATOR_GUIDE.md).
 
 A fresh tenant must be provisioned by the **local operator** using `python -m ago.bootstrap`; an independent human reviewer must be provisioned using `python -m ago.provision`. See `docs/reports/M3_M5_OPERATOR_AND_ACCEPTANCE.md` for details.
 
 ## CI
-The GitHub Actions workflow `.github/workflows/ago-backend-ci.yml` uses disposable PostgreSQL and validates migrations, Ruff and the complete pytest suite on **Python 3.11 and 3.14**. Do not use production DB credentials for tests.
+The GitHub Actions workflow `.github/workflows/ago-backend-ci.yml` uses disposable PostgreSQL and validates migrations, Ruff, JavaScript syntax/Node 22 UI tests, and the complete pytest suite on **Python 3.11 and 3.14**. Do not use production DB credentials for tests.
 
 ## Governance and safety
 Nothing invokes consequential external tools by default. High-impact work requires tenant-scoped human authorization; strategic plan consent never replaces per-task approval. Optional paid model use is disabled unless explicitly enabled and separately billed by the provider; AGO credit units are only an internal quota and **not actual currency**.
