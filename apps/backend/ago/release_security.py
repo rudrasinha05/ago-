@@ -6,6 +6,7 @@ configured TLS gateway, private egress policies or an independent security audit
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import os
 import re
 from dataclasses import dataclass
@@ -50,11 +51,18 @@ class ReleasePolicy:
 
 
 def validate_production_config(hosts: tuple[str, ...]) -> None:
-    if not hosts or len(set(hosts)) != len(hosts) or not all(
-        _HOST.fullmatch(name) and not name.endswith((".local", ".internal", ".test"))
-        for name in hosts
-    ):
+    if not hosts or len(set(hosts)) != len(hosts):
         raise ValueError("Production requires explicit safe public AGO_ALLOWED_HOSTS")
+    for name in hosts:
+        if not _HOST.fullmatch(name) or name.endswith(
+            (".local", ".internal", ".test", ".localhost")
+        ):
+            raise ValueError("Production requires explicit safe public AGO_ALLOWED_HOSTS")
+        try:
+            ipaddress.ip_address(name)
+        except ValueError:
+            continue
+        raise ValueError("Production IP literals are not accepted as public hosts")
     secret = os.getenv("AGO_SESSION_SECRET", "")
     if (
         len(secret.encode()) < 48 or len(set(secret)) < 15
