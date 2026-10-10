@@ -71,3 +71,21 @@ def post(client, path, headers, body=None, expected=200):
     response = client.post(path, json=body or {}, headers=headers)
     assert response.status_code == expected, (path, response.status_code, response.text)
     return response.json()
+
+
+def test_handoff_reviewer_boundary(case):
+    client, headers, ids = case
+    request = post(client, "/v1/operations/handoffs", headers["founder"], {
+        "sender_department_id": ids["executive"],
+        "receiver_department_id": ids["research"],
+        "assignee_id": ids["reviewer1"],
+        "title": "Research review",
+        "brief": "Review the research material",
+        "operation_key": "handoff-test",
+    })
+    url = f"/v1/operations/handoffs/{request['id']}/transition"
+    data = {"decision": "accepted", "note": "Acknowledged"}
+    post(client, url, headers["founder"], data, expected=403)
+    post(client, url, headers["reviewer2"], data, expected=403)
+    post(client, url, headers["reviewer1"], data)
+    post(client, url, headers["reviewer1"], data, expected=403)
