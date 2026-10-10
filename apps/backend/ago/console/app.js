@@ -220,7 +220,6 @@ form.addEventListener("submit", async event => {
       : String(error.message || "Unable to sign in");
     errorArea.hidden = false;
   } finally {
-    password.replaceAll(/./g, ""); // This reference is never persisted.
     submit.disabled = false;
   }
 });
