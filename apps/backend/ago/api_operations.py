@@ -821,3 +821,57 @@ def enterprise_plan_feedback(
     return enterprise_call(lambda: repositories.resolve(
         EnterpriseOperationsStorePort).plan_feedback(
         tenant_id=actor.tenant_id, horizon_plan_id=str(horizon_plan_id)))
+
+
+# Section 21: auditable, independently approved organizational lifecycle.
+class EnterpriseOrganizationApproval(StrictInput):
+    change_kind: Literal["hired","promoted","terminated","created","closed"]
+    target_id: UUID
+
+
+class EnterpriseOrganizationChange(EnterpriseOrganizationApproval):
+    approval_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
+    department_id: UUID | None = None
+    name: str | None = Field(default=None, max_length=200)
+    manager_id: UUID | None = None
+    role_level: int | None = Field(default=None, ge=1, le=5)
+
+
+@router.post("/enterprise/organization/approval")
+def enterprise_organization_approval(
+    data: EnterpriseOrganizationApproval,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    entity = ("department" if data.change_kind in ("created","closed") else "hr")
+    return issue_enterprise_approval(
+        repositories, actor,
+        "enterprise:" + entity + ":" + data.change_kind + ":" + str(data.target_id))
+
+
+@router.post("/enterprise/organization/apply")
+def enterprise_organization_change(
+    data: EnterpriseOrganizationChange,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).organization_change(
+        actor=actor, change_kind=data.change_kind, target_id=str(data.target_id),
+        approval_id=str(data.approval_id), reason=data.reason,
+        department_id=str(data.department_id) if data.department_id else None,
+        name=data.name, manager_id=str(data.manager_id) if data.manager_id else None,
+        role_level=data.role_level))
+
+
+@router.get("/enterprise/organization/history")
+def enterprise_organization_history(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).organization_history(
+        tenant_id=actor.tenant_id)
