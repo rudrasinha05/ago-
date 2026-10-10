@@ -350,6 +350,19 @@ class EnterpriseOperationsStore:
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
             self._approval(actor, approval_id, "enterprise:budget:" + identifier)
+            previous = self.connection.execute(
+                """SELECT id,scope_kind,scope_id,approved_ceiling,currency
+                   FROM ago_budget_envelopes WHERE tenant_id=%s AND approval_id=%s""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            if previous:
+                if (str(previous["id"]) != identifier or previous["scope_kind"] != scope_kind
+                    or (str(previous["scope_id"]) if previous["scope_id"] else None) != (
+                        str(UUID(scope_id)) if scope_id else None)
+                    or previous["approved_ceiling"] != value or previous["currency"] != currency):
+                    raise ValueError("Approval already bound to a different budget")
+                return {"id": identifier, "ceiling": str(value),
+                        "scope_kind": scope_kind, "idempotent": True}
             if scope_id:
                 table = "ago_departments" if scope_kind == "department" else "ago_employees"
                 target = self.connection.execute(
@@ -480,6 +493,20 @@ class EnterpriseOperationsStore:
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
             self._approval(actor, approval_id, "enterprise:consume:" + asset_id)
+            previous = self.connection.execute(
+                """SELECT id,asset_id,consumer_department_id,evidence_ref
+                   FROM ago_asset_consumptions
+                   WHERE tenant_id=%s AND approval_id=%s""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            if previous:
+                if (str(previous["asset_id"]) != str(UUID(asset_id))
+                    or str(previous["consumer_department_id"]) != str(UUID(department_id))
+                    or previous["evidence_ref"] != evidence_ref.strip()):
+                    raise ValueError("Approval already consumed by different immutable asset use")
+                return {"id": str(previous["id"]), "asset_id": asset_id,
+                        "status": "recorded", "execution_granted": False,
+                        "idempotent": True}
             if not self.connection.execute(
                 """SELECT 1 FROM ago_marketplace_assets
                    WHERE tenant_id=%s AND id=%s AND status='published'""",
@@ -647,6 +674,18 @@ class EnterpriseOperationsStore:
             ).fetchone()
             if not row:
                 raise LookupError("Asset missing")
+            previous = self.connection.execute(
+                """SELECT id,asset_id,target_state,reason FROM ago_marketplace_lifecycle_events
+                   WHERE tenant_id=%s AND approval_id=%s""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            if previous:
+                if (str(previous["asset_id"]) != asset_id
+                    or previous["target_state"] != target_state
+                    or previous["reason"] != reason.strip()):
+                    raise ValueError("Approval already used for a different lifecycle event")
+                return {"id": asset_id, "status": target_state,
+                        "event_id": str(previous["id"]), "idempotent": True}
             if str(row["publisher_id"]) != actor.subject or (
                 (row["status"] == "published" and target_state not in ("deprecated", "revoked"))
                 or (row["status"] == "deprecated" and target_state != "revoked")
