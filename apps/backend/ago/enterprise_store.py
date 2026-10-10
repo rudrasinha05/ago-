@@ -411,6 +411,37 @@ class EnterpriseOperationsStore:
             (str(UUID(tenant_id)),),
         ).fetchall()]
 
+    def _verify_marketplace_dependencies(self, *, tenant_id: str,
+                                         manifest: dict, require_published: bool) -> None:
+        """Fail closed on cross-tenant, expired or incompatible asset versions."""
+        dependencies = manifest.get("dependencies", [])
+        if not isinstance(dependencies, list) or len(dependencies) > 25:
+            raise ValueError("Bounded dependency manifest list required")
+        seen: set[str] = set()
+        for item in dependencies:
+            if not isinstance(item, dict) or set(item) != {"asset_id", "version", "digest"}:
+                raise ValueError("Dependency requires exact asset ID, version and digest")
+            identifier = str(UUID(item["asset_id"]))
+            if identifier in seen:
+                raise ValueError("Duplicate asset dependency")
+            seen.add(identifier)
+            version, digest = item["version"], item["digest"]
+            if (not isinstance(version, str) or len(version.split(".")) != 3
+                or not all(part.isdigit() for part in version.split("."))):
+                raise ValueError("Unsupported dependency version")
+            if (not isinstance(digest, str) or len(digest) != 64
+                or any(char not in "0123456789abcdef" for char in digest)):
+                raise ValueError("Invalid dependency content digest")
+            if require_published:
+                row = self.connection.execute(
+                    """SELECT version,digest,status FROM ago_marketplace_assets
+                       WHERE tenant_id=%s AND id=%s""",
+                    (tenant_id, identifier),
+                ).fetchone()
+                if (not row or row["status"] != "published"
+                    or row["version"] != version or row["digest"] != digest):
+                    raise PermissionError("Dependency not published or version/digest mismatch")
+
     def asset_draft(self, *, actor: Principal, department_id: str, name: str,
                     kind: str, version: str, license_id: str,
                     digest: str, manifest: dict) -> dict:
@@ -419,6 +450,8 @@ class EnterpriseOperationsStore:
         identity.validate()
         if not isinstance(manifest, dict) or len(json.dumps(manifest)) > 16000:
             raise ValueError("Bounded asset manifest required")
+        self._verify_marketplace_dependencies(
+            tenant_id=actor.tenant_id, manifest=manifest, require_published=False)
         identifier = str(uuid4())
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
@@ -480,7 +513,7 @@ class EnterpriseOperationsStore:
     def asset_publish(self, *, actor: Principal, asset_id: str) -> dict:
         with self.connection.transaction():
             asset = self.connection.execute(
-                """SELECT approval_id,publisher_id,status FROM ago_marketplace_assets
+                """SELECT approval_id,publisher_id,status,manifest FROM ago_marketplace_assets
                    WHERE tenant_id=%s AND id=%s FOR UPDATE""",
                 (actor.tenant_id, str(UUID(asset_id))),
             ).fetchone()
@@ -490,6 +523,9 @@ class EnterpriseOperationsStore:
                 raise PermissionError("Only publisher can reconcile proposed asset")
             self._approval(actor, str(asset["approval_id"]),
                            "enterprise:publish:" + asset_id)
+            self._verify_marketplace_dependencies(
+                tenant_id=actor.tenant_id, manifest=asset["manifest"],
+                require_published=True)
             self.connection.execute(
                 """UPDATE ago_marketplace_assets SET status='published'
                    WHERE tenant_id=%s AND id=%s""",
@@ -519,12 +555,16 @@ class EnterpriseOperationsStore:
                 return {"id": str(previous["id"]), "asset_id": asset_id,
                         "status": "recorded", "execution_granted": False,
                         "idempotent": True}
-            if not self.connection.execute(
-                """SELECT 1 FROM ago_marketplace_assets
+            selected_asset = self.connection.execute(
+                """SELECT manifest FROM ago_marketplace_assets
                    WHERE tenant_id=%s AND id=%s AND status='published'""",
                 (actor.tenant_id, str(UUID(asset_id))),
-            ).fetchone():
+            ).fetchone()
+            if not selected_asset:
                 raise PermissionError("Only active tenant-owned published asset may be used")
+            self._verify_marketplace_dependencies(
+                tenant_id=actor.tenant_id, manifest=selected_asset["manifest"],
+                require_published=True)
             if not self.connection.execute(
                 """SELECT 1 FROM ago_departments WHERE tenant_id=%s AND id=%s""",
                 (actor.tenant_id, str(UUID(department_id))),
