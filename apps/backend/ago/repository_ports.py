@@ -791,6 +791,12 @@ class EnterpriseOperationsStorePort(Protocol):
 
     def organization_intents(self, *, tenant_id: str) -> list[dict]: ...
 
+    def capacity_limits(self, *, tenant_id: str) -> dict: ...
+
+    def set_capacity(self, *, actor: Principal, approval_id: str,
+                     scope_kind: str, scope_id: str | None, max_running: int,
+                     rationale: str) -> dict: ...
+
     def organization_change(self, *, actor: Principal, change_kind: str,
                             target_id: str, approval_id: str, reason: str,
                             department_id: str | None = None,
