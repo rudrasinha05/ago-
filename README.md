@@ -67,6 +67,17 @@ remain valid without npm. See [Section 4 architecture](docs/architecture/SECTION
 and [acceptance evidence](docs/reports/SECTION04_FINAL_ACCEPTANCE.md).
 This scaffold does not claim full frontend parity or separately deployed services.
 
+## Architecture section 5 — Backend architecture
+
+FastAPI adapters consume typed ports from one request-local repository scope.
+Application services orchestrate transactions through context-owned repositories;
+pure domain values have no database/framework dependencies. Strict inputs reject
+unknown authority fields and coerced booleans; business errors preserve HTTP
+status/detail with safe correlation metadata. See
+[Section 5 contracts](docs/architecture/SECTION_05_BACKEND_ARCHITECTURE.md) and
+[acceptance evidence](docs/reports/SECTION05_FINAL_ACCEPTANCE.md).
+Run `python scripts/check_backend_architecture.py` for the source guard.
+
 ## Completed architecture section: 14 — Module Dependency Rules
 
 The original 1–34 architecture checklist is tracked **separately** from

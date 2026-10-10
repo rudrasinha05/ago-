@@ -2,27 +2,20 @@
 
 Credits are internal accounting units, not real-world money or payments.
 """
+
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from uuid import UUID, uuid4
 
-
-def credits(value) -> Decimal:
-    try:
-        amount = Decimal(str(value))
-    except (InvalidOperation, ValueError) as exc:
-        raise ValueError("Invalid credit amount") from exc
-    if not amount.is_finite() or amount <= 0 or amount > 1_000_000_000:
-        raise ValueError("Credit amount out of range")
-    if amount.as_tuple().exponent < -4:
-        raise ValueError("At most four decimal places supported")
-    return amount
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
+from ago.credit_domain import credits as credits
 
 
 class CreditBudget:
-    def __init__(self, db):
+    def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
+        self.repositories = repositories or RepositoryScope(db)
 
     def configure(self, *, tenant_id: str, ceiling) -> None:
         UUID(tenant_id)
@@ -43,8 +36,9 @@ class CreditBudget:
             if row is None or Decimal(row["ceiling"]) != cap:
                 raise PermissionError("Cannot set ceiling below consumed credits")
 
-    def charge(self, *, tenant_id: str, actor_id: str, operation_key: str,
-               amount, category: str) -> dict:
+    def charge(
+        self, *, tenant_id: str, actor_id: str, operation_key: str, amount, category: str
+    ) -> dict:
         UUID(tenant_id)
         UUID(actor_id)
         qty = credits(amount)
@@ -67,8 +61,11 @@ class CreditBudget:
                 (tenant_id, operation_key),
             ).fetchone()
             if existing:
-                if (Decimal(existing["amount"]) != qty or existing["category"] != category
-                        or str(existing["actor_id"]) != actor_id):
+                if (
+                    Decimal(existing["amount"]) != qty
+                    or existing["category"] != category
+                    or str(existing["actor_id"]) != actor_id
+                ):
                     raise PermissionError("Operation key cannot be reused differently")
                 return {"id": str(existing["id"]), "charged": False}
             if Decimal(budget["consumed"]) + qty > Decimal(budget["ceiling"]):

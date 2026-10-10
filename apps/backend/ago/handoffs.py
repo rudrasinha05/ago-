@@ -1,23 +1,37 @@
 """M6 tenant-scoped departmental handoffs. No external action execution."""
+
 from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal
 from ago.security_controls import SecurityControls
 
 
 class HandoffStore:
-    def __init__(self, db):
+    def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
+        self.repositories = repositories or RepositoryScope(db)
 
     def request(
-        self, *, actor: Principal, sender_department_id: str,
-        receiver_department_id: str, assignee_id: str,
-        title: str, brief: str, operation_key: str,
+        self,
+        *,
+        actor: Principal,
+        sender_department_id: str,
+        receiver_department_id: str,
+        assignee_id: str,
+        title: str,
+        brief: str,
+        operation_key: str,
     ) -> str:
-        for item in (actor.tenant_id, actor.subject, sender_department_id,
-                     receiver_department_id, assignee_id):
+        for item in (
+            actor.tenant_id,
+            actor.subject,
+            sender_department_id,
+            receiver_department_id,
+            assignee_id,
+        ):
             UUID(item)
         if sender_department_id == receiver_department_id:
             raise ValueError("Handoff requires distinct departments")
@@ -33,12 +47,22 @@ class HandoffStore:
                 (actor.tenant_id, operation_key),
             ).fetchone()
             if existing is not None:
-                expected = (sender_department_id, receiver_department_id, assignee_id,
-                            actor.subject, title.strip(), brief.strip())
-                recorded = (str(existing["sender_department_id"]),
-                            str(existing["receiver_department_id"]),
-                            str(existing["assignee_id"]), str(existing["requester_id"]),
-                            existing["title"], existing["brief"])
+                expected = (
+                    sender_department_id,
+                    receiver_department_id,
+                    assignee_id,
+                    actor.subject,
+                    title.strip(),
+                    brief.strip(),
+                )
+                recorded = (
+                    str(existing["sender_department_id"]),
+                    str(existing["receiver_department_id"]),
+                    str(existing["assignee_id"]),
+                    str(existing["requester_id"]),
+                    existing["title"],
+                    existing["brief"],
+                )
                 if expected != recorded:
                     raise PermissionError("Idempotency key used for another handoff")
                 return str(existing["id"])
@@ -52,8 +76,11 @@ class HandoffStore:
                    WHERE tenant_id=%s AND id=%s""",
                 (actor.tenant_id, assignee_id),
             ).fetchone()
-            if (author is None or author["kind"] != "human"
-                    or str(author["department_id"]) != sender_department_id):
+            if (
+                author is None
+                or author["kind"] != "human"
+                or str(author["department_id"]) != sender_department_id
+            ):
                 raise PermissionError("Human requester must belong to sending department")
             if target is None or str(target["department_id"]) != receiver_department_id:
                 raise PermissionError("Assignee must belong to receiving department")
@@ -63,9 +90,17 @@ class HandoffStore:
                    (id,tenant_id,requester_id,sender_department_id,
                     receiver_department_id,assignee_id,title,brief,operation_key)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (handoff_id, actor.tenant_id, actor.subject, sender_department_id,
-                 receiver_department_id, assignee_id, title.strip(),
-                 brief.strip(), operation_key),
+                (
+                    handoff_id,
+                    actor.tenant_id,
+                    actor.subject,
+                    sender_department_id,
+                    receiver_department_id,
+                    assignee_id,
+                    title.strip(),
+                    brief.strip(),
+                    operation_key,
+                ),
             )
             self._record(actor, handoff_id, "requested", brief.strip())
         return handoff_id
@@ -79,7 +114,12 @@ class HandoffStore:
         )
 
     def transition(
-        self, *, actor: Principal, handoff_id: str, decision: str, note: str,
+        self,
+        *,
+        actor: Principal,
+        handoff_id: str,
+        decision: str,
+        note: str,
     ) -> dict:
         UUID(handoff_id)
         if decision not in ("accepted", "rejected", "completed"):
@@ -94,8 +134,10 @@ class HandoffStore:
             ).fetchone()
             if row is None:
                 raise LookupError("Handoff not found")
-            if not SecurityControls(self.db).permitted(
-                actor, "operations:respond", actor.tenant_id,
+            if not self.repositories.resolve(SecurityControls).permitted(
+                actor,
+                "operations:respond",
+                actor.tenant_id,
             ):
                 raise PermissionError("Receiver authorization required")
             human = self.db.execute(
@@ -103,9 +145,11 @@ class HandoffStore:
                    WHERE tenant_id=%s AND id=%s AND kind='human'""",
                 (actor.tenant_id, actor.subject),
             ).fetchone()
-            if (human is None
-                    or str(human["department_id"]) != str(row["receiver_department_id"])
-                    or actor.subject == str(row["requester_id"])):
+            if (
+                human is None
+                or str(human["department_id"]) != str(row["receiver_department_id"])
+                or actor.subject == str(row["requester_id"])
+            ):
                 raise PermissionError("Independent human from receiving department required")
             if decision in ("accepted", "rejected"):
                 if row["status"] != "requested":
@@ -134,18 +178,22 @@ class HandoffStore:
         rows = self.db.execute(
             """SELECT id,requester_id,sender_department_id,receiver_department_id,
                       assignee_id,title,brief,status,receiver_actor_id,conclusion,created_at
-               FROM ago_handoffs WHERE tenant_id=%s""" + condition
+               FROM ago_handoffs WHERE tenant_id=%s"""
+            + condition
             + " ORDER BY created_at DESC,id LIMIT 200",
             tuple(args),
         ).fetchall()
         return [dict(row) for row in rows]
 
     def history(self, *, tenant_id: str, handoff_id: str) -> list[dict]:
-        return [dict(row) for row in self.db.execute(
-            """SELECT e.actor_id,e.event,e.note,e.created_at
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT e.actor_id,e.event,e.note,e.created_at
                FROM ago_handoff_events e JOIN ago_handoffs h
                  ON h.id=e.handoff_id AND h.tenant_id=e.tenant_id
                WHERE e.tenant_id=%s AND e.handoff_id=%s
                ORDER BY e.event_order""",
-            (tenant_id, handoff_id),
-        ).fetchall()]
+                (tenant_id, handoff_id),
+            ).fetchall()
+        ]

@@ -1,4 +1,4 @@
-name: AGO Architecture Sections 1, 2 & 14 and M1-M12 CI
+name: AGO Architecture Sections 1-5 & 14 and M1-M12 CI
 on:
   push:
     branches: [develop]
@@ -80,6 +80,8 @@ jobs:
         run: python ../../scripts/check_domain_contexts.py
       - name: Enforce Section 4 monorepo boundaries
         run: python ../../scripts/check_monorepo.py
+      - name: Enforce Section 5 backend ports and strict layers
+        run: python ../../scripts/check_backend_architecture.py
       - name: Apply PostgreSQL migrations
         id: migration
         run: python -m ago.event_runtime migrate
@@ -90,7 +92,7 @@ jobs:
           python -m ago.local_ops tenants
       - name: Lint
         id: lint
-        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py ../../scripts/check_domain_contexts.py ../../scripts/check_monorepo.py ../../scripts/smoke_workspace_exports.py
+        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py ../../scripts/check_domain_contexts.py ../../scripts/check_monorepo.py ../../scripts/smoke_workspace_exports.py ../../scripts/check_backend_architecture.py
       - name: Validate first-party console JS and UI unit tests
         id: javascript
         run: |

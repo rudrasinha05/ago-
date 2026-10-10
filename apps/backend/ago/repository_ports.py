@@ -1,0 +1,666 @@
+"""Version 1 structural ports for every database-backed backend component.
+
+Any marks existing open evidence/payload values; DTO/domain validators constrain them.
+Bindings are trusted constructors only, with no connections or singleton state.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Protocol, runtime_checkable
+
+from ago.access import AccessDecision
+from ago.access import AccessService as _AccessService
+from ago.agent_runtime import AgentRuntime as _AgentRuntime
+from ago.agent_runtime_queries import AgentRuntimeQueries as _AgentRuntimeQueries
+from ago.approvals import ApprovalRequest
+from ago.backend_contracts import Cursor
+from ago.calendar_store import CalendarStore as _CalendarStore
+from ago.console_service import ConsoleService as _ConsoleService
+from ago.console_store import ConsoleStore as _ConsoleStore
+from ago.council_store import CouncilStore as _CouncilStore
+from ago.credits import CreditBudget as _CreditBudget
+from ago.department_automation import DepartmentAutomation as _DepartmentAutomation
+from ago.department_automation_queries import (
+    DepartmentAutomationQueries as _DepartmentAutomationQueries,
+)
+from ago.executive_intelligence import ExecutiveIntelligence as _ExecutiveIntelligence
+from ago.executive_intelligence_queries import (
+    ExecutiveIntelligenceQueries as _ExecutiveIntelligenceQueries,
+)
+from ago.experiments import ExperimentStore as _ExperimentStore
+from ago.goals import GoalStore as _GoalStore
+from ago.governance import ApprovalRepository as _ApprovalRepository
+from ago.handoffs import HandoffStore as _HandoffStore
+from ago.identity import IdentityRepository as _IdentityRepository
+from ago.identity import UserRecord
+from ago.knowledge_store import KnowledgeStore as _KnowledgeStore
+from ago.login_security import LoginThrottle as _LoginThrottle
+from ago.memory import MemoryRecord
+from ago.meta_brain import MetaBrain as _MetaBrain
+from ago.meta_brain_queries import MetaBrainQueries as _MetaBrainQueries
+from ago.organization import Department, Employee
+from ago.organization_store import MemoryStore as _MemoryStore
+from ago.organization_store import OrganizationStore as _OrganizationStore
+from ago.organizational_dna import GenomeStore as _GenomeStore
+from ago.plan_execution import PlanExecution as _PlanExecution
+from ago.plan_execution_queries import PlanExecutionQueries as _PlanExecutionQueries
+from ago.plan_store import PlanStore as _PlanStore
+from ago.quality import Review, Verdict
+from ago.quality_store import QualityStore as _QualityStore
+from ago.scorecard import Scorecard as _Scorecard
+from ago.scorecard_queries import ScorecardQueries as _ScorecardQueries
+from ago.security import Principal
+from ago.security_controls import SecurityControls as _SecurityControls
+from ago.session_service import SessionService as _SessionService
+from ago.task_store import TaskStore as _TaskStore
+from ago.tool_catalog_queries import ToolCatalogQueries as _ToolCatalogQueries
+from ago.tool_enrollment import ToolEnrollment as _ToolEnrollment
+from ago.tool_enrollment_queries import ToolEnrollmentQueries as _ToolEnrollmentQueries
+from ago.tool_runtime import EnterpriseToolRuntime as _EnterpriseToolRuntime
+from ago.tool_runtime_queries import ToolRuntimeQueries as _ToolRuntimeQueries
+from ago.workflows import GovernedTask
+
+
+@runtime_checkable
+class AccessServicePort(Protocol):
+    def evaluate(
+        self, principal: Principal, permission: str, *, resource_tenant_id: str
+    ) -> AccessDecision: ...
+
+    def require(
+        self, principal: Principal, permission: str, *, resource_tenant_id: str
+    ) -> None: ...
+
+
+@runtime_checkable
+class AgentRuntimePort(Protocol):
+    def run(self, *, task_id: str, actor: Any) -> dict: ...
+
+    def list(self, *, tenant_id: str, limit: int = 100) -> list[dict]: ...
+
+    def recover_stale(self, *, tenant_id: str, minimum_age_seconds: int = 3600) -> int: ...
+
+
+@runtime_checkable
+class AgentRuntimeQueriesPort(Protocol):
+    def select_ago_governed_tasks_01(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_employees_02(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_agent_runs_03(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_agent_runs_04(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_agent_runs_05(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_agent_messages_06(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_agent_runs_07(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_agent_runs_08(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_agent_runs_09(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_governed_tasks_10(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_agent_messages_11(self, parameters: Any = None) -> Cursor: ...
+
+
+@runtime_checkable
+class ApprovalRepositoryPort(Protocol):
+    def propose(self, *, tenant_id: str, action: str, requester_id: str) -> ApprovalRequest: ...
+
+    def decide(
+        self,
+        *,
+        request_id: str,
+        tenant_id: str,
+        reviewer_id: str,
+        approve: bool,
+        reason: str,
+        authorized: bool = False,
+    ) -> ApprovalRequest: ...
+
+    def list_requests(self, *, tenant_id: str, limit: int = 100) -> list[dict]: ...
+
+    def assert_executable(self, *, request_id: str, tenant_id: str, action: str) -> None: ...
+
+
+@runtime_checkable
+class CalendarStorePort(Protocol):
+    def schedule(
+        self,
+        *,
+        actor: Principal,
+        title: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        operation_key: str,
+        detail: str = "",
+        visibility: str = "tenant",
+        employee_ids: list[str] | None = None,
+        goal_id: str | None = None,
+        task_id: str | None = None,
+    ) -> str: ...
+
+    def list(self, *, actor: Principal, start: datetime, end: datetime) -> list[dict]: ...
+
+    def cancel(self, *, actor: Principal, event_id: str) -> None: ...
+
+    def respond(self, *, actor: Principal, event_id: str, response: str) -> None: ...
+
+    def attendees(self, *, actor: Principal, event_id: str) -> list[dict]: ...
+
+    def history(self, *, actor: Principal, event_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class ConsoleServicePort(Protocol):
+    def request_approval(self, task_id: str, actor: Principal) -> dict: ...
+
+
+@runtime_checkable
+class ConsoleStorePort(Protocol):
+    def me(self, actor: Principal) -> dict: ...
+
+    def task_reviews(self, actor: Principal) -> list[dict]: ...
+
+    def pending_qa(self, actor: Principal) -> list[dict]: ...
+
+    def lock_proposed_task(self, task_id: str, tenant_id: str) -> dict: ...
+
+    def review(self, task_id: str, tenant_id: str) -> dict: ...
+
+
+@runtime_checkable
+class CouncilStorePort(Protocol):
+    def propose(
+        self, *, actor: Principal, title: str, rationale: str, required_votes: int = 2
+    ) -> dict: ...
+
+    def vote(self, *, actor: Principal, motion_id: str, vote: str, reason: str) -> dict: ...
+
+    def finalize(self, *, actor: Principal, motion_id: str) -> str: ...
+
+    def list(self, *, tenant_id: str) -> list[dict]: ...
+
+    def ballots(self, *, tenant_id: str, motion_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class CreditBudgetPort(Protocol):
+    def configure(self, *, tenant_id: str, ceiling: Any) -> None: ...
+
+    def charge(
+        self, *, tenant_id: str, actor_id: str, operation_key: str, amount: Any, category: str
+    ) -> dict: ...
+
+    def balance(self, *, tenant_id: str) -> dict: ...
+
+
+@runtime_checkable
+class DepartmentAutomationPort(Protocol):
+    def create(
+        self, *, actor: Principal, department_id: str, assignee_id: str, code: str, trigger: str
+    ) -> str: ...
+
+    def disable(self, *, tenant_id: str, rule_id: str) -> None: ...
+
+    def fire(self, *, tenant_id: str, rule_id: str, source_id: str) -> dict: ...
+
+    def scan(self, *, tenant_id: str, limit: int = 25) -> list[dict]: ...
+
+    def list_rules(self, *, tenant_id: str) -> list[dict]: ...
+
+    def list_firings(self, *, tenant_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class DepartmentAutomationQueriesPort(Protocol):
+    def select_ago_employees_01(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_automation_rules_02(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_automation_rules_03(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_automation_firings_04(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_governed_tasks_05(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_knowledge_nodes_06(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_automation_rules_07(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_automation_firings_08(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_automation_firings_09(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_automation_rules_10(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_governed_tasks_11(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_knowledge_nodes_12(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_automation_rules_13(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_automation_firings_14(self, parameters: Any = None) -> Cursor: ...
+
+
+@runtime_checkable
+class EnterpriseToolRuntimePort(Protocol):
+    def run(self, *, task_id: str, actor: Any) -> dict: ...
+
+    def recover_stale(self, *, tenant_id: str, minimum_age_seconds: int = 3600) -> int: ...
+
+    def list(self, *, tenant_id: str, limit: int = 100) -> list[dict]: ...
+
+    def evidence(self, *, tenant_id: str, run_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class ExecutiveIntelligencePort(Protocol):
+    def capture(self, *, tenant_id: str, analyst_id: str) -> dict: ...
+
+    def get(self, *, tenant_id: str, snapshot_id: str) -> dict: ...
+
+    def list(self, *, tenant_id: str, limit: int = 50) -> list[dict]: ...
+
+    def simulate(self, *, tenant_id: str, snapshot_id: str, candidate: dict) -> dict: ...
+
+    def verify(self, *, tenant_id: str, snapshot_id: str) -> dict: ...
+
+
+@runtime_checkable
+class ExecutiveIntelligenceQueriesPort(Protocol):
+    def select_ago_governed_tasks_01(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_executive_snapshots_02(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_executive_snapshots_03(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_executive_snapshots_04(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_dna_versions_05(self, parameters: Any = None) -> Cursor: ...
+
+
+@runtime_checkable
+class ExperimentStorePort(Protocol):
+    def propose(
+        self, *, tenant_id: str, proposer_id: str, hypothesis: str, baseline: str, candidate: str
+    ) -> dict: ...
+
+    def list(self, *, tenant_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class GenomeStorePort(Protocol):
+    def propose(
+        self, *, tenant_id: str, proposer_id: str, profile: dict, rationale: str
+    ) -> dict: ...
+
+    def reconcile(self, *, tenant_id: str, genome_id: str) -> dict: ...
+
+    def active(self, *, tenant_id: str) -> dict: ...
+
+    def list(self, *, tenant_id: str, limit: int = 100) -> list[dict]: ...
+
+
+@runtime_checkable
+class GoalStorePort(Protocol):
+    def create(
+        self,
+        *,
+        tenant_id: str,
+        created_by: str,
+        title: str,
+        description: str = "",
+        parent_id: str | None = None,
+    ) -> str: ...
+
+    def close(self, *, tenant_id: str, goal_id: str, status: str) -> None: ...
+
+    def list(self, *, tenant_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class HandoffStorePort(Protocol):
+    def request(
+        self,
+        *,
+        actor: Principal,
+        sender_department_id: str,
+        receiver_department_id: str,
+        assignee_id: str,
+        title: str,
+        brief: str,
+        operation_key: str,
+    ) -> str: ...
+
+    def transition(
+        self, *, actor: Principal, handoff_id: str, decision: str, note: str
+    ) -> dict: ...
+
+    def list(self, *, tenant_id: str, department_id: str | None = None) -> list[dict]: ...
+
+    def history(self, *, tenant_id: str, handoff_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class IdentityRepositoryPort(Protocol):
+    def create_tenant(self, name: str) -> str: ...
+
+    def create_user(self, tenant_id: str, email: str, password: str) -> UserRecord: ...
+
+    def assign_role(self, tenant_id: str, user_id: str, role: str) -> None: ...
+
+    def authenticate(self, tenant_id: str, email: str, password: str) -> Principal | None: ...
+
+    def deactivate_user(self, tenant_id: str, user_id: str) -> bool: ...
+
+    def active(self, tenant_id: str, subject: str) -> bool: ...
+
+
+@runtime_checkable
+class KnowledgeStorePort(Protocol):
+    def propose(
+        self, *, actor: Principal, kind: str, label: str, statement: str, source_ref: str
+    ) -> str: ...
+
+    def review(self, *, actor: Principal, node_id: str, approve: bool, note: str) -> dict: ...
+
+    def relate(self, *, actor: Principal, from_id: str, to_id: str, relation: str) -> str: ...
+
+    def verified(self, *, tenant_id: str, limit: int = 100) -> list[dict]: ...
+
+    def pending(self, *, tenant_id: str) -> list[dict]: ...
+
+    def edges(self, *, tenant_id: str, node_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class LoginThrottlePort(Protocol):
+    def begin(self, tenant_id: str, email: str) -> bool: ...
+
+    def failure(self, tenant_id: str, email: str) -> None: ...
+
+    def success(self, tenant_id: str, email: str) -> None: ...
+
+
+@runtime_checkable
+class MemoryStorePort(Protocol):
+    def save(self, record: MemoryRecord) -> None: ...
+
+    def get(self, *, record_id: str, tenant_id: str, reader_id: str) -> MemoryRecord: ...
+
+
+@runtime_checkable
+class MetaBrainPort(Protocol):
+    def generate(self, *, tenant_id: str, author_id: str, snapshot_id: str) -> list[dict]: ...
+
+    def reconcile(self, *, tenant_id: str, recommendation_id: str) -> dict: ...
+
+    def list(
+        self, *, tenant_id: str, snapshot_id: str | None = None, limit: int = 100
+    ) -> list[dict]: ...
+
+    def brief(self, *, tenant_id: str) -> dict: ...
+
+
+@runtime_checkable
+class MetaBrainQueriesPort(Protocol):
+    def select_ago_executive_snapshots_01(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_meta_recommendations_02(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_meta_recommendations_03(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_meta_recommendations_04(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_approval_requests_05(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_meta_recommendations_06(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_meta_recommendations_07(
+        self, parameters: Any = None, *, extra: str
+    ) -> Cursor: ...
+
+
+@runtime_checkable
+class OrganizationStorePort(Protocol):
+    def add_department(self, *, tenant_id: str, name: str) -> Department: ...
+
+    def hire(
+        self,
+        *,
+        tenant_id: str,
+        department_id: str,
+        name: str,
+        kind: str,
+        manager_id: str | None = None,
+    ) -> Employee: ...
+
+    def list_departments(self, *, tenant_id: str) -> list[Department]: ...
+
+    def list_employees(self, *, tenant_id: str, department_id: str) -> list[Employee]: ...
+
+
+@runtime_checkable
+class PlanExecutionPort(Protocol):
+    def activate(self, *, tenant_id: str, plan_id: str) -> None: ...
+
+    def materialize(self, *, tenant_id: str, plan_id: str) -> list[str]: ...
+
+
+@runtime_checkable
+class PlanExecutionQueriesPort(Protocol):
+    def select_ago_strategy_plans_01(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_goals_02(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_strategy_plans_03(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_strategy_plans_04(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_plan_steps_05(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_plan_steps_06(self, parameters: Any = None) -> Cursor: ...
+
+
+@runtime_checkable
+class PlanStorePort(Protocol):
+    def create(self, *, tenant_id: str, proposer_id: str, goal_id: str, title: str) -> str: ...
+
+    def add_step(
+        self,
+        *,
+        tenant_id: str,
+        plan_id: str,
+        action: str,
+        assignee_id: str,
+        depends_on: str | None = None,
+    ) -> str: ...
+
+    def submit(self, *, tenant_id: str, plan_id: str, requester_id: str) -> str: ...
+
+    def list(self, *, tenant_id: str) -> list[dict]: ...
+
+    def steps(self, *, tenant_id: str, plan_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class QualityStorePort(Protocol):
+    def review(
+        self, *, task_id: str, principal: Principal, verdict: Verdict, evidence: str
+    ) -> Review: ...
+
+    def require_pass(self, *, task_id: str, tenant_id: str) -> None: ...
+
+
+@runtime_checkable
+class ScorecardPort(Protocol):
+    def summary(self, *, tenant_id: str) -> dict: ...
+
+
+@runtime_checkable
+class ScorecardQueriesPort(Protocol):
+    def select_tenant_count_01(self, parameters: Any = None, *, table: str) -> Cursor: ...
+
+    def select_ago_governed_tasks_02(self, parameters: Any = None) -> Cursor: ...
+
+
+@runtime_checkable
+class SecurityControlsPort(Protocol):
+    def grant(self, tenant_id: str, role: str, permission: str) -> None: ...
+
+    def revoke_grant(self, tenant_id: str, role: str, permission: str) -> None: ...
+
+    def permitted(self, principal: Principal, permission: str, tenant_id: str) -> bool: ...
+
+    def token_hash(token: str) -> str: ...
+
+    def revoke_session(self, token: str, tenant_id: str, expires_at: Any) -> None: ...
+
+    def is_revoked(self, token: str) -> bool: ...
+
+    def audit(
+        self,
+        action: str,
+        outcome: str,
+        *,
+        tenant_id: str | None = None,
+        actor_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None: ...
+
+
+@runtime_checkable
+class SessionServicePort(Protocol):
+    def authenticate(self, tenant_id: str, email: str, password: str) -> Principal: ...
+
+
+@runtime_checkable
+class TaskStorePort(Protocol):
+    def propose(self, *, tenant_id: str, action: str, assignee_id: str) -> GovernedTask: ...
+
+    def request_approval(self, *, task_id: str, tenant_id: str, approval_id: str) -> None: ...
+
+    def authorize_and_start(self, *, task_id: str, principal: Principal) -> GovernedTask: ...
+
+    def list_tasks(self, *, tenant_id: str, limit: int = 100) -> list[dict]: ...
+
+    def finish(self, *, task_id: str, tenant_id: str, success: bool) -> None: ...
+
+
+@runtime_checkable
+class ToolCatalogQueriesPort(Protocol):
+    def select_ago_knowledge_nodes_01(self, parameters: Any = None) -> Cursor: ...
+
+
+@runtime_checkable
+class ToolEnrollmentPort(Protocol):
+    def propose(self, *, actor: Principal, code: str, rationale: str) -> dict: ...
+
+    def reconcile(self, *, actor: Principal, enrollment_id: str) -> dict: ...
+
+    def require_active(self, *, tenant_id: str, code: str) -> None: ...
+
+    def disable(self, *, actor: Principal, enrollment_id: str, reason: str) -> dict: ...
+
+    def list(self, *, tenant_id: str) -> list[dict]: ...
+
+    def history(self, *, tenant_id: str, enrollment_id: str) -> list[dict]: ...
+
+
+@runtime_checkable
+class ToolEnrollmentQueriesPort(Protocol):
+    def insert_ago_tool_enrollment_audit_01(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tenants_02(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_enrollments_03(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_tool_enrollments_04(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_enrollments_05(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_approval_requests_06(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_tool_enrollments_07(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_enrollments_08(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_enrollments_09(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_tool_enrollments_10(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_enrollments_11(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_enrollment_audit_12(self, parameters: Any = None) -> Cursor: ...
+
+
+@runtime_checkable
+class ToolRuntimeQueriesPort(Protocol):
+    def insert_ago_tool_run_evidence_01(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_governed_tasks_02(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_runs_03(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ago_tool_runs_04(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_tool_runs_05(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_tool_runs_06(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_runs_07(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_tool_runs_08(self, parameters: Any = None) -> Cursor: ...
+
+    def update_ago_governed_tasks_09(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_runs_10(self, parameters: Any = None) -> Cursor: ...
+
+    def select_ago_tool_run_evidence_11(self, parameters: Any = None) -> Cursor: ...
+
+
+REPOSITORY_BINDINGS = {
+    AccessServicePort: _AccessService,
+    AgentRuntimePort: _AgentRuntime,
+    AgentRuntimeQueriesPort: _AgentRuntimeQueries,
+    ApprovalRepositoryPort: _ApprovalRepository,
+    CalendarStorePort: _CalendarStore,
+    ConsoleServicePort: _ConsoleService,
+    ConsoleStorePort: _ConsoleStore,
+    CouncilStorePort: _CouncilStore,
+    CreditBudgetPort: _CreditBudget,
+    DepartmentAutomationPort: _DepartmentAutomation,
+    DepartmentAutomationQueriesPort: _DepartmentAutomationQueries,
+    EnterpriseToolRuntimePort: _EnterpriseToolRuntime,
+    ExecutiveIntelligencePort: _ExecutiveIntelligence,
+    ExecutiveIntelligenceQueriesPort: _ExecutiveIntelligenceQueries,
+    ExperimentStorePort: _ExperimentStore,
+    GenomeStorePort: _GenomeStore,
+    GoalStorePort: _GoalStore,
+    HandoffStorePort: _HandoffStore,
+    IdentityRepositoryPort: _IdentityRepository,
+    KnowledgeStorePort: _KnowledgeStore,
+    LoginThrottlePort: _LoginThrottle,
+    MemoryStorePort: _MemoryStore,
+    MetaBrainPort: _MetaBrain,
+    MetaBrainQueriesPort: _MetaBrainQueries,
+    OrganizationStorePort: _OrganizationStore,
+    PlanExecutionPort: _PlanExecution,
+    PlanExecutionQueriesPort: _PlanExecutionQueries,
+    PlanStorePort: _PlanStore,
+    QualityStorePort: _QualityStore,
+    ScorecardPort: _Scorecard,
+    ScorecardQueriesPort: _ScorecardQueries,
+    SecurityControlsPort: _SecurityControls,
+    SessionServicePort: _SessionService,
+    TaskStorePort: _TaskStore,
+    ToolCatalogQueriesPort: _ToolCatalogQueries,
+    ToolEnrollmentPort: _ToolEnrollment,
+    ToolEnrollmentQueriesPort: _ToolEnrollmentQueries,
+    ToolRuntimeQueriesPort: _ToolRuntimeQueries,
+}

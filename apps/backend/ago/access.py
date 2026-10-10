@@ -1,9 +1,10 @@
 """Tenant-scoped authorization service backed by persistent user-role assignments."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import AuthorizationError, Principal, RolePolicy
 
 
@@ -14,12 +15,22 @@ class AccessDecision:
 
 
 class AccessService:
-    def __init__(self, connection: Any, policy: RolePolicy):
+    def __init__(
+        self,
+        connection: DatabaseConnection,
+        policy: RolePolicy,
+        *,
+        repositories: RepositoryScope | None = None,
+    ):
         self.connection = connection
         self.policy = policy
+        self.repositories = repositories or RepositoryScope(connection)
 
     def evaluate(
-        self, principal: Principal, permission: str, *,
+        self,
+        principal: Principal,
+        permission: str,
+        *,
         resource_tenant_id: str,
     ) -> AccessDecision:
         if not resource_tenant_id or principal.tenant_id != resource_tenant_id:
@@ -37,7 +48,8 @@ class AccessService:
         ).fetchall()
         # Always refresh persisted roles; never trust a potentially stale token's role list.
         current = Principal(
-            principal.subject, principal.tenant_id,
+            principal.subject,
+            principal.tenant_id,
             tuple(item["role"] for item in rows),
         )
         if not self.policy.allowed(current, permission, tenant_id=resource_tenant_id):
@@ -45,11 +57,12 @@ class AccessService:
         return AccessDecision(True, "allowed")
 
     def require(
-        self, principal: Principal, permission: str, *,
+        self,
+        principal: Principal,
+        permission: str,
+        *,
         resource_tenant_id: str,
     ) -> None:
-        decision = self.evaluate(
-            principal, permission, resource_tenant_id=resource_tenant_id
-        )
+        decision = self.evaluate(principal, permission, resource_tenant_id=resource_tenant_id)
         if not decision.permitted:
             raise AuthorizationError("Access denied")

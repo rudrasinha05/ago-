@@ -3,6 +3,7 @@
 Exactly two internal read-only reports and one optional, operator-configured
 HTTPS GET. Untrusted API/database values never turn into executable code or URLs.
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -13,8 +14,9 @@ from collections.abc import Callable
 from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.scorecard import Scorecard
-
+from ago.tool_catalog_queries import ToolCatalogQueries
 
 TOOL_DESCRIPTIONS = {
     "tool:scorecard": "Tenant-scoped operational scorecard (internal read-only)",
@@ -44,8 +46,12 @@ class ReadOnlyMetricsProvider:
     """
 
     def __init__(
-        self, *, hostname: str, api_token: str,
-        timeout: int = 5, opener: Callable | None = None,
+        self,
+        *,
+        hostname: str,
+        api_token: str,
+        timeout: int = 5,
+        opener: Callable | None = None,
     ):
         if not hostname or len(hostname) > 253 or not 1 <= timeout <= 10:
             raise ValueError("Invalid external metrics host or timeout")
@@ -72,7 +78,8 @@ class ReadOnlyMetricsProvider:
 
     def fetch(self) -> dict:
         request = Request(
-            self.url, method="GET",
+            self.url,
+            method="GET",
             headers={
                 "Authorization": "Bearer " + self.token,
                 "Accept": "application/json",
@@ -97,36 +104,48 @@ class ReadOnlyMetricsProvider:
 
         metrics = {}
         for key, value in values.items():
-            if (not isinstance(key, str) or not 1 <= len(key) <= 48
-                    or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", key)
-                    or type(value) not in (int, float)
-                    or not math.isfinite(value)):
+            if (
+                not isinstance(key, str)
+                or not 1 <= len(key) <= 48
+                or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", key)
+                or type(value) not in (int, float)
+                or not math.isfinite(value)
+            ):
                 raise ValueError("Provider metrics must be finite numeric telemetry")
             metrics[key] = value
-        return {"source": "operator_https_readonly", "metrics": metrics,
-                "untrusted_external_data": True}
+        return {
+            "source": "operator_https_readonly",
+            "metrics": metrics,
+            "untrusted_external_data": True,
+        }
 
 
-def handlers(db) -> dict[str, Callable]:
+def handlers(
+    db: DatabaseConnection, *, repositories: RepositoryScope | None = None
+) -> dict[str, Callable]:
     """Explicit static mapping. No arbitrary provider code can be registered."""
+
+    repositories = repositories or RepositoryScope(db)
 
     def scorecard(task):
         return {
-            "kind": "tenant_scorecard", "task_id": task.id,
-            "data": Scorecard(db).summary(tenant_id=task.tenant_id),
+            "kind": "tenant_scorecard",
+            "task_id": task.id,
+            "data": repositories.resolve(Scorecard).summary(tenant_id=task.tenant_id),
             "requires_human_qa": True,
         }
 
     def knowledge(task):
-        row = db.execute(
-            """SELECT count(*) FILTER (WHERE status='verified') AS verified,
-                      count(*) FILTER (WHERE status='pending') AS pending
-               FROM ago_knowledge_nodes WHERE tenant_id=%s""",
-            (task.tenant_id,),
-        ).fetchone()
+        row = (
+            repositories.resolve(ToolCatalogQueries)
+            .select_ago_knowledge_nodes_01((task.tenant_id,))
+            .fetchone()
+        )
         return {
-            "kind": "knowledge_digest", "task_id": task.id,
-            "verified": int(row["verified"]), "pending": int(row["pending"]),
+            "kind": "knowledge_digest",
+            "task_id": task.id,
+            "verified": int(row["verified"]),
+            "pending": int(row["pending"]),
             "requires_human_qa": True,
         }
 
@@ -138,8 +157,10 @@ def handlers(db) -> dict[str, Callable]:
             api_token=os.getenv("AGO_M8_METRICS_TOKEN", ""),
         )
         return {
-            "kind": "external_metrics", "task_id": task.id,
-            "data": provider.fetch(), "requires_human_qa": True,
+            "kind": "external_metrics",
+            "task_id": task.id,
+            "data": provider.fetch(),
+            "requires_human_qa": True,
         }
 
     return {

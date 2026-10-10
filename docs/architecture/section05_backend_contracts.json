@@ -1,0 +1,915 @@
+{
+  "version": 1,
+  "components": {
+    "AccessService": {
+      "module": "access",
+      "methods": {
+        "evaluate": {
+          "arguments": "self, principal: Principal, permission: str, *, resource_tenant_id: str",
+          "returns": "AccessDecision"
+        },
+        "require": {
+          "arguments": "self, principal: Principal, permission: str, *, resource_tenant_id: str",
+          "returns": "None"
+        }
+      }
+    },
+    "AgentRuntime": {
+      "module": "agent_runtime",
+      "methods": {
+        "run": {
+          "arguments": "self, *, task_id: str, actor",
+          "returns": "dict"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "recover_stale": {
+          "arguments": "self, *, tenant_id: str, minimum_age_seconds: int=3600",
+          "returns": "int"
+        }
+      }
+    },
+    "AgentRuntimeQueries": {
+      "module": "agent_runtime_queries",
+      "methods": {
+        "select_ago_governed_tasks_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_employees_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_agent_runs_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_agent_runs_04": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_agent_runs_05": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_agent_messages_06": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_agent_runs_07": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_agent_runs_08": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_agent_runs_09": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_governed_tasks_10": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_agent_messages_11": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "CalendarStore": {
+      "module": "calendar_store",
+      "methods": {
+        "schedule": {
+          "arguments": "self, *, actor: Principal, title: str, starts_at: datetime, ends_at: datetime, operation_key: str, detail: str='', visibility: str='tenant', employee_ids: list[str] | None=None, goal_id: str | None=None, task_id: str | None=None",
+          "returns": "str"
+        },
+        "list": {
+          "arguments": "self, *, actor: Principal, start: datetime, end: datetime",
+          "returns": "list[dict]"
+        },
+        "cancel": {
+          "arguments": "self, *, actor: Principal, event_id: str",
+          "returns": "None"
+        },
+        "respond": {
+          "arguments": "self, *, actor: Principal, event_id: str, response: str",
+          "returns": "None"
+        },
+        "attendees": {
+          "arguments": "self, *, actor: Principal, event_id: str",
+          "returns": "list[dict]"
+        },
+        "history": {
+          "arguments": "self, *, actor: Principal, event_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "ConsoleService": {
+      "module": "console_service",
+      "methods": {
+        "request_approval": {
+          "arguments": "self, task_id: str, actor: Principal",
+          "returns": "dict"
+        }
+      }
+    },
+    "ConsoleStore": {
+      "module": "console_store",
+      "methods": {
+        "me": {
+          "arguments": "self, actor: Principal",
+          "returns": "dict"
+        },
+        "task_reviews": {
+          "arguments": "self, actor: Principal",
+          "returns": "list[dict]"
+        },
+        "pending_qa": {
+          "arguments": "self, actor: Principal",
+          "returns": "list[dict]"
+        },
+        "lock_proposed_task": {
+          "arguments": "self, task_id: str, tenant_id: str",
+          "returns": "dict"
+        },
+        "review": {
+          "arguments": "self, task_id: str, tenant_id: str",
+          "returns": "dict"
+        }
+      }
+    },
+    "CouncilStore": {
+      "module": "council_store",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, actor: Principal, title: str, rationale: str, required_votes: int=2",
+          "returns": "dict"
+        },
+        "vote": {
+          "arguments": "self, *, actor: Principal, motion_id: str, vote: str, reason: str",
+          "returns": "dict"
+        },
+        "finalize": {
+          "arguments": "self, *, actor: Principal, motion_id: str",
+          "returns": "str"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "ballots": {
+          "arguments": "self, *, tenant_id: str, motion_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "CreditBudget": {
+      "module": "credits",
+      "methods": {
+        "configure": {
+          "arguments": "self, *, tenant_id: str, ceiling",
+          "returns": "None"
+        },
+        "charge": {
+          "arguments": "self, *, tenant_id: str, actor_id: str, operation_key: str, amount, category: str",
+          "returns": "dict"
+        },
+        "balance": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        }
+      }
+    },
+    "DepartmentAutomation": {
+      "module": "department_automation",
+      "methods": {
+        "create": {
+          "arguments": "self, *, actor: Principal, department_id: str, assignee_id: str, code: str, trigger: str",
+          "returns": "str"
+        },
+        "disable": {
+          "arguments": "self, *, tenant_id: str, rule_id: str",
+          "returns": "None"
+        },
+        "fire": {
+          "arguments": "self, *, tenant_id: str, rule_id: str, source_id: str",
+          "returns": "dict"
+        },
+        "scan": {
+          "arguments": "self, *, tenant_id: str, limit: int=25",
+          "returns": "list[dict]"
+        },
+        "list_rules": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "list_firings": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "DepartmentAutomationQueries": {
+      "module": "department_automation_queries",
+      "methods": {
+        "select_ago_employees_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_automation_rules_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_automation_rules_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_automation_firings_04": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_governed_tasks_05": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_knowledge_nodes_06": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_automation_rules_07": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_automation_firings_08": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_automation_firings_09": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_automation_rules_10": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_governed_tasks_11": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_knowledge_nodes_12": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_automation_rules_13": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_automation_firings_14": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "ExecutiveIntelligence": {
+      "module": "executive_intelligence",
+      "methods": {
+        "capture": {
+          "arguments": "self, *, tenant_id: str, analyst_id: str",
+          "returns": "dict"
+        },
+        "get": {
+          "arguments": "self, *, tenant_id: str, snapshot_id: str",
+          "returns": "dict"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str, limit: int=50",
+          "returns": "list[dict]"
+        },
+        "simulate": {
+          "arguments": "self, *, tenant_id: str, snapshot_id: str, candidate: dict",
+          "returns": "dict"
+        },
+        "verify": {
+          "arguments": "self, *, tenant_id: str, snapshot_id: str",
+          "returns": "dict"
+        }
+      }
+    },
+    "ExecutiveIntelligenceQueries": {
+      "module": "executive_intelligence_queries",
+      "methods": {
+        "select_ago_governed_tasks_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_executive_snapshots_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_executive_snapshots_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_executive_snapshots_04": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_dna_versions_05": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "ExperimentStore": {
+      "module": "experiments",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, tenant_id: str, proposer_id: str, hypothesis: str, baseline: str, candidate: str",
+          "returns": "dict"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "GoalStore": {
+      "module": "goals",
+      "methods": {
+        "create": {
+          "arguments": "self, *, tenant_id: str, created_by: str, title: str, description: str='', parent_id: str | None=None",
+          "returns": "str"
+        },
+        "close": {
+          "arguments": "self, *, tenant_id: str, goal_id: str, status: str",
+          "returns": "None"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "ApprovalRepository": {
+      "module": "governance",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, tenant_id: str, action: str, requester_id: str",
+          "returns": "ApprovalRequest"
+        },
+        "decide": {
+          "arguments": "self, *, request_id: str, tenant_id: str, reviewer_id: str, approve: bool, reason: str, authorized: bool=False",
+          "returns": "ApprovalRequest"
+        },
+        "list_requests": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "assert_executable": {
+          "arguments": "self, *, request_id: str, tenant_id: str, action: str",
+          "returns": "None"
+        }
+      }
+    },
+    "HandoffStore": {
+      "module": "handoffs",
+      "methods": {
+        "request": {
+          "arguments": "self, *, actor: Principal, sender_department_id: str, receiver_department_id: str, assignee_id: str, title: str, brief: str, operation_key: str",
+          "returns": "str"
+        },
+        "transition": {
+          "arguments": "self, *, actor: Principal, handoff_id: str, decision: str, note: str",
+          "returns": "dict"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str, department_id: str | None=None",
+          "returns": "list[dict]"
+        },
+        "history": {
+          "arguments": "self, *, tenant_id: str, handoff_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "IdentityRepository": {
+      "module": "identity",
+      "methods": {
+        "create_tenant": {
+          "arguments": "self, name: str",
+          "returns": "str"
+        },
+        "create_user": {
+          "arguments": "self, tenant_id: str, email: str, password: str",
+          "returns": "UserRecord"
+        },
+        "assign_role": {
+          "arguments": "self, tenant_id: str, user_id: str, role: str",
+          "returns": "None"
+        },
+        "authenticate": {
+          "arguments": "self, tenant_id: str, email: str, password: str",
+          "returns": "Principal | None"
+        },
+        "deactivate_user": {
+          "arguments": "self, tenant_id: str, user_id: str",
+          "returns": "bool"
+        },
+        "active": {
+          "arguments": "self, tenant_id: str, subject: str",
+          "returns": "bool"
+        }
+      }
+    },
+    "KnowledgeStore": {
+      "module": "knowledge_store",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, actor: Principal, kind: str, label: str, statement: str, source_ref: str",
+          "returns": "str"
+        },
+        "review": {
+          "arguments": "self, *, actor: Principal, node_id: str, approve: bool, note: str",
+          "returns": "dict"
+        },
+        "relate": {
+          "arguments": "self, *, actor: Principal, from_id: str, to_id: str, relation: str",
+          "returns": "str"
+        },
+        "verified": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "pending": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "edges": {
+          "arguments": "self, *, tenant_id: str, node_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "LoginThrottle": {
+      "module": "login_security",
+      "methods": {
+        "begin": {
+          "arguments": "self, tenant_id: str, email: str",
+          "returns": "bool"
+        },
+        "failure": {
+          "arguments": "self, tenant_id: str, email: str",
+          "returns": "None"
+        },
+        "success": {
+          "arguments": "self, tenant_id: str, email: str",
+          "returns": "None"
+        }
+      }
+    },
+    "MetaBrain": {
+      "module": "meta_brain",
+      "methods": {
+        "generate": {
+          "arguments": "self, *, tenant_id: str, author_id: str, snapshot_id: str",
+          "returns": "list[dict]"
+        },
+        "reconcile": {
+          "arguments": "self, *, tenant_id: str, recommendation_id: str",
+          "returns": "dict"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str, snapshot_id: str | None=None, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "brief": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        }
+      }
+    },
+    "MetaBrainQueries": {
+      "module": "meta_brain_queries",
+      "methods": {
+        "select_ago_executive_snapshots_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_meta_recommendations_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_meta_recommendations_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_meta_recommendations_04": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_approval_requests_05": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_meta_recommendations_06": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_meta_recommendations_07": {
+          "arguments": "self, parameters: Any=None, *, extra: str",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "OrganizationStore": {
+      "module": "organization_store",
+      "methods": {
+        "add_department": {
+          "arguments": "self, *, tenant_id: str, name: str",
+          "returns": "Department"
+        },
+        "hire": {
+          "arguments": "self, *, tenant_id: str, department_id: str, name: str, kind: str, manager_id: str | None=None",
+          "returns": "Employee"
+        },
+        "list_departments": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[Department]"
+        },
+        "list_employees": {
+          "arguments": "self, *, tenant_id: str, department_id: str",
+          "returns": "list[Employee]"
+        }
+      }
+    },
+    "MemoryStore": {
+      "module": "organization_store",
+      "methods": {
+        "save": {
+          "arguments": "self, record: MemoryRecord",
+          "returns": "None"
+        },
+        "get": {
+          "arguments": "self, *, record_id: str, tenant_id: str, reader_id: str",
+          "returns": "MemoryRecord"
+        }
+      }
+    },
+    "GenomeStore": {
+      "module": "organizational_dna",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, tenant_id: str, proposer_id: str, profile: dict, rationale: str",
+          "returns": "dict"
+        },
+        "reconcile": {
+          "arguments": "self, *, tenant_id: str, genome_id: str",
+          "returns": "dict"
+        },
+        "active": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "PlanExecution": {
+      "module": "plan_execution",
+      "methods": {
+        "activate": {
+          "arguments": "self, *, tenant_id: str, plan_id: str",
+          "returns": "None"
+        },
+        "materialize": {
+          "arguments": "self, *, tenant_id: str, plan_id: str",
+          "returns": "list[str]"
+        }
+      }
+    },
+    "PlanExecutionQueries": {
+      "module": "plan_execution_queries",
+      "methods": {
+        "select_ago_strategy_plans_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_goals_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_strategy_plans_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_strategy_plans_04": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_plan_steps_05": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_plan_steps_06": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "PlanStore": {
+      "module": "plan_store",
+      "methods": {
+        "create": {
+          "arguments": "self, *, tenant_id: str, proposer_id: str, goal_id: str, title: str",
+          "returns": "str"
+        },
+        "add_step": {
+          "arguments": "self, *, tenant_id: str, plan_id: str, action: str, assignee_id: str, depends_on: str | None=None",
+          "returns": "str"
+        },
+        "submit": {
+          "arguments": "self, *, tenant_id: str, plan_id: str, requester_id: str",
+          "returns": "str"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "steps": {
+          "arguments": "self, *, tenant_id: str, plan_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "QualityStore": {
+      "module": "quality_store",
+      "methods": {
+        "review": {
+          "arguments": "self, *, task_id: str, principal: Principal, verdict: Verdict, evidence: str",
+          "returns": "Review"
+        },
+        "require_pass": {
+          "arguments": "self, *, task_id: str, tenant_id: str",
+          "returns": "None"
+        }
+      }
+    },
+    "Scorecard": {
+      "module": "scorecard",
+      "methods": {
+        "summary": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        }
+      }
+    },
+    "ScorecardQueries": {
+      "module": "scorecard_queries",
+      "methods": {
+        "select_tenant_count_01": {
+          "arguments": "self, parameters: Any=None, *, table: str",
+          "returns": "Cursor"
+        },
+        "select_ago_governed_tasks_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "SecurityControls": {
+      "module": "security_controls",
+      "methods": {
+        "grant": {
+          "arguments": "self, tenant_id: str, role: str, permission: str",
+          "returns": "None"
+        },
+        "revoke_grant": {
+          "arguments": "self, tenant_id: str, role: str, permission: str",
+          "returns": "None"
+        },
+        "permitted": {
+          "arguments": "self, principal: Principal, permission: str, tenant_id: str",
+          "returns": "bool"
+        },
+        "token_hash": {
+          "arguments": "token: str",
+          "returns": "str"
+        },
+        "revoke_session": {
+          "arguments": "self, token: str, tenant_id: str, expires_at: Any",
+          "returns": "None"
+        },
+        "is_revoked": {
+          "arguments": "self, token: str",
+          "returns": "bool"
+        },
+        "audit": {
+          "arguments": "self, action: str, outcome: str, *, tenant_id: str | None=None, actor_id: str | None=None, metadata: dict[str, Any] | None=None",
+          "returns": "None"
+        }
+      }
+    },
+    "SessionService": {
+      "module": "session_service",
+      "methods": {
+        "authenticate": {
+          "arguments": "self, tenant_id: str, email: str, password: str",
+          "returns": "Principal"
+        }
+      }
+    },
+    "TaskStore": {
+      "module": "task_store",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, tenant_id: str, action: str, assignee_id: str",
+          "returns": "GovernedTask"
+        },
+        "request_approval": {
+          "arguments": "self, *, task_id: str, tenant_id: str, approval_id: str",
+          "returns": "None"
+        },
+        "authorize_and_start": {
+          "arguments": "self, *, task_id: str, principal: Principal",
+          "returns": "GovernedTask"
+        },
+        "list_tasks": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "finish": {
+          "arguments": "self, *, task_id: str, tenant_id: str, success: bool",
+          "returns": "None"
+        }
+      }
+    },
+    "ToolCatalogQueries": {
+      "module": "tool_catalog_queries",
+      "methods": {
+        "select_ago_knowledge_nodes_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "ToolEnrollment": {
+      "module": "tool_enrollment",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, actor: Principal, code: str, rationale: str",
+          "returns": "dict"
+        },
+        "reconcile": {
+          "arguments": "self, *, actor: Principal, enrollment_id: str",
+          "returns": "dict"
+        },
+        "require_active": {
+          "arguments": "self, *, tenant_id: str, code: str",
+          "returns": "None"
+        },
+        "disable": {
+          "arguments": "self, *, actor: Principal, enrollment_id: str, reason: str",
+          "returns": "dict"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "history": {
+          "arguments": "self, *, tenant_id: str, enrollment_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "ToolEnrollmentQueries": {
+      "module": "tool_enrollment_queries",
+      "methods": {
+        "insert_ago_tool_enrollment_audit_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tenants_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_enrollments_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_tool_enrollments_04": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_enrollments_05": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_approval_requests_06": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_tool_enrollments_07": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_enrollments_08": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_enrollments_09": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_tool_enrollments_10": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_enrollments_11": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_enrollment_audit_12": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "EnterpriseToolRuntime": {
+      "module": "tool_runtime",
+      "methods": {
+        "run": {
+          "arguments": "self, *, task_id: str, actor",
+          "returns": "dict"
+        },
+        "recover_stale": {
+          "arguments": "self, *, tenant_id: str, minimum_age_seconds: int=3600",
+          "returns": "int"
+        },
+        "list": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "evidence": {
+          "arguments": "self, *, tenant_id: str, run_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "ToolRuntimeQueries": {
+      "module": "tool_runtime_queries",
+      "methods": {
+        "insert_ago_tool_run_evidence_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_governed_tasks_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_runs_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ago_tool_runs_04": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_tool_runs_05": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_tool_runs_06": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_runs_07": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_tool_runs_08": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "update_ago_governed_tasks_09": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_runs_10": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_ago_tool_run_evidence_11": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    }
+  }
+}

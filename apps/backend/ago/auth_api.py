@@ -2,6 +2,7 @@
 
 Requires explicit application wiring and trusted tenant selection. Not mounted by default.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -11,15 +12,16 @@ from typing import Protocol
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from ago.security import Principal, SessionTokens
+from ago.api_contracts import StrictInput
 from ago.rate_limit import RateLimiter
+from ago.security import Principal, SessionTokens
 
 
 class IdentityBackend(Protocol):
     def authenticate(self, tenant_id: str, email: str, password: str) -> Principal | None: ...
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(StrictInput):
     tenant_id: str = Field(min_length=1, max_length=128)
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=1024)

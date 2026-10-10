@@ -1,26 +1,35 @@
 """Durable tenant-scoped independent QA review with immutable evidence."""
+
 from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.quality import Review, Verdict
 from ago.security import Principal
 from ago.security_controls import SecurityControls
 
 
 class QualityStore:
-    def __init__(self, connection):
+    def __init__(
+        self, connection: DatabaseConnection, *, repositories: RepositoryScope | None = None
+    ):
         self.connection = connection
+        self.repositories = repositories or RepositoryScope(connection)
 
     def review(
-        self, *, task_id: str, principal: Principal, verdict: Verdict,
+        self,
+        *,
+        task_id: str,
+        principal: Principal,
+        verdict: Verdict,
         evidence: str,
     ) -> Review:
         UUID(task_id)
         UUID(principal.subject)
         UUID(principal.tenant_id)
         with self.connection.transaction():
-            if not SecurityControls(self.connection).permitted(
+            if not self.repositories.resolve(SecurityControls).permitted(
                 principal, "qa:review", principal.tenant_id
             ):
                 raise PermissionError("QA permission required")
@@ -41,17 +50,26 @@ class QualityStore:
             if human is None:
                 raise PermissionError("Independent human QA required")
             assessment = Review(
-                tenant_id=principal.tenant_id, artifact_id=task_id,
-                author_id=str(task["assignee_id"]), reviewer_id=principal.subject,
-                verdict=verdict, evidence=evidence,
+                tenant_id=principal.tenant_id,
+                artifact_id=task_id,
+                author_id=str(task["assignee_id"]),
+                reviewer_id=principal.subject,
+                verdict=verdict,
+                evidence=evidence,
             )
             self.connection.execute(
                 """INSERT INTO ago_task_reviews
                    (id, tenant_id, task_id, author_id, reviewer_id, verdict, evidence)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (str(uuid4()), assessment.tenant_id, assessment.artifact_id,
-                 assessment.author_id, assessment.reviewer_id,
-                 assessment.verdict.value, assessment.evidence),
+                (
+                    str(uuid4()),
+                    assessment.tenant_id,
+                    assessment.artifact_id,
+                    assessment.author_id,
+                    assessment.reviewer_id,
+                    assessment.verdict.value,
+                    assessment.evidence,
+                ),
             )
         return assessment
 

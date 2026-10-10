@@ -1,26 +1,41 @@
 """M6 organizational calendar: permissioned, local-only commitments and RSVPs."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal
 
 
 class CalendarStore:
-    def __init__(self, db):
+    def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
+        self.repositories = repositories or RepositoryScope(db)
 
     def schedule(
-        self, *, actor: Principal, title: str, starts_at: datetime,
-        ends_at: datetime, operation_key: str, detail: str = "",
-        visibility: str = "tenant", employee_ids: list[str] | None = None,
-        goal_id: str | None = None, task_id: str | None = None,
+        self,
+        *,
+        actor: Principal,
+        title: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        operation_key: str,
+        detail: str = "",
+        visibility: str = "tenant",
+        employee_ids: list[str] | None = None,
+        goal_id: str | None = None,
+        task_id: str | None = None,
     ) -> str:
         UUID(actor.tenant_id)
         UUID(actor.subject)
-        if (starts_at.tzinfo is None or ends_at.tzinfo is None
-                or starts_at.utcoffset() is None or ends_at.utcoffset() is None):
+        if (
+            starts_at.tzinfo is None
+            or ends_at.tzinfo is None
+            or starts_at.utcoffset() is None
+            or ends_at.utcoffset() is None
+        ):
             raise ValueError("Calendar datetimes must include timezone offsets")
         if not starts_at < ends_at <= starts_at + timedelta(days=366):
             raise ValueError("Invalid event duration")
@@ -44,17 +59,31 @@ class CalendarStore:
                 (actor.tenant_id, operation_key),
             ).fetchone()
             if row is not None:
-                expected = (actor.subject, title.strip(), detail,
-                            starts_at, ends_at, visibility,
-                            goal_id, task_id)
-                actual = (str(row["creator_id"]), row["title"], row["detail"],
-                          row["starts_at"], row["ends_at"], row["visibility"],
-                          str(row["goal_id"]) if row["goal_id"] else None,
-                          str(row["task_id"]) if row["task_id"] else None)
+                expected = (
+                    actor.subject,
+                    title.strip(),
+                    detail,
+                    starts_at,
+                    ends_at,
+                    visibility,
+                    goal_id,
+                    task_id,
+                )
+                actual = (
+                    str(row["creator_id"]),
+                    row["title"],
+                    row["detail"],
+                    row["starts_at"],
+                    row["ends_at"],
+                    row["visibility"],
+                    str(row["goal_id"]) if row["goal_id"] else None,
+                    str(row["task_id"]) if row["task_id"] else None,
+                )
                 if expected != actual:
                     raise PermissionError("Calendar idempotency key reused")
                 recorded = {
-                    str(r["employee_id"]) for r in self.db.execute(
+                    str(r["employee_id"])
+                    for r in self.db.execute(
                         """SELECT employee_id FROM ago_calendar_attendees
                            WHERE tenant_id=%s AND event_id=%s""",
                         (actor.tenant_id, row["id"]),
@@ -69,11 +98,21 @@ class CalendarStore:
                    (id,tenant_id,creator_id,title,detail,starts_at,ends_at,
                     visibility,operation_key,goal_id,task_id)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (event_id, actor.tenant_id, actor.subject, title.strip(),
-                 detail, starts_at, ends_at, visibility, operation_key,
-                 goal_id, task_id),
+                (
+                    event_id,
+                    actor.tenant_id,
+                    actor.subject,
+                    title.strip(),
+                    detail,
+                    starts_at,
+                    ends_at,
+                    visibility,
+                    operation_key,
+                    goal_id,
+                    task_id,
+                ),
             )
-            self._audit(actor, event_id, 'scheduled', title.strip())
+            self._audit(actor, event_id, "scheduled", title.strip())
             for employee_id in attendee_ids:
                 self.db.execute(
                     """INSERT INTO ago_calendar_attendees(tenant_id,event_id,employee_id)
@@ -82,8 +121,7 @@ class CalendarStore:
                 )
         return event_id
 
-    def list(self, *, actor: Principal, start: datetime,
-             end: datetime) -> list[dict]:
+    def list(self, *, actor: Principal, start: datetime, end: datetime) -> list[dict]:
         if start.tzinfo is None or end.tzinfo is None or not start < end:
             raise ValueError("Invalid calendar query range")
         if end > start + timedelta(days=366):
@@ -163,11 +201,14 @@ class CalendarStore:
         ).fetchone()
         if visible is None:
             raise PermissionError("Event not visible")
-        return [dict(row) for row in self.db.execute(
-            """SELECT employee_id,response FROM ago_calendar_attendees
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT employee_id,response FROM ago_calendar_attendees
                WHERE tenant_id=%s AND event_id=%s ORDER BY employee_id""",
-            (actor.tenant_id, event_id),
-        ).fetchall()]
+                (actor.tenant_id, event_id),
+            ).fetchall()
+        ]
 
     def _audit(self, actor: Principal, event_id: str, event: str, note: str) -> None:
         self.db.execute(
@@ -179,9 +220,12 @@ class CalendarStore:
 
     def history(self, *, actor: Principal, event_id: str) -> list[dict]:
         self.attendees(actor=actor, event_id=event_id)
-        return [dict(row) for row in self.db.execute(
-            """SELECT actor_id,event,note,occurred_at FROM ago_calendar_audit
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT actor_id,event,note,occurred_at FROM ago_calendar_audit
                WHERE tenant_id=%s AND event_id=%s
                ORDER BY event_order LIMIT 500""",
-            (actor.tenant_id, event_id),
-        ).fetchall()]
+                (actor.tenant_id, event_id),
+            ).fetchall()
+        ]

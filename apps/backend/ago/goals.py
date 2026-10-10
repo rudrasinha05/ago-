@@ -1,15 +1,26 @@
 """M3 Company Brain: tenant-scoped strategic goal hierarchy."""
+
 from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
+
 
 class GoalStore:
-    def __init__(self, db):
+    def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
+        self.repositories = repositories or RepositoryScope(db)
 
-    def create(self, *, tenant_id: str, created_by: str, title: str,
-               description: str = "", parent_id: str | None = None) -> str:
+    def create(
+        self,
+        *,
+        tenant_id: str,
+        created_by: str,
+        title: str,
+        description: str = "",
+        parent_id: str | None = None,
+    ) -> str:
         UUID(tenant_id)
         UUID(created_by)
         if not title.strip() or len(title) > 250:
@@ -53,7 +64,11 @@ class GoalStore:
             )
 
     def list(self, *, tenant_id: str) -> list[dict]:
-        return [dict(row) for row in self.db.execute(
-            """SELECT id,parent_id,title,description,status FROM ago_goals
-               WHERE tenant_id=%s ORDER BY created_at,id""", (tenant_id,)
-        ).fetchall()]
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT id,parent_id,title,description,status FROM ago_goals
+               WHERE tenant_id=%s ORDER BY created_at,id""",
+                (tenant_id,),
+            ).fetchall()
+        ]

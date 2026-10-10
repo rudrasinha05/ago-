@@ -1,10 +1,11 @@
 """Tenant-scoped PostgreSQL identity persistence. No public login endpoints."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 from uuid import uuid4
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal, hash_password, verify_password
 
 
@@ -17,8 +18,11 @@ class UserRecord:
 
 
 class IdentityRepository:
-    def __init__(self, connection: Any):
+    def __init__(
+        self, connection: DatabaseConnection, *, repositories: RepositoryScope | None = None
+    ):
         self.connection = connection
+        self.repositories = repositories or RepositoryScope(connection)
 
     def create_tenant(self, name: str) -> str:
         name = name.strip()
@@ -76,3 +80,12 @@ class IdentityRepository:
             (tenant_id, user_id),
         ).fetchone()
         return row is not None
+
+    def active(self, tenant_id: str, subject: str) -> bool:
+        return (
+            self.connection.execute(
+                "SELECT 1 FROM ago_users WHERE id=%s AND tenant_id=%s AND active=true",
+                (subject, tenant_id),
+            ).fetchone()
+            is not None
+        )

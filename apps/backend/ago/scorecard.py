@@ -1,10 +1,16 @@
 """M5: privacy-preserving tenant-only operational scorecard."""
+
+from __future__ import annotations
+
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.credits import CreditBudget
+from ago.scorecard_queries import ScorecardQueries
 
 
 class Scorecard:
-    def __init__(self, db):
+    def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
+        self.repositories = repositories or RepositoryScope(db)
 
     def summary(self, *, tenant_id: str) -> dict:
         counts = {}
@@ -29,18 +35,21 @@ class Scorecard:
         }
         # SQL identifiers come exclusively from trusted server-owned constants.
         for label, table in entities.items():
-            row = self.db.execute(
-                f"SELECT count(*) AS total FROM {table} WHERE tenant_id=%s",
-                (tenant_id,),
-            ).fetchone()
+            row = (
+                self.repositories.resolve(ScorecardQueries)
+                .select_tenant_count_01((tenant_id,), table=table)
+                .fetchone()
+            )
             counts[label] = int(row["total"])
-        tasks = self.db.execute(
-            """SELECT status,count(*) AS total FROM ago_governed_tasks
-               WHERE tenant_id=%s GROUP BY status""",
-            (tenant_id,),
-        ).fetchall()
+        tasks = (
+            self.repositories.resolve(ScorecardQueries)
+            .select_ago_governed_tasks_02((tenant_id,))
+            .fetchall()
+        )
         return {
             "counts": counts,
             "task_status": {row["status"]: int(row["total"]) for row in tasks},
-            "virtual_credit_budget": CreditBudget(self.db).balance(tenant_id=tenant_id),
+            "virtual_credit_budget": self.repositories.resolve(CreditBudget).balance(
+                tenant_id=tenant_id
+            ),
         }

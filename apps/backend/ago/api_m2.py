@@ -3,52 +3,59 @@
 All mutations take identity from signed, nonrevoked sessions and check persistent
 tenant-scoped database grants. No caller-provided 'authorized' field is accepted.
 """
+
 from __future__ import annotations
 
 import os
 from dataclasses import asdict
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import Field, StrictBool
 
-from ago.governance import ApprovalRepository
+from ago.api_contracts import StrictInput
+from ago.backend_contracts import RepositoryScope
 from ago.governed_execution import GovernanceGate
-from ago.identity import IdentityRepository
-from ago.login_security import LoginThrottle
 from ago.memory import MemoryRecord
-from ago.organization_store import MemoryStore, OrganizationStore
 from ago.quality import Verdict
-from ago.quality_store import QualityStore
+from ago.repository_ports import (
+    REPOSITORY_BINDINGS,
+    ApprovalRepositoryPort,
+    ConsoleStorePort,
+    IdentityRepositoryPort,
+    MemoryStorePort,
+    OrganizationStorePort,
+    QualityStorePort,
+    SecurityControlsPort,
+    SessionServicePort,
+    TaskStorePort,
+)
 from ago.security import AuthenticationError, Principal, SessionTokens
-from ago.security_controls import SecurityControls
-from ago.task_store import TaskStore
-
 
 router = APIRouter(prefix="/v1", tags=["M2 organization"])
 bearer = HTTPBearer(auto_error=False)
 
 
-class Login(BaseModel):
+class Login(StrictInput):
     tenant_id: UUID
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=1024)
 
 
-class DepartmentInput(BaseModel):
+class DepartmentInput(StrictInput):
     name: str = Field(min_length=1, max_length=150)
 
 
-class EmployeeInput(BaseModel):
+class EmployeeInput(StrictInput):
     department_id: UUID
     name: str = Field(min_length=1, max_length=150)
-    kind: str
+    kind: Literal["human", "ai"]
     manager_id: UUID | None = None
 
 
-class ActionInput(BaseModel):
+class ActionInput(StrictInput):
     action: str = Field(min_length=1, max_length=500)
 
 
@@ -56,27 +63,27 @@ class TaskInput(ActionInput):
     assignee_id: UUID
 
 
-class ApprovalLink(BaseModel):
+class ApprovalLink(StrictInput):
     approval_id: UUID
 
 
-class DecisionInput(BaseModel):
-    approve: bool
+class DecisionInput(StrictInput):
+    approve: StrictBool
     reason: str = Field(min_length=1, max_length=3000)
 
 
-class FinishInput(BaseModel):
-    success: bool
+class FinishInput(StrictInput):
+    success: StrictBool
 
 
-class ReviewInput(BaseModel):
+class ReviewInput(StrictInput):
     verdict: Verdict
     evidence: str = Field(min_length=1, max_length=5000)
 
 
-class MemoryInput(BaseModel):
+class MemoryInput(StrictInput):
     content: str = Field(min_length=1, max_length=20_000)
-    visibility: str = "private"
+    visibility: Literal["private", "tenant"] = "private"
 
 
 def session_tokens() -> SessionTokens:
@@ -102,6 +109,14 @@ def db_connection():
         raise HTTPException(503, "Database unavailable") from exc
 
 
+def repository_scope(request: Request, db=Depends(db_connection)) -> RepositoryScope:
+    return RepositoryScope(
+        db,
+        bindings=REPOSITORY_BINDINGS,
+        overrides=getattr(request.app.state, "repository_overrides", {}),
+    )
+
+
 def verified_bearer(
     credential: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
 ) -> tuple[Principal, str]:
@@ -114,35 +129,33 @@ def verified_bearer(
         UUID(principal.subject)
         return principal, credential.credentials
     except (AuthenticationError, ValueError) as exc:
-        raise HTTPException(
-            401, "Invalid session", headers={"WWW-Authenticate": "Bearer"}
-        ) from exc
+        raise HTTPException(401, "Invalid session", headers={"WWW-Authenticate": "Bearer"}) from exc
 
 
 def authenticated(
     verified: Annotated[tuple[Principal, str], Depends(verified_bearer)],
     db=Depends(db_connection),
+    repositories: RepositoryScope = Depends(repository_scope),
 ) -> Principal:
     principal, token = verified
     try:
-        security = SecurityControls(db)
+        security = repositories.resolve(SecurityControlsPort)
         if security.is_revoked(token):
             raise AuthenticationError("Revoked token")
-        active = db.execute(
-            "SELECT 1 FROM ago_users WHERE id=%s AND tenant_id=%s AND active=true",
-            (principal.subject, principal.tenant_id),
-        ).fetchone()
-        if active is None:
+        active = repositories.resolve(IdentityRepositoryPort).active(
+            principal.tenant_id, principal.subject
+        )
+        if not active:
             raise AuthenticationError("Inactive account")
         return principal
     except (AuthenticationError, ValueError) as exc:
-        raise HTTPException(
-            401, "Invalid session", headers={"WWW-Authenticate": "Bearer"}
-        ) from exc
+        raise HTTPException(401, "Invalid session", headers={"WWW-Authenticate": "Bearer"}) from exc
 
 
-def allowed(db, principal: Principal, permission: str) -> None:
-    if not SecurityControls(db).permitted(principal, permission, principal.tenant_id):
+def allowed(repositories: RepositoryScope, principal: Principal, permission: str) -> None:
+    if not repositories.resolve(SecurityControlsPort).permitted(
+        principal, permission, principal.tenant_id
+    ):
         raise HTTPException(403, "Permission denied")
 
 
@@ -157,80 +170,98 @@ def translate_error(exc: Exception):
 
 
 @router.post("/sessions")
-def login(data: Login, db=Depends(db_connection)):
+def login(
+    data: Login,
+    db=Depends(db_connection),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
     tokens = session_tokens()
-    tenant_id = str(data.tenant_id)
-    throttle = LoginThrottle(db)
-    if not throttle.begin(tenant_id, data.email):
-        db.commit()
-        raise HTTPException(401, "Invalid credentials")
-    principal = IdentityRepository(db).authenticate(
-        tenant_id, data.email, data.password
-    )
-    if principal is None:
-        throttle.failure(tenant_id, data.email)
-        db.commit()  # Persist failed attempts even though HTTP returns 401.
-        raise HTTPException(401, "Invalid credentials")
-    throttle.success(tenant_id, data.email)
+    try:
+        principal = repositories.resolve(SessionServicePort).authenticate(
+            str(data.tenant_id), data.email, data.password
+        )
+    except AuthenticationError as exc:
+        raise HTTPException(401, "Invalid credentials") from exc
     return {"access_token": tokens.issue(principal), "token_type": "bearer"}
 
 
 @router.post("/organization/departments")
 def add_department(
-    data: DepartmentInput, db=Depends(db_connection),
+    data: DepartmentInput,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "organization:manage")
+    allowed(repositories, actor, "organization:manage")
     try:
-        return asdict(OrganizationStore(db).add_department(
-            tenant_id=actor.tenant_id, name=data.name
-        ))
+        return asdict(
+            repositories.resolve(OrganizationStorePort).add_department(
+                tenant_id=actor.tenant_id, name=data.name
+            )
+        )
     except ValueError as exc:
         translate_error(exc)
 
 
 @router.post("/organization/employees")
 def add_employee(
-    data: EmployeeInput, db=Depends(db_connection),
+    data: EmployeeInput,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "organization:manage")
+    allowed(repositories, actor, "organization:manage")
     try:
-        return asdict(OrganizationStore(db).hire(
-            tenant_id=actor.tenant_id, department_id=str(data.department_id),
-            name=data.name, kind=data.kind,
-            manager_id=str(data.manager_id) if data.manager_id else None,
-        ))
+        return asdict(
+            repositories.resolve(OrganizationStorePort).hire(
+                tenant_id=actor.tenant_id,
+                department_id=str(data.department_id),
+                name=data.name,
+                kind=data.kind,
+                manager_id=str(data.manager_id) if data.manager_id else None,
+            )
+        )
     except (ValueError, PermissionError) as exc:
         translate_error(exc)
 
 
 @router.post("/governance/approvals")
 def request_approval(
-    data: ActionInput, db=Depends(db_connection),
+    data: ActionInput,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "approval:request")
+    allowed(repositories, actor, "approval:request")
     try:
-        return asdict(ApprovalRepository(db).propose(
-            tenant_id=actor.tenant_id, action=data.action,
-            requester_id=actor.subject,
-        ))
+        return asdict(
+            repositories.resolve(ApprovalRepositoryPort).propose(
+                tenant_id=actor.tenant_id,
+                action=data.action,
+                requester_id=actor.subject,
+            )
+        )
     except ValueError as exc:
         translate_error(exc)
 
 
 @router.post("/governance/approvals/{request_id}/decision")
 def decide_approval(
-    request_id: UUID, data: DecisionInput, db=Depends(db_connection),
+    request_id: UUID,
+    data: DecisionInput,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
     try:
         decision = GovernanceGate(
-            ApprovalRepository(db), SecurityControls(db)
+            repositories.resolve(ApprovalRepositoryPort), repositories.resolve(SecurityControlsPort)
         ).decide(
-            principal=actor, request_id=str(request_id),
-            tenant_id=actor.tenant_id, approve=data.approve, reason=data.reason,
+            principal=actor,
+            request_id=str(request_id),
+            tenant_id=actor.tenant_id,
+            approve=data.approve,
+            reason=data.reason,
         )
         return asdict(decision)
     except (ValueError, PermissionError, LookupError) as exc:
@@ -239,28 +270,37 @@ def decide_approval(
 
 @router.post("/tasks")
 def create_task(
-    data: TaskInput, db=Depends(db_connection),
+    data: TaskInput,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "task:create")
+    allowed(repositories, actor, "task:create")
     try:
-        return asdict(TaskStore(db).propose(
-            tenant_id=actor.tenant_id, action=data.action,
-            assignee_id=str(data.assignee_id),
-        ))
+        return asdict(
+            repositories.resolve(TaskStorePort).propose(
+                tenant_id=actor.tenant_id,
+                action=data.action,
+                assignee_id=str(data.assignee_id),
+            )
+        )
     except ValueError as exc:
         translate_error(exc)
 
 
 @router.post("/tasks/{task_id}/approval")
 def attach_approval(
-    task_id: UUID, data: ApprovalLink, db=Depends(db_connection),
+    task_id: UUID,
+    data: ApprovalLink,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "task:create")
+    allowed(repositories, actor, "task:create")
     try:
-        TaskStore(db).request_approval(
-            task_id=str(task_id), tenant_id=actor.tenant_id,
+        repositories.resolve(TaskStorePort).request_approval(
+            task_id=str(task_id),
+            tenant_id=actor.tenant_id,
             approval_id=str(data.approval_id),
         )
     except (PermissionError, ValueError) as exc:
@@ -270,11 +310,13 @@ def attach_approval(
 
 @router.post("/tasks/{task_id}/start")
 def start_task(
-    task_id: UUID, db=Depends(db_connection),
+    task_id: UUID,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
     try:
-        task = TaskStore(db).authorize_and_start(
+        task = repositories.resolve(TaskStorePort).authorize_and_start(
             task_id=str(task_id), principal=actor
         )
         return asdict(task)
@@ -284,13 +326,17 @@ def start_task(
 
 @router.post("/tasks/{task_id}/finish")
 def finish_task(
-    task_id: UUID, data: FinishInput, db=Depends(db_connection),
+    task_id: UUID,
+    data: FinishInput,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "task:execute")
+    allowed(repositories, actor, "task:execute")
     try:
-        TaskStore(db).finish(
-            task_id=str(task_id), tenant_id=actor.tenant_id,
+        repositories.resolve(TaskStorePort).finish(
+            task_id=str(task_id),
+            tenant_id=actor.tenant_id,
             success=data.success,
         )
     except ValueError as exc:
@@ -300,13 +346,18 @@ def finish_task(
 
 @router.post("/tasks/{task_id}/review")
 def review_task(
-    task_id: UUID, data: ReviewInput, db=Depends(db_connection),
+    task_id: UUID,
+    data: ReviewInput,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
     try:
-        review = QualityStore(db).review(
-            task_id=str(task_id), principal=actor,
-            verdict=data.verdict, evidence=data.evidence,
+        review = repositories.resolve(QualityStorePort).review(
+            task_id=str(task_id),
+            principal=actor,
+            verdict=data.verdict,
+            evidence=data.evidence,
         )
         return asdict(review)
     except (PermissionError, ValueError) as exc:
@@ -315,16 +366,20 @@ def review_task(
 
 @router.post("/memory")
 def save_memory(
-    data: MemoryInput, db=Depends(db_connection),
+    data: MemoryInput,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "memory:write")
+    allowed(repositories, actor, "memory:write")
     try:
         record = MemoryRecord.create(
-            tenant_id=actor.tenant_id, owner_id=actor.subject,
-            content=data.content, visibility=data.visibility,
+            tenant_id=actor.tenant_id,
+            owner_id=actor.subject,
+            content=data.content,
+            visibility=data.visibility,
         )
-        MemoryStore(db).save(record)
+        repositories.resolve(MemoryStorePort).save(record)
         return {"id": record.id, "visibility": record.visibility}
     except ValueError as exc:
         translate_error(exc)
@@ -332,13 +387,16 @@ def save_memory(
 
 @router.get("/memory/{record_id}")
 def get_memory(
-    record_id: UUID, db=Depends(db_connection),
+    record_id: UUID,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "memory:read")
+    allowed(repositories, actor, "memory:read")
     try:
-        record = MemoryStore(db).get(
-            record_id=str(record_id), tenant_id=actor.tenant_id,
+        record = repositories.resolve(MemoryStorePort).get(
+            record_id=str(record_id),
+            tenant_id=actor.tenant_id,
             reader_id=actor.subject,
         )
         return asdict(record)
@@ -348,54 +406,62 @@ def get_memory(
 
 @router.get("/organization/departments")
 def list_departments(
-    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "organization:read")
+    allowed(repositories, actor, "organization:read")
     return [
-        asdict(d) for d in OrganizationStore(db).list_departments(tenant_id=actor.tenant_id)
+        asdict(d)
+        for d in repositories.resolve(OrganizationStorePort).list_departments(
+            tenant_id=actor.tenant_id
+        )
     ]
 
 
 @router.get("/organization/employees")
 def list_employees(
-    department_id: UUID, db=Depends(db_connection),
+    department_id: UUID,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "organization:read")
+    allowed(repositories, actor, "organization:read")
     return [
-        asdict(e) for e in OrganizationStore(db).list_employees(
-            tenant_id=actor.tenant_id, department_id=str(department_id),
+        asdict(e)
+        for e in repositories.resolve(OrganizationStorePort).list_employees(
+            tenant_id=actor.tenant_id,
+            department_id=str(department_id),
         )
     ]
 
 
 @router.get("/governance/approvals")
 def list_approvals(
-    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "approval:read")
-    return ApprovalRepository(db).list_requests(tenant_id=actor.tenant_id)
+    allowed(repositories, actor, "approval:read")
+    return repositories.resolve(ApprovalRepositoryPort).list_requests(tenant_id=actor.tenant_id)
 
 
 @router.get("/tasks")
 def list_tasks(
-    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "task:read")
-    return TaskStore(db).list_tasks(tenant_id=actor.tenant_id)
+    allowed(repositories, actor, "task:read")
+    return repositories.resolve(TaskStorePort).list_tasks(tenant_id=actor.tenant_id)
 
 
 @router.get("/tasks/{task_id}/review")
 def get_task_review(
-    task_id: UUID, db=Depends(db_connection),
+    task_id: UUID,
+    db=Depends(db_connection),
     actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
 ):
-    allowed(db, actor, "qa:read")
-    row = db.execute(
-        """SELECT task_id, author_id, reviewer_id, verdict, evidence, created_at
-           FROM ago_task_reviews WHERE tenant_id=%s AND task_id=%s""",
-        (actor.tenant_id, str(task_id)),
-    ).fetchone()
-    if row is None:
-        raise HTTPException(404, "Review not found")
-    return dict(row)
+    allowed(repositories, actor, "qa:read")
+    return repositories.resolve(ConsoleStorePort).review(str(task_id), actor.tenant_id)

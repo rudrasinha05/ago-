@@ -1,26 +1,27 @@
 """AGO API entry point."""
+
 from __future__ import annotations
 
 import os
-from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from ago.api_agents import router as agents_router
-from ago.api_insights import router as insights_router
 from ago.api_brain import router as brain_router
+from ago.api_council import router as council_router
+from ago.api_insights import router as insights_router
+from ago.api_knowledge import router as knowledge_router
 from ago.api_m2 import router as m2_router
 from ago.api_meta import router as meta_router
-from ago.api_tools import router as tools_router
 from ago.api_operations import router as operations_router
-from ago.api_knowledge import router as knowledge_router
-from ago.api_council import router as council_router
-from ago.platform import Settings, build_container, configure_logging, request_id
-from ago.console_host import console_headers, register_console
+from ago.api_tools import router as tools_router
 from ago.console_api import router as console_router
+from ago.console_host import console_headers, register_console
+from ago.http_errors import correlation_id, install_error_handlers
+from ago.platform import Settings, build_container, configure_logging, request_id
 from ago.readiness import ReadinessChecks
-from ago.release_security import (ReleasePolicy, install_release_perimeter, schema_integrity)
+from ago.release_security import ReleasePolicy, install_release_perimeter, schema_integrity
 
 
 def postgres_available() -> bool:
@@ -39,7 +40,8 @@ def create_app() -> FastAPI:
     policy = ReleasePolicy.from_environment(settings.environment)
     configure_logging(settings)
     app = FastAPI(
-        title="Artificial General Organization", version="0.1.0",
+        title="Artificial General Organization",
+        version="0.1.0",
         docs_url=None if policy.production else "/docs",
         redoc_url=None if policy.production else "/redoc",
         openapi_url=None if policy.production else "/openapi.json",
@@ -62,26 +64,17 @@ def create_app() -> FastAPI:
     app.include_router(console_router)
     register_console(app)
 
-    try:
-        import psycopg
-
-        @app.exception_handler(psycopg.IntegrityError)
-        async def database_conflict(_request: Request, _exc: psycopg.IntegrityError):
-            return JSONResponse(status_code=409, content={"detail": "Database conflict"})
-    except ImportError:
-        pass
+    install_error_handlers(app)
 
     @app.middleware("http")
     async def correlate(request: Request, call_next):
         incoming = request.headers.get("x-request-id")
-        correlation_id = (incoming if incoming and len(incoming) <= 128
-                          and incoming.isascii() and incoming.isprintable()
-                          and all(ch not in incoming for ch in ("\\r", "\\n"))
-                          else str(uuid4()))
-        token = request_id.set(correlation_id)
+        correlation = correlation_id(incoming)
+        request.state.request_id = correlation
+        token = request_id.set(correlation)
         try:
             response = await call_next(request)
-            response.headers["x-request-id"] = correlation_id
+            response.headers["x-request-id"] = correlation
             for key, value in console_headers(request.url.path).items():
                 response.headers[key] = value
             return response

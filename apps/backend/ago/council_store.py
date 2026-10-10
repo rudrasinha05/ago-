@@ -2,31 +2,41 @@
 
 A passing motion remains an advisory record. It cannot execute external actions.
 """
+
 from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.governance import ApprovalRepository
 from ago.security import Principal
 from ago.security_controls import SecurityControls
 
 
 class CouncilStore:
-    def __init__(self, db):
+    def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
+        self.repositories = repositories or RepositoryScope(db)
 
     def _human(self, actor: Principal) -> bool:
-        return self.db.execute(
-            """SELECT 1 FROM ago_users u
+        return (
+            self.db.execute(
+                """SELECT 1 FROM ago_users u
                JOIN ago_employees e ON e.id=u.id AND e.tenant_id=u.tenant_id
                WHERE u.tenant_id=%s AND u.id=%s AND u.active=true
                  AND e.kind='human'""",
-            (actor.tenant_id, actor.subject),
-        ).fetchone() is not None
+                (actor.tenant_id, actor.subject),
+            ).fetchone()
+            is not None
+        )
 
     def propose(
-        self, *, actor: Principal, title: str,
-        rationale: str, required_votes: int = 2,
+        self,
+        *,
+        actor: Principal,
+        title: str,
+        rationale: str,
+        required_votes: int = 2,
     ) -> dict:
         UUID(actor.tenant_id)
         UUID(actor.subject)
@@ -56,7 +66,7 @@ class CouncilStore:
             if eligible < required_votes:
                 raise PermissionError("Insufficient independent human council voters")
             motion_id = str(uuid4())
-            approval = ApprovalRepository(self.db).propose(
+            approval = self.repositories.resolve(ApprovalRepository).propose(
                 tenant_id=actor.tenant_id,
                 action=f"council:pass:{motion_id}",
                 requester_id=actor.subject,
@@ -65,20 +75,34 @@ class CouncilStore:
                 """INSERT INTO ago_council_motions
                    (id,tenant_id,proposer_id,title,rationale,required_votes,approval_id)
                    VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-                (motion_id, actor.tenant_id, actor.subject, title.strip(),
-                 rationale.strip(), required_votes, approval.request_id),
+                (
+                    motion_id,
+                    actor.tenant_id,
+                    actor.subject,
+                    title.strip(),
+                    rationale.strip(),
+                    required_votes,
+                    approval.request_id,
+                ),
             )
         return {"id": motion_id, "approval_id": approval.request_id, "status": "open"}
 
     def vote(
-        self, *, actor: Principal, motion_id: str, vote: str, reason: str,
+        self,
+        *,
+        actor: Principal,
+        motion_id: str,
+        vote: str,
+        reason: str,
     ) -> dict:
         UUID(motion_id)
         if vote not in ("yes", "no") or not 1 <= len(reason.strip()) <= 3000:
             raise ValueError("Valid council decision and explanation required")
         with self.db.transaction():
-            if not SecurityControls(self.db).permitted(
-                actor, "council:vote", actor.tenant_id,
+            if not self.repositories.resolve(SecurityControls).permitted(
+                actor,
+                "council:vote",
+                actor.tenant_id,
             ) or not self._human(actor):
                 raise PermissionError("Only authorized active humans may vote")
             motion = self.db.execute(
@@ -102,8 +126,10 @@ class CouncilStore:
     def finalize(self, *, actor: Principal, motion_id: str) -> str:
         UUID(motion_id)
         with self.db.transaction():
-            if not SecurityControls(self.db).permitted(
-                actor, "council:finalize", actor.tenant_id,
+            if not self.repositories.resolve(SecurityControls).permitted(
+                actor,
+                "council:finalize",
+                actor.tenant_id,
             ) or not self._human(actor):
                 raise PermissionError("Council finalizer must be an authorized human")
             motion = self.db.execute(
@@ -125,7 +151,7 @@ class CouncilStore:
             if counts.get("no", 0):
                 status = "rejected"
             elif counts.get("yes", 0) >= motion["required_votes"]:
-                ApprovalRepository(self.db).assert_executable(
+                self.repositories.resolve(ApprovalRepository).assert_executable(
                     request_id=str(motion["approval_id"]),
                     tenant_id=actor.tenant_id,
                     action=f"council:pass:{motion_id}",
@@ -141,8 +167,10 @@ class CouncilStore:
         return status
 
     def list(self, *, tenant_id: str) -> list[dict]:
-        return [dict(row) for row in self.db.execute(
-            """SELECT m.id,m.proposer_id,m.title,m.rationale,m.required_votes,
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT m.id,m.proposer_id,m.title,m.rationale,m.required_votes,
                       m.status,m.approval_id,m.created_at,
                       count(v.id) FILTER (WHERE v.vote='yes') AS yes_votes,
                       count(v.id) FILTER (WHERE v.vote='no') AS no_votes
@@ -152,13 +180,17 @@ class CouncilStore:
                WHERE m.tenant_id=%s
                GROUP BY m.tenant_id,m.id
                ORDER BY m.created_at DESC,m.id LIMIT 200""",
-            (tenant_id,),
-        ).fetchall()]
+                (tenant_id,),
+            ).fetchall()
+        ]
 
     def ballots(self, *, tenant_id: str, motion_id: str) -> list[dict]:
-        return [dict(row) for row in self.db.execute(
-            """SELECT voter_id,vote,reason,created_at FROM ago_council_votes
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT voter_id,vote,reason,created_at FROM ago_council_votes
                WHERE tenant_id=%s AND motion_id=%s
                ORDER BY created_at,id LIMIT 200""",
-            (tenant_id, motion_id),
-        ).fetchall()]
+                (tenant_id, motion_id),
+            ).fetchall()
+        ]

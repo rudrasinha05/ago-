@@ -3,15 +3,25 @@
 Call begin()/success()/failure() within one connection transaction and commit
 failed attempts before returning an authentication error.
 """
+
 from __future__ import annotations
+
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 
 
 class LoginThrottle:
-    def __init__(self, connection, *, max_attempts: int = 5):
+    def __init__(
+        self,
+        connection: DatabaseConnection,
+        *,
+        max_attempts: int = 5,
+        repositories: RepositoryScope | None = None,
+    ):
         if max_attempts < 2:
             raise ValueError("max_attempts must be >= 2")
         self.connection = connection
         self.max_attempts = max_attempts
+        self.repositories = repositories or RepositoryScope(connection)
 
     def begin(self, tenant_id: str, email: str) -> bool:
         normalized = email.strip().lower()

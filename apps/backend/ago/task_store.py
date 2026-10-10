@@ -1,16 +1,21 @@
 """Durable governed tasks; authorization and transition are atomic under row lock."""
+
 from __future__ import annotations
 
 from uuid import UUID
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal
 from ago.security_controls import SecurityControls
 from ago.workflows import GovernedTask, TaskStatus
 
 
 class TaskStore:
-    def __init__(self, connection):
+    def __init__(
+        self, connection: DatabaseConnection, *, repositories: RepositoryScope | None = None
+    ):
         self.connection = connection
+        self.repositories = repositories or RepositoryScope(connection)
 
     def propose(self, *, tenant_id: str, action: str, assignee_id: str) -> GovernedTask:
         task = GovernedTask.propose(tenant_id, action, assignee_id)
@@ -38,8 +43,11 @@ class TaskStore:
                 (approval_id, tenant_id),
             ).fetchone()
             if (
-                task is None or approval is None or task["status"] != "proposed"
-                or approval["status"] != "pending" or task["action"] != approval["action"]
+                task is None
+                or approval is None
+                or task["status"] != "proposed"
+                or approval["status"] != "pending"
+                or task["action"] != approval["action"]
             ):
                 raise PermissionError("Matching pending approval required")
             self.connection.execute(
@@ -50,7 +58,10 @@ class TaskStore:
             )
 
     def authorize_and_start(
-        self, *, task_id: str, principal: Principal,
+        self,
+        *,
+        task_id: str,
+        principal: Principal,
     ) -> GovernedTask:
         tenant_id = principal.tenant_id
         with self.connection.transaction():
@@ -61,7 +72,7 @@ class TaskStore:
             ).fetchone()
             if task is None or task["status"] != "waiting_approval" or not task["approval_id"]:
                 raise PermissionError("Task awaiting valid approval required")
-            if not SecurityControls(self.connection).permitted(
+            if not self.repositories.resolve(SecurityControls).permitted(
                 principal, "task:execute", tenant_id
             ):
                 raise PermissionError("Execution permission required")
@@ -70,7 +81,11 @@ class TaskStore:
                    WHERE id=%s AND tenant_id=%s FOR UPDATE""",
                 (task["approval_id"], tenant_id),
             ).fetchone()
-            if approval is None or approval["status"] != "approved" or approval["action"] != task["action"]:
+            if (
+                approval is None
+                or approval["status"] != "approved"
+                or approval["action"] != task["action"]
+            ):
                 raise PermissionError("Approved matching action required")
             # M3 plan tasks must respect active strategy and reviewed prerequisites.
             blocked_plan = self.connection.execute(
@@ -112,8 +127,12 @@ class TaskStore:
                 (task_id, tenant_id),
             )
         return GovernedTask(
-            str(task["id"]), tenant_id, task["action"], str(task["assignee_id"]),
-            TaskStatus.RUNNING, str(task["approval_id"]),
+            str(task["id"]),
+            tenant_id,
+            task["action"],
+            str(task["assignee_id"]),
+            TaskStatus.RUNNING,
+            str(task["approval_id"]),
         )
 
     def list_tasks(self, *, tenant_id: str, limit: int = 100) -> list[dict]:

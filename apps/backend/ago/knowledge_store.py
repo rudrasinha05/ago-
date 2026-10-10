@@ -2,10 +2,12 @@
 
 Evidence review is not proof of factual truth or automatic policy activation.
 """
+
 from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal
 from ago.security_controls import SecurityControls
 
@@ -14,20 +16,28 @@ class KnowledgeStore:
     KINDS = frozenset(("fact", "policy", "artifact", "decision"))
     RELATIONS = frozenset(("supports", "contradicts", "depends_on", "references"))
 
-    def __init__(self, db):
+    def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
+        self.repositories = repositories or RepositoryScope(db)
 
     def propose(
-        self, *, actor: Principal, kind: str, label: str,
-        statement: str, source_ref: str,
+        self,
+        *,
+        actor: Principal,
+        kind: str,
+        label: str,
+        statement: str,
+        source_ref: str,
     ) -> str:
         UUID(actor.tenant_id)
         UUID(actor.subject)
         if kind not in self.KINDS:
             raise ValueError("Unsupported knowledge kind")
-        if (not 1 <= len(label.strip()) <= 250
-                or not 1 <= len(statement.strip()) <= 12000
-                or not 1 <= len(source_ref.strip()) <= 1000):
+        if (
+            not 1 <= len(label.strip()) <= 250
+            or not 1 <= len(statement.strip()) <= 12000
+            or not 1 <= len(source_ref.strip()) <= 1000
+        ):
             raise ValueError("Label, statement and evidence reference required")
         node_id = str(uuid4())
         with self.db.transaction():
@@ -35,20 +45,34 @@ class KnowledgeStore:
                 """INSERT INTO ago_knowledge_nodes
                    (id,tenant_id,author_id,kind,label,statement,source_ref)
                    VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-                (node_id, actor.tenant_id, actor.subject, kind, label.strip(),
-                 statement.strip(), source_ref.strip()),
+                (
+                    node_id,
+                    actor.tenant_id,
+                    actor.subject,
+                    kind,
+                    label.strip(),
+                    statement.strip(),
+                    source_ref.strip(),
+                ),
             )
         return node_id
 
     def review(
-        self, *, actor: Principal, node_id: str, approve: bool, note: str,
+        self,
+        *,
+        actor: Principal,
+        node_id: str,
+        approve: bool,
+        note: str,
     ) -> dict:
         UUID(node_id)
         if not 1 <= len(note.strip()) <= 3000:
             raise ValueError("Independent review rationale required")
         with self.db.transaction():
-            if not SecurityControls(self.db).permitted(
-                actor, "knowledge:review", actor.tenant_id,
+            if not self.repositories.resolve(SecurityControls).permitted(
+                actor,
+                "knowledge:review",
+                actor.tenant_id,
             ):
                 raise PermissionError("Knowledge review permission required")
             reviewer = self.db.execute(
@@ -79,7 +103,12 @@ class KnowledgeStore:
         return {"id": node_id, "status": verdict}
 
     def relate(
-        self, *, actor: Principal, from_id: str, to_id: str, relation: str,
+        self,
+        *,
+        actor: Principal,
+        from_id: str,
+        to_id: str,
+        relation: str,
     ) -> str:
         for value in (actor.tenant_id, actor.subject, from_id, to_id):
             UUID(value)
@@ -113,26 +142,34 @@ class KnowledgeStore:
     def verified(self, *, tenant_id: str, limit: int = 100) -> list[dict]:
         if not 1 <= limit <= 500:
             raise ValueError("Invalid search limit")
-        return [dict(row) for row in self.db.execute(
-            """SELECT id,kind,label,statement,source_ref,author_id,reviewer_id,
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT id,kind,label,statement,source_ref,author_id,reviewer_id,
                       reviewed_at FROM ago_knowledge_nodes
                WHERE tenant_id=%s AND status='verified'
                ORDER BY reviewed_at DESC,id LIMIT %s""",
-            (tenant_id, limit),
-        ).fetchall()]
+                (tenant_id, limit),
+            ).fetchall()
+        ]
 
     def pending(self, *, tenant_id: str) -> list[dict]:
-        return [dict(row) for row in self.db.execute(
-            """SELECT id,kind,label,statement,source_ref,author_id,created_at
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT id,kind,label,statement,source_ref,author_id,created_at
                FROM ago_knowledge_nodes WHERE tenant_id=%s AND status='pending'
                ORDER BY created_at,id LIMIT 200""",
-            (tenant_id,),
-        ).fetchall()]
+                (tenant_id,),
+            ).fetchall()
+        ]
 
     def edges(self, *, tenant_id: str, node_id: str) -> list[dict]:
         UUID(node_id)
-        return [dict(row) for row in self.db.execute(
-            """SELECT e.id,e.from_id,e.to_id,e.relation,e.created_at
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT e.id,e.from_id,e.to_id,e.relation,e.created_at
                FROM ago_knowledge_edges e
                JOIN ago_knowledge_nodes source ON source.tenant_id=e.tenant_id
                  AND source.id=e.from_id AND source.status='verified'
@@ -140,5 +177,6 @@ class KnowledgeStore:
                  AND target.id=e.to_id AND target.status='verified'
                WHERE e.tenant_id=%s AND (e.from_id=%s OR e.to_id=%s)
                ORDER BY e.created_at,e.id LIMIT 500""",
-            (tenant_id, node_id, node_id),
-        ).fetchall()]
+                (tenant_id, node_id, node_id),
+            ).fetchall()
+        ]

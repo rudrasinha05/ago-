@@ -1,16 +1,21 @@
 """PostgreSQL-backed authorization grants, session revocation, and audit records."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 from typing import Any
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal
 
 
 class SecurityControls:
-    def __init__(self, connection: Any):
+    def __init__(
+        self, connection: DatabaseConnection, *, repositories: RepositoryScope | None = None
+    ):
         self.connection = connection
+        self.repositories = repositories or RepositoryScope(connection)
 
     def grant(self, tenant_id: str, role: str, permission: str) -> None:
         if not tenant_id or not role or not permission:
@@ -53,15 +58,23 @@ class SecurityControls:
         )
 
     def is_revoked(self, token: str) -> bool:
-        return self.connection.execute(
-            """SELECT 1 FROM ago_revoked_sessions
+        return (
+            self.connection.execute(
+                """SELECT 1 FROM ago_revoked_sessions
                WHERE token_hash=%s AND expires_at>now()""",
-            (self.token_hash(token),),
-        ).fetchone() is not None
+                (self.token_hash(token),),
+            ).fetchone()
+            is not None
+        )
 
     def audit(
-        self, action: str, outcome: str, *, tenant_id: str | None = None,
-        actor_id: str | None = None, metadata: dict[str, Any] | None = None,
+        self,
+        action: str,
+        outcome: str,
+        *,
+        tenant_id: str | None = None,
+        actor_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         if not action or not outcome:
             raise ValueError("Audit action and outcome required")

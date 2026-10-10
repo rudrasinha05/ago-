@@ -168,7 +168,26 @@
     "tool_catalog": "operations",
     "tool_enrollment": "operations",
     "tool_runtime": "operations",
-    "workflows": "workforce"
+    "workflows": "workforce",
+    "backend_contracts": "platform",
+    "api_contracts": "transport",
+    "http_errors": "transport",
+    "console_store": "governance",
+    "console_service": "governance",
+    "governance_domain": "governance",
+    "credit_domain": "economics",
+    "dna_domain": "strategy",
+    "repository_ports": "platform",
+    "session_service": "governance",
+    "agent_runtime_queries": "workforce",
+    "department_automation_queries": "operations",
+    "executive_intelligence_queries": "strategy",
+    "meta_brain_queries": "strategy",
+    "plan_execution_queries": "strategy",
+    "scorecard_queries": "economics",
+    "tool_catalog_queries": "operations",
+    "tool_enrollment_queries": "operations",
+    "tool_runtime_queries": "operations"
   },
   "sql_access": {
     "__init__": [],
@@ -177,7 +196,8 @@
       "ago_users"
     ],
     "agent_handlers": [],
-    "agent_runtime": [
+    "agent_runtime": [],
+    "agent_runtime_queries": [
       "ago_agent_messages",
       "ago_agent_runs",
       "ago_employees",
@@ -185,13 +205,11 @@
     ],
     "api_agents": [],
     "api_brain": [],
+    "api_contracts": [],
     "api_council": [],
     "api_insights": [],
     "api_knowledge": [],
-    "api_m2": [
-      "ago_task_reviews",
-      "ago_users"
-    ],
+    "api_m2": [],
     "api_meta": [],
     "api_operations": [],
     "api_tools": [],
@@ -199,6 +217,7 @@
     "architecture_guard": [],
     "auth_api": [],
     "auth_guard": [],
+    "backend_contracts": [],
     "bootstrap": [
       "ago_employees"
     ],
@@ -207,7 +226,10 @@
       "ago_calendar_audit",
       "ago_calendar_events"
     ],
-    "console_api": [
+    "console_api": [],
+    "console_host": [],
+    "console_service": [],
+    "console_store": [
       "ago_employees",
       "ago_governed_tasks",
       "ago_role_permissions",
@@ -215,7 +237,6 @@
       "ago_user_roles",
       "ago_users"
     ],
-    "console_host": [],
     "council_store": [
       "ago_council_motions",
       "ago_council_votes",
@@ -224,11 +245,13 @@
       "ago_user_roles",
       "ago_users"
     ],
+    "credit_domain": [],
     "credits": [
       "ago_credit_budgets",
       "ago_credit_usage"
     ],
-    "department_automation": [
+    "department_automation": [],
+    "department_automation_queries": [
       "ago_automation_firings",
       "ago_automation_rules",
       "ago_employees",
@@ -237,6 +260,7 @@
       "ago_task_reviews",
       "ago_tool_enrollments"
     ],
+    "dna_domain": [],
     "event_contracts": [],
     "event_migrations": [
       "ago_schema_migrations"
@@ -246,7 +270,8 @@
     "event_worker": [],
     "events": [],
     "execution": [],
-    "executive_intelligence": [
+    "executive_intelligence": [],
+    "executive_intelligence_queries": [
       "ago_agent_runs",
       "ago_approval_requests",
       "ago_credit_budgets",
@@ -271,12 +296,14 @@
       "ago_employees",
       "ago_users"
     ],
+    "governance_domain": [],
     "governed_execution": [],
     "handoffs": [
       "ago_employees",
       "ago_handoff_events",
       "ago_handoffs"
     ],
+    "http_errors": [],
     "identity": [
       "ago_tenants",
       "ago_user_roles",
@@ -306,7 +333,8 @@
     ],
     "main": [],
     "memory": [],
-    "meta_brain": [
+    "meta_brain": [],
+    "meta_brain_queries": [
       "ago_approval_requests",
       "ago_executive_snapshots",
       "ago_meta_recommendations"
@@ -325,7 +353,8 @@
       "ago_dna_versions",
       "ago_tenants"
     ],
-    "plan_execution": [
+    "plan_execution": [],
+    "plan_execution_queries": [
       "ago_goals",
       "ago_plan_steps",
       "ago_strategy_plans"
@@ -355,8 +384,10 @@
     "release_security": [
       "ago_schema_migrations"
     ],
+    "repository_ports": [],
     "scheduler": [],
-    "scorecard": [
+    "scorecard": [],
+    "scorecard_queries": [
       "ago_governed_tasks"
     ],
     "security": [],
@@ -367,6 +398,7 @@
       "ago_user_roles",
       "ago_users"
     ],
+    "session_service": [],
     "simulation": [],
     "task_store": [
       "ago_approval_requests",
@@ -376,16 +408,19 @@
       "ago_strategy_plans",
       "ago_task_reviews"
     ],
-    "tool_catalog": [
+    "tool_catalog": [],
+    "tool_catalog_queries": [
       "ago_knowledge_nodes"
     ],
-    "tool_enrollment": [
+    "tool_enrollment": [],
+    "tool_enrollment_queries": [
       "ago_approval_requests",
       "ago_tenants",
       "ago_tool_enrollment_audit",
       "ago_tool_enrollments"
     ],
-    "tool_runtime": [
+    "tool_runtime": [],
+    "tool_runtime_queries": [
       "ago_governed_tasks",
       "ago_tool_run_evidence",
       "ago_tool_runs"

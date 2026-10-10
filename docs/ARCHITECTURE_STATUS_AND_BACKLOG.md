@@ -34,9 +34,14 @@ Intelligence or completion of the original entire enterprise architecture.
   All seven gates CI-accepted: `4845502`, run `38037327542`; 298 Python tests
   per matrix version, 14 console JS, three SDK, six Chromium, Docker/restore
   and all three actual Next.js builds/HTTP exports passed; `docs/reports/SECTION04_FINAL_ACCEPTANCE.md`.
+- **Section 5 — Backend Architecture:** strict route/application/domain separation,
+  context-owned SQL repositories, 38 typed structural component ports and request
+  scope injection; strict request inputs and correlated safe exception envelopes.
+  Local targeted gates passed; full PostgreSQL/matrix/browser/image CI pending.
+  Evidence: `docs/reports/SECTION05_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
-  Versioned manifest maps 76 AGO root modules and 145 observed internal
+  Versioned manifest now maps 95 AGO root modules and 252 observed internal
   imports, enforces layering and cycle bans, protects approval/QA write
   ownership, documents extraction contracts and requires bounded reviewed
   exception records. Graphviz diagrams and negative tests are generated

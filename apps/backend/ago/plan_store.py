@@ -1,17 +1,19 @@
 """M3: tenant-scoped, immutable-after-submission strategic action plans."""
+
 from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.governance import ApprovalRepository
 
 
 class PlanStore:
-    def __init__(self, db):
+    def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
+        self.repositories = repositories or RepositoryScope(db)
 
-    def create(self, *, tenant_id: str, proposer_id: str,
-               goal_id: str, title: str) -> str:
+    def create(self, *, tenant_id: str, proposer_id: str, goal_id: str, title: str) -> str:
         for value in (tenant_id, proposer_id, goal_id):
             UUID(value)
         if not title.strip() or len(title) > 250:
@@ -32,8 +34,15 @@ class PlanStore:
             )
         return plan_id
 
-    def add_step(self, *, tenant_id: str, plan_id: str, action: str,
-                 assignee_id: str, depends_on: str | None = None) -> str:
+    def add_step(
+        self,
+        *,
+        tenant_id: str,
+        plan_id: str,
+        action: str,
+        assignee_id: str,
+        depends_on: str | None = None,
+    ) -> str:
         for value in (tenant_id, plan_id, assignee_id):
             UUID(value)
         if not action.strip() or len(action) > 500:
@@ -70,13 +79,11 @@ class PlanStore:
                 """INSERT INTO ago_plan_steps
                    (id,tenant_id,plan_id,position,action,assignee_id,depends_on)
                    VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-                (step_id, tenant_id, plan_id, position, action.strip(),
-                 assignee_id, depends_on),
+                (step_id, tenant_id, plan_id, position, action.strip(), assignee_id, depends_on),
             )
         return step_id
 
-    def submit(self, *, tenant_id: str, plan_id: str,
-               requester_id: str) -> str:
+    def submit(self, *, tenant_id: str, plan_id: str, requester_id: str) -> str:
         UUID(requester_id)
         with self.db.transaction():
             plan = self.db.execute(
@@ -95,7 +102,7 @@ class PlanStore:
             ).fetchone()
             if steps is None:
                 raise ValueError("A plan requires at least one step")
-            approval = ApprovalRepository(self.db).propose(
+            approval = self.repositories.resolve(ApprovalRepository).propose(
                 tenant_id=tenant_id,
                 action=f"brain:activate:{plan_id}",
                 requester_id=requester_id,
@@ -109,16 +116,22 @@ class PlanStore:
         return approval.request_id
 
     def list(self, *, tenant_id: str) -> list[dict]:
-        return [dict(row) for row in self.db.execute(
-            """SELECT id,goal_id,title,status,approval_id
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT id,goal_id,title,status,approval_id
                FROM ago_strategy_plans WHERE tenant_id=%s ORDER BY created_at,id""",
-            (tenant_id,),
-        ).fetchall()]
+                (tenant_id,),
+            ).fetchall()
+        ]
 
     def steps(self, *, tenant_id: str, plan_id: str) -> list[dict]:
-        return [dict(row) for row in self.db.execute(
-            """SELECT id,position,action,assignee_id,depends_on,task_id
+        return [
+            dict(row)
+            for row in self.db.execute(
+                """SELECT id,position,action,assignee_id,depends_on,task_id
                FROM ago_plan_steps WHERE tenant_id=%s AND plan_id=%s
                ORDER BY position""",
-            (tenant_id, plan_id),
-        ).fetchall()]
+                (tenant_id, plan_id),
+            ).fetchall()
+        ]
