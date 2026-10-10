@@ -260,3 +260,18 @@ def test_digital_twin_unvalidated_data_is_not_certified_accuracy():
     assert x["calibration"] == "requires_validation"
     assert x["uncertainty"] == "unquantified"
     assert x["observed_revenue"] is None
+
+
+
+def test_oos_admission_never_overcommits_employee_capacity():
+    batch = [
+        WorkCandidate("one-agent", "task-c", 1, 2, 1, True,
+                      True, WorkerState.AVAILABLE, 10),
+        WorkCandidate("one-agent", "task-a", 10, 2, 1, True,
+                      True, WorkerState.IDLE, 10),
+        WorkCandidate("one-agent", "task-b", 9, 2, 1, True,
+                      True, WorkerState.AVAILABLE, 10),
+    ]
+    accepted = allocate(batch, mode=OperatingMode.ACTIVE)
+    assert [x.task_id for x in accepted] == ["task-a", "task-b"]
+    assert sum(x.required_units for x in accepted) <= 2
