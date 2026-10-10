@@ -285,6 +285,8 @@
     "dna_domain": [],
     "enterprise_domains": [],
     "enterprise_store": [
+      "ago_agent_evidence_events",
+      "ago_agent_evidence_intents",
       "ago_agent_state_snapshots",
       "ago_approval_requests",
       "ago_asset_consumptions",
