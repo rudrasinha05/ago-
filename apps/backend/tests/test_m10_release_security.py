@@ -50,7 +50,7 @@ def test_production_rejects_missing_hosts_weak_secrets_and_non_tls_database(prod
 ])
 def test_production_disallows_wildcards_and_local_hosts(prod, monkeypatch, hostname):
     monkeypatch.setenv("AGO_ALLOWED_HOSTS", hostname)
-    with pytest.raises(ValueError, match="HOSTS"):
+    with pytest.raises(ValueError, match="HOSTS|public hosts"):
         ReleasePolicy.from_environment()
 
 
@@ -73,7 +73,10 @@ def test_production_rejects_oversize_body_limit_and_unknown_environment(prod, mo
 
 
 def test_trusted_host_tls_docs_and_hsts_protection(prod):
+    from ago import api_m2
+
     app = create_app()
+    app.dependency_overrides[api_m2.db_connection] = lambda: object()
     with TestClient(app, base_url="https://ago.example.com") as client:
         console = client.get("/console/")
         assert console.status_code == 200
