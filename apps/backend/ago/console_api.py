@@ -7,11 +7,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Security
 from fastapi.security import HTTPAuthorizationCredentials
 
-from ago.api_m2 import authenticated, bearer, db_connection
+from ago.api_m2 import allowed, authenticated, bearer, db_connection, translate_error
 from ago.security_controls import SecurityControls
+from ago.governance import ApprovalRepository
+from ago.task_store import TaskStore
 from ago.security import Principal
 
 router = APIRouter(prefix="/v1/console", tags=["M9 Control Center"])
@@ -63,3 +67,48 @@ def logout(
             datetime.now(timezone.utc) + timedelta(days=1),
         )
     return {"status": "revoked"}
+
+
+@router.post("/tasks/{task_id}/request-approval")
+def request_task_approval(
+    task_id: UUID, db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+):
+    """Atomically propose the exact task action and attach its M2 approval."""
+    allowed(db, actor, "task:create")
+    allowed(db, actor, "approval:request")
+    try:
+        with db.transaction():
+            task = db.execute(
+                """SELECT action,status FROM ago_governed_tasks
+                   WHERE id=%s AND tenant_id=%s FOR UPDATE""",
+                (str(task_id), actor.tenant_id),
+            ).fetchone()
+            if task is None:
+                raise LookupError("Task not found")
+            if task["status"] != "proposed":
+                raise PermissionError("Only unsubmitted tasks can request approval")
+            proposal = ApprovalRepository(db).propose(
+                tenant_id=actor.tenant_id, requester_id=actor.subject,
+                action=task["action"],
+            )
+            TaskStore(db).request_approval(
+                task_id=str(task_id), tenant_id=actor.tenant_id,
+                approval_id=proposal.request_id,
+            )
+        return {"approval_id":proposal.request_id,"status":"waiting_approval"}
+    except (ValueError, LookupError, PermissionError) as exc:
+        translate_error(exc)
+
+
+@router.get("/task-reviews")
+def task_reviews(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+):
+    allowed(db, actor, "qa:read")
+    return [dict(row) for row in db.execute(
+        """SELECT task_id,reviewer_id,verdict,created_at
+           FROM ago_task_reviews WHERE tenant_id=%s
+           ORDER BY created_at DESC,task_id LIMIT 100""",
+        (actor.tenant_id,),
+    ).fetchall()]
