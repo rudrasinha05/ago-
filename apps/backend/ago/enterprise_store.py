@@ -1065,6 +1065,131 @@ class EnterpriseOperationsStore:
         return {"personnel": personnel, "departments": departments,
                 "historical_records_retained": True}
 
+
+    def review_evolution(self, *, actor: Principal, observation_id: str,
+                         approval_id: str, decision: str, rollback_plan: str,
+                         evidence_ref: str) -> dict:
+        obs = str(UUID(observation_id))
+        if decision not in ("endorsed", "rejected"):
+            raise ValueError("Unknown evolution review decision")
+        if not 1 <= len(rollback_plan.strip()) <= 3000 or not (
+            1 <= len(evidence_ref.strip()) <= 1024
+        ):
+            raise ValueError("Reviewed rollback and evidence references required")
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            self._approval(actor, approval_id, "enterprise:evolution:review:" + obs)
+            earlier = self.connection.execute(
+                """SELECT id,approval_id,decision,rollback_plan,evidence_ref
+                   FROM ago_evolution_review_events WHERE tenant_id=%s AND observation_id=%s""",
+                (actor.tenant_id, obs),
+            ).fetchone()
+            if earlier:
+                if (str(earlier["approval_id"]) != str(UUID(approval_id))
+                    or earlier["decision"] != decision
+                    or earlier["rollback_plan"] != rollback_plan.strip()
+                    or earlier["evidence_ref"] != evidence_ref.strip()):
+                    raise PermissionError("Cannot rewrite independently reviewed evaluation")
+                return {"id": str(earlier["id"]), "decision": decision,
+                        "idempotent": True, "applied": False}
+            if not self.connection.execute(
+                "SELECT 1 FROM ago_evolution_observations WHERE tenant_id=%s AND id=%s",
+                (actor.tenant_id, obs),
+            ).fetchone():
+                raise LookupError("Evidence observation absent")
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_evolution_review_events
+                   (id,tenant_id,observation_id,actor_id,approval_id,decision,
+                    rollback_plan,evidence_ref)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, obs, actor.subject,
+                 str(UUID(approval_id)), decision, rollback_plan.strip(),
+                 evidence_ref.strip()),
+            )
+        return {"id": identifier, "observation_id": obs,
+                "decision": decision, "idempotent": False, "applied": False}
+
+    def evolution_reviews(self, *, tenant_id: str) -> list[dict]:
+        return [dict(x) for x in self.connection.execute(
+            """SELECT id,observation_id,decision,rollback_plan,evidence_ref,created_at
+               FROM ago_evolution_review_events WHERE tenant_id=%s
+               ORDER BY created_at DESC,id LIMIT 100""",
+            (str(UUID(tenant_id)),),
+        ).fetchall()]
+
+    def compare_twin_outcome(self, *, actor: Principal, scenario_id: str,
+                             later_snapshot_id: str, approval_id: str,
+                             rationale: str) -> dict:
+        scenario, after_id = str(UUID(scenario_id)), str(UUID(later_snapshot_id))
+        if not 1 <= len(rationale.strip()) <= 2000:
+            raise ValueError("Actual comparison rationale required")
+        action = "enterprise:twin:compare:" + scenario + ":" + after_id
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            self._approval(actor, approval_id, action)
+            existing = self.connection.execute(
+                """SELECT id,outcome,approval_id,rationale FROM ago_twin_observed_comparisons
+                   WHERE tenant_id=%s AND scenario_id=%s AND later_snapshot_id=%s""",
+                (actor.tenant_id, scenario, after_id),
+            ).fetchone()
+            if existing:
+                if (str(existing["approval_id"]) != str(UUID(approval_id))
+                    or existing["rationale"] != rationale.strip()):
+                    raise PermissionError("Cannot change historical observed comparison")
+                return {"id": str(existing["id"]), **existing["outcome"],
+                        "idempotent": True}
+            before = self.connection.execute(
+                """SELECT t.id,t.created_at,t.result,s.metrics AS base_metrics
+                   FROM ago_twin_scenarios t
+                   JOIN ago_executive_snapshots s
+                     ON s.tenant_id=t.tenant_id AND s.id=t.snapshot_id
+                   WHERE t.tenant_id=%s AND t.id=%s""",
+                (actor.tenant_id, scenario),
+            ).fetchone()
+            later = self.connection.execute(
+                """SELECT id,metrics,created_at FROM ago_executive_snapshots
+                   WHERE tenant_id=%s AND id=%s""",
+                (actor.tenant_id, after_id),
+            ).fetchone()
+            if not before or not later or later["created_at"] <= before["created_at"]:
+                raise ValueError("Later tenant evidence required after scenario capture")
+            first = before["base_metrics"].get("completed_tasks")
+            last = later["metrics"].get("completed_tasks")
+            if type(first) is not int or type(last) is not int or last < first:
+                raise ValueError("Valid nondecreasing actual completed task counts required")
+            predicted = Decimal(str(before["result"].get("estimated_successful_actions")))
+            observed = last - first
+            outcome = {
+                "calibration": "descriptive_only",
+                "predicted_successful_actions": str(predicted),
+                "observed_completed_task_delta": observed,
+                "absolute_difference": str(abs(predicted - Decimal(observed))),
+                "snapshot_comparison": [str(before["id"]), after_id],
+                "source": "immutable_executive_snapshots",
+                "limits": "Actions and completed tasks are not proven comparable; no accuracy certification.",
+                "applied": False,
+            }
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_twin_observed_comparisons
+                   (id,tenant_id,scenario_id,later_snapshot_id,actor_id,
+                    approval_id,outcome,rationale)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s)""",
+                (identifier, actor.tenant_id, scenario, after_id, actor.subject,
+                 str(UUID(approval_id)), json.dumps(outcome, sort_keys=True),
+                 rationale.strip()),
+            )
+        return {"id": identifier, "idempotent": False, **outcome}
+
+    def twin_comparisons(self, *, tenant_id: str) -> list[dict]:
+        return [dict(x) for x in self.connection.execute(
+            """SELECT id,scenario_id,later_snapshot_id,outcome,rationale,created_at
+               FROM ago_twin_observed_comparisons WHERE tenant_id=%s
+               ORDER BY created_at DESC,id LIMIT 100""",
+            (str(UUID(tenant_id)),),
+        ).fetchall()]
+
     def twin_runs(self, *, tenant_id: str) -> list[dict]:
         return [dict(row) for row in self.connection.execute(
             """SELECT id,snapshot_id,assumptions,result,calibrated,data_coverage,
