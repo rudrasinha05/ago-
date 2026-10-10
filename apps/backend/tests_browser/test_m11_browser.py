@@ -309,7 +309,7 @@ def test_real_browser_governed_plan_two_humans_execution_and_qa(
         page.locator("#operation-submit").click()
         expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
         expect(page.locator("tr").filter(has_text="Pilot single-step brief")).to_contain_text(
-            "submitted",
+            "pending approval",
         )
 
         navigate(reviewer, "governance", "Governance & oversight")
