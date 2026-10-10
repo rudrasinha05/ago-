@@ -7,7 +7,7 @@ provided by the existing audited application/service ports.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from hashlib import sha256
