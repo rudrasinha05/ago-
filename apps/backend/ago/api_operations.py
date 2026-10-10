@@ -221,3 +221,412 @@ def calendar_history(
         return repositories.resolve(CalendarStorePort).history(actor=actor, event_id=str(event_id))
     except PermissionError as exc:
         translate_error(exc)
+
+
+# Sections 21–27: authorized application calls only, never SQL in transport.
+from typing import Literal
+from decimal import Decimal
+from fastapi import Query
+from ago.repository_ports import EnterpriseOperationsStorePort, ApprovalRepositoryPort
+
+
+class EnterpriseModeApproval(StrictInput):
+    target: Literal["active", "paused", "maintenance", "emergency", "suspended"]
+    scope_kind: Literal["company", "department", "employee"] = "company"
+    scope_id: UUID | None = None
+
+
+class EnterpriseModeChange(EnterpriseModeApproval):
+    approval_id: UUID
+    rationale: str = Field(min_length=1, max_length=3000)
+    expires_at: datetime
+
+
+class AgentCapacity(StrictInput):
+    available_units: int = Field(ge=0, le=100000)
+    source_ref: str = Field(min_length=1, max_length=1024)
+
+
+class EnterprisePlanApproval(StrictInput):
+    # Returned plan ID is bound to the exact independently approved action.
+    pass
+
+
+class EnterprisePlanInput(StrictInput):
+    plan_id: UUID
+    approval_id: UUID
+    parent_id: UUID | None = None
+    horizon: Literal["lifetime", "five_year", "annual", "quarterly", "monthly",
+                     "weekly", "daily", "hourly", "current_task"]
+    title: str = Field(min_length=1, max_length=300)
+    starts_at: datetime
+    ends_at: datetime
+    budget_ceiling: Decimal = Field(ge=0)
+    evidence_ref: str = Field(min_length=1, max_length=1024)
+
+
+class EnterpriseCostInput(StrictInput):
+    operation_key: str = Field(min_length=1, max_length=200)
+    category: Literal["model","storage","tool","execution","time","revenue","other"]
+    provider: str = Field(min_length=1, max_length=180)
+    source_ref: str = Field(min_length=1, max_length=1024)
+    amount: Decimal = Field(ge=0)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    period_start: datetime
+    period_end: datetime
+
+
+class EnterpriseBudgetInput(StrictInput):
+    budget_id: UUID
+    approval_id: UUID
+    scope_kind: Literal["company", "department", "employee"]
+    scope_id: UUID | None = None
+    ceiling: Decimal = Field(ge=0)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+
+
+class EnterpriseAssetInput(StrictInput):
+    department_id: UUID
+    name: str = Field(min_length=1, max_length=200)
+    kind: Literal["service", "library", "dataset", "research", "design_system",
+                  "template", "agent", "model", "workflow"]
+    version: str = Field(pattern=r"^[0-9]+[.][0-9]+[.][0-9]+$")
+    license_id: str = Field(min_length=1, max_length=200)
+    sha256_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    manifest: dict = Field(default_factory=dict)
+
+
+class ApprovalReference(StrictInput):
+    approval_id: UUID
+
+
+class AssetConsumption(ApprovalReference):
+    department_id: UUID
+    evidence_ref: str = Field(min_length=1, max_length=1024)
+
+
+class EvolutionComparison(StrictInput):
+    snapshot_id: UUID
+    baseline: list[str] = Field(min_length=1, max_length=1000)
+    candidate: list[str] = Field(min_length=1, max_length=1000)
+    evidence: list[dict] = Field(min_length=1, max_length=1000)
+
+
+class EnterpriseTwinInput(StrictInput):
+    snapshot_id: UUID
+    actions: int = Field(ge=0, le=100000)
+    cost_per_action: Decimal = Field(ge=0)
+    budget: Decimal = Field(ge=0)
+    failure_pct: int = Field(ge=0, le=100)
+    hiring: int = Field(ge=0, le=100000, default=0)
+    layoffs: int = Field(ge=0, le=100000, default=0)
+    market_shock_pct: int = Field(ge=-100, le=100, default=0)
+
+
+def enterprise_call(fn):
+    try:
+        return fn()
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+def issue_enterprise_approval(repositories, actor, action: str) -> dict:
+    allowed(repositories, actor, "approval:request")
+    approval = repositories.resolve(ApprovalRepositoryPort).propose(
+        tenant_id=actor.tenant_id, action=action, requester_id=actor.subject
+    )
+    return {"approval_id": approval.request_id, "action": action, "status": "pending"}
+
+
+@router.get("/enterprise/modes")
+def enterprise_modes(
+    scope_kind: Literal["company", "department", "employee"] = "company",
+    scope_id: UUID | None = None,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    store = repositories.resolve(EnterpriseOperationsStorePort)
+    return enterprise_call(lambda: {
+        "effective": store.effective_mode(tenant_id=actor.tenant_id, scope_kind=scope_kind,
+                                         scope_id=str(scope_id) if scope_id else None),
+        "history": store.modes(tenant_id=actor.tenant_id, scope_kind=scope_kind,
+                               scope_id=str(scope_id) if scope_id else None),
+    })
+
+
+@router.post("/enterprise/modes/approval")
+def request_mode_approval(
+    data: EnterpriseModeApproval,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    if (data.scope_kind == "company") != (data.scope_id is None):
+        return enterprise_call(lambda: (_ for _ in ()).throw(ValueError("Invalid scope")))
+    action = "enterprise:mode:" + data.scope_kind + ":" + (
+        str(data.scope_id) if data.scope_id else "company") + ":" + data.target
+    return issue_enterprise_approval(repositories, actor, action)
+
+
+@router.post("/enterprise/modes/activate")
+def activate_enterprise_mode(
+    data: EnterpriseModeChange,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).mode_change(
+        actor=actor, target=data.target, approval_id=str(data.approval_id),
+        reason=data.rationale, expires_at=data.expires_at, scope_kind=data.scope_kind,
+        scope_id=str(data.scope_id) if data.scope_id else None,
+    ))
+
+
+@router.get("/enterprise/agents/{employee_id}/state")
+def enterprise_agent_state(
+    employee_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).worker_state(
+        tenant_id=actor.tenant_id, employee_id=str(employee_id)))
+
+
+@router.post("/enterprise/agents/{employee_id}/snapshot")
+def enterprise_agent_snapshot(
+    employee_id: UUID, data: AgentCapacity,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).capture_worker(
+        actor=actor, employee_id=str(employee_id), available_units=data.available_units,
+        source_ref=data.source_ref))
+
+
+@router.post("/enterprise/agents/{employee_id}/allocation")
+def enterprise_allocation(
+    employee_id: UUID, data: AgentCapacity,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).allocate_preview(
+        tenant_id=actor.tenant_id, employee_id=str(employee_id),
+        available_units=data.available_units))
+
+
+@router.post("/enterprise/plans/approval")
+def enterprise_plan_approval(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    from uuid import uuid4
+    identifier = str(uuid4())
+    return {"plan_id": identifier, **issue_enterprise_approval(
+        repositories, actor, "enterprise:plan:" + identifier)}
+
+
+@router.post("/enterprise/plans")
+def create_enterprise_plan(
+    data: EnterprisePlanInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).plan(
+        actor=actor, identifier=str(data.plan_id), horizon=data.horizon,
+        parent_id=str(data.parent_id) if data.parent_id else None,
+        title=data.title, starts_at=data.starts_at, ends_at=data.ends_at,
+        budget_ceiling=str(data.budget_ceiling), approval_id=str(data.approval_id),
+        evidence_ref=data.evidence_ref))
+
+
+@router.get("/enterprise/plans")
+def list_enterprise_plans(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).plans(tenant_id=actor.tenant_id)
+
+
+@router.post("/enterprise/costs")
+def record_enterprise_cost(
+    data: EnterpriseCostInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).record_cost(
+        actor=actor, operation_key=data.operation_key, category=data.category,
+        provider=data.provider, source_ref=data.source_ref, amount=str(data.amount),
+        currency=data.currency, period_start=data.period_start,
+        period_end=data.period_end))
+
+
+@router.get("/enterprise/costs")
+def list_enterprise_costs(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).costs(tenant_id=actor.tenant_id)
+
+
+@router.post("/enterprise/budgets/approval")
+def enterprise_budget_approval(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    from uuid import uuid4
+    identifier = str(uuid4())
+    return {"budget_id": identifier, **issue_enterprise_approval(
+        repositories, actor, "enterprise:budget:" + identifier)}
+
+
+@router.post("/enterprise/budgets")
+def create_enterprise_budget(
+    data: EnterpriseBudgetInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).create_budget(
+        actor=actor, identifier=str(data.budget_id), approval_id=str(data.approval_id),
+        scope_kind=data.scope_kind, scope_id=str(data.scope_id) if data.scope_id else None,
+        ceiling=str(data.ceiling), currency=data.currency))
+
+
+@router.get("/enterprise/budgets")
+def list_enterprise_budgets(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).budgets(tenant_id=actor.tenant_id)
+
+
+@router.post("/enterprise/marketplace")
+def create_marketplace_draft(
+    data: EnterpriseAssetInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).asset_draft(
+        actor=actor, department_id=str(data.department_id), name=data.name, kind=data.kind,
+        version=data.version, license_id=data.license_id, digest=data.sha256_digest,
+        manifest=data.manifest))
+
+
+@router.get("/enterprise/marketplace")
+def discover_marketplace(
+    kind: str | None = None,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).assets(
+        tenant_id=actor.tenant_id, kind=kind))
+
+
+@router.post("/enterprise/marketplace/{asset_id}/approval")
+def request_marketplace_review(
+    asset_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    reference = issue_enterprise_approval(repositories, actor,
+                                           "enterprise:publish:" + str(asset_id))
+    result = enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).asset_propose(
+        actor=actor, asset_id=str(asset_id), approval_id=reference["approval_id"]))
+    return {**reference, **result}
+
+
+@router.post("/enterprise/marketplace/{asset_id}/publish")
+def publish_marketplace_asset(
+    asset_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).asset_publish(actor=actor, asset_id=str(asset_id)))
+
+
+@router.post("/enterprise/marketplace/{asset_id}/consume/approval")
+def marketplace_consume_review(
+    asset_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:request")
+    return issue_enterprise_approval(repositories, actor,
+                                     "enterprise:consume:" + str(asset_id))
+
+
+@router.post("/enterprise/marketplace/{asset_id}/consume")
+def consume_marketplace_asset(
+    asset_id: UUID, data: AssetConsumption,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:request")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).asset_consume(
+        actor=actor, asset_id=str(asset_id), department_id=str(data.department_id),
+        approval_id=str(data.approval_id), evidence_ref=data.evidence_ref))
+
+
+@router.get("/enterprise/marketplace/usage")
+def marketplace_consumptions(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).asset_usage(
+        tenant_id=actor.tenant_id)
+
+
+@router.post("/enterprise/evolution/compare")
+def compare_evolution(
+    data: EvolutionComparison,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:observe")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).evolution_observation(
+        actor=actor, baseline=data.baseline, candidate=data.candidate,
+        evidence=data.evidence, source_snapshot_id=str(data.snapshot_id)))
+
+
+@router.post("/enterprise/twin")
+def simulate_enterprise_twin(
+    data: EnterpriseTwinInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:simulate")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).twin(
+        actor=actor, snapshot_id=str(data.snapshot_id), actions=data.actions,
+        cost_per_action=str(data.cost_per_action), budget=str(data.budget),
+        failure_pct=data.failure_pct, hiring=data.hiring, layoffs=data.layoffs,
+        market_shock_pct=data.market_shock_pct))
+
+
+@router.get("/enterprise/twin")
+def enterprise_twin_history(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "meta:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).twin_runs(
+        tenant_id=actor.tenant_id)
