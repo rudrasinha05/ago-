@@ -90,7 +90,12 @@ class CalendarStore:
             raise ValueError("Calendar query exceeds one year")
         rows = self.db.execute(
             """SELECT e.id,e.title,e.detail,e.starts_at,e.ends_at,
-                      e.visibility,e.status,e.goal_id,e.task_id,e.creator_id
+                      e.visibility,e.status,e.goal_id,e.task_id,e.creator_id,
+                      EXISTS(
+                        SELECT 1 FROM ago_calendar_attendees invited
+                        WHERE invited.tenant_id=e.tenant_id
+                          AND invited.event_id=e.id AND invited.employee_id=%s
+                      ) AS invited
                FROM ago_calendar_events e
                WHERE e.tenant_id=%s AND e.starts_at < %s AND e.ends_at > %s
                  AND (e.visibility='tenant' OR e.creator_id=%s
@@ -99,7 +104,7 @@ class CalendarStore:
                        WHERE a.tenant_id=e.tenant_id AND a.event_id=e.id
                          AND a.employee_id=%s))
                ORDER BY e.starts_at,e.id LIMIT 500""",
-            (actor.tenant_id, end, start, actor.subject, actor.subject),
+            (actor.subject, actor.tenant_id, end, start, actor.subject, actor.subject),
         ).fetchall()
         return [dict(r) for r in rows]
 
