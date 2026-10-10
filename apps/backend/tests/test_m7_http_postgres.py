@@ -292,3 +292,37 @@ def test_rejected_dna_cannot_be_activated(case):
         "rationale": "Unknown key",
     })
     assert invalid.status_code == 422
+
+
+def test_snapshot_digest_and_recency_are_stable_inside_one_transaction(case):
+    client, headers, info = case
+    first = post(client, "/v1/meta/snapshots", headers["founder"])
+    second = post(client, "/v1/meta/snapshots", headers["founder"])
+    assert first["id"] != second["id"]
+    assert first["digest"] == second["digest"]
+    recent = client.get("/v1/meta/snapshots", headers=headers["founder"])
+    assert recent.status_code == 200, recent.text
+    assert [row["id"] for row in recent.json()[:2]] == [
+        second["id"], first["id"],
+    ]
+    executive = client.get("/v1/meta/brief", headers=headers["founder"])
+    assert executive.status_code == 200
+    assert executive.json()["snapshot"]["id"] == second["id"]
+
+
+def test_dna_change_without_decision_is_blocked_by_postgres(case):
+    client, headers, info = case
+    psycopg = pytest.importorskip("psycopg")
+    candidate = post(client, "/v1/meta/dna", headers["founder"], {
+        "profile": profile(), "rationale": "Unapproved policy candidate",
+    })
+    with pytest.raises(psycopg.errors.RaiseException):
+        with info["db"].transaction():
+            info["db"].execute(
+                """UPDATE ago_dna_versions SET status='active',
+                   activated_at=now() WHERE id=%s""",
+                (candidate["id"],),
+            )
+    assert client.get("/v1/meta/dna/active", headers=headers["founder"]).json()[
+        "source"
+    ] == "baseline"
