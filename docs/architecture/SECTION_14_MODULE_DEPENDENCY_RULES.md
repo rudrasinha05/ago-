@@ -8,7 +8,7 @@
 
 This implements **Section 14's modular boundaries**; it does not claim that
 Sections 1–13 or 15–34, or the historical original 0–35 blueprint, are
-implemented. Source inventory includes 76 root Python modules and 142
+implemented. Source inventory includes 76 root Python modules and 145
 recorded internal import edges at the accepted pre-change baseline.
 This project remains a governed **modular monolith first** (BDR);
 neither a new fleet of microservices nor a new database is introduced.
@@ -75,7 +75,7 @@ independently reviewed exception.
   are rejected because graph membership cannot be statically reviewed.
 - A new root module must be registered explicitly before it can join the graph.
 
-The approved baseline lists **existing** edges only; it is not a standing
+The release startup module \`release_security\` is explicitly assigned to\nthe **composition layer** because it performs migration-readiness wiring\nthrough \`event_runtime\`. Likewise, \`local_ops\` loads bootstrap/provision\nmodules inside operator-only functions. All three lazy imports are present\nin the approved exact-edge baseline; none is an implicit exception.\n\nThe approved baseline lists **existing** edges only; it is not a standing
 permission to grow indiscriminately within a context.
 
 ## 3. Domain protections and forbidden write paths
