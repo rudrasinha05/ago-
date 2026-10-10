@@ -58,7 +58,8 @@
       "organization_store"
     ],
     "knowledge-graph": [
-      "knowledge_store"
+      "knowledge_store",
+      "database_store"
     ],
     "auth": [
       "security",

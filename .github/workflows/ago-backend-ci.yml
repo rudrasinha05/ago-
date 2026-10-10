@@ -1,4 +1,4 @@
-name: AGO Architecture Sections 1-6 & 14 and M1-M12 CI
+name: AGO Architecture Sections 1-7 & 14 and M1-M12 CI
 on:
   push:
     branches: [develop]
@@ -11,6 +11,62 @@ permissions:
   statuses: write
 
 jobs:
+  database-architecture:
+    name: Section 7 Real Model Redis and Object Recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ago_test
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: ago_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ago_test -d ago_test"
+          --health-interval 3s --health-timeout 5s --health-retries 15
+      redis:
+        image: redis:7.4-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s --health-timeout 5s --health-retries 15
+    env:
+      AGO_ENVIRONMENT: development
+      AGO_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_TEST_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_RESTORE_TEST_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_restore_drill
+      AGO_SESSION_SECRET: ci_only_signing_key_change_outside_ci_123456789
+      AGO_EMBEDDING_DIR: /tmp/ago-s7-model
+      AGO_GRAPH_REDIS_URL: redis://127.0.0.1:6379/0
+      AGO_S7_REAL_MODEL: 'true'
+      AGO_S7_REAL_REDIS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install storage adapters and actual recovery clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          python -m pip install -e 'apps/backend[dev,postgres,storage]'
+      - name: Explicitly prepare and fingerprint actual ONNX model
+        run: python -m ago.storage_ops prepare-model --directory "$AGO_EMBEDDING_DIR" --confirm
+      - name: Apply fresh and idempotent checksum migrations
+        run: |
+          python -m ago.event_runtime migrate
+          python -m ago.event_runtime migrate
+      - name: Real signed sessions PostgreSQL graph Redis vectors and private bytes
+        env:
+          HF_HUB_OFFLINE: '1'
+        run: python -m pytest -q apps/backend/tests/test_section07_storage.py apps/backend/tests/test_section07_postgres.py apps/backend/tests_storage
+      - name: Recover populated database graph vectors metadata and exact object bytes
+        env:
+          HF_HUB_OFFLINE: '1'
+        run: python scripts/verify_storage_recovery.py
+
   foundation-through-m12:
     strategy:
       fail-fast: false

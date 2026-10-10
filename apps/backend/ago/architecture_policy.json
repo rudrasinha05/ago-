@@ -123,7 +123,8 @@
         "api_m2",
         "backend_contracts",
         "repository_ports",
-        "security"
+        "security",
+        "storage_adapters"
       ]
     },
     "api_m2": {
@@ -763,7 +764,8 @@
         "tool_enrollment_queries",
         "tool_runtime",
         "tool_runtime_queries",
-        "workflows"
+        "workflows",
+        "database_store"
       ]
     },
     "session_service": {
@@ -838,6 +840,29 @@
       "imports": [
         "backend_contracts"
       ]
+    },
+    "storage_adapters": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "database_store": {
+      "context": "knowledge",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "security",
+        "storage_adapters"
+      ]
+    },
+    "storage_ops": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "backend_contracts",
+        "database_store",
+        "storage_adapters"
+      ]
     }
   },
   "protected_sql_writers": {
@@ -849,6 +874,12 @@
     ],
     "ago_task_reviews": [
       "quality_store"
+    ],
+    "ago_semantic_vectors": [
+      "database_store"
+    ],
+    "ago_document_objects": [
+      "database_store"
     ]
   },
   "exceptions": []

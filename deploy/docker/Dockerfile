@@ -29,7 +29,7 @@ RUN groupadd --gid 10001 ago && \
     useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin ago && \
     mkdir -p /app/deploy/sql /tmp && chown -R ago:ago /app /tmp
 COPY --from=build /wheels /tmp/wheels
-RUN python -m pip install --no-cache-dir '/tmp/wheels/'*.whl 'psycopg[binary]>=3.2,<4' && \
+RUN python -m pip install --no-cache-dir '/tmp/wheels/'*.whl 'psycopg[binary]>=3.2,<4' 'fastembed==0.7.4' 'redis==6.4.0' && \
     rm -rf /tmp/wheels && \
     python -c 'from importlib.resources import files; p=files("ago").joinpath("console","index.html"); assert p.is_file(); assert files("ago").joinpath("frontend","index.html").is_file()'
 COPY --chown=ago:ago deploy/sql/ /app/deploy/sql/

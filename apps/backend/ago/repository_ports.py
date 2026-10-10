@@ -35,6 +35,7 @@ from ago.handoffs import HandoffStore as _HandoffStore
 from ago.identity import IdentityRepository as _IdentityRepository
 from ago.identity import UserRecord
 from ago.knowledge_store import KnowledgeStore as _KnowledgeStore
+from ago.database_store import DatabaseStore as _DatabaseStore
 from ago.login_security import LoginThrottle as _LoginThrottle
 from ago.memory import MemoryRecord
 from ago.meta_brain import MetaBrain as _MetaBrain
@@ -362,6 +363,21 @@ class IdentityRepositoryPort(Protocol):
 
 
 @runtime_checkable
+class DatabaseStorePort(Protocol):
+    def graph(self, *, tenant_id: str, root_id: str, depth: int=2, limit: int=100, direction: str='both') -> dict: ...
+    def index_node(self, *, tenant_id: str, node_id: str) -> dict: ...
+    def search(self, *, tenant_id: str, query: str, limit: int=10) -> dict: ...
+    def rebuild_index(self, *, tenant_id: str) -> dict: ...
+    def upload(self, *, actor: Principal, filename: str, media_type: str, content: bytes, retention_days: int=90) -> dict: ...
+    def documents(self, *, tenant_id: str, limit: int=100) -> list[dict]: ...
+    def download(self, *, tenant_id: str, object_id: str) -> tuple[dict, bytes]: ...
+    def expire(self, *, tenant_id: str, limit: int=100) -> dict: ...
+    def object_manifest(self, *, tenant_id: str) -> list[dict]: ...
+    def backup_objects(self, *, tenant_id: str, destination: str) -> dict: ...
+    def restore_objects(self, *, tenant_id: str, source: str, destination: str) -> dict: ...
+
+
+@runtime_checkable
 class KnowledgeStorePort(Protocol):
     def propose(
         self, *, actor: Principal, kind: str, label: str, statement: str, source_ref: str
@@ -645,6 +661,7 @@ REPOSITORY_BINDINGS = {
     HandoffStorePort: _HandoffStore,
     IdentityRepositoryPort: _IdentityRepository,
     KnowledgeStorePort: _KnowledgeStore,
+    DatabaseStorePort: _DatabaseStore,
     LoginThrottlePort: _LoginThrottle,
     MemoryStorePort: _MemoryStore,
     MetaBrainPort: _MetaBrain,

@@ -185,6 +185,55 @@
         }
       }
     },
+    "DatabaseStore": {
+      "module": "database_store",
+      "methods": {
+        "graph": {
+          "arguments": "self, *, tenant_id: str, root_id: str, depth: int=2, limit: int=100, direction: str='both'",
+          "returns": "dict"
+        },
+        "index_node": {
+          "arguments": "self, *, tenant_id: str, node_id: str",
+          "returns": "dict"
+        },
+        "search": {
+          "arguments": "self, *, tenant_id: str, query: str, limit: int=10",
+          "returns": "dict"
+        },
+        "rebuild_index": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
+        "upload": {
+          "arguments": "self, *, actor: Principal, filename: str, media_type: str, content: bytes, retention_days: int=90",
+          "returns": "dict"
+        },
+        "documents": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "download": {
+          "arguments": "self, *, tenant_id: str, object_id: str",
+          "returns": "tuple[dict, bytes]"
+        },
+        "expire": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "dict"
+        },
+        "object_manifest": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "backup_objects": {
+          "arguments": "self, *, tenant_id: str, destination: str",
+          "returns": "dict"
+        },
+        "restore_objects": {
+          "arguments": "self, *, tenant_id: str, source: str, destination: str",
+          "returns": "dict"
+        }
+      }
+    },
     "DepartmentAutomation": {
       "module": "department_automation",
       "methods": {

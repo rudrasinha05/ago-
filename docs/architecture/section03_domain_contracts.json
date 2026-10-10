@@ -55,8 +55,8 @@
       "purpose": "Private organizational memory and reviewed facts",
       "aggregates": "MemoryRecord; proposed knowledge node and edge",
       "value_objects": "Visibility scope; provenance reference; relation/verdict type",
-      "repositories": "MemoryStore in organization_store; knowledge_store",
-      "services": "MemoryRecord privacy checks; KnowledgeStore review/relate",
+      "repositories": "MemoryStore in organization_store; knowledge_store; DatabaseStore graph/vector/document metadata",
+      "services": "MemoryRecord privacy checks; KnowledgeStore review/relate; bounded traversal, offline semantic retrieval and private objects",
       "invariants": "Tenant/private access, independent fact verification, provenance; no fabricated RAG",
       "published_language": "Memory records; node/edge IDs; evidence references",
       "consistency": "Record/review transactions; graph-memory consolidation is not currently automatic"
@@ -187,7 +187,10 @@
     "scorecard_queries": "economics",
     "tool_catalog_queries": "operations",
     "tool_enrollment_queries": "operations",
-    "tool_runtime_queries": "operations"
+    "tool_runtime_queries": "operations",
+    "storage_adapters": "platform",
+    "database_store": "knowledge",
+    "storage_ops": "entrypoints"
   },
   "sql_access": {
     "__init__": [],
@@ -249,6 +252,14 @@
     "credits": [
       "ago_credit_budgets",
       "ago_credit_usage"
+    ],
+    "database_store": [
+      "ago_document_objects",
+      "ago_knowledge_edges",
+      "ago_knowledge_nodes",
+      "ago_knowledge_versions",
+      "ago_semantic_vectors",
+      "ago_tenants"
     ],
     "department_automation": [],
     "department_automation_queries": [
@@ -400,6 +411,8 @@
     ],
     "session_service": [],
     "simulation": [],
+    "storage_adapters": [],
+    "storage_ops": [],
     "task_store": [
       "ago_approval_requests",
       "ago_goals",

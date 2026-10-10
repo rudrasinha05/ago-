@@ -30,7 +30,7 @@ these are not an import graph, deployment sequence or autonomous control loop.
 | Plan dependency orchestration | partial | [PlanExecution.materialize](../../apps/backend/ago/plan_execution.py) |
 | Allowlisted execution | partial | [AgentRuntime.run](../../apps/backend/ago/agent_runtime.py) |
 | Private persistent memory | partial | [MemoryStore](../../apps/backend/ago/organization_store.py) |
-| Evidence-reviewed knowledge graph | partial | [KnowledgeStore.review](../../apps/backend/ago/knowledge_store.py) |
+| Evidence-reviewed knowledge graph | partial | [KnowledgeStore.review](../../apps/backend/ago/knowledge_store.py); [DatabaseStore.graph](../../apps/backend/ago/database_store.py) |
 | Internal calendar | partial | [CalendarStore.respond](../../apps/backend/ago/calendar_store.py) |
 | External communications — future | planned | Future scope; no runtime implementation |
 | Independent QA | bounded | [QualityStore.review](../../apps/backend/ago/quality_store.py) |

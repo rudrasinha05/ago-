@@ -109,7 +109,8 @@
       "label": "Evidence-reviewed knowledge graph",
       "status": "partial",
       "sources": [
-        "apps/backend/ago/knowledge_store.py#KnowledgeStore.review"
+        "apps/backend/ago/knowledge_store.py#KnowledgeStore.review",
+        "apps/backend/ago/database_store.py#DatabaseStore.graph"
       ]
     },
     "calendar": {
