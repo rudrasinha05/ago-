@@ -15,6 +15,8 @@ export function readPlan(page, now = new Date()) {
       ['runs','/v1/tools/runs'],['tasks','/v1/tasks'],
       ['approvals','/v1/governance/approvals'],
       ['enterpriseModes','/v1/operations/enterprise/modes'],
+      ['enterpriseCapacity','/v1/operations/enterprise/capacity'],
+      ['enterpriseOrgIntents','/v1/operations/enterprise/organization/intents'],
       ['enterprisePlans','/v1/operations/enterprise/plans'],
       ['enterpriseCosts','/v1/operations/enterprise/costs'],
       ['enterpriseBudgets','/v1/operations/enterprise/budgets'],
