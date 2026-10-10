@@ -114,7 +114,7 @@ jobs:
             -e AGO_ENVIRONMENT=development \
             -e AGO_ENABLE_PAID_MODELS=false \
             -e AGO_M8_EXTERNAL_ENABLED=false ago-m10:ci
-          trap 'docker stop ago-m10-smoke || true' EXIT
+          trap 'docker logs ago-m10-smoke --tail=30 || true; docker stop ago-m10-smoke || true' EXIT
           passed=0
           for i in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:18765/health/live >/dev/null; then
@@ -124,7 +124,7 @@ jobs:
             sleep 1
           done
           test "$passed" = "1"
-          curl -fsS http://127.0.0.1:18765/console/ | grep -q 'login-form'
+          curl --retry 5 --retry-connrefused --retry-delay 1 -fsS \\\n            -o /tmp/ago-console-smoke.html http://127.0.0.1:18765/console/\n          grep -q 'login-form' /tmp/ago-console-smoke.html
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18765/v1/console/me)" = "401"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18765/health/ready)" = "503"
       - name: Publish image gate
