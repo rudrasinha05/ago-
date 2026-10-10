@@ -146,6 +146,6 @@ class HandoffStore:
                FROM ago_handoff_events e JOIN ago_handoffs h
                  ON h.id=e.handoff_id AND h.tenant_id=e.tenant_id
                WHERE e.tenant_id=%s AND e.handoff_id=%s
-               ORDER BY e.created_at,e.id""",
+               ORDER BY e.event_order""",
             (tenant_id, handoff_id),
         ).fetchall()]
