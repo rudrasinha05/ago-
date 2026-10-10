@@ -8,7 +8,7 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 migrate
 #>
 param(
-    [ValidateSet("doctor", "init", "serve", "migrate", "test")]
+    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -35,6 +35,10 @@ try {
     if ($Action -eq "migrate") {
         if (-not $env:AGO_POSTGRES_DSN) {
             throw "AGO_POSTGRES_DSN is missing; migration cancelled."
+        }
+        & python -c "import os,sys; from ago.local_ops import local_database; sys.exit(0 if local_database(os.getenv('AGO_POSTGRES_DSN', '')) else 3)"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Migration refused: only a localhost PostgreSQL database is supported by this helper."
         }
         # No automatic migration. Never run this against production or shared test data.
         $Confirmation = Read-Host "This applies SQL migrations to your configured database. Type MIGRATE"
