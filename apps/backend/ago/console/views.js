@@ -1,0 +1,407 @@
+/** M9 views. Every dynamic backend/user string is HTML-escaped. */
+import {
+  safe, num, amount, dateText, shortId, statusTone, percent,
+  resource, errorMessage, formatRisk, fitnessDelta, validateProfile,
+} from "./core.js";
+
+export const PAGES = Object.freeze({
+  overview: { title: "Overview", heading: "Your organization at a glance", eyebrow: "COMMAND OVERVIEW",
+    description: "A live operating picture, grounded in your organization's records—not synthetic KPIs." },
+  strategy: { title: "Strategy", heading: "Strategy & execution", eyebrow: "COMPANY BRAIN",
+    description: "From goals to plans, and from approved plans to governed tasks." },
+  governance: { title: "Governance", heading: "Governance & oversight", eyebrow: "HUMAN IN CONTROL",
+    description: "Independent decisions, protected task lifecycles and executive council motions." },
+  organization: { title: "Organization", heading: "People & departments", eyebrow: "ORGANIZATIONAL STRUCTURE",
+    description: "A single view of your departments, human operators and AI employees." },
+  knowledge: { title: "Knowledge", heading: "Institutional knowledge", eyebrow: "EVIDENCE & MEMORY",
+    description: "Trustworthy provenance starts with independent human verification." },
+  tools: { title: "Operations & Tools", heading: "Enterprise operations", eyebrow: "CONTROLLED EXECUTION",
+    description: "Registered tools, authorized automation and immutable execution records." },
+  calendar: { title: "Calendar", heading: "Organizational calendar", eyebrow: "SHARED COORDINATION",
+    description: "Time-bound commitments and visibility-controlled internal events." },
+  twin: { title: "Digital Twin", heading: "Organization Digital Twin", eyebrow: "EXECUTIVE INTELLIGENCE LAB",
+    description: "Compare alternative operating thresholds with recorded evidence. Simulations do not apply changes." },
+});
+const icon = (name) => '<svg class="ico" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
+const maybe = (value) => value === null || value === undefined || value === "" ? "—" : safe(value);
+const badge = (status) => '<span class="status-badge ' + statusTone(status) + '">' + maybe(String(status ?? "unknown").replaceAll("_", " ")) + "</span>";
+const empty = (title, detail = "There are no records yet.") =>
+  '<div class="empty-state">' + icon("layers") + '<strong>' + safe(title) + "</strong>" + safe(detail) + "</div>";
+const panel = (title, body, subtitle = "") => '<section class="panel"><div class="panel-head"><h3>' +
+  safe(title) + '</h3><small>' + safe(subtitle) + '</small></div>' + body + "</section>";
+const section = (title, info = "") => '<div class="section-title"><h2>' + safe(title) +
+  '</h2><small>' + safe(info) + "</small></div>";
+const action = (label, key, id = "", style = "soft") => '<button type="button" class="btn btn-tiny btn-' + style +
+  '" data-action="' + safe(key) + '"' + (id ? ' data-id="' + safe(id) + '"' : "") + ">" + safe(label) + "</button>";
+const meter = (value) => '<div class="progress-track"><div class="progress-fill" style="width:' + percent(value) + '%"></div></div>';
+const risks = (flags) => !Array.isArray(flags) || !flags.length
+  ? '<span class="risk-pill clean">No flagged conditions</span>'
+  : flags.map(x => '<span class="risk-pill">' + safe(formatRisk(x)) + "</span>").join("");
+function unavailable(data, key, zero) {
+  const message = errorMessage(data, key);
+  return message
+    ? '<div class="empty-state">' + icon("lock") + "<strong>" +
+      safe(message) + "</strong>" + safe(key) + " is available only with the relevant grant.</div>"
+    : zero;
+}
+function list(data, key) { const item = resource(data, key); return Array.isArray(item) ? item : []; }
+function capability(state, name) {
+  return Array.isArray(state.me?.permissions) && state.me.permissions.includes(name);
+}
+function table(headers, rows, fallback = empty("Nothing here yet")) {
+  return rows.length ? '<div class="table-scroll"><table class="data-table"><thead><tr>' +
+    headers.map(x => '<th scope="col">' + safe(x) + "</th>").join("") +
+    "</tr></thead><tbody>" + rows.join("") + "</tbody></table></div>" : fallback;
+}
+function metric(label, value, note, glyph, highlight = false) {
+  return '<div class="metric' + (highlight ? " highlight" : "") + '"><div class="metric-label">' +
+    icon(glyph) + safe(label) + '</div><div class="metric-value">' +
+    safe(value) + '</div><div class="metric-foot">' + safe(note) + "</div></div>";
+}
+function layout(page, actionButtons, body) {
+  const p = PAGES[page];
+  return '<div class="page-head"><div><span class="page-eyebrow">' + p.eyebrow + "</span><h1>" +
+    safe(p.heading) + '</h1><p>' + safe(p.description) + '</p></div><div class="page-actions">' +
+    actionButtons + "</div></div>" + body;
+}
+function statusRows(tasks) {
+  const values = ["proposed","waiting_approval","running","completed","failed"];
+  const count = tasks.reduce((acc, x) => { acc[String(x.status)] = (acc[String(x.status)] || 0) + 1; return acc; }, {});
+  const total = tasks.length;
+  return values.map(name => '<div class="keyval"><span>' + safe(name.replaceAll("_"," ")) +
+    '</span><strong>' + num(count[name] || 0) + "</strong></div>" +
+    meter(total ? (count[name] || 0) / total * 100 : 0)).join("");
+}
+export function renderOverview(data, state) {
+  const score = resource(data, "score");
+  const tasks = list(data, "tasks");
+  const approvals = list(data, "approvals");
+  const brief = resource(data, "brief");
+  const count = score?.counts || {};
+  const pending = resource(data, "approvals") === null ? "—"
+    : num(approvals.filter(x => x.status === "pending").length);
+  const money = score?.virtual_credit_budget;
+  const metrics = '<div class="metric-grid">' +
+    metric("Governed tasks", score ? num(count.tasks || 0) : "—", "Organization-wide", "activity", true) +
+    metric("Pending decisions", pending, "Human review required", "shield") +
+    metric("AI workforce runs", score ? num(count.agent_runs || 0) : "—", "Recorded execution", "bolt") +
+    metric("Available virtual credits", money ? amount(money.remaining) : "—",
+      "Internal credits, not currency", "chart") + "</div>";
+  const taskRows = tasks.slice(0, 5).map(x =>
+    '<div class="list-row"><span class="row-icon">' + icon("layers") +
+    '</span><div class="row-main"><strong>' + maybe(x.action) +
+    '</strong><small>Task ' + safe(shortId(x.id)) + '</small></div>' +
+    badge(x.status) + "</div>").join("");
+  const approvalRows = approvals.filter(x => x.status === "pending").slice(0, 4)
+    .map(x => '<div class="list-row"><span class="row-icon">' + icon("shield") +
+    '</span><div class="row-main"><strong>' + maybe(x.action) +
+    '</strong><small>Requested ' + safe(dateText(x.created_at)) + '</small></div>' +
+    (capability(state, "approval:decide") ? action("Review","review-approval",x.id) : badge("pending")) + "</div>").join("");
+  const intelligence = brief?.snapshot;
+  const risksHTML = intelligence ? risks(intelligence.risk_flags) : risks(["insufficient_data"]);
+  const intelligenceBody = '<div class="panel-body">' +
+    '<div class="mini-stat"><div><small>Evidence-backed fitness</small><strong>' +
+    (intelligence?.fitness == null ? "N/A" : safe(intelligence.fitness)) +
+    '</strong></div><div><small>Latest evidence</small><strong>' +
+    (intelligence ? safe(shortId(intelligence.id)) : "None") +
+    '</strong></div></div><div class="section-title"><h2>Risk signals</h2></div>' +
+    '<div class="pill-list">' + risksHTML + '</div><p class="muted" style="font-size:11px;line-height:1.8;margin:17px 0 0">' +
+    (intelligence ? "The displayed assessment is from a recorded snapshot, not a live prediction."
+      : "No executive snapshot captured. Use Digital Twin to capture evidence when authorized.") +
+    '</p></div>';
+  const taskBody = unavailable(data, "tasks", taskRows || empty("No tasks created", "Propose goals and approved plans to begin."));
+  const approvalsBody = unavailable(data, "approvals", approvalRows || empty("Nothing awaiting review"));
+  const twinBody = unavailable(data, "brief", intelligenceBody);
+  return layout("overview", action("Open Digital Twin","go-twin","","soft") +
+    action("Refresh data","refresh","","primary"), metrics +
+    section("Operational pulse", "Live tenant data") +
+    '<div class="two-col"><div class="col">' +
+    panel("Recent governed tasks", taskBody, score ? num(count.tasks || 0) + " total" : "") +
+    panel("Human approval queue", approvalsBody, pending + " pending") +
+    '</div><div class="col">' +
+    panel("Executive intelligence", twinBody, "M7 snapshot") +
+    panel("Task lifecycle", '<div class="panel-body">' +
+      (resource(data,"tasks") === null ? unavailable(data,"tasks","") : statusRows(tasks)) +
+      '</div>', "Current records") + '</div></div>');
+}
+export function renderStrategy(data, state) {
+  const goals = list(data, "goals"), plans = list(data, "plans");
+  const goalsRows = goals.map(x => '<tr><td class="primary">' + maybe(x.title) +
+    '</td><td>' + badge(x.status) + '</td><td><span class="text-mono">' +
+    safe(shortId(x.id)) + '</span></td><td>' +
+    (x.parent_id ? '<span class="text-mono">' + safe(shortId(x.parent_id)) + '</span>' : "—") +
+    "</td></tr>");
+  const plansRows = plans.map(x => '<tr><td class="primary">' + maybe(x.title) +
+    '</td><td>' + badge(x.status) + '</td><td><span class="text-mono">' +
+    safe(shortId(x.goal_id)) + '</span></td><td><div class="inline-actions">' +
+    action("Steps","plan-steps",x.id) +
+    (x.status === "draft" ? action("Add step","plan-add-step",x.id) +
+      action("Submit","plan-submit",x.id,"primary") : "") +
+    (x.status === "submitted" ? action("Activate","plan-activate",x.id,"primary") : "") +
+    (x.status === "active" ? action("Create tasks","plan-materialize",x.id,"primary") : "") +
+    '</div></td></tr>');
+  return layout("strategy",
+    (capability(state,"brain:manage") ? action("New goal","new-goal","","primary") +
+      action("New plan","new-plan") : ""),
+    '<div class="info-strip">' + icon("shield") +
+    '<span>A plan requires its own independent approval before activation. Every resulting task still requires its own approval.</span></div>' +
+    section("Strategic objectives", num(goals.length) + " recorded") +
+    panel("Goals", unavailable(data,"goals",table(
+      ["Goal","Status","ID","Parent"],goalsRows,empty("No goals yet","Create your first organizational objective."),
+    ))) + section("Execution plans",num(plans.length) + " plans") +
+    panel("Governed plans",unavailable(data,"plans",table(
+      ["Plan","State","Goal","Actions"],plansRows,empty("No plans yet","Attach a new plan to an active goal."),
+    ))));
+}
+export function renderGovernance(data, state) {
+  const approvals = list(data,"approvals"), tasks = list(data,"tasks"), motions = list(data,"motions");
+  const aRows = approvals.map(x => '<tr><td class="primary">' + maybe(x.action) +
+    '<div class="text-mono">' + safe(shortId(x.id)) + '</div></td><td>' +
+    badge(x.status) + '</td><td>' + safe(dateText(x.created_at)) +
+    '</td><td>' + (x.status==="pending" && capability(state,"approval:decide")
+      ? '<div class="inline-actions">' + action("Approve","approve",x.id,"primary") +
+        action("Reject","reject",x.id,"danger") + "</div>"
+      : '<span class="muted">—</span>') + '</td></tr>');
+  const tRows = tasks.map(x => '<tr><td class="primary">' + maybe(x.action) +
+    '</td><td>' + badge(x.status) + '</td><td><span class="text-mono">' +
+    safe(shortId(x.assignee_id)) + '</span></td><td>' + (
+      x.approval_id ? '<span class="text-mono">' + safe(shortId(x.approval_id)) + '</span>' : "—"
+    ) + '</td></tr>');
+  const councilRows = motions.map(x => '<tr><td class="primary">' + maybe(x.title) +
+    '<div class="muted">' + maybe(x.rationale) + '</div></td><td>' + badge(x.status) +
+    '</td><td>' + num(Number(x.yes_votes)||0) + "/" + num(x.required_votes) +
+    ' yes</td><td><div class="inline-actions">' +
+    (x.status==="open" ? action("Vote","council-vote",x.id) +
+      (capability(state,"council:finalize") ? action("Finalize","council-finalize",x.id,"primary") : "")
+      : "") + "</div></td></tr>");
+  return layout("governance",capability(state,"council:propose") ?
+    action("Propose motion","new-motion","","primary") : "",
+    '<div class="info-strip">' + icon("shield") +
+    "<span>Approvals remain independent. You cannot approve your own requests. Council motions are advisory only.</span></div>" +
+    section("Independent review","Human decisions") +
+    panel("Approvals",unavailable(data,"approvals",table(
+      ["Request","Status","Created","Decision"],aRows,empty("Review queue is clear"),
+    ))) + section("Task control","Backend-governed") +
+    panel("Task register",unavailable(data,"tasks",table(
+      ["Action","State","Assignee","Approval"],tRows,empty("No governed tasks"),
+    ))) + section("Executive council","Human quorum") +
+    panel("Council motions",unavailable(data,"motions",table(
+      ["Motion","Status","Votes","Action"],councilRows,empty("No motions recorded"),
+    ))));
+}
+export function renderOrganization(data, state) {
+  const depts = list(data,"departments"), people = resource(data,"employees");
+  const rows = depts.map(x => {
+    const team = (people && Array.isArray(people[x.id])) ? people[x.id] : [];
+    return '<div class="list-row"><span class="row-icon">' + icon("network") +
+      '</span><div class="row-main"><strong>' + maybe(x.name) +
+      '</strong><small>' + num(team.length) + ' team members · ' +
+      safe(shortId(x.id)) + '</small></div><span class="chip">' +
+      num(team.filter(y => y.kind==="ai").length) + ' AI</span></div>';
+  });
+  const allPeople = people && typeof people === "object" ? Object.values(people).flat() : [];
+  const peopleRows = allPeople.map(x => '<div class="person-card panel"><span class="avatar">' +
+    safe(String(x.name||"A").slice(0,2).toUpperCase()) +
+    '</span><div><strong>' + maybe(x.name) +
+    '</strong><small>Department ' + safe(shortId(x.department_id)) +
+    '</small></div>' + badge(x.kind) + '</div>').join("");
+  return layout("organization",
+    capability(state,"organization:manage") ?
+      action("Add department","new-department") + action("Add AI employee","new-ai","","primary") : "",
+    '<div class="metric-grid">' +
+    metric("Departments",resource(data,"departments") ? num(depts.length) : "—",
+      "Tenant-defined structure","network",true) +
+    metric("Total personnel",people ? num(allPeople.length) : "—",
+      "Human + AI employee records","layers") +
+    metric("AI employees",people ? num(allPeople.filter(x=>x.kind==="ai").length) : "—",
+      "Registered virtual workers","brain") +
+    metric("Human personnel",people ? num(allPeople.filter(x=>x.kind==="human").length) : "—",
+      "Human organizational roles","shield") +
+    '</div>' + section("Department structure") +
+    panel("Departments",unavailable(data,"departments",rows.join("") ||
+      empty("No departments found"))) +
+    section("Personnel directory") +
+    (people ? '<div class="pair-grid">' + (peopleRows ||
+      '<div class="panel">' + empty("No employees found") + "</div>") + "</div>"
+      : unavailable(data,"employees",empty("No personnel available"))));
+}
+export function renderKnowledge(data, state) {
+  const verified = list(data,"verified"), pending = list(data,"pending");
+  const verifiedRows = verified.map(x =>
+    '<div class="list-row"><span class="row-icon">' + icon("book") +
+    '</span><div class="row-main"><strong>' + maybe(x.label) +
+    '</strong><small>' + maybe(x.statement) +
+    '</small><small>Source: ' + maybe(x.source_ref) + '</small></div>' +
+    badge("verified") + "</div>").join("");
+  const pendingRows = pending.map(x =>
+    '<div class="list-row"><span class="row-icon">' + icon("alert") +
+    '</span><div class="row-main"><strong>' + maybe(x.label) +
+    '</strong><small>' + maybe(x.statement) +
+    '</small><small>Source: ' + maybe(x.source_ref) + '</small></div>' +
+    (capability(state,"knowledge:review") ?
+      action("Review","knowledge-review",x.id) : badge("pending")) + "</div>").join("");
+  return layout("knowledge", capability(state,"knowledge:write") ?
+    action("Propose evidence","new-knowledge","","primary") : "",
+    '<div class="info-strip">' + icon("shield") +
+    "<span>Verified means an independent human inspected a source. It is not a universal guarantee of factual correctness.</span></div>" +
+    section("Verified knowledge",num(verified.length)+" entries") +
+    panel("Evidence library",unavailable(data,"verified",verifiedRows ||
+      empty("No verified knowledge","Propose source-backed evidence for review."))) +
+    section("Pending review",num(pending.length)+" proposals") +
+    panel("Review queue",unavailable(data,"pending",pendingRows ||
+      empty("No pending evidence"))));
+}
+export function renderTools(data, state) {
+  const enrollments = list(data,"enrollments"), runs = list(data,"runs");
+  const rules = list(data,"rules"), tasks = list(data,"tasks");
+  const activeCodes = new Set(enrollments.filter(x => x.status==="active").map(x=>x.tool_code));
+  const eRows = enrollments.map(x => '<tr><td class="primary">' + maybe(x.tool_code) +
+    '</td><td>' + badge(x.status) + '</td><td><span class="text-mono">' +
+    safe(shortId(x.id)) + '</span></td><td><div class="inline-actions">' +
+    (x.status==="proposed" && capability(state,"tool:enroll") ?
+      action("Reconcile","tool-reconcile",x.id) : "") +
+    (x.status==="active" && capability(state,"tool:enroll") ?
+      action("Disable","tool-disable",x.id,"danger") : "") + "</div></td></tr>");
+  const rRows = rules.map(x => '<tr><td class="primary">' + maybe(x.tool_code) +
+    '</td><td>' + maybe(x.trigger_kind) + '</td><td>' + badge(x.status) +
+    '</td><td>' + (x.status==="active" && capability(state,"automation:manage") ?
+      action("Disable","rule-disable",x.id,"danger") : "—") + '</td></tr>');
+  const runsRows = runs.map(x => '<tr><td class="primary">' + maybe(x.tool_code) +
+    '</td><td>' + badge(x.status) + '</td><td>' + safe(dateText(x.started_at)) +
+    '</td><td><span class="text-mono">' + safe(shortId(x.id)) + '</span></td></tr>');
+  const ready = tasks.filter(x => String(x.action||"").startsWith("tool:") &&
+    x.status === "waiting_approval");
+  const readyRows = ready.map(x => '<div class="list-row"><span class="row-icon">' +
+    icon("bolt") + '</span><div class="row-main"><strong>' +
+    maybe(x.action) + '</strong><small>' + safe(shortId(x.id)) +
+    " · Requires per-task M2 approval</small></div>" +
+    (capability(state,"tool:dispatch") ? action("Run approved task","tool-run",x.id,"primary")
+      : badge("pending")) + '</div>').join("");
+  return layout("tools", (capability(state,"tool:enroll") ?
+    action("Enroll a tool","new-enrollment") : "") +
+    (capability(state,"automation:manage") ? action("New automation","new-rule") : "") +
+    (capability(state,"automation:run") ? action("Scan sources","automation-scan","","primary") : ""),
+    '<div class="info-strip">' + icon("shield") +
+    "<span>Enrolling a tool is not approving execution. Each automated task needs its own independent approval, and completed output needs QA.</span></div>" +
+    section("Active capabilities",num(activeCodes.size)+" tools active") +
+    panel("Tenant tool enrollments",unavailable(data,"enrollments",table(
+      ["Tool","Status","Enrollment","Action"],eRows,
+      empty("No tools enrolled","Every tool enrollment requires independent approval."),
+    ))) + section("Automated coordination",num(rules.length)+" rules") +
+    panel("Department automation rules",unavailable(data,"rules",table(
+      ["Tool","Verified source","Status","Action"],rRows,empty("No automation rules"),
+    ))) + section("Approved execution","Independent task approval required") +
+    panel("Tool task queue",unavailable(data,"tasks",readyRows ||
+      empty("No pending tool tasks"))) +
+    section("Execution evidence",num(runs.length)+" runs") +
+    panel("Enterprise tool runs",unavailable(data,"runs",table(
+      ["Tool","State","Started","Run ID"],runsRows,empty("No tool runs recorded"),
+    ))));
+}
+export function renderCalendar(data, state) {
+  const events = list(data,"events");
+  const rows = events.map(x => '<div class="list-row"><span class="row-icon">' + icon("calendar") +
+    '</span><div class="row-main"><strong>' + maybe(x.title) +
+    '</strong><small>' + safe(dateText(x.starts_at)) + ' — ' +
+    safe(dateText(x.ends_at)) + '</small><small>' + maybe(x.detail) + '</small></div>' +
+    '<div class="row-action">' + badge(x.status) +
+    (x.status==="scheduled" && x.creator_id===state.me?.id &&
+      capability(state,"calendar:write") ? action("Cancel","calendar-cancel",x.id,"danger")
+      : "") +
+    (x.status==="scheduled" && capability(state,"calendar:respond") ?
+      action("RSVP","calendar-rsvp",x.id) : "") + '</div></div>').join("");
+  return layout("calendar",capability(state,"calendar:write") ?
+    action("Schedule event","new-event","","primary") : "",
+    '<div class="info-strip">' + icon("calendar") +
+    "<span>Events are records within AGO. No external email invitation or third-party calendar is sent.</span></div>" +
+    section("Upcoming window","Next 30 days") +
+    panel("Shared commitments",unavailable(data,"events",rows ||
+      empty("No upcoming events","Schedule the first organizational event."))));
+}
+export function renderTwin(data, state) {
+  const active = resource(data,"dna");
+  const snapshots = list(data,"snapshots");
+  const selected = state.twin?.snapshotId
+    ? snapshots.find(x=>x.id===state.twin.snapshotId) || snapshots[0] : snapshots[0];
+  const currentProfile = active?.profile || {
+    qa_target_pct:85,backlog_limit:5,budget_alert_pct:80,
+  };
+  const candidate = validateProfile(state.twin?.profile || currentProfile);
+  const simulation = state.twin?.simulation;
+  const recorded = selected || null;
+  const preface = '<div class="twin-banner"><div><span class="eyebrow">' + icon("spark") +
+    ' EVIDENCE-BASED EXPLORATION</span><h2>Explore decisions before making them.</h2>' +
+    '<p>Run bounded what-if calculations against a recorded organizational snapshot. No policy is saved, no employee is changed and no task is executed.</p></div><span class="twin-visual">' +
+    icon("brain") + '</span></div>';
+  const selectOptions = snapshots.map(x => '<option value="' + safe(x.id) + '"' +
+    (recorded?.id===x.id ? " selected" : "") + '>' +
+    safe(dateText(x.created_at)) + ' · ' + safe(shortId(x.id)) + "</option>").join("");
+  const rangeDefs = [
+    ["qa_target_pct","QA quality target",50,100,1,"%"],
+    ["backlog_limit","Backlog alert threshold",0,10000,1," tasks"],
+    ["budget_alert_pct","Credit utilization alert",1,100,1,"%"],
+  ];
+  const ranges = rangeDefs.map(([key,title,min,max,step,suffix]) =>
+    '<div class="range-row"><label class="twin-label" for="range-' + key + '">' +
+    safe(title) + '<output id="output-' + key + '">' + num(candidate[key]) + safe(suffix) +
+    '</output></label><input type="range" data-twin-field="' + key +
+    '" id="range-' + key + '" min="' + min + '" max="' + max +
+    '" step="' + step + '" value="' + candidate[key] + '"></div>').join("");
+  const baselineScore = recorded?.fitness == null ? "N/A" : safe(recorded.fitness);
+  const hypotheticalScore = simulation?.assessment?.fitness == null
+    ? "N/A" : safe(simulation.assessment.fitness);
+  const delta = simulation ? fitnessDelta(recorded?.fitness,simulation.assessment.fitness) : null;
+  const comparer = '<div class="comparison"><div><div class="twin-card-label">RECORDED BASELINE</div>' +
+    '<div class="score-line"><strong>' + baselineScore +
+    '</strong><span>/100 fitness</span></div><div class="pill-list">' +
+    risks(recorded?.risk_flags || ["insufficient_data"]) + '</div></div>' +
+    '<div><div class="twin-card-label">HYPOTHETICAL SCENARIO</div>' +
+    '<div class="score-line"><strong>' + (simulation ? hypotheticalScore : "—") +
+    '</strong><span>/100 fitness</span></div><div class="pill-list">' +
+    (simulation ? risks(simulation.assessment?.risk_flags) : '<span class="muted">Not evaluated</span>') +
+    '</div>' + (delta===null ? "" : '<p class="twin-delta">Score delta: ' + safe(delta) +
+    " points (threshold-only changes may leave score unchanged)</p>") + '</div></div>';
+  const snapshotStatus = unavailable(data,"snapshots",
+    !recorded ? '<div class="notice-card"><strong>No recorded evidence yet.</strong> ' +
+    "An authorized user must capture a snapshot before running a hypothetical scenario.</div>" : "");
+  return layout("twin",
+    (capability(state,"meta:observe") ? action("Capture current evidence","capture-snapshot","","soft") : "") +
+    (capability(state,"meta:recommend") && recorded ?
+      action("Propose recommendations","generate-recommendations","","soft") : ""),
+    preface + '<div class="twin-grid"><section class="panel"><div class="panel-head"><h3>Scenario controls</h3><small>Not applied to AGO</small></div><div class="panel-body">' +
+    snapshotStatus + '<label class="field-label" for="snapshot-select">Evidence snapshot</label>' +
+    '<select id="snapshot-select"' + (!snapshots.length ? " disabled" : "") +
+    '>' + (selectOptions || '<option value="">No snapshots available</option>') +
+    '</select><div class="section-title"><h2>Hypothetical operating DNA</h2></div>' +
+    ranges + '<div class="page-actions" style="justify-content:flex-start;padding-top:17px">' +
+    (capability(state,"meta:simulate") ? action("Run comparison","compare-twin","","primary") : "") +
+    action("Reset thresholds","reset-twin") + '</div></div></section>' +
+    '<section class="panel"><div class="panel-head"><h3>Assessment</h3><small>Recorded vs hypothetical</small></div>' +
+    '<div class="panel-body"><div class="split-actions"><span class="chip">' +
+    (active?.source==="approved" ? "Human-approved DNA" : "Default baseline") +
+    '</span><span class="text-mono">Snapshot ' + safe(shortId(recorded?.id || "none")) +
+    '</span></div><div class="section-title"><h2>Fitness indicator</h2></div>' +
+    comparer + '<div class="section-title"><h2>Safety interpretation</h2></div>' +
+    '<div class="notice-card"><strong>Simulation only.</strong> The calculations use recorded task, QA and internal-credit values. A score of N/A means insufficient completed outcomes, not perfect performance. Threshold editing never changes actual DNA.</div></div></section></div>' +
+    section("Evidence provenance") +
+    panel("Snapshot integrity",'<div class="panel-body">' +
+    '<div class="keyval"><span>Snapshot</span><strong class="text-mono">' +
+    safe(recorded?.id || "None") + '</strong></div>' +
+    '<div class="keyval"><span>SHA-256 evidence fingerprint</span><strong class="text-mono">' +
+    safe(recorded?.digest || "None captured") + '</strong></div>' +
+    '<div class="keyval"><span>Active DNA version</span><strong>' +
+    safe(active?.version == null ? "Default baseline" : "v"+active.version) + '</strong></div>' +
+    '<div class="keyval"><span>Authoritative execution</span><strong>None</strong></div>' +
+    '<div class="page-actions" style="justify-content:flex-start">' +
+    (recorded ? action("Verify evidence fingerprint","verify-snapshot") : "") +
+    '</div></div>'));
+}
+export function renderPage(page,data,state) {
+  const fn = {
+    overview:renderOverview,strategy:renderStrategy,governance:renderGovernance,
+    organization:renderOrganization,knowledge:renderKnowledge,
+    tools:renderTools,calendar:renderCalendar,twin:renderTwin,
+  }[page];
+  if (!fn) return '<div class="error-card">Unknown workspace</div>';
+  return fn(data,state);
+}
