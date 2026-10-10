@@ -98,3 +98,53 @@ def verified_node(client, founder, reviewer):
         "approve": True, "note": "Reviewed M8 evidence",
     })
     return node["id"]
+
+
+def test_verified_department_trigger_requires_separate_task_review(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    assert client.get("/v1/tools/catalog").status_code == 401
+    assert client.get("/v1/tools/catalog", headers=reviewer).status_code == 200
+    enrollment = post(client, "/v1/tools/enrollments", founder, {
+        "code": "tool:knowledge_digest",
+        "rationale": "Restricted knowledge report for reviewed department workflow",
+    })
+    post(client, f"/v1/tools/enrollments/{enrollment['id']}/reconcile",
+         founder, expected=403)
+    post(client, f"/v1/governance/approvals/{enrollment['approval_id']}/decision",
+         founder, {"approve": True, "reason": "Self review"}, expected=403)
+    decision(client, reviewer, enrollment["approval_id"])
+    post(client, f"/v1/tools/enrollments/{enrollment['id']}/reconcile", founder)
+    department_id, employee_id = create_ai(client, founder)
+    rule = post(client, "/v1/tools/automation/rules", founder, {
+        "department_id": department_id, "assignee_id": employee_id,
+        "code": "tool:knowledge_digest", "trigger": "knowledge_verified",
+    })
+    source_id = verified_node(client, founder, reviewer)
+    fire_url = f"/v1/tools/automation/rules/{rule['id']}/fire"
+    fired = post(client, fire_url, founder, {"source_id": source_id})
+    assert fired["created"] is True
+    assert fired["execution_permitted"] is False
+    again = post(client, fire_url, founder, {"source_id": source_id})
+    assert again["created"] is False and again["task_id"] == fired["task_id"]
+    assert client.post("/v1/tools/automation/scan", headers=founder,
+                       json={"limit": 10}).json()["firings"] == []
+    run_url = f"/v1/tools/tasks/{fired['task_id']}/run"
+    post(client, run_url, founder, expected=403)
+    decision(client, reviewer, fired["approval_id"])
+    result = post(client, run_url, founder)
+    assert result["status"] == "completed"
+    assert result["requires_independent_qa"] is True
+    assert result["result"]["data"] if False else result["result"]["verified"] >= 1
+    post(client, run_url, founder, expected=403)
+    logs = client.get(f"/v1/tools/runs/{result['id']}/evidence",
+                      headers=founder)
+    assert logs.status_code == 200
+    assert [item["event"] for item in logs.json()] == ["claimed", "completed"]
+    post(client, f"/v1/tasks/{fired['task_id']}/review", reviewer, {
+        "verdict": "pass", "evidence": "Verified delivered digest",
+    })
+    score = client.get("/v1/insights/scorecard", headers=founder)
+    assert score.status_code == 200
+    assert score.json()["counts"]["tool_runs"] == 1
+    assert score.json()["counts"]["automation_firings"] == 1
