@@ -126,6 +126,9 @@ export function renderOverview(data, state) {
 }
 export function renderStrategy(data, state) {
   const goals = list(data, "goals"), plans = list(data, "plans");
+  const decisions = list(data, "approvals");
+  const decisionFor = plan => decisions.find(x => x.id === plan.approval_id);
+
   const goalsRows = goals.map(x => '<tr><td class="primary">' + maybe(x.title) +
     '</td><td>' + badge(x.status) + '</td><td><span class="text-mono">' +
     safe(shortId(x.id)) + '</span></td><td>' +
@@ -137,7 +140,12 @@ export function renderStrategy(data, state) {
     action("Steps","plan-steps",x.id) +
     (x.status === "draft" ? action("Add step","plan-add-step",x.id) +
       action("Submit","plan-submit",x.id,"primary") : "") +
-    (x.status === "submitted" ? action("Activate","plan-activate",x.id,"primary") : "") +
+    (x.status === "pending_approval"
+      ? (decisionFor(x)?.status === "approved"
+        ? action("Activate","plan-activate",x.id,"primary")
+        : (decisionFor(x)?.status === "rejected" ? badge("rejected")
+          : badge("pending")))
+      : "") +
     (x.status === "active" ? action("Create tasks","plan-materialize",x.id,"primary") : "") +
     '</div></td></tr>');
   return layout("strategy",
