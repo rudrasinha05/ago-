@@ -1445,6 +1445,215 @@ class EnterpriseOperationsStore:
             (str(UUID(tenant_id)),),
         ).fetchall()]
 
+    def work_queue(self, *, tenant_id: str) -> list[dict]:
+        tenant = str(UUID(tenant_id))
+        return [dict(row) for row in self.connection.execute(
+            """SELECT q.id,q.task_id,q.operation_key,q.priority,q.eligible_at,
+                      q.created_at,t.status AS task_status,
+                      e.state AS lease_state,e.expires_at AS lease_expires_at,
+                      e.sequence AS lease_sequence
+               FROM ago_oos_queue_items q
+               JOIN ago_governed_tasks t ON t.tenant_id=q.tenant_id AND t.id=q.task_id
+               LEFT JOIN LATERAL (
+                 SELECT state,expires_at,sequence
+                 FROM ago_oos_queue_events
+                 WHERE tenant_id=q.tenant_id AND queue_id=q.id
+                 ORDER BY sequence DESC LIMIT 1
+               ) e ON true
+               WHERE q.tenant_id=%s
+               ORDER BY q.created_at DESC,q.id LIMIT 100""",
+            (tenant,),
+        ).fetchall()]
+
+    def queue_work(self, *, actor: Principal, task_id: str, operation_key: str,
+                   priority: int, eligible_at: datetime) -> dict:
+        if (not 1 <= len(operation_key.strip()) <= 160
+            or type(priority) is not int or not 0 <= priority <= 100):
+            raise ValueError("Invalid idempotent operation key or task priority")
+        if eligible_at.tzinfo is None or eligible_at > (
+            datetime.now(timezone.utc) + timedelta(days=90)
+        ):
+            raise ValueError("Timezone-aware eligible time within 90 days required")
+        task = str(UUID(task_id))
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            prev = self.connection.execute(
+                """SELECT id,task_id,priority,eligible_at
+                   FROM ago_oos_queue_items
+                   WHERE tenant_id=%s AND operation_key=%s""",
+                (actor.tenant_id, operation_key.strip()),
+            ).fetchone()
+            if prev:
+                if (str(prev["task_id"]) != task or prev["priority"] != priority
+                    or prev["eligible_at"] != eligible_at):
+                    raise PermissionError("Operation key cannot enqueue different work")
+                return {"id": str(prev["id"]), "task_id": task,
+                        "idempotent": True, "executed": False}
+            record = self.connection.execute(
+                """SELECT t.action,t.status,a.status AS approval_status,a.action AS approved_action
+                   FROM ago_governed_tasks t LEFT JOIN ago_approval_requests a
+                   ON a.tenant_id=t.tenant_id AND a.id=t.approval_id
+                   WHERE t.tenant_id=%s AND t.id=%s""",
+                (actor.tenant_id, task),
+            ).fetchone()
+            if (not record or record["status"] != "waiting_approval"
+                or record["approval_status"] != "approved"
+                or record["approved_action"] != record["action"]):
+                raise PermissionError("Only separately approved pending tasks may be queued")
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_oos_queue_items
+                   (id,tenant_id,task_id,operation_key,priority,eligible_at,enqueued_by)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, task, operation_key.strip(),
+                 priority, eligible_at, actor.subject),
+            )
+        return {"id": identifier, "task_id": task,
+                "idempotent": False, "executed": False}
+
+    def claim_work(self, *, actor: Principal, lease_seconds: int) -> dict:
+        if type(lease_seconds) is not int or not 300 <= lease_seconds <= 3600:
+            raise ValueError("Lease must be between five and sixty minutes")
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            if self.effective_mode(tenant_id=actor.tenant_id)["mode"] != "active":
+                raise PermissionError("Company paused or otherwise unavailable")
+            available = self.connection.execute(
+                """SELECT q.id,q.task_id,q.priority,t.assignee_id,
+                          e.department_id,
+                          coalesce(last.sequence,0) AS previous_sequence
+                   FROM ago_oos_queue_items q
+                   JOIN ago_governed_tasks t
+                     ON t.tenant_id=q.tenant_id AND t.id=q.task_id
+                   JOIN ago_employees e
+                     ON e.tenant_id=t.tenant_id AND e.id=t.assignee_id
+                   JOIN ago_approval_requests a
+                     ON a.tenant_id=t.tenant_id AND a.id=t.approval_id
+                   LEFT JOIN LATERAL (
+                      SELECT state,expires_at,sequence
+                      FROM ago_oos_queue_events history
+                      WHERE history.tenant_id=q.tenant_id AND history.queue_id=q.id
+                      ORDER BY sequence DESC LIMIT 1
+                   ) last ON true
+                   WHERE q.tenant_id=%s AND q.eligible_at<=clock_timestamp()
+                     AND t.status='waiting_approval'
+                     AND a.status='approved' AND a.action=t.action
+                     AND (last.state IS NULL OR last.state='released'
+                       OR (last.state='leased' AND last.expires_at<=clock_timestamp()))
+                     AND NOT EXISTS(
+                       SELECT 1 FROM ago_agent_runs r
+                       WHERE r.tenant_id=q.tenant_id AND r.task_id=q.task_id)
+                   ORDER BY (q.priority+LEAST(20,
+                     GREATEST(0,FLOOR(EXTRACT(EPOCH FROM
+                       (clock_timestamp()-q.created_at))/3600)::int))) DESC,
+                       q.created_at,q.id
+                   LIMIT 100""",
+                (actor.tenant_id,),
+            ).fetchall()
+            for candidate in available:
+                department = str(candidate["department_id"])
+                worker = str(candidate["assignee_id"])
+                if (self.effective_mode(tenant_id=actor.tenant_id,
+                         scope_kind="department",scope_id=department)["mode"] != "active"
+                    or self.effective_mode(tenant_id=actor.tenant_id,
+                         scope_kind="employee",scope_id=worker)["mode"] != "active"):
+                    continue
+                recent_state = self.worker_history(tenant_id=actor.tenant_id,
+                                                   employee_id=worker)
+                if recent_state and recent_state[0]["state"] not in ("available","idle"):
+                    continue
+                if any(x["severity"] == "blocking" and x["outcome"] != "resolved"
+                       for x in self.assistance(tenant_id=actor.tenant_id,
+                                                employee_id=worker)):
+                    continue
+                if self.connection.execute(
+                    """SELECT 1 FROM ago_personnel_events
+                       WHERE tenant_id=%s AND employee_id=%s
+                         AND change_kind='terminated' LIMIT 1""",
+                    (actor.tenant_id, worker),
+                ).fetchone():
+                    continue
+                blocked = self.connection.execute(
+                    """SELECT 1 FROM ago_plan_steps s
+                       JOIN ago_strategy_plans p
+                         ON p.tenant_id=s.tenant_id AND p.id=s.plan_id
+                       JOIN ago_goals g
+                         ON g.tenant_id=p.tenant_id AND g.id=p.goal_id
+                       WHERE s.tenant_id=%s AND s.task_id=%s
+                         AND (p.status<>'active' OR g.status<>'active')
+                       LIMIT 1""",
+                    (actor.tenant_id, candidate["task_id"]),
+                ).fetchone()
+                if blocked:
+                    continue
+                dependency = self.connection.execute(
+                    """SELECT 1 FROM ago_plan_steps s JOIN ago_plan_steps prior
+                       ON prior.tenant_id=s.tenant_id AND prior.plan_id=s.plan_id
+                       AND prior.id=s.depends_on
+                       LEFT JOIN ago_governed_tasks t
+                       ON t.tenant_id=prior.tenant_id AND t.id=prior.task_id
+                       LEFT JOIN ago_task_reviews review
+                       ON review.tenant_id=t.tenant_id AND review.task_id=t.id
+                       WHERE s.tenant_id=%s AND s.task_id=%s
+                         AND s.depends_on IS NOT NULL
+                         AND (t.status IS DISTINCT FROM 'completed'
+                         OR review.verdict IS DISTINCT FROM 'pass') LIMIT 1""",
+                    (actor.tenant_id, candidate["task_id"]),
+                ).fetchone()
+                if dependency:
+                    continue
+                identifier = str(uuid4())
+                lease_until = datetime.now(timezone.utc)+timedelta(seconds=lease_seconds)
+                self.connection.execute(
+                    """INSERT INTO ago_oos_queue_events
+                       (id,tenant_id,queue_id,actor_id,state,sequence,expires_at,explanation)
+                       VALUES(%s,%s,%s,%s,'leased',%s,%s,%s)""",
+                    (identifier, actor.tenant_id, candidate["id"], actor.subject,
+                     candidate["previous_sequence"]+1, lease_until,
+                     "Bounded priority lease; task execution still needs original approval"),
+                )
+                return {"queue_id": str(candidate["id"]),
+                        "task_id": str(candidate["task_id"]),
+                        "lease_id": identifier, "expires_at": lease_until,
+                        "priority": candidate["priority"],
+                        "executed": False, "manual_authorized_execution_required": True,
+                        "replay_of_side_effects": False}
+        return {"queue_id": None, "reason": "no_safe_approved_task",
+                "executed": False, "manual_authorized_execution_required": True}
+
+    def resolve_work_lease(self, *, actor: Principal, queue_id: str,
+                           explanation: str, status: str) -> dict:
+        if status not in ("released","reconciled") or not (
+            1 <= len(explanation.strip()) <= 1000
+        ):
+            raise ValueError("Bounded recovery decision required")
+        item = str(UUID(queue_id))
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            latest = self.connection.execute(
+                """SELECT id,state,sequence,actor_id,expires_at
+                   FROM ago_oos_queue_events
+                   WHERE tenant_id=%s AND queue_id=%s
+                   ORDER BY sequence DESC LIMIT 1""",
+                (actor.tenant_id, item),
+            ).fetchone()
+            if not latest or latest["state"] != "leased":
+                raise PermissionError("No active or expired work lease to reconcile")
+            if str(latest["actor_id"]) != actor.subject:
+                raise PermissionError("Only original claimant may close lease")
+            if status == "released" and latest["expires_at"] <= datetime.now(timezone.utc):
+                raise PermissionError("Expired lease needs explicit terminal reconciliation")
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_oos_queue_events
+                   (id,tenant_id,queue_id,actor_id,state,sequence,explanation)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, item, actor.subject, status,
+                 latest["sequence"]+1, explanation.strip()),
+            )
+        return {"id": identifier, "queue_id": item, "state": status,
+                "replayed": False, "executed": False}
+
     def capacity_limits(self, *, tenant_id: str) -> dict:
         tenant = str(UUID(tenant_id))
         policies = [dict(row) for row in self.connection.execute(
