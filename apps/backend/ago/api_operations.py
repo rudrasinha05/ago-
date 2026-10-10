@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+from typing import Literal
 from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import Field
 
+from ago.repository_ports import EnterpriseOperationsStorePort, ApprovalRepositoryPort
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, db_connection, repository_scope, translate_error
 from ago.backend_contracts import RepositoryScope
@@ -224,9 +227,6 @@ def calendar_history(
 
 
 # Sections 21–27: authorized application calls only, never SQL in transport.
-from typing import Literal
-from decimal import Decimal
-from ago.repository_ports import EnterpriseOperationsStorePort, ApprovalRepositoryPort
 
 
 class EnterpriseModeApproval(StrictInput):
