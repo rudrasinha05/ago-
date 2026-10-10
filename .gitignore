@@ -23,3 +23,6 @@ dist/
 *.partial
 backups/
 .backups/
+
+# Local editable Python installation metadata
+*.egg-info/
