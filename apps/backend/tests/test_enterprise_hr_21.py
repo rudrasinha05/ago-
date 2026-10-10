@@ -8,11 +8,11 @@ from test_m7_http_postgres import case as case, decide, post
 
 def _change(client, founder, reviewer, change_kind, target_id, **extra):
     url = "/v1/operations/enterprise/organization"
-    request = post(client, url + "/approval", founder,
-                   {"change_kind": change_kind, "target_id": target_id})
-    payload = {"change_kind": change_kind, "target_id": target_id,
-               "approval_id": request["approval_id"],
-               "reason": "Reviewed operational organizational adjustment", **extra}
+    reviewed = {"change_kind": change_kind, "target_id": target_id,
+                "reason": "Reviewed operational organizational adjustment", **extra}
+    request = post(client, url + "/approval", founder, reviewed)
+    assert request["review_payload"]["target_id"] == target_id
+    payload = {**reviewed, "approval_id": request["approval_id"]}
     post(client, url + "/apply", founder, payload, expected=403)
     decide(client, reviewer, request["approval_id"])
     result = post(client, url + "/apply", founder, payload)
@@ -77,11 +77,45 @@ def test_organizational_promotion_cannot_be_downlevelled_or_self_approved(case):
             department_id=dept, name="Promotable Agent")
     _change(client, founder, reviewer, "promoted", worker, role_level=3)
     request = post(client, "/v1/operations/enterprise/organization/approval",
-                   founder, {"change_kind": "promoted", "target_id": worker})
+                   founder, {"change_kind": "promoted", "target_id": worker,
+                             "role_level": 4,
+                             "reason": "Authorized promotion to level four"})
     post(client, "/v1/governance/approvals/" + request["approval_id"] + "/decision",
          founder, {"approve": True, "reason": "self review forbidden"}, expected=403)
     decide(client, reviewer, request["approval_id"])
     post(client, "/v1/operations/enterprise/organization/apply", founder, {
         "change_kind": "promoted", "target_id": worker,
         "approval_id": request["approval_id"], "role_level": 2,
-        "reason": "Cannot demote under approved promotion"}, expected=400)
+        "reason": "Cannot demote under approved promotion"}, expected=403)
+
+
+def test_independent_hr_review_binds_all_fields_and_is_immutable(case):
+    client, headers, _ = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    dept = str(uuid4())
+    _change(client, founder, reviewer, "created", dept, name="HR Review Origin")
+    agent = str(uuid4())
+    url = "/v1/operations/enterprise/organization"
+    reviewed = {"change_kind": "hired", "target_id": agent,
+                "department_id": dept, "name": "AI Employee A",
+                "reason": "Specific independently reviewed AI hire"}
+    request = post(client, url + "/approval", founder, reviewed)
+    assert request["review_payload"]["name"] == "AI Employee A"
+    assert len(request["intent_digest"]) == 64
+    pending = client.get(url + "/intents", headers=reviewer).json()
+    assert any(str(x["approval_id"]) == request["approval_id"]
+               and x["payload"]["name"] == "AI Employee A" for x in pending)
+    decide(client, reviewer, request["approval_id"])
+    tampered = {**reviewed, "approval_id": request["approval_id"],
+                "name": "Secretly Replaced AI Employee"}
+    post(client, url + "/apply", founder, tampered, expected=403)
+    tampered["name"] = reviewed["name"]
+    tampered["department_id"] = str(uuid4())
+    post(client, url + "/apply", founder, tampered, expected=403)
+    tampered["department_id"] = dept
+    tampered["reason"] = "Unreviewed justification"
+    post(client, url + "/apply", founder, tampered, expected=403)
+    actual = post(client, url + "/apply", founder,
+                  {**reviewed, "approval_id": request["approval_id"]})
+    assert actual["independently_approved"]
+    assert client.get(url + "/intents").status_code == 401
