@@ -99,14 +99,21 @@ class EnterpriseOperationsStore:
                    ORDER BY sequence DESC LIMIT 1""",
                 (tenant, scope_kind, scope),
             ).fetchone()
-            if previous:
-                already = self.connection.execute(
-                    """SELECT id,mode,sequence FROM ago_oos_mode_events
-                       WHERE tenant_id=%s AND approval_id=%s""",
-                    (tenant, approval_id)
-                ).fetchone()
-                if already:
-                    return dict(already) | {"idempotent": True}
+            already = self.connection.execute(
+                """SELECT id,mode,sequence,scope_kind,scope_id,rationale,expires_at
+                   FROM ago_oos_mode_events
+                   WHERE tenant_id=%s AND approval_id=%s""",
+                (tenant, str(UUID(approval_id)))
+            ).fetchone()
+            if already:
+                if (already["mode"] != target_mode.value or already["scope_kind"] != scope_kind
+                    or (str(already["scope_id"]) if already["scope_id"] else None) != scope
+                    or already["rationale"] != reason.strip()
+                    or already["expires_at"] != expires_at):
+                    raise PermissionError("Approval already used for a different operating action")
+                return {"id": str(already["id"]), "mode": already["mode"],
+                        "sequence": already["sequence"],
+                        "expires_at": already["expires_at"], "idempotent": True}
             self._approval(actor, approval_id, action)
             previous_mode = OperatingMode(previous["mode"]) if previous else OperatingMode.ACTIVE
             transition_mode(previous_mode, target_mode, approved=True, reason=reason)
