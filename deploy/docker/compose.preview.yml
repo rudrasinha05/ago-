@@ -1,0 +1,40 @@
+# Local/staging preview ONLY. Never publish this compose stack as production.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ago_preview
+      POSTGRES_USER: ago_preview
+      POSTGRES_PASSWORD: ${AGO_PREVIEW_DB_PASSWORD:?set a unique preview password}
+    volumes:
+      - pg_preview_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ago_preview -d ago_preview"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [ago_internal]
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:mode=1777"]
+    environment:
+      AGO_ENVIRONMENT: development
+      AGO_SESSION_SECRET: ${AGO_PREVIEW_SESSION_SECRET:?set a unique preview signing secret}
+      AGO_POSTGRES_DSN: postgresql://ago_preview:${AGO_PREVIEW_DB_PASSWORD}@postgres:5432/ago_preview
+      AGO_ENABLE_PAID_MODELS: "false"
+      AGO_M8_EXTERNAL_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports: ["127.0.0.1:8000:8000"]
+    networks: [ago_internal]
+volumes:
+  pg_preview_data:
+networks:
+  ago_internal:
+    internal: true
