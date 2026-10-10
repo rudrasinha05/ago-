@@ -103,7 +103,7 @@ def page(browser, request):
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     yield page
-    if request.node.rep_call.failed:
+    if getattr(getattr(request.node, "rep_call", None), "failed", False):
         ARTIFACTS.mkdir(parents=True, exist_ok=True)
         page.screenshot(
             path=str(ARTIFACTS / (request.node.name + "-failure.png")),
@@ -111,14 +111,6 @@ def page(browser, request):
         )
     context.close()
     assert not errors, "Uncaught real browser exceptions: " + repr(errors)
-
-
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    outcome = yield
-    report = outcome.get_result()
-    if report.when == "call":
-        item.rep_call = report
 
 
 def sign_in(page, app_url, tenant, role="founder"):
@@ -213,6 +205,7 @@ def test_reviewer_is_not_a_founder_and_cannot_self_escalate(page, tenant, app_ur
     expect(page.get_by_role("button", name="Propose motion")).to_have_count(0)
     navigate(page, "tools", "Enterprise operations")
     expect(page.get_by_role("button", name="Enroll a tool")).to_have_count(0)
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(ARTIFACTS / "reviewer-restricted.png"), full_page=True)
 
 
@@ -253,6 +246,7 @@ def test_mobile_menu_and_keyboard_access(browser, tenant, app_url):
         expect(page.locator("#dlg-title")).to_be_focused()
         page.keyboard.press("Escape")
         expect(page.locator("#action-dialog")).to_be_hidden()
+        ARTIFACTS.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(ARTIFACTS / "mobile-strategy.png"), full_page=True)
         assert not errors, "Browser exceptions on mobile: " + repr(errors)
     finally:
