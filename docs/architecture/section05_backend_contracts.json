@@ -381,7 +381,7 @@
           "returns": "dict"
         },
         "apply_agent_evidence": {
-          "arguments": "self, *, actor: Principal, intent_id: str, approval_id: str",
+          "arguments": "self, *, actor: Principal, intent_id: str, approval_id: str, employee_id: str",
           "returns": "dict"
         },
         "agent_evidence": {
@@ -409,7 +409,7 @@
           "returns": "dict"
         },
         "apply_plan_revision": {
-          "arguments": "self, *, actor: Principal, intent_id: str, approval_id: str",
+          "arguments": "self, *, actor: Principal, intent_id: str, approval_id: str, plan_id: str",
           "returns": "dict"
         },
         "plan_revisions": {
