@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import http.client
 import json
 import os
 import secrets
 import sys
 from dataclasses import dataclass
+from pathlib import Path
+from time import monotonic
 from urllib.parse import urlsplit
 
 from ago.release_security import schema_integrity
@@ -186,6 +189,51 @@ def serve_local(*, port: int = 8000, run_server=None) -> None:
     runner("ago.main:app", host="127.0.0.1", port=port, reload=False)
 
 
+def monitor_local(*, port: int = 8000, connection=http.client.HTTPConnection) -> dict:
+    """Bounded loopback-only probes; never follow redirects or expose response data."""
+    if _stage() not in _LOCAL_STAGES or not 1024 <= port <= 65535:
+        raise PermissionError("Monitoring requires a local stage and valid port")
+    report = {}
+    for name, expected in (("live", "ok"), ("ready", "ready")):
+        started = monotonic()
+        healthy = False
+        client = connection("127.0.0.1", port, timeout=3)
+        try:
+            client.request("GET", f"/health/{name}")
+            response = client.getresponse()
+            payload = response.read(65537)
+            healthy = (response.status == 200 and len(payload) <= 65536
+                       and json.loads(payload).get("status") == expected)
+        except (OSError, ValueError, AttributeError, http.client.HTTPException):
+            pass
+        finally:
+            client.close()
+        report[name] = {"healthy": healthy,
+                        "latency_ms": round((monotonic() - started) * 1000, 2)}
+    report["alert"] = not all(report[key]["healthy"] for key in ("live", "ready"))
+    return report
+
+
+def backup_local(output: Path, *, confirmed: bool = False) -> dict:
+    """Explicit local snapshot; reuse archive integrity and no-overwrite controls."""
+    if not doctor().ready:
+        raise RuntimeError("Local database/schema must be ready before backup")
+    from ago.release_ops import create_backup
+
+    return create_backup(_dsn(), output, confirmed=confirmed)
+
+
+def restore_local(archive: Path, *, confirmed: bool = False) -> dict:
+    """Never restore over the active DB; only an empty local drill target."""
+    target = os.getenv("AGO_RESTORE_TEST_DSN", "")
+    if (_stage() not in _LOCAL_STAGES or not local_database(_dsn())
+            or not local_database(target)):
+        raise PermissionError("Restore requires two local database configurations")
+    from ago.release_ops import restore_drill
+
+    return restore_drill(_dsn(), target, archive, confirmed=confirmed)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AGO safe local operator workflow")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -194,12 +242,30 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init", help="Create new organization, founder and reviewer")
     server = sub.add_parser("serve", help="Launch localhost Control Center")
     server.add_argument("--port", type=int, default=8000)
+    monitor = sub.add_parser("monitor", help="Read-only local health probes and alert")
+    monitor.add_argument("--port", type=int, default=8000)
+    backup = sub.add_parser("backup", help="Explicit local custom-format backup")
+    backup.add_argument("--output", type=Path, required=True)
+    backup.add_argument("--confirm", action="store_true")
+    restore = sub.add_parser("restore-drill", help="Restore into an empty local drill DB")
+    restore.add_argument("--archive", type=Path, required=True)
+    restore.add_argument("--confirm", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "doctor":
         info = doctor().as_dict()
         print(json.dumps(info, sort_keys=True))
         return 0 if info["ready"] else 2
     try:
+        if args.command == "monitor":
+            report = monitor_local(port=args.port)
+            print(json.dumps(report, sort_keys=True))
+            return 2 if report["alert"] else 0
+        if args.command == "backup":
+            print(json.dumps(backup_local(args.output, confirmed=args.confirm)))
+            return 0
+        if args.command == "restore-drill":
+            print(json.dumps(restore_local(args.archive, confirmed=args.confirm)))
+            return 0
         if args.command == "tenants":
             print(json.dumps(list_local_tenants(), sort_keys=True))
             return 0

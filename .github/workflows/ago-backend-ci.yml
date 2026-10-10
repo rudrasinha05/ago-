@@ -1,4 +1,4 @@
-name: AGO Architecture Sections 1-10 & 14 and M1-M12 CI
+name: AGO Architecture Sections 1-11 & 14 and M1-M12 CI
 on:
   push:
     branches: [develop]
@@ -293,9 +293,9 @@ jobs:
         run: psql -h localhost -U ago_test -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ago_restore_drill'
       - name: Backup, verify manifest and restore with real PostgreSQL tools
         run: |
-          python -m ago.release_ops backup --output /tmp/ago-m10-ci.dump --confirm
+          python -m ago.local_ops backup --output /tmp/ago-m10-ci.dump --confirm
           python -m ago.release_ops verify-backup --archive /tmp/ago-m10-ci.dump
-          python -m ago.release_ops restore-drill --archive /tmp/ago-m10-ci.dump --confirm
+          python -m ago.local_ops restore-drill --archive /tmp/ago-m10-ci.dump --confirm
       - name: Publish verified disaster recovery gate
         if: always()
         env:

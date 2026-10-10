@@ -59,7 +59,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [identity_factors](../../apps/backend/ago/identity_factors.py) | governance | foundation | security |
 | [identity_security_store](../../apps/backend/ago/identity_security_store.py) | governance | persistence | backend_contracts, identity, identity_factors, login_security, security, security_controls, sso_provider |
 | [knowledge_store](../../apps/backend/ago/knowledge_store.py) | knowledge | persistence | backend_contracts, security, security_controls |
-| [local_ops](../../apps/backend/ago/local_ops.py) | entrypoints | composition | bootstrap, provision, release_security |
+| [local_ops](../../apps/backend/ago/local_ops.py) | entrypoints | composition | bootstrap, provision, release_ops, release_security |
 | [login_security](../../apps/backend/ago/login_security.py) | governance | persistence | backend_contracts |
 | [m6_permissions](../../apps/backend/ago/m6_permissions.py) | entrypoints | composition | security_controls |
 | [m7_permissions](../../apps/backend/ago/m7_permissions.py) | entrypoints | composition | security_controls |
