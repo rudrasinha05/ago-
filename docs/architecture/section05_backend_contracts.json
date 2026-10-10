@@ -400,6 +400,22 @@
           "arguments": "self, *, tenant_id: str, employee_id: str, available_units: int",
           "returns": "dict"
         },
+        "normalize_plan_revision": {
+          "arguments": "self, *, plan_id: str, base_revision: int, title: str, starts_at: datetime, ends_at: datetime, budget_ceiling: str, evidence_ref: str, rationale: str",
+          "returns": "dict"
+        },
+        "propose_plan_revision": {
+          "arguments": "self, *, actor: Principal, approval_id: str, payload: dict, intent_digest: str",
+          "returns": "dict"
+        },
+        "apply_plan_revision": {
+          "arguments": "self, *, actor: Principal, intent_id: str, approval_id: str",
+          "returns": "dict"
+        },
+        "plan_revisions": {
+          "arguments": "self, *, tenant_id: str, plan_id: str",
+          "returns": "list[dict]"
+        },
         "plan": {
           "arguments": "self, *, actor: Principal, identifier: str, horizon: str, parent_id: str | None, title: str, starts_at: datetime, ends_at: datetime, budget_ceiling: str, approval_id: str, evidence_ref: str",
           "returns": "dict"
