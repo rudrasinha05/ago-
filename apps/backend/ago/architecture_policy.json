@@ -40,6 +40,11 @@
     ]
   },
   "nodes": {
+    "__init__": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": []
+    },
     "access": {
       "context": "governance",
       "layer": "foundation",
