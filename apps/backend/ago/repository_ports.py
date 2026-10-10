@@ -25,6 +25,7 @@ from ago.department_automation import DepartmentAutomation as _DepartmentAutomat
 from ago.department_automation_queries import (
     DepartmentAutomationQueries as _DepartmentAutomationQueries,
 )
+from ago.enterprise_store import EnterpriseOperationsStore as _EnterpriseOperationsStore
 from ago.executive_intelligence import ExecutiveIntelligence as _ExecutiveIntelligence
 from ago.executive_intelligence_queries import (
     ExecutiveIntelligenceQueries as _ExecutiveIntelligenceQueries,
@@ -694,7 +695,73 @@ class IdentitySecurityStorePort(Protocol):
 
 
 
+@runtime_checkable
+class EnterpriseOperationsStorePort(Protocol):
+    def modes(self, *, tenant_id: str, scope_kind: str = "company",
+              scope_id: str | None = None) -> list[dict]: ...
+
+    def mode_change(self, *, actor: Principal, target: str,
+                    approval_id: str, reason: str, expires_at: datetime,
+                    scope_kind: str = "company", scope_id: str | None = None) -> dict: ...
+
+    def effective_mode(self, *, tenant_id: str, scope_kind: str = "company",
+                       scope_id: str | None = None) -> dict: ...
+
+    def worker_state(self, *, tenant_id: str, employee_id: str) -> dict: ...
+
+    def capture_worker(self, *, actor: Principal, employee_id: str,
+                       available_units: int, source_ref: str) -> dict: ...
+
+    def allocate_preview(self, *, tenant_id: str, employee_id: str,
+                         available_units: int) -> dict: ...
+
+    def plan(self, *, actor: Principal, identifier: str, horizon: str,
+             parent_id: str | None, title: str, starts_at: datetime,
+             ends_at: datetime, budget_ceiling: str, approval_id: str,
+             evidence_ref: str) -> dict: ...
+
+    def plans(self, *, tenant_id: str) -> list[dict]: ...
+
+    def record_cost(self, *, actor: Principal, operation_key: str, category: str,
+                    provider: str, source_ref: str, amount: str, currency: str,
+                    period_start: datetime, period_end: datetime) -> dict: ...
+
+    def costs(self, *, tenant_id: str) -> list[dict]: ...
+
+    def create_budget(self, *, actor: Principal, identifier: str, approval_id: str,
+                      scope_kind: str, scope_id: str | None,
+                      ceiling: str, currency: str) -> dict: ...
+
+    def budgets(self, *, tenant_id: str) -> list[dict]: ...
+
+    def asset_draft(self, *, actor: Principal, department_id: str, name: str,
+                    kind: str, version: str, license_id: str,
+                    digest: str, manifest: dict) -> dict: ...
+
+    def assets(self, *, tenant_id: str, kind: str | None = None) -> list[dict]: ...
+
+    def asset_propose(self, *, actor: Principal, asset_id: str, approval_id: str) -> dict: ...
+
+    def asset_publish(self, *, actor: Principal, asset_id: str) -> dict: ...
+
+    def asset_consume(self, *, actor: Principal, asset_id: str,
+                      department_id: str, approval_id: str, evidence_ref: str) -> dict: ...
+
+    def asset_usage(self, *, tenant_id: str) -> list[dict]: ...
+
+    def evolution_observation(self, *, actor: Principal, baseline: list[str],
+                              candidate: list[str], evidence: list[dict],
+                              source_snapshot_id: str) -> dict: ...
+
+    def twin(self, *, actor: Principal, snapshot_id: str, actions: int,
+             cost_per_action: str, budget: str, failure_pct: int,
+             hiring: int = 0, layoffs: int = 0, market_shock_pct: int = 0) -> dict: ...
+
+    def twin_runs(self, *, tenant_id: str) -> list[dict]: ...
+
+
 REPOSITORY_BINDINGS = {
+    EnterpriseOperationsStorePort: _EnterpriseOperationsStore,
     IdentitySecurityStorePort: _IdentitySecurityStore,
     SemanticMemoryStorePort: _SemanticMemoryStore,
     MessageStorePort: _MessageStore,
