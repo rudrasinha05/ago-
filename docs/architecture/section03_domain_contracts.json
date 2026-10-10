@@ -127,6 +127,7 @@
     "department_automation_queries": "operations",
     "dna_domain": "strategy",
     "enterprise_domains": "operations",
+    "enterprise_store": "operations",
     "event_contracts": "platform",
     "event_migrations": "platform",
     "event_runtime": "entrypoints",
@@ -283,6 +284,23 @@
     ],
     "dna_domain": [],
     "enterprise_domains": [],
+    "enterprise_store": [
+      "ago_agent_state_snapshots",
+      "ago_approval_requests",
+      "ago_asset_consumptions",
+      "ago_budget_envelopes",
+      "ago_departments",
+      "ago_employees",
+      "ago_evolution_observations",
+      "ago_executive_snapshots",
+      "ago_governed_tasks",
+      "ago_horizon_plans",
+      "ago_marketplace_assets",
+      "ago_observed_costs",
+      "ago_oos_mode_events",
+      "ago_tenants",
+      "ago_twin_scenarios"
+    ],
     "event_contracts": [],
     "event_migrations": [
       "ago_schema_migrations"
