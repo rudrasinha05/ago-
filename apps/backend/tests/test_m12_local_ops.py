@@ -250,3 +250,52 @@ def test_real_postgresql_onboarding_and_independent_approval(local_environment, 
             "SELECT count(*) AS n FROM ago_tenants"
         ).fetchone()["n"]
         assert after == original_count
+
+
+def test_actual_local_launcher_serves_console_and_requires_no_public_bind(
+    local_environment, monkeypatch,
+):
+    """Smoke the actual python -m ago.local_ops serve entrypoint over HTTP."""
+    dsn = os.getenv("AGO_TEST_POSTGRES_DSN")
+    if not dsn or not local_ops.local_database(dsn):
+        pytest.skip("Local disposable PostgreSQL required")
+    monkeypatch.setenv("AGO_POSTGRES_DSN", dsn)
+    monkeypatch.delenv("AGO_SESSION_SECRET", raising=False)
+    assert local_ops.doctor().ready
+
+    import subprocess
+    import sys
+    import time
+    from urllib.error import URLError
+    from urllib.request import urlopen
+
+    port = 18773
+    command = [sys.executable, "-m", "ago.local_ops", "serve",
+               "--port", str(port)]
+    # Startup uses an ephemeral development signing key only inside this child.
+    process = subprocess.Popen(
+        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=os.environ.copy(),
+    )
+    try:
+        for _ in range(80):
+            if process.poll() is not None:
+                pytest.fail("AGO local operator launcher exited during startup")
+            try:
+                with urlopen(
+                    f"http://127.0.0.1:{port}/console/", timeout=1,
+                ) as response:
+                    assert response.status == 200
+                    assert b"login-form" in response.read()
+                    break
+            except (URLError, TimeoutError, ConnectionError):
+                time.sleep(0.2)
+        else:
+            pytest.fail("AGO local operator launcher never served the console")
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=6)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=6)
