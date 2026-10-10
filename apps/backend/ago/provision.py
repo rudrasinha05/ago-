@@ -41,7 +41,11 @@ def add_reviewer(connection, *, tenant_id: str, email: str, password: str) -> st
         )
         security = SecurityControls(connection)
         for permission in (
-            "approval:decide", "approval:read", "qa:review", "qa:read", "memory:read",
+            "approval:decide", "approval:read", "qa:review", "qa:read",
+            "memory:read", "operations:respond", "operations:read",
+            "calendar:read", "calendar:respond",
+            "knowledge:review", "knowledge:read",
+            "council:vote", "council:read",
         ):
             security.grant(tenant_id, "reviewer", permission)
         return reviewer.user_id
