@@ -189,3 +189,14 @@ def test_council_needs_two_humans_and_m2_approval(case):
     post(client, vote_url, headers["reviewer2"],
          {"vote": "yes", "reason": "Second independent review"})
     post(client, finalize_url, headers["founder"], expected=403)
+    post(client, f"/v1/governance/approvals/{motion['approval_id']}/decision",
+         headers["reviewer1"], {
+             "approve": True, "reason": "Council motion independently approved",
+         })
+    finalized = post(client, finalize_url, headers["founder"])
+    assert finalized["status"] == "passed"
+    assert finalized["execution_permitted"] is False
+    post(client, vote_url, headers["reviewer1"],
+         {"vote": "yes", "reason": "Late replay"}, expected=403)
+    motions = client.get("/v1/council/motions", headers=headers["founder"])
+    assert motions.status_code == 200 and motions.json()[0]["yes_votes"] == 2
