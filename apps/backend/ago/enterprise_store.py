@@ -15,7 +15,7 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.enterprise_domains import (
     ASSET_TYPES, AssetIdentity, HORIZONS, OperatingMode, WorkCandidate,
     WorkerState, allocate, budget_guard, evaluate_change, operational_load,
-    transition_mode, twin_scenario, validate_horizon,
+    transition_mode, transition_worker, twin_scenario, validate_horizon,
 )
 from ago.security import Principal
 
@@ -155,7 +155,10 @@ class EnterpriseOperationsStore:
         future = [str(t["id"]) for t in tasks if t["status"] in (
             "proposed", "waiting_approval", "ready")]
         capacity = None  # no measured worker-unit capacity exists in legacy schema
+        latest = self.worker_history(tenant_id=tenant, employee_id=employee)
+        availability = latest[0]["state"] if latest else "available"
         return {
+            "availability_state": availability,
             "id": employee, "name": row["name"], "kind": row["kind"],
             "department_id": str(row["department_id"]),
             "manager_id": str(row["manager_id"]) if row["manager_id"] else None,
@@ -558,6 +561,102 @@ class EnterpriseOperationsStore:
                  json.dumps(model, sort_keys=True), snap["digest"]),
             )
         return {"id": identifier, "snapshot_id": snapshot_id, **model}
+
+
+    def worker_transition(self, *, actor: Principal, employee_id: str,
+                          state: str, approval_id: str, reason: str,
+                          expires_at: datetime | None = None) -> dict:
+        employee = str(UUID(employee_id))
+        target = WorkerState(state)
+        if not reason.strip() or len(reason) > 3000:
+            raise ValueError("Worker transition rationale required")
+        if target in (WorkerState.PAUSED, WorkerState.SLEEPING, WorkerState.INTERRUPTED):
+            now = datetime.now(timezone.utc)
+            if not expires_at or expires_at.tzinfo is None or not (
+                now < expires_at <= now + timedelta(days=7)
+            ):
+                raise ValueError("Temporary worker restriction needs bounded expiry")
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            row = self.connection.execute(
+                """SELECT kind FROM ago_employees WHERE tenant_id=%s AND id=%s""",
+                (actor.tenant_id, employee),
+            ).fetchone()
+            if not row:
+                raise LookupError("Worker not found")
+            if row["kind"] != "ai":
+                raise PermissionError("OOS automated control applies to AI workers only")
+            prior_use = self.connection.execute(
+                """SELECT id,state,sequence FROM ago_worker_state_events
+                   WHERE tenant_id=%s AND approval_id=%s""",
+                (actor.tenant_id, str(UUID(approval_id))),
+            ).fetchone()
+            if prior_use:
+                return dict(prior_use) | {"idempotent": True}
+            self._approval(actor, approval_id, "enterprise:worker:" + employee + ":" + state)
+            previous = self.connection.execute(
+                """SELECT state,sequence FROM ago_worker_state_events
+                   WHERE tenant_id=%s AND employee_id=%s ORDER BY sequence DESC LIMIT 1""",
+                (actor.tenant_id, employee),
+            ).fetchone()
+            old_state = WorkerState(previous["state"]) if previous else WorkerState.AVAILABLE
+            transition_worker(old_state, target, approved=True, reason=reason)
+            identifier = str(uuid4())
+            sequence = (int(previous["sequence"]) + 1) if previous else 1
+            self.connection.execute(
+                """INSERT INTO ago_worker_state_events
+                   (id,tenant_id,employee_id,actor_id,approval_id,state,sequence,reason,expires_at)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, employee, actor.subject,
+                 approval_id, target.value, sequence, reason.strip(), expires_at),
+            )
+        return {"id": identifier, "employee_id": employee, "state": state,
+                "sequence": sequence, "idempotent": False}
+
+    def worker_history(self, *, tenant_id: str, employee_id: str) -> list[dict]:
+        return [dict(row) for row in self.connection.execute(
+            """SELECT id,employee_id,state,sequence,reason,expires_at,created_at,approval_id
+               FROM ago_worker_state_events WHERE tenant_id=%s AND employee_id=%s
+               ORDER BY sequence DESC LIMIT 100""",
+            (str(UUID(tenant_id)), str(UUID(employee_id))),
+        ).fetchall()]
+
+    def asset_retire(self, *, actor: Principal, asset_id: str, target_state: str,
+                     approval_id: str, reason: str) -> dict:
+        if target_state not in ("deprecated", "revoked") or not reason.strip() or len(reason) > 3000:
+            raise ValueError("Valid asset retirement reason and target required")
+        asset_id = str(UUID(asset_id))
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            row = self.connection.execute(
+                """SELECT publisher_id,status FROM ago_marketplace_assets
+                   WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+                (actor.tenant_id, asset_id),
+            ).fetchone()
+            if not row:
+                raise LookupError("Asset missing")
+            if str(row["publisher_id"]) != actor.subject or (
+                (row["status"] == "published" and target_state not in ("deprecated", "revoked"))
+                or (row["status"] == "deprecated" and target_state != "revoked")
+                or row["status"] not in ("published", "deprecated")
+            ):
+                raise PermissionError("Invalid asset state or unauthorized owner")
+            self._approval(actor, approval_id,
+                           "enterprise:asset:" + asset_id + ":" + target_state)
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_marketplace_lifecycle_events
+                   (id,tenant_id,asset_id,actor_id,approval_id,target_state,reason)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, asset_id, actor.subject, approval_id,
+                 target_state, reason.strip()),
+            )
+            self.connection.execute(
+                """UPDATE ago_marketplace_assets SET status=%s,approval_id=%s
+                   WHERE tenant_id=%s AND id=%s""",
+                (target_state, approval_id, actor.tenant_id, asset_id),
+            )
+        return {"id": asset_id, "status": target_state, "event_id": identifier}
 
     def twin_runs(self, *, tenant_id: str) -> list[dict]:
         return [dict(row) for row in self.connection.execute(
