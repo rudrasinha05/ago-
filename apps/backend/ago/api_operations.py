@@ -1115,7 +1115,7 @@ def enterprise_agent_evidence_apply(
     return enterprise_call(lambda: repositories.resolve(
         EnterpriseOperationsStorePort).apply_agent_evidence(
         actor=actor, intent_id=str(intent_id),
-        approval_id=str(data.approval_id)))
+        approval_id=str(data.approval_id), employee_id=str(employee_id)))
 
 
 @router.get("/enterprise/agents/{employee_id}/evidence")
@@ -1176,7 +1176,7 @@ def enterprise_plan_revision_apply(
     return enterprise_call(lambda: repositories.resolve(
         EnterpriseOperationsStorePort).apply_plan_revision(
         actor=actor, intent_id=str(intent_id),
-        approval_id=str(data.approval_id)))
+        approval_id=str(data.approval_id), plan_id=str(horizon_plan_id)))
 
 
 @router.get("/enterprise/plans/{horizon_plan_id}/revisions")
