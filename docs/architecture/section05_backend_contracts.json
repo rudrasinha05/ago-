@@ -480,6 +480,22 @@
           "arguments": "self, *, tenant_id: str",
           "returns": "dict"
         },
+        "review_evolution": {
+          "arguments": "self, *, actor: Principal, observation_id: str, approval_id: str, decision: str, rollback_plan: str, evidence_ref: str",
+          "returns": "dict"
+        },
+        "evolution_reviews": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "compare_twin_outcome": {
+          "arguments": "self, *, actor: Principal, scenario_id: str, later_snapshot_id: str, approval_id: str, rationale: str",
+          "returns": "dict"
+        },
+        "twin_comparisons": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
         "twin_runs": {
           "arguments": "self, *, tenant_id: str",
           "returns": "list[dict]"
