@@ -15,6 +15,7 @@ from ago.security_controls import SecurityControls
 
 
 FOUNDER_PERMISSIONS = (
+    'messages:read', 'messages:write', 'messages:replay',
     "tool:enroll",
     "tool:read",
     "tool:dispatch",

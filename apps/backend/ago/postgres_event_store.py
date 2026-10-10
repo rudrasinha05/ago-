@@ -47,7 +47,7 @@ class PostgresEventStore:
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
         rows = self.connection.execute(
-            """SELECT * FROM event_outbox WHERE status='pending'
+            """SELECT * FROM event_outbox WHERE message_kind IS NULL AND status='pending'
                AND available_at<=now() ORDER BY available_at, id LIMIT %s""",
             (limit,),
         ).fetchall()
@@ -71,8 +71,8 @@ class PostgresEventStore:
             rows = db.execute(
                 """WITH due AS (
                      SELECT id FROM event_outbox
-                     WHERE (status='pending' AND available_at<=now())
-                        OR (status='leased' AND available_at<=now())
+                     WHERE message_kind IS NULL AND ((status='pending' AND available_at<=now())
+                        OR (status='leased' AND available_at<=now()))
                      ORDER BY available_at, id
                      FOR UPDATE SKIP LOCKED LIMIT %s
                    )
@@ -86,7 +86,7 @@ class PostgresEventStore:
     def delivered(self, event_id: str, worker_id: str) -> bool:
         row = self.connection.execute(
             """UPDATE event_outbox SET status='delivered', lease_owner=NULL
-               WHERE id=%s AND status='leased' AND lease_owner=%s RETURNING id""",
+               WHERE message_kind IS NULL AND id=%s AND status='leased' AND lease_owner=%s RETURNING id""",
             (event_id, worker_id),
         ).fetchone()
         return row is not None
@@ -104,7 +104,7 @@ class PostgresEventStore:
                        LEAST(60 * POWER(2, LEAST(attempts, 6)), 3600)
                        * interval '1 second'),
                    last_error=%s, lease_owner=NULL
-               WHERE id=%s AND status='leased' AND lease_owner=%s RETURNING id""",
+               WHERE message_kind IS NULL AND id=%s AND status='leased' AND lease_owner=%s RETURNING id""",
             (max_attempts, error[:2000], event_id, worker_id),
         ).fetchone()
         return row is not None
@@ -134,7 +134,7 @@ class PostgresEventStore:
         row = self.connection.execute(
             """UPDATE event_outbox
                SET available_at=now()+(%s * interval '1 second')
-               WHERE id=%s AND status='leased' AND lease_owner=%s
+               WHERE message_kind IS NULL AND id=%s AND status='leased' AND lease_owner=%s
                RETURNING id""",
             (lease_seconds, event_id, worker_id),
         ).fetchone()
@@ -144,7 +144,7 @@ class PostgresEventStore:
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
         rows = self.connection.execute(
-            """SELECT * FROM event_outbox WHERE status='dead'
+            """SELECT * FROM event_outbox WHERE message_kind IS NULL AND status='dead'
                ORDER BY available_at, id LIMIT %s""",
             (limit,),
         ).fetchall()
@@ -155,7 +155,7 @@ class PostgresEventStore:
         row = self.connection.execute(
             """UPDATE event_outbox SET status='pending', available_at=now(),
                    lease_owner=NULL, last_error=NULL
-               WHERE id=%s AND status='dead' RETURNING id""",
+               WHERE message_kind IS NULL AND id=%s AND status='dead' RETURNING id""",
             (event_id,),
         ).fetchone()
         return row is not None

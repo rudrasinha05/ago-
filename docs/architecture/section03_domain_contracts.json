@@ -85,7 +85,7 @@
       "purpose": "Shared technical infrastructure without business authority",
       "aggregates": "Event; inbox/outbox entry; plugin registration; scheduled job",
       "value_objects": "Event ID/name/time/correlation; version; lease identity",
-      "repositories": "event_store; postgres_event_store; migration checksum metadata",
+      "repositories": "event_store; postgres_event_store; migration checksum metadata; MessageStore versioned ordered inbox/outbox",
       "services": "EventBus; EventWorker; IntervalScheduler; readiness; DI; release perimeter",
       "invariants": "Idempotence, owned leases, checksum migrations, fail-closed readiness, no permission bypass",
       "published_language": "Event envelope and EventRegistry validation; health; config; dispatch report",
@@ -190,7 +190,10 @@
     "tool_runtime_queries": "operations",
     "storage_adapters": "platform",
     "database_store": "knowledge",
-    "storage_ops": "entrypoints"
+    "storage_ops": "entrypoints",
+    "message_contracts": "platform",
+    "message_store": "platform",
+    "message_ops": "entrypoints"
   },
   "sql_access": {
     "__init__": [],
@@ -344,6 +347,14 @@
     ],
     "main": [],
     "memory": [],
+    "message_contracts": [],
+    "message_ops": [],
+    "message_store": [
+      "ago_approval_requests",
+      "ago_employees",
+      "ago_message_receipts",
+      "ago_tenants"
+    ],
     "meta_brain": [],
     "meta_brain_queries": [
       "ago_approval_requests",

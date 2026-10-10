@@ -14,11 +14,61 @@ from pydantic import Field, StrictBool, StrictInt
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, db_connection, repository_scope, translate_error
 from ago.backend_contracts import RepositoryScope
-from ago.repository_ports import DatabaseStorePort, KnowledgeStorePort
+from ago.repository_ports import DatabaseStorePort, KnowledgeStorePort, MessageStorePort
 from ago.security import Principal
 from ago.storage_adapters import StorageUnavailable
 
 router = APIRouter(prefix="/v1/knowledge", tags=["M6 knowledge"])
+
+
+class MessageInput(StrictInput):
+    kind: Literal['command', 'event', 'query', 'notification', 'approval']
+    name: str = Field(min_length=3, max_length=100)
+    payload: dict
+    operation_key: str = Field(min_length=1, max_length=150)
+    ordering_key: str = Field(default='default', min_length=1, max_length=150)
+    correlation_id: UUID | None = None
+
+
+class ReplayInput(StrictInput):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@router.post('/messages')
+def publish_message(data: MessageInput, actor: Principal = Depends(authenticated),
+                    db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, 'messages:write')
+    try:
+        return repositories.resolve(MessageStorePort).publish(
+            actor=actor, kind=data.kind, name=data.name, payload=data.payload,
+            operation_key=data.operation_key, ordering_key=data.ordering_key,
+            correlation_id=str(data.correlation_id) if data.correlation_id else None)
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+
+@router.get('/messages')
+def inspect_messages(limit: int = Query(default=100, ge=1, le=200),
+                     actor: Principal = Depends(authenticated), db=Depends(db_connection),
+                     repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, 'messages:read')
+    store = repositories.resolve(MessageStorePort)
+    return {'messages': store.inspect(tenant_id=actor.tenant_id, limit=limit),
+            'metrics': store.metrics(tenant_id=actor.tenant_id)}
+
+
+@router.post('/messages/{message_id}/replay')
+def replay_message(message_id: UUID, data: ReplayInput,
+                   actor: Principal = Depends(authenticated), db=Depends(db_connection),
+                   repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        replayed = repositories.resolve(MessageStorePort).replay(
+            actor=actor, message_id=str(message_id), reason=data.reason)
+        if not replayed:
+            raise HTTPException(404, 'Dead message not found')
+        return {'id': str(message_id), 'status': 'pending'}
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
 
 
 class NodeInput(StrictInput):

@@ -521,6 +521,39 @@
         }
       }
     },
+    "MessageStore": {
+      "module": "message_store",
+      "methods": {
+        "publish": {
+          "arguments": "self, *, actor: Principal, kind: str, name: str, payload: dict, operation_key: str, ordering_key: str='default', correlation_id: str | None=None",
+          "returns": "dict"
+        },
+        "inspect": {
+          "arguments": "self, *, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "metrics": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
+        "claim": {
+          "arguments": "self, *, tenant_id: str, worker_id: str, limit: int=50, lease_seconds: int=30",
+          "returns": "list[dict]"
+        },
+        "fail": {
+          "arguments": "self, *, tenant_id: str, message_id: str, lease_token: str, category: str='handler-failed'",
+          "returns": "bool"
+        },
+        "dispatch": {
+          "arguments": "self, *, tenant_id: str, message_id: str, lease_token: str, consumer: str, handler: Callable[[DatabaseConnection, dict], dict]",
+          "returns": "bool"
+        },
+        "replay": {
+          "arguments": "self, *, actor: Principal, message_id: str, reason: str",
+          "returns": "bool"
+        }
+      }
+    },
     "MetaBrain": {
       "module": "meta_brain",
       "methods": {

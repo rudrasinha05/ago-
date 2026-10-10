@@ -6,6 +6,7 @@ Bindings are trusted constructors only, with no connections or singleton state.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
@@ -14,7 +15,7 @@ from ago.access import AccessService as _AccessService
 from ago.agent_runtime import AgentRuntime as _AgentRuntime
 from ago.agent_runtime_queries import AgentRuntimeQueries as _AgentRuntimeQueries
 from ago.approvals import ApprovalRequest
-from ago.backend_contracts import Cursor
+from ago.backend_contracts import Cursor, DatabaseConnection
 from ago.calendar_store import CalendarStore as _CalendarStore
 from ago.console_service import ConsoleService as _ConsoleService
 from ago.console_store import ConsoleStore as _ConsoleStore
@@ -37,6 +38,7 @@ from ago.identity import UserRecord
 from ago.knowledge_store import KnowledgeStore as _KnowledgeStore
 from ago.database_store import DatabaseStore as _DatabaseStore
 from ago.login_security import LoginThrottle as _LoginThrottle
+from ago.message_store import MessageStore as _MessageStore
 from ago.memory import MemoryRecord
 from ago.meta_brain import MetaBrain as _MetaBrain
 from ago.meta_brain_queries import MetaBrainQueries as _MetaBrainQueries
@@ -640,7 +642,25 @@ class ToolRuntimeQueriesPort(Protocol):
     def select_ago_tool_run_evidence_11(self, parameters: Any = None) -> Cursor: ...
 
 
+@runtime_checkable
+class MessageStorePort(Protocol):
+    def publish(self, *, actor: Principal, kind: str, name: str, payload: dict, operation_key: str, ordering_key: str='default', correlation_id: str | None=None) -> dict: ...
+
+    def inspect(self, *, tenant_id: str, limit: int=100) -> list[dict]: ...
+
+    def metrics(self, *, tenant_id: str) -> dict: ...
+
+    def claim(self, *, tenant_id: str, worker_id: str, limit: int=50, lease_seconds: int=30) -> list[dict]: ...
+
+    def fail(self, *, tenant_id: str, message_id: str, lease_token: str, category: str='handler-failed') -> bool: ...
+
+    def dispatch(self, *, tenant_id: str, message_id: str, lease_token: str, consumer: str, handler: Callable[[DatabaseConnection, dict], dict]) -> bool: ...
+
+    def replay(self, *, actor: Principal, message_id: str, reason: str) -> bool: ...
+
+
 REPOSITORY_BINDINGS = {
+    MessageStorePort: _MessageStore,
     AccessServicePort: _AccessService,
     AgentRuntimePort: _AgentRuntime,
     AgentRuntimeQueriesPort: _AgentRuntimeQueries,

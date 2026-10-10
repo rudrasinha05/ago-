@@ -731,6 +731,7 @@
         "console_store",
         "council_store",
         "credits",
+        "database_store",
         "department_automation",
         "department_automation_queries",
         "executive_intelligence",
@@ -743,6 +744,7 @@
         "knowledge_store",
         "login_security",
         "memory",
+        "message_store",
         "meta_brain",
         "meta_brain_queries",
         "organization",
@@ -764,8 +766,7 @@
         "tool_enrollment_queries",
         "tool_runtime",
         "tool_runtime_queries",
-        "workflows",
-        "database_store"
+        "workflows"
       ]
     },
     "session_service": {
@@ -862,6 +863,29 @@
         "backend_contracts",
         "database_store",
         "storage_adapters"
+      ]
+    },
+    "message_contracts": {
+      "context": "platform",
+      "layer": "domain",
+      "imports": []
+    },
+    "message_store": {
+      "context": "platform",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "message_contracts",
+        "security",
+        "security_controls"
+      ]
+    },
+    "message_ops": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "backend_contracts",
+        "message_store"
       ]
     }
   },
