@@ -416,6 +416,14 @@
           "arguments": "self, *, tenant_id: str, kind: str | None=None",
           "returns": "list[dict]"
         },
+        "asset_payload_upload": {
+          "arguments": "self, *, actor: Principal, asset_id: str, content_base64: str, content_type: str",
+          "returns": "dict"
+        },
+        "asset_payload_read": {
+          "arguments": "self, *, actor: Principal, asset_id: str",
+          "returns": "dict"
+        },
         "asset_propose": {
           "arguments": "self, *, actor: Principal, asset_id: str, approval_id: str",
           "returns": "dict"
