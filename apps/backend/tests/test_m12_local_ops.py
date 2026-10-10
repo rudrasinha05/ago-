@@ -299,3 +299,31 @@ def test_actual_local_launcher_serves_console_and_requires_no_public_bind(
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=6)
+
+
+def test_tenant_lookup_returns_only_local_organization_name_and_uuid(
+    local_environment, monkeypatch,
+):
+    from uuid import UUID
+
+    identifier = str(uuid4())
+    monkeypatch.setattr(local_ops, "doctor", lambda: local_ops.LocalDiagnosis(
+        True, True, True, True, "configured", True,
+    ))
+
+    class FakeDB:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def execute(self, sql):
+            assert "SELECT id,name FROM ago_tenants" in sql
+            class Rows:
+                def fetchall(self):
+                    return [{"id": UUID(identifier), "name": "AGO Existing"}]
+            return Rows()
+
+    output = local_ops.list_local_tenants(
+        connector=lambda dsn, **kwargs: FakeDB(),
+    )
+    assert output == [{"tenant_id":identifier, "organization":"AGO Existing"}]
+    assert "password" not in json.dumps(output)
+    assert "email" not in json.dumps(output)
