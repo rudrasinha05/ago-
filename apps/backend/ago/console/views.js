@@ -341,7 +341,7 @@ export function renderCalendar(data, state) {
     (x.status==="scheduled" && x.creator_id===state.me?.id &&
       capability(state,"calendar:write") ? action("Cancel","calendar-cancel",x.id,"danger")
       : "") +
-    (x.status==="scheduled" && capability(state,"calendar:respond") ?
+    (x.status==="scheduled" && x.invited === true && capability(state,"calendar:respond") ?
       action("RSVP","calendar-rsvp",x.id) : "") + '</div></div>').join("");
   return layout("calendar",capability(state,"calendar:write") ?
     action("Schedule event","new-event","","primary") : "",
