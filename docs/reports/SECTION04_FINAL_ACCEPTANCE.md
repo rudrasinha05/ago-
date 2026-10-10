@@ -13,7 +13,11 @@ Original full blueprint unavailable; no exact-source-parity or complete frontend
 
 Local boundary/Ruff tests: passed; five new Python negative/positive tests;
 three SDK origin/timeout/privacy tests passed. All three optimized application-shell builds and actual loopback HTTP exports passed.
-Pushed-commit full CI remains the final acceptance gate.
+Implementation commit `4845502`, primary CI [38037327542](https://github.com/rudrasinha05/ago-/actions/runs/38037327542) and independent backend CI [38037327626](https://github.com/rudrasinha05/ago-/actions/runs/38037327626) passed.
+All six primary jobs passed: Python 3.11/3.14 (298 tests each), 14 console JS,
+six Chromium journeys, nonroot Docker, real PostgreSQL restore, and three
+Next.js production builds with served-export smoke plus three SDK tests.
+The closing documentation commit must also be verified green before Section 5.
 The HTTP smoke initially caught a missing local web export; rebuilding that workspace
 restored the homepage, and all three served outputs then passed. Dependencies use exact versions and committed lockfile; no new deployed service,
 database, private frontend authority or schema change. Full Section 6 UI and
