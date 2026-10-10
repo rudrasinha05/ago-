@@ -123,3 +123,58 @@ def test_dna_requires_independent_approval_and_versions_are_immutable(case):
                 "UPDATE ago_dna_versions SET rationale='rewritten' WHERE id=%s",
                 (second["id"],),
             )
+
+
+def test_snapshot_and_meta_brain_advice_require_separate_human_endorsement(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    assert client.get("/v1/meta/brief", headers=founder).json()["status"] == (
+        "needs_snapshot"
+    )
+    snapshot = post(client, "/v1/meta/snapshots", founder)
+    assert snapshot["fitness"] is None
+    assert snapshot["risk_flags"] == ["insufficient_data"]
+    assert len(snapshot["digest"]) == 64
+    assert snapshot["recorded"]
+    assert client.post("/v1/meta/snapshots", headers=reviewer).status_code == 403
+    simulation = post(client, "/v1/meta/simulate", founder, {
+        "snapshot_id": snapshot["id"], "profile": profile(backlog_limit=0),
+    })
+    assert simulation["applied"] is False
+    assert simulation["source_digest"] == snapshot["digest"]
+    assert simulation["assessment"]["fitness"] is None
+    url = f"/v1/meta/snapshots/{snapshot['id']}/recommendations"
+    first = post(client, url, founder)
+    second = post(client, url, founder)
+    assert len(first) == len(second) == 1
+    assert first[0]["id"] == second[0]["id"]
+    assert first[0]["category"] == "insufficient_data"
+    assert first[0]["evidence"]["snapshot_digest"] == snapshot["digest"]
+    recommendation = first[0]
+    reconcile = f"/v1/meta/recommendations/{recommendation['id']}/reconcile"
+    post(client, reconcile, founder, expected=403)
+    post(client,
+         f"/v1/governance/approvals/{recommendation['approval_id']}/decision",
+         founder, {"approve": True, "reason": "Self endorsement"}, expected=403)
+    decide(client, reviewer, recommendation["approval_id"])
+    concluded = post(client, reconcile, founder)
+    assert concluded["status"] == "endorsed" and concluded["executed"] is False
+    post(client, reconcile, founder, expected=403)
+    brief = client.get("/v1/meta/brief", headers=founder)
+    assert brief.status_code == 200, brief.text
+    assert brief.json()["advisory_only"] is True
+    assert brief.json()["automatic_execution"] is False
+    assert brief.json()["recommendations"][0]["status"] == "endorsed"
+    psycopg = pytest.importorskip("psycopg")
+    with pytest.raises(psycopg.errors.RaiseException):
+        with info["db"].transaction():
+            info["db"].execute(
+                "UPDATE ago_executive_snapshots SET digest=%s WHERE id=%s",
+                ("0" * 64, snapshot["id"]),
+            )
+    with pytest.raises(psycopg.errors.RaiseException):
+        with info["db"].transaction():
+            info["db"].execute(
+                "UPDATE ago_meta_recommendations SET summary=%s WHERE id=%s",
+                ("unreviewed change", recommendation["id"]),
+            )
