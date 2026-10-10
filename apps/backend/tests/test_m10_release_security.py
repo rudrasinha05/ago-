@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import base64
+import json
+import secrets
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +25,15 @@ def prod(monkeypatch):
     monkeypatch.setenv("AGO_ENABLE_PAID_MODELS", "false")
     monkeypatch.setenv("AGO_M8_EXTERNAL_ENABLED", "false")
     monkeypatch.delenv("AGO_DEBUG", raising=False)
+    monkeypatch.setenv('AGO_IDENTITY_POLICY', 'mfa')
+    monkeypatch.setenv('AGO_VAULT_URL', 'https://vault.example.com')
+    monkeypatch.setenv('AGO_VAULT_KV_PATH', 'secret/data/ago')
+    monkeypatch.setenv('AGO_VAULT_TOKEN_FILE', '/run/secrets/test-vault-token')
+    monkeypatch.setenv('AGO_VAULT_CA_FILE', '/run/secrets/test-vault-ca')
+    monkeypatch.setenv('AGO_MFA_KEYS', json.dumps({'current': 'test', 'keys': {'test': base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()}}))
+    monkeypatch.setenv('AGO_SESSION_KEYRING', json.dumps({'current': 'test', 'keys': {'test': {'secret': os.environ['AGO_SESSION_SECRET']}}}))
+    # HTTP perimeter unit fixture only; actual TLS/vault adapter is separately tested.
+    monkeypatch.setattr('ago.main.bootstrap_security', lambda: None)
 
 
 def test_production_rejects_missing_hosts_weak_secrets_and_non_tls_database(prod, monkeypatch):

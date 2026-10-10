@@ -68,6 +68,13 @@ Intelligence or completion of the original entire enterprise architecture.
   independent `38062604261`; 357 Python tests on all three versions plus all
   prior browser/build/storage/image/recovery gates. Separate broker not required.
   Evidence: `docs/reports/SECTION08_FINAL_ACCEPTANCE.md`.
+- **Section 9 — Memory Architecture:** four scoped experience memories, real
+  offline semantic indexing, same-scope extractive consolidation, verified
+  evidence references and audited expiry/correction/forgetting.
+  All seven gates CI-accepted: `fc2ffb7`, primary `38063636010`, independent
+  `38063636007`; 371 Python tests on each version, 31 dedicated real model/storage
+  tests and all prior browser/build/image/recovery gates.
+  Evidence: `docs/reports/SECTION09_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
   Versioned manifest now maps 98 AGO root modules and 260 observed internal
@@ -81,7 +88,7 @@ Intelligence or completion of the original entire enterprise architecture.
   the repository administrator before independent human review is considered
   operationally enforced.
 - Every other unfinished section is **still separately pending**. Closure of
-  Sections 1–8 and 14 does not upgrade Sections 9–13 or 15–34, nor imply
+  Sections 1–9 and 14 does not upgrade Sections 10–13 or 15–34, nor imply
   that the full original blueprint is available.
 
 ## Evidence and provenance caveat

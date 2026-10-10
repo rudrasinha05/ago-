@@ -22,6 +22,7 @@ from ago.http_errors import correlation_id, install_error_handlers
 from ago.platform import Settings, build_container, configure_logging, request_id
 from ago.readiness import ReadinessChecks
 from ago.release_security import ReleasePolicy, install_release_perimeter, schema_integrity
+from ago.security_material import bootstrap_security
 
 
 def postgres_available() -> bool:
@@ -36,6 +37,7 @@ def postgres_available() -> bool:
 
 
 def create_app() -> FastAPI:
+    bootstrap_security()
     settings = Settings()
     policy = ReleasePolicy.from_environment(settings.environment)
     configure_logging(settings)

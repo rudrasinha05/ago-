@@ -7,7 +7,7 @@ name = "ago-backend"
 version = "0.1.0"
 description = "AGO enterprise platform foundation"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pydantic-settings>=2.5,<3"]
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pydantic-settings>=2.5,<3", "httpx>=0.27,<1", "cryptography>=46,<49", "PyJWT[crypto]>=2.15.1,<3"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "httpx>=0.27,<1", "ruff>=0.8,<1"]

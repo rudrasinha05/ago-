@@ -14,6 +14,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from ago.identity_factors import factor_keys
+from ago.security_material import RotatingSessionTokens, safe_https
+from ago.sso_provider import OIDCProvider
 
 _ALLOWED_ENVIRONMENTS = frozenset({"development", "test", "testing", "staging", "production"})
 _HOST = re.compile(
@@ -91,6 +94,22 @@ def validate_production_config(hosts: tuple[str, ...]) -> None:
         raise ValueError("Production disallows unreviewed paid-model egress")
     if os.getenv("AGO_DEBUG", "").lower() == "true":
         raise ValueError("Production debug mode cannot be enabled")
+    try:
+        if os.getenv('AGO_IDENTITY_POLICY') not in {'mfa', 'oidc'}:
+            raise ValueError('Production requires MFA or OIDC identity policy')
+        safe_https(os.environ['AGO_VAULT_URL'])
+        if not all(os.environ.get(key) for key in ('AGO_VAULT_KV_PATH', 'AGO_VAULT_CA_FILE', 'AGO_VAULT_TOKEN_FILE')):
+            raise ValueError('Production external vault references required')
+        factor_keys()
+        tokens = RotatingSessionTokens(os.environ['AGO_SESSION_KEYRING'])
+        if tokens.keys[tokens.current]['secret'] != secret:
+            raise ValueError('Current signing key must match vault secret bundle')
+        if os.getenv('AGO_IDENTITY_POLICY') == 'oidc':
+            provider = OIDCProvider()
+            if urlsplit(provider.config['redirect_uri']).hostname not in hosts:
+                raise ValueError('SSO callback must use an approved application host')
+    except (KeyError, ValueError) as exc:
+        raise ValueError('Production identity/vault configuration is incomplete') from exc
 
 
 def schema_integrity(dsn: str, directory: Path | None = None) -> bool:

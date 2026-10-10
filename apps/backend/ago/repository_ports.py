@@ -35,6 +35,7 @@ from ago.governance import ApprovalRepository as _ApprovalRepository
 from ago.handoffs import HandoffStore as _HandoffStore
 from ago.identity import IdentityRepository as _IdentityRepository
 from ago.identity import UserRecord
+from ago.identity_security_store import IdentitySecurityStore as _IdentitySecurityStore
 from ago.knowledge_store import KnowledgeStore as _KnowledgeStore
 from ago.database_store import DatabaseStore as _DatabaseStore
 from ago.login_security import LoginThrottle as _LoginThrottle
@@ -362,7 +363,7 @@ class IdentityRepositoryPort(Protocol):
 
     def deactivate_user(self, tenant_id: str, user_id: str) -> bool: ...
 
-    def active(self, tenant_id: str, subject: str) -> bool: ...
+    def active(self, tenant_id: str, subject: str, *, session_version: int | None=None) -> bool: ...
 
 
 @runtime_checkable
@@ -555,7 +556,7 @@ class SecurityControlsPort(Protocol):
 
 @runtime_checkable
 class SessionServicePort(Protocol):
-    def authenticate(self, tenant_id: str, email: str, password: str) -> Principal: ...
+    def authenticate(self, tenant_id: str, email: str, password: str, *, factor_code: str | None=None) -> Principal: ...
 
 
 @runtime_checkable
@@ -681,7 +682,34 @@ class SemanticMemoryStorePort(Protocol):
     def set_project_member(self, *, actor: Principal, goal_id: str, user_id: str, member: bool) -> dict: ...
 
 
+@runtime_checkable
+class IdentitySecurityStorePort(Protocol):
+    def begin_factor(self, *, actor: Principal, password: str) -> dict: ...
+
+    def confirm_factor(self, *, token: str, code: str) -> dict: ...
+
+    def verify_factor(self, *, actor: Principal, code: str | None, required: bool=False) -> None: ...
+
+    def issue_ticket(self, *, actor: Principal, kind: str, email: str, department_id: str) -> dict: ...
+
+    def redeem_ticket(self, *, token: str, email: str, password: str, factor_code: str | None=None) -> dict: ...
+
+    def bind_sso(self, *, actor: Principal, user_id: str, subject: str) -> dict: ...
+
+    def begin_sso(self, *, tenant_id: str, browser_binding: str) -> dict: ...
+
+    def finish_sso(self, *, state: str, browser_binding: str, code: str) -> Principal: ...
+
+    def rotate_factors(self, *, actor: Principal, limit: int=100) -> dict: ...
+
+    def create_handoff(self, *, actor: Principal, browser_binding: str) -> str: ...
+
+    def redeem_handoff(self, *, token: str, browser_binding: str) -> Principal: ...
+
+
+
 REPOSITORY_BINDINGS = {
+    IdentitySecurityStorePort: _IdentitySecurityStore,
     SemanticMemoryStorePort: _SemanticMemoryStore,
     MessageStorePort: _MessageStore,
     AccessServicePort: _AccessService,

@@ -11,6 +11,12 @@ from ago.api_m2 import db_connection
 from ago.main import create_app
 
 ROOT = Path(__file__).resolve().parents[3]
+# These proof-exchange routes deliberately cannot require an existing bearer.
+# The list is exact; every other /v1 operation remains in the anonymous denial gate.
+PUBLIC_AUTH_ROUTES = {
+    '/v1/sessions', '/v1/security/mfa/confirm', '/v1/security/tickets/redeem',
+    '/v1/security/sso/start', '/v1/security/sso/callback', '/v1/security/sso/session',
+}
 spec = importlib.util.spec_from_file_location(
     "system_architecture", ROOT / "scripts/check_system_architecture.py",
 )
@@ -61,7 +67,7 @@ def test_every_private_api_operation_rejects_anonymous(monkeypatch, database_ava
     schema = client.get("/openapi.json").json()
     checked = 0
     for path, operations in schema["paths"].items():
-        if not path.startswith("/v1/") or path == "/v1/sessions":
+        if not path.startswith("/v1/") or path in PUBLIC_AUTH_ROUTES:
             continue
         # Authentication/database outage must prevent business execution.
         actual = path

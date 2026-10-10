@@ -195,7 +195,11 @@
     "message_store": "platform",
     "message_ops": "entrypoints",
     "memory_policies": "knowledge",
-    "semantic_memory_store": "knowledge"
+    "semantic_memory_store": "knowledge",
+    "identity_factors": "governance",
+    "security_material": "platform",
+    "sso_provider": "governance",
+    "identity_security_store": "governance"
   },
   "sql_access": {
     "__init__": [],
@@ -325,6 +329,21 @@
       "ago_user_roles",
       "ago_users"
     ],
+    "identity_factors": [],
+    "identity_security_store": [
+      "ago_departments",
+      "ago_employees",
+      "ago_identity_tickets",
+      "ago_mfa_enrollments",
+      "ago_mfa_factors",
+      "ago_mfa_recovery_codes",
+      "ago_sso_bindings",
+      "ago_sso_handoffs",
+      "ago_sso_states",
+      "ago_tenants",
+      "ago_user_roles",
+      "ago_users"
+    ],
     "knowledge_store": [
       "ago_employees",
       "ago_knowledge_edges",
@@ -423,6 +442,7 @@
       "ago_user_roles",
       "ago_users"
     ],
+    "security_material": [],
     "semantic_memory_store": [
       "ago_employees",
       "ago_goals",
@@ -436,6 +456,7 @@
     ],
     "session_service": [],
     "simulation": [],
+    "sso_provider": [],
     "storage_adapters": [],
     "storage_ops": [],
     "task_store": [

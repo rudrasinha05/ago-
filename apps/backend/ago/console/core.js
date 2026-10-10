@@ -119,16 +119,41 @@ export class SessionClient {
       if (!response.ok && response.status !== 401) throw new ApiError(response.status, "Session revocation unavailable");
     } finally { clearTimeout(timeout); }
   }
-  async login({ tenant, email, password }) {
+  async login({ tenant, email, password, factorCode }) {
     uuid(tenant);
     if (!email || !password) throw new Error("Work email and password are required");
     this.clear();
     const session = await this.request("/v1/sessions", {
-      method: "POST", body: { tenant_id: tenant, email, password },
+      method: "POST", body: { tenant_id: tenant, email, password, ...(factorCode ? {factor_code:factorCode} : {}) },
     });
     if (typeof session?.access_token !== "string" || !session.access_token)
       throw new Error("Invalid session response");
     this.#token = session.access_token;
+  }
+  async startSSO(tenant) {
+    uuid(tenant);
+    const response = await this.fetchImpl('/v1/security/sso/start', {
+      method:'POST', headers:{'Content-Type':'application/json',Accept:'application/json'},
+      body:JSON.stringify({tenant_id:tenant}), credentials:'same-origin', cache:'no-store',
+      redirect:'error', mode:'same-origin', signal:AbortSignal.timeout(15000),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new ApiError(response.status,'SSO is unavailable for this organization');
+    const target = new URL(result.authorization_url);
+    if (target.protocol !== 'https:' || target.username || target.password) throw new Error('Invalid SSO provider response');
+    return target.href;
+  }
+  async completeSSO() {
+    const generation = this.#generation;
+    const response = await this.fetchImpl('/v1/security/sso/session', {
+      headers:{Accept:'application/json'},credentials:'same-origin',cache:'no-store',
+      redirect:'error',mode:'same-origin',signal:AbortSignal.timeout(15000),
+    });
+    if (!response.ok) return false;
+    const session = await response.json();
+    if (generation !== this.#generation || typeof session.access_token !== 'string' || !session.access_token) return false;
+    this.#token = session.access_token;
+    return true;
   }
   async request(path, { method = "GET", body, timeoutMs = 15000 } = {}) {
     if (typeof path !== "string" || !path.startsWith("/v1/")

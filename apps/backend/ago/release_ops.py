@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from ago.release_security import ReleasePolicy, schema_integrity
+from ago.security_material import bootstrap_security
 
 
 def _connection_parts(dsn: str) -> tuple[dict, dict]:
@@ -57,6 +58,7 @@ def check_release() -> dict:
     try:
         if os.getenv("AGO_ENVIRONMENT") != "production":
             return report
+        bootstrap_security()
         policy = ReleasePolicy.from_environment()
         report["configuration"] = policy.production
         report["external_egress_disabled"] = (

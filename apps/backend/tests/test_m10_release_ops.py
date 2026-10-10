@@ -135,6 +135,8 @@ def test_restore_verifies_empty_target_and_migration_integrity(tmp_path, monkeyp
 
 def test_release_preflight_output_cannot_expose_connection_secrets(monkeypatch):
     from ago.release_security import ReleasePolicy
+    # Redaction unit fixture; production startup and real TLS/vault are tested separately.
+    monkeypatch.setattr(release_ops, 'bootstrap_security', lambda: None)
 
     monkeypatch.setattr(ReleasePolicy, "from_environment",
                         classmethod(lambda cls, *_: ReleasePolicy(

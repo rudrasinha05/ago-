@@ -61,6 +61,7 @@ class Principal:
     subject: str
     tenant_id: str
     roles: tuple[str, ...]
+    session_version: int = 0
 
 
 class SessionTokens:
@@ -83,6 +84,7 @@ class SessionTokens:
             "iss": self.issuer, "sub": principal.subject, "tenant": principal.tenant_id,
             "roles": list(principal.roles), "iat": issued,
             "exp": issued + self.ttl_seconds, "nonce": secrets.token_hex(12),
+            "version": principal.session_version,
         }
         body = _b64(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode())
         signature = _b64(hmac.new(self._secret, body.encode(), hashlib.sha256).digest())
@@ -108,9 +110,10 @@ class SessionTokens:
                 or not isinstance(data.get("tenant"), str) or not data["tenant"]
                 or not isinstance(data.get("roles"), list) or not data["roles"]
                 or not all(isinstance(role, str) and role for role in data["roles"])
+                or type(data.get('version', 0)) is not int or data.get('version', 0) < 0
             ):
                 raise AuthenticationError("Invalid or expired token")
-            return Principal(data["sub"], data["tenant"], tuple(data["roles"]))
+            return Principal(data["sub"], data["tenant"], tuple(data["roles"]), data.get('version', 0))
         except (ValueError, TypeError, KeyError, UnicodeError, OverflowError, binascii.Error) as exc:
             raise AuthenticationError("Invalid token") from exc
 

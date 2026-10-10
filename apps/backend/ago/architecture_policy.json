@@ -137,7 +137,8 @@
         "memory",
         "quality",
         "repository_ports",
-        "security"
+        "security",
+        "security_material"
       ]
     },
     "api_meta": {
@@ -441,7 +442,8 @@
         "http_errors",
         "platform",
         "readiness",
-        "release_security"
+        "release_security",
+        "security_material"
       ]
     },
     "memory": {
@@ -575,14 +577,18 @@
       "context": "entrypoints",
       "layer": "composition",
       "imports": [
-        "release_security"
+        "release_security",
+        "security_material"
       ]
     },
     "release_security": {
       "context": "platform",
       "layer": "composition",
       "imports": [
-        "event_runtime"
+        "event_runtime",
+        "identity_factors",
+        "security_material",
+        "sso_provider"
       ]
     },
     "scheduler": {
@@ -741,6 +747,7 @@
         "governance",
         "handoffs",
         "identity",
+        "identity_security_store",
         "knowledge_store",
         "login_security",
         "memory",
@@ -776,6 +783,7 @@
       "imports": [
         "backend_contracts",
         "identity",
+        "identity_security_store",
         "login_security",
         "security"
       ]
@@ -903,6 +911,41 @@
         "security",
         "security_controls",
         "storage_adapters"
+      ]
+    },
+    "identity_factors": {
+      "context": "governance",
+      "layer": "foundation",
+      "imports": [
+        "security"
+      ]
+    },
+    "security_material": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": [
+        "security"
+      ]
+    },
+    "sso_provider": {
+      "context": "governance",
+      "layer": "foundation",
+      "imports": [
+        "security",
+        "security_material"
+      ]
+    },
+    "identity_security_store": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "identity",
+        "identity_factors",
+        "login_security",
+        "security",
+        "security_controls",
+        "sso_provider"
       ]
     }
   },

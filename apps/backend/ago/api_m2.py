@@ -7,11 +7,13 @@ tenant-scoped database grants. No caller-provided 'authorized' field is accepted
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import asdict
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Security
+from fastapi import APIRouter, Depends, HTTPException, Request, Security, Response
+from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import Field, StrictBool
 
@@ -25,6 +27,7 @@ from ago.repository_ports import (
     ApprovalRepositoryPort,
     ConsoleStorePort,
     IdentityRepositoryPort,
+    IdentitySecurityStorePort,
     MemoryStorePort,
     OrganizationStorePort,
     QualityStorePort,
@@ -33,6 +36,7 @@ from ago.repository_ports import (
     TaskStorePort,
 )
 from ago.security import AuthenticationError, Principal, SessionTokens
+from ago.security_material import RotatingSessionTokens
 
 router = APIRouter(prefix="/v1", tags=["M2 organization"])
 bearer = HTTPBearer(auto_error=False)
@@ -42,6 +46,7 @@ class Login(StrictInput):
     tenant_id: UUID
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=1024)
+    factor_code: str | None = Field(default=None, min_length=6, max_length=256)
 
 
 class DepartmentInput(StrictInput):
@@ -87,6 +92,11 @@ class MemoryInput(StrictInput):
 
 
 def session_tokens() -> SessionTokens:
+    if os.getenv('AGO_SESSION_KEYRING'):
+        try:
+            return RotatingSessionTokens(os.environ['AGO_SESSION_KEYRING'])
+        except AuthenticationError as exc:
+            raise HTTPException(503, 'Authentication not configured') from exc
     secret = os.getenv("AGO_SESSION_SECRET")
     if not secret or len(secret.encode()) < 32:
         raise HTTPException(503, "Authentication not configured")
@@ -143,7 +153,7 @@ def authenticated(
         if security.is_revoked(token):
             raise AuthenticationError("Revoked token")
         active = repositories.resolve(IdentityRepositoryPort).active(
-            principal.tenant_id, principal.subject
+            principal.tenant_id, principal.subject, session_version=principal.session_version
         )
         if not active:
             raise AuthenticationError("Inactive account")
@@ -178,11 +188,144 @@ def login(
     tokens = session_tokens()
     try:
         principal = repositories.resolve(SessionServicePort).authenticate(
-            str(data.tenant_id), data.email, data.password
+            str(data.tenant_id), data.email, data.password, factor_code=data.factor_code
         )
     except AuthenticationError as exc:
         raise HTTPException(401, "Invalid credentials") from exc
     return {"access_token": tokens.issue(principal), "token_type": "bearer"}
+
+
+class FactorBegin(StrictInput):
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class FactorConfirm(StrictInput):
+    enrollment_token: str = Field(min_length=20, max_length=256)
+    code: str = Field(min_length=6, max_length=6)
+
+
+class TicketInput(StrictInput):
+    kind: Literal['invitation', 'recovery']
+    email: str = Field(min_length=3, max_length=320)
+    department_id: UUID
+
+
+class RedeemInput(StrictInput):
+    token: str = Field(min_length=20, max_length=256)
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=12, max_length=1024)
+    factor_code: str | None = Field(default=None, min_length=6, max_length=256)
+
+
+class SSOBinding(StrictInput):
+    user_id: UUID
+    subject: str = Field(min_length=1, max_length=255)
+
+
+class SSOStart(StrictInput):
+    tenant_id: UUID
+
+
+def identity_error(exc):
+    if isinstance(exc, AuthenticationError):
+        raise HTTPException(401, 'Invalid credentials') from exc
+    translate_error(exc)
+
+
+@router.post('/security/mfa/enroll')
+def enroll_factor(data: FactorBegin, actor: Principal = Depends(authenticated),
+                  db=Depends(db_connection), repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(IdentitySecurityStorePort).begin_factor(actor=actor, password=data.password)
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+
+
+@router.post('/security/mfa/confirm')
+def confirm_factor(data: FactorConfirm, db=Depends(db_connection),
+                   repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(IdentitySecurityStorePort).confirm_factor(token=data.enrollment_token, code=data.code)
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+
+
+@router.post('/security/mfa/rotate')
+def rotate_factors(actor: Principal = Depends(authenticated), db=Depends(db_connection),
+                   repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(IdentitySecurityStorePort).rotate_factors(actor=actor)
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+
+
+@router.post('/security/tickets')
+def issue_ticket(data: TicketInput, actor: Principal = Depends(authenticated), db=Depends(db_connection),
+                 repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(IdentitySecurityStorePort).issue_ticket(actor=actor, kind=data.kind,
+            email=data.email, department_id=str(data.department_id))
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+
+
+@router.post('/security/tickets/redeem')
+def redeem_ticket(data: RedeemInput, db=Depends(db_connection),
+                  repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(IdentitySecurityStorePort).redeem_ticket(token=data.token, email=data.email,
+                                                                           password=data.password, factor_code=data.factor_code)
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+
+
+@router.post('/security/sso/bindings')
+def bind_sso(data: SSOBinding, actor: Principal = Depends(authenticated), db=Depends(db_connection),
+             repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        return repositories.resolve(IdentitySecurityStorePort).bind_sso(actor=actor, user_id=str(data.user_id), subject=data.subject)
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+
+
+@router.post('/security/sso/start')
+def begin_sso(data: SSOStart, response: Response, db=Depends(db_connection),
+              repositories: RepositoryScope = Depends(repository_scope)):
+    binding = secrets.token_urlsafe(32)
+    try:
+        result = repositories.resolve(IdentitySecurityStorePort).begin_sso(tenant_id=str(data.tenant_id), browser_binding=binding)
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+    response.set_cookie('ago_sso_browser', binding, max_age=300, httponly=True, secure=True, samesite='lax', path='/v1/security/sso')
+    return result
+
+
+@router.get('/security/sso/callback')
+def finish_sso(request: Request, state: str = '', code: str = '', db=Depends(db_connection),
+               repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        binding = request.cookies.get('ago_sso_browser', '')
+        store = repositories.resolve(IdentitySecurityStorePort)
+        actor = store.finish_sso(state=state, browser_binding=binding, code=code)
+        token = store.create_handoff(actor=actor, browser_binding=binding)
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+    response = RedirectResponse('/workspace/', status_code=303)
+    response.set_cookie('ago_sso_result', token, max_age=60, httponly=True, secure=True, samesite='strict', path='/v1/security/sso')
+    return response
+
+
+@router.get('/security/sso/session')
+def sso_session(request: Request, response: Response, db=Depends(db_connection),
+                repositories: RepositoryScope = Depends(repository_scope)):
+    try:
+        actor = repositories.resolve(IdentitySecurityStorePort).redeem_handoff(
+            token=request.cookies.get('ago_sso_result', ''), browser_binding=request.cookies.get('ago_sso_browser', ''))
+    except (AuthenticationError, PermissionError, ValueError) as exc:
+        identity_error(exc)
+    response.delete_cookie('ago_sso_result', path='/v1/security/sso')
+    response.delete_cookie('ago_sso_browser', path='/v1/security/sso')
+    return {'access_token': session_tokens().issue(actor), 'token_type': 'bearer'}
 
 
 @router.post("/organization/departments")

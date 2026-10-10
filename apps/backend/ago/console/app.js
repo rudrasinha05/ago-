@@ -207,11 +207,12 @@ form.addEventListener("submit", async event => {
   const email = String(fields.get("email") || "").trim();
   const password = String(fields.get("password") || "");
   try {
-    await api.login({ tenant, email, password });
+    await api.login({ tenant, email, password, factorCode:String(fields.get('factor_code')||'').trim() });
     state.tenant = tenant;
     state.me = await api.request("/v1/console/me");
     initializeWorkspace();
     form.querySelector('[name="password"]').value = "";
+    form.querySelector('[name="factor_code"]').value = "";
     toast("Connected to AGO. Governance safeguards are active.");
     await goPage("overview");
   } catch (error) {
@@ -225,6 +226,8 @@ form.addEventListener("submit", async event => {
     errorArea.hidden = false;
   } finally {
     submit.disabled = false;
+    form.querySelector('[name="password"]').value = "";
+    form.querySelector('[name="factor_code"]').value = "";
   }
 });
 document.getElementById("signout").addEventListener("click", async () => {

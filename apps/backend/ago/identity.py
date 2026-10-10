@@ -60,7 +60,7 @@ class IdentityRepository:
 
     def authenticate(self, tenant_id: str, email: str, password: str) -> Principal | None:
         row = self.connection.execute(
-            """SELECT id, password_hash FROM ago_users
+            """SELECT id, password_hash, session_version FROM ago_users
                WHERE tenant_id=%s AND email=%s AND active=true""",
             (tenant_id, email.strip().lower()),
         ).fetchone()
@@ -71,7 +71,7 @@ class IdentityRepository:
                WHERE tenant_id=%s AND user_id=%s ORDER BY role""",
             (tenant_id, row["id"]),
         ).fetchall()
-        return Principal(str(row["id"]), tenant_id, tuple(item["role"] for item in roles))
+        return Principal(str(row["id"]), tenant_id, tuple(item["role"] for item in roles), row.get('session_version', 0))
 
     def deactivate_user(self, tenant_id: str, user_id: str) -> bool:
         row = self.connection.execute(
@@ -81,11 +81,11 @@ class IdentityRepository:
         ).fetchone()
         return row is not None
 
-    def active(self, tenant_id: str, subject: str) -> bool:
+    def active(self, tenant_id: str, subject: str, *, session_version: int | None = None) -> bool:
         return (
             self.connection.execute(
-                "SELECT 1 FROM ago_users WHERE id=%s AND tenant_id=%s AND active=true",
-                (subject, tenant_id),
+                "SELECT 1 FROM ago_users WHERE id=%s AND tenant_id=%s AND active=true AND (%s::integer IS NULL OR session_version=%s)",
+                (subject, tenant_id, session_version, session_version),
             ).fetchone()
             is not None
         )

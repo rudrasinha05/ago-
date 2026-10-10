@@ -470,8 +470,57 @@
           "returns": "bool"
         },
         "active": {
-          "arguments": "self, tenant_id: str, subject: str",
+          "arguments": "self, tenant_id: str, subject: str, *, session_version: int | None=None",
           "returns": "bool"
+        }
+      }
+    },
+    "IdentitySecurityStore": {
+      "module": "identity_security_store",
+      "methods": {
+        "begin_factor": {
+          "arguments": "self, *, actor: Principal, password: str",
+          "returns": "dict"
+        },
+        "confirm_factor": {
+          "arguments": "self, *, token: str, code: str",
+          "returns": "dict"
+        },
+        "verify_factor": {
+          "arguments": "self, *, actor: Principal, code: str | None, required: bool=False",
+          "returns": "None"
+        },
+        "issue_ticket": {
+          "arguments": "self, *, actor: Principal, kind: str, email: str, department_id: str",
+          "returns": "dict"
+        },
+        "redeem_ticket": {
+          "arguments": "self, *, token: str, email: str, password: str, factor_code: str | None=None",
+          "returns": "dict"
+        },
+        "bind_sso": {
+          "arguments": "self, *, actor: Principal, user_id: str, subject: str",
+          "returns": "dict"
+        },
+        "begin_sso": {
+          "arguments": "self, *, tenant_id: str, browser_binding: str",
+          "returns": "dict"
+        },
+        "finish_sso": {
+          "arguments": "self, *, state: str, browser_binding: str, code: str",
+          "returns": "Principal"
+        },
+        "rotate_factors": {
+          "arguments": "self, *, actor: Principal, limit: int=100",
+          "returns": "dict"
+        },
+        "create_handoff": {
+          "arguments": "self, *, actor: Principal, browser_binding: str",
+          "returns": "str"
+        },
+        "redeem_handoff": {
+          "arguments": "self, *, token: str, browser_binding: str",
+          "returns": "Principal"
         }
       }
     },
@@ -843,7 +892,7 @@
       "module": "session_service",
       "methods": {
         "authenticate": {
-          "arguments": "self, tenant_id: str, email: str, password: str",
+          "arguments": "self, tenant_id: str, email: str, password: str, *, factor_code: str | None=None",
           "returns": "Principal"
         }
       }

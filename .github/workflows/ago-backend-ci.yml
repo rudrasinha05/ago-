@@ -1,4 +1,4 @@
-name: AGO Architecture Sections 1-9 & 14 and M1-M12 CI
+name: AGO Architecture Sections 1-10 & 14 and M1-M12 CI
 on:
   push:
     branches: [develop]

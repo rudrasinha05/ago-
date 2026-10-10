@@ -63,6 +63,8 @@
         <input id="email" name="email" type="email" required autocomplete="username" maxlength="320" placeholder="you@organization.com">
         <label class="field-label" for="password">Password</label>
         <input id="password" name="password" type="password" required autocomplete="current-password" placeholder="Your secure password">
+        <label for="factor_code">One-time or recovery code (if enabled)</label>
+        <input id="factor_code" name="factor_code" type="password" autocomplete="one-time-code">
         <p id="login-error" class="form-error" role="alert" hidden></p>
         <button class="btn btn-primary login-submit" id="login-button" type="submit">Enter control center <svg class="ico"><use href="#i-right"></use></svg></button>
       </form>
