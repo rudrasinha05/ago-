@@ -1,0 +1,627 @@
+{
+  "schema_version": 1,
+  "name": "AGO Section 14 — enforceable module boundary contract",
+  "approved_baseline": "2026-10-10",
+  "review_reference": "SECTION14-BASELINE-001",
+  "layers": {
+    "composition": [
+      "composition",
+      "transport",
+      "service",
+      "persistence",
+      "domain",
+      "foundation"
+    ],
+    "transport": [
+      "transport",
+      "service",
+      "persistence",
+      "domain",
+      "foundation"
+    ],
+    "service": [
+      "service",
+      "persistence",
+      "domain",
+      "foundation"
+    ],
+    "persistence": [
+      "persistence",
+      "domain",
+      "foundation"
+    ],
+    "domain": [
+      "domain",
+      "foundation"
+    ],
+    "foundation": [
+      "foundation",
+      "domain"
+    ]
+  },
+  "nodes": {
+    "access": {
+      "context": "governance",
+      "layer": "foundation",
+      "imports": [
+        "security"
+      ]
+    },
+    "agent_handlers": {
+      "context": "workforce",
+      "layer": "service",
+      "imports": [
+        "workflows"
+      ]
+    },
+    "agent_runtime": {
+      "context": "workforce",
+      "layer": "service",
+      "imports": [
+        "task_store"
+      ]
+    },
+    "api_agents": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "agent_handlers",
+        "agent_runtime",
+        "api_m2",
+        "model_handlers",
+        "security"
+      ]
+    },
+    "api_brain": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_m2",
+        "goals",
+        "plan_execution",
+        "plan_store",
+        "security"
+      ]
+    },
+    "api_council": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_m2",
+        "council_store",
+        "security"
+      ]
+    },
+    "api_insights": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_m2",
+        "credits",
+        "experiments",
+        "scorecard",
+        "security",
+        "simulation"
+      ]
+    },
+    "api_knowledge": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_m2",
+        "knowledge_store",
+        "security"
+      ]
+    },
+    "api_m2": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "governance",
+        "governed_execution",
+        "identity",
+        "login_security",
+        "memory",
+        "organization_store",
+        "quality",
+        "quality_store",
+        "security",
+        "security_controls",
+        "task_store"
+      ]
+    },
+    "api_meta": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_m2",
+        "executive_intelligence",
+        "meta_brain",
+        "organizational_dna",
+        "security"
+      ]
+    },
+    "api_operations": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_m2",
+        "calendar_store",
+        "handoffs",
+        "security"
+      ]
+    },
+    "api_tools": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_m2",
+        "department_automation",
+        "security",
+        "tool_catalog",
+        "tool_enrollment",
+        "tool_runtime"
+      ]
+    },
+    "approvals": {
+      "context": "governance",
+      "layer": "domain",
+      "imports": []
+    },
+    "architecture_guard": {
+      "context": "entrypoints",
+      "layer": "foundation",
+      "imports": []
+    },
+    "auth_api": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "rate_limit",
+        "security"
+      ]
+    },
+    "auth_guard": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "security"
+      ]
+    },
+    "bootstrap": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "identity",
+        "organization_store",
+        "security_controls"
+      ]
+    },
+    "calendar_store": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "security"
+      ]
+    },
+    "console_api": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_m2",
+        "governance",
+        "security",
+        "security_controls",
+        "task_store"
+      ]
+    },
+    "console_host": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": []
+    },
+    "council_store": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "governance",
+        "security",
+        "security_controls"
+      ]
+    },
+    "credits": {
+      "context": "economics",
+      "layer": "domain",
+      "imports": []
+    },
+    "department_automation": {
+      "context": "operations",
+      "layer": "service",
+      "imports": [
+        "governance",
+        "security",
+        "task_store",
+        "tool_catalog",
+        "tool_enrollment"
+      ]
+    },
+    "event_contracts": {
+      "context": "platform",
+      "layer": "domain",
+      "imports": [
+        "events"
+      ]
+    },
+    "event_migrations": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "event_runtime": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "event_migrations",
+        "event_worker",
+        "events",
+        "postgres_event_store"
+      ]
+    },
+    "event_store": {
+      "context": "platform",
+      "layer": "persistence",
+      "imports": [
+        "events"
+      ]
+    },
+    "event_worker": {
+      "context": "platform",
+      "layer": "service",
+      "imports": [
+        "events"
+      ]
+    },
+    "events": {
+      "context": "platform",
+      "layer": "domain",
+      "imports": []
+    },
+    "execution": {
+      "context": "workforce",
+      "layer": "service",
+      "imports": [
+        "security",
+        "workflows"
+      ]
+    },
+    "executive_intelligence": {
+      "context": "strategy",
+      "layer": "service",
+      "imports": [
+        "organizational_dna"
+      ]
+    },
+    "experiments": {
+      "context": "strategy",
+      "layer": "domain",
+      "imports": [
+        "governance"
+      ]
+    },
+    "feature_flags": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "goals": {
+      "context": "strategy",
+      "layer": "domain",
+      "imports": []
+    },
+    "governance": {
+      "context": "governance",
+      "layer": "domain",
+      "imports": [
+        "approvals"
+      ]
+    },
+    "governed_execution": {
+      "context": "governance",
+      "layer": "service",
+      "imports": [
+        "governance",
+        "security",
+        "security_controls",
+        "workflows"
+      ]
+    },
+    "handoffs": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "security",
+        "security_controls"
+      ]
+    },
+    "identity": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "security"
+      ]
+    },
+    "knowledge_store": {
+      "context": "knowledge",
+      "layer": "persistence",
+      "imports": [
+        "security",
+        "security_controls"
+      ]
+    },
+    "local_ops": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "release_security"
+      ]
+    },
+    "login_security": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": []
+    },
+    "m6_permissions": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "security_controls"
+      ]
+    },
+    "m7_permissions": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "security_controls"
+      ]
+    },
+    "m8_permissions": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "security_controls"
+      ]
+    },
+    "main": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "api_agents",
+        "api_brain",
+        "api_council",
+        "api_insights",
+        "api_knowledge",
+        "api_m2",
+        "api_meta",
+        "api_operations",
+        "api_tools",
+        "console_api",
+        "console_host",
+        "platform",
+        "readiness",
+        "release_security"
+      ]
+    },
+    "memory": {
+      "context": "knowledge",
+      "layer": "domain",
+      "imports": []
+    },
+    "meta_brain": {
+      "context": "strategy",
+      "layer": "service",
+      "imports": [
+        "executive_intelligence",
+        "governance"
+      ]
+    },
+    "metrics": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "model_handlers": {
+      "context": "workforce",
+      "layer": "service",
+      "imports": [
+        "credits",
+        "model_provider"
+      ]
+    },
+    "model_provider": {
+      "context": "workforce",
+      "layer": "foundation",
+      "imports": []
+    },
+    "organization": {
+      "context": "workforce",
+      "layer": "domain",
+      "imports": []
+    },
+    "organization_store": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "memory",
+        "organization"
+      ]
+    },
+    "organizational_dna": {
+      "context": "strategy",
+      "layer": "domain",
+      "imports": [
+        "governance"
+      ]
+    },
+    "plan_execution": {
+      "context": "strategy",
+      "layer": "service",
+      "imports": [
+        "governance",
+        "task_store"
+      ]
+    },
+    "plan_store": {
+      "context": "strategy",
+      "layer": "persistence",
+      "imports": [
+        "governance"
+      ]
+    },
+    "platform": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": [
+        "events"
+      ]
+    },
+    "plugins": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "postgres_event_store": {
+      "context": "platform",
+      "layer": "persistence",
+      "imports": [
+        "events"
+      ]
+    },
+    "provision": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "identity",
+        "security_controls"
+      ]
+    },
+    "quality": {
+      "context": "governance",
+      "layer": "domain",
+      "imports": []
+    },
+    "quality_store": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "quality",
+        "security",
+        "security_controls"
+      ]
+    },
+    "rate_limit": {
+      "context": "governance",
+      "layer": "foundation",
+      "imports": []
+    },
+    "readiness": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "release_ops": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "release_security"
+      ]
+    },
+    "release_security": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "scheduler": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "scorecard": {
+      "context": "economics",
+      "layer": "service",
+      "imports": [
+        "credits"
+      ]
+    },
+    "security": {
+      "context": "governance",
+      "layer": "domain",
+      "imports": []
+    },
+    "security_controls": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "security"
+      ]
+    },
+    "simulation": {
+      "context": "strategy",
+      "layer": "service",
+      "imports": [
+        "credits"
+      ]
+    },
+    "task_store": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "security",
+        "security_controls",
+        "workflows"
+      ]
+    },
+    "tool_catalog": {
+      "context": "operations",
+      "layer": "service",
+      "imports": [
+        "scorecard"
+      ]
+    },
+    "tool_enrollment": {
+      "context": "operations",
+      "layer": "service",
+      "imports": [
+        "governance",
+        "security",
+        "tool_catalog"
+      ]
+    },
+    "tool_runtime": {
+      "context": "operations",
+      "layer": "service",
+      "imports": [
+        "security_controls",
+        "task_store",
+        "tool_catalog",
+        "tool_enrollment"
+      ]
+    },
+    "workflows": {
+      "context": "workforce",
+      "layer": "domain",
+      "imports": []
+    }
+  },
+  "protected_sql_writers": {
+    "ago_approval_requests": [
+      "governance"
+    ],
+    "ago_approval_audit": [
+      "governance"
+    ],
+    "ago_task_reviews": [
+      "quality_store"
+    ]
+  },
+  "exceptions": []
+}
