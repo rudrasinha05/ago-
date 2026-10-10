@@ -302,6 +302,7 @@ function renderEnterpriseSummary(data) {
   const currentMode = resource(data,"enterpriseModes")?.effective;
   const capacity = resource(data,"enterpriseCapacity");
   const capacityPolicies = Array.isArray(capacity?.policies) ? capacity.policies : [];
+  const queue = list(data,"enterpriseWorkQueue");
   const orgIntents = list(data,"enterpriseOrgIntents");
   const strategicPlans = list(data,"enterprisePlans");
   const costs = list(data,"enterpriseCosts");
@@ -347,6 +348,10 @@ function renderEnterpriseSummary(data) {
   const capacityRows = capacityPolicies.slice(0,10).map(x=>
     '<tr><td>'+maybe(x.scope_kind)+'</td><td>'+safe(shortId(x.scope_id || "company"))+
     '</td><td>'+num(Number(x.max_running))+'</td><td>'+maybe(x.rationale)+'</td></tr>');
+  const queuedRows = queue.slice(0,12).map(x=>
+    '<tr><td>'+safe(shortId(x.task_id))+'</td><td>'+
+    num(Number(x.priority))+'</td><td>'+badge(x.task_status)+'</td><td>'+
+    badge(x.lease_state || "queued")+'</td></tr>');
   const intentRows = orgIntents.slice(0,10).map(x=>
     '<tr><td>'+maybe(x.change_kind)+'</td><td>'+
     maybe(x.payload?.name || x.payload?.target_id)+'</td><td>'+
@@ -368,6 +373,9 @@ function renderEnterpriseSummary(data) {
     panel("Governed execution capacity",unavailable(data,"enterpriseCapacity",
       table(["Scope","Target","Max running","Reviewed rationale"],capacityRows,
         empty("Default company / department / employee limits apply"))))+
+    panel("Durable approved-work queue",unavailable(data,"enterpriseWorkQueue",
+      table(["Task","Priority","Task state","Lease state"],queuedRows,
+        empty("No approved task queue entries"))))+
     panel("Immutable organizational approval details",unavailable(data,"enterpriseOrgIntents",
       table(["Change","Employee / department","Exact reviewed reason","Approval"],intentRows,
         empty("No full-payload HR review requests"))))+
