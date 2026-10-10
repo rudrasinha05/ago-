@@ -273,3 +273,20 @@ def test_reviewed_knowledge_is_database_immutable(case):
                 "UPDATE ago_knowledge_nodes SET statement='changed' WHERE id=%s",
                 (node["id"],),
             )
+
+
+def test_revoked_human_review_permission_is_enforced_immediately(case):
+    from ago.security_controls import SecurityControls
+
+    client, headers, ids = case
+    node = post(client, "/v1/knowledge/nodes", headers["founder"], {
+        "kind": "fact", "label": "Pending peer review",
+        "statement": "Review is allowed only with current privileges",
+        "source_ref": "internal:review-eligibility",
+    })
+    SecurityControls(ids["db"]).revoke_grant(
+        ids["tenant"], "reviewer", "knowledge:review",
+    )
+    post(client, f"/v1/knowledge/nodes/{node['id']}/review",
+         headers["reviewer1"],
+         {"approve": True, "note": "Review attempted after revoke"}, expected=403)
