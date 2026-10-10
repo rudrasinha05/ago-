@@ -204,3 +204,91 @@ def test_cross_tenant_cannot_read_or_claim_foreign_tool_activity(case):
     assert client.get("/v1/tools/automation/rules", headers=outsider).json() == []
     post(client, f"/v1/tools/enrollments/{enrollment['id']}/disable",
          outsider, {"reason": "Unauthorized"}, expected=404)
+
+
+def test_handler_failure_is_a_terminal_record_not_a_silent_retry(case, monkeypatch):
+    import ago.tool_runtime as runtime_module
+
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    enroll(client, founder, reviewer, "tool:scorecard")
+    _, employee = create_ai(client, founder)
+    task = post(client, "/v1/tasks", founder, {
+        "action": "tool:scorecard", "assignee_id": employee,
+    })
+    approval = post(client, "/v1/governance/approvals", founder, {
+        "action": "tool:scorecard",
+    })
+    post(client, f"/v1/tasks/{task['id']}/approval", founder, {
+        "approval_id": approval["request_id"],
+    })
+    decision(client, reviewer, approval["request_id"])
+
+    def fail(_task):
+        raise RuntimeError("provider token should never be exposed")
+
+    monkeypatch.setattr(
+        runtime_module, "handlers", lambda _db: {"tool:scorecard": fail},
+    )
+    url = f"/v1/tools/tasks/{task['id']}/run"
+    response = client.post(url, headers=founder)
+    assert response.status_code == 502
+    assert "provider token" not in response.text
+    post(client, url, founder, expected=403)
+    runs = client.get("/v1/tools/runs", headers=founder)
+    assert runs.status_code == 200
+    assert runs.json()[0]["status"] == "failed"
+    assert runs.json()[0]["failure_code"] == "handler_failed"
+    assert info["db"].execute(
+        "SELECT status FROM ago_governed_tasks WHERE id=%s", (task["id"],),
+    ).fetchone()["status"] == "failed"
+
+
+def test_stale_tool_run_reconciliation_requires_operator_and_never_replays(case):
+    from datetime import timedelta, datetime, timezone
+
+    from ago.security import Principal
+    from ago.task_store import TaskStore
+
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    enroll(client, founder, reviewer, "tool:scorecard")
+    _, employee = create_ai(client, founder)
+    task = post(client, "/v1/tasks", founder, {
+        "action": "tool:scorecard", "assignee_id": employee,
+    })
+    approval = post(client, "/v1/governance/approvals", founder, {
+        "action": "tool:scorecard",
+    })
+    post(client, f"/v1/tasks/{task['id']}/approval", founder, {
+        "approval_id": approval["request_id"],
+    })
+    decision(client, reviewer, approval["request_id"])
+    TaskStore(info["db"]).authorize_and_start(
+        task_id=task["id"],
+        principal=Principal(info["founder_id"], info["tenant"], ("founder",)),
+    )
+    run_id = str(uuid4())
+    info["db"].execute(
+        """INSERT INTO ago_tool_runs
+           (id,tenant_id,task_id,tool_code,executor_id,started_at)
+           VALUES (%s,%s,%s,%s,%s,%s)""",
+        (run_id, info["tenant"], task["id"], "tool:scorecard",
+         info["founder_id"],
+         datetime.now(timezone.utc) - timedelta(hours=2)),
+    )
+    assert client.post("/v1/tools/runs/recover-stale",
+                       headers=reviewer).status_code == 403
+    recovered = post(client, "/v1/tools/runs/recover-stale", founder)
+    assert recovered["uncertain_runs"] == 1
+    assert recovered["manual_reconciliation_required"] is True
+    assert post(client, "/v1/tools/runs/recover-stale", founder)[
+        "uncertain_runs"
+    ] == 0
+    assert info["db"].execute(
+        "SELECT status FROM ago_tool_runs WHERE id=%s", (run_id,),
+    ).fetchone()["status"] == "uncertain"
+    assert info["db"].execute(
+        "SELECT status FROM ago_governed_tasks WHERE id=%s", (task["id"],),
+    ).fetchone()["status"] == "failed"
+    post(client, f"/v1/tools/tasks/{task['id']}/run", founder, expected=403)
