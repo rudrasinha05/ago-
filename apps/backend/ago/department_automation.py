@@ -187,7 +187,7 @@ class DepartmentAutomation:
                 ).fetchall()
             for source in sources:
                 item = self.fire(
-                    tenant_id=tenant, rule_id=str(rule["id"]),
+                    tenant_id=tenant_id, rule_id=str(rule["id"]),
                     source_id=str(source["source_id"]),
                 )
                 if item["created"]:
