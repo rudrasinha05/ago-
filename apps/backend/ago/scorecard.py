@@ -22,6 +22,10 @@ class Scorecard:
             "dna_versions": "ago_dna_versions",
             "executive_snapshots": "ago_executive_snapshots",
             "meta_recommendations": "ago_meta_recommendations",
+            "tool_enrollments": "ago_tool_enrollments",
+            "automation_rules": "ago_automation_rules",
+            "automation_firings": "ago_automation_firings",
+            "tool_runs": "ago_tool_runs",
         }
         # SQL identifiers come exclusively from trusted server-owned constants.
         for label, table in entities.items():
