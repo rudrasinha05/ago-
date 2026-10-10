@@ -253,3 +253,38 @@ def test_console_approval_request_rejects_foreign_tenant_without_orphans(live_co
     ).fetchone()["total"]
     assert approval_count == 0
     assert client.get("/v1/console/task-reviews",headers=headers).json() == []
+
+
+def test_calendar_invitee_flag_matches_actual_server_visibility(live_console):
+    from datetime import datetime, timedelta, timezone
+
+    client, db, tenant, founder, reviewer = live_console
+    def login(email,password):
+        result = client.post("/v1/sessions",json={
+            "tenant_id":tenant,"email":email,"password":password,
+        })
+        return {"Authorization":"Bearer "+result.json()["access_token"]}
+
+    owner = login("m9founder@example.test","founder-password-123")
+    invitee = login("m9reviewer@example.test","reviewer-password-123")
+    begins = datetime.now(timezone.utc) + timedelta(days=2)
+    ends = begins + timedelta(hours=1)
+    event = client.post("/v1/operations/calendar",headers=owner,json={
+        "title":"Private team review","detail":"Human review meeting",
+        "starts_at":begins.isoformat(),"ends_at":ends.isoformat(),
+        "visibility":"private","operation_key":str(uuid4()),
+        "employee_ids":[reviewer],
+    })
+    assert event.status_code == 200, event.text
+    params={"start":(begins-timedelta(minutes=1)).isoformat(),
+            "end":(ends+timedelta(minutes=1)).isoformat()}
+    owner_rows=client.get("/v1/operations/calendar",headers=owner,params=params)
+    invited_rows=client.get("/v1/operations/calendar",headers=invitee,params=params)
+    assert owner_rows.status_code==200 and invited_rows.status_code==200
+    assert owner_rows.json()[0]["invited"] is False
+    assert invited_rows.json()[0]["invited"] is True
+    response=client.post(
+        f"/v1/operations/calendar/{event.json()['id']}/rsvp",
+        headers=invitee,json={"response":"accepted"},
+    )
+    assert response.status_code==200,response.text
