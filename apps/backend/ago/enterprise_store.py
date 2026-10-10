@@ -201,8 +201,17 @@ class EnterpriseOperationsStore:
 
     def allocate_preview(self, *, tenant_id: str, employee_id: str,
                          available_units: int) -> dict:
+        if not 0 <= available_units <= 100000:
+            raise ValueError("Operator input capacity must be bounded")
         state = self.worker_state(tenant_id=tenant_id, employee_id=employee_id)
-        mode = self.effective_mode(tenant_id=tenant_id)["mode"]
+        scope_modes = [
+            self.effective_mode(tenant_id=tenant_id)["mode"],
+            self.effective_mode(tenant_id=tenant_id, scope_kind="department",
+                                scope_id=state["department_id"])["mode"],
+            self.effective_mode(tenant_id=tenant_id, scope_kind="employee",
+                                scope_id=employee_id)["mode"],
+        ]
+        mode = next((x for x in scope_modes if x != "active"), "active")
         rows = self.connection.execute(
             """SELECT t.id,t.status,a.status AS approval_status
                FROM ago_governed_tasks t
@@ -213,15 +222,18 @@ class EnterpriseOperationsStore:
                ORDER BY t.created_at,t.id LIMIT 100""",
             (tenant_id, employee_id),
         ).fetchall()
+        worker = WorkerState(state["availability_state"])
         items = [WorkCandidate(employee_id, str(row["id"]), 50,
                  available_units, 1, True,
                  row["status"] == "ready" and row["approval_status"] == "approved",
-                 WorkerState.AVAILABLE, 0) for row in rows]
+                 worker, 0) for row in rows]
         admitted = allocate(items, mode=OperatingMode.ACTIVE) if mode == "active" else ()
-        return {"mode": mode, "admitted_task_ids": [x.task_id for x in admitted],
+        return {"mode": mode, "worker_state": worker.value,
+                "admitted_task_ids": [x.task_id for x in admitted],
                 "queued": len(rows), "read_only": True,
                 "capacity_source": "operator_input_not_measured",
                 "unknown_dependencies": True, "not_authorized_to_start": True}
+
 
     def plan(self, *, actor: Principal, identifier: str, horizon: str,
              parent_id: str | None, title: str, starts_at: datetime,
