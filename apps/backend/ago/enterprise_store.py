@@ -162,6 +162,9 @@ class EnterpriseOperationsStore:
         future = [str(t["id"]) for t in tasks if t["status"] in (
             "proposed", "waiting_approval", "ready")]
         capacity = None  # no measured worker-unit capacity exists in legacy schema
+        open_help = [h for h in self.assistance(tenant_id=tenant, employee_id=employee)
+                     if h["outcome"] != "resolved"]
+        blocking_help = [h for h in open_help if h["severity"] == "blocking"]
         latest = self.worker_history(tenant_id=tenant, employee_id=employee)
         availability = latest[0]["state"] if latest else "available"
         return {
@@ -175,7 +178,9 @@ class EnterpriseOperationsStore:
             "permission_awareness": "requires_runtime_policy_evaluation",
             "learning_evidence": None, "risk": "unassessed",
             "stress": "operational_load_only", "subjective_consciousness": False,
-            "help_needed": "unassessed", "evidence_source": "ago_governed_tasks",
+            "help_needed": bool(open_help), "blocking_assistance": len(blocking_help),
+            "open_assistance_count": len(open_help),
+            "evidence_source": "ago_governed_tasks_and_employee_help_requests",
             "observed_at": datetime.now(timezone.utc),
         }
 
