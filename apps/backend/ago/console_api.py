@@ -112,3 +112,25 @@ def task_reviews(
            ORDER BY created_at DESC,task_id LIMIT 100""",
         (actor.tenant_id,),
     ).fetchall()]
+
+
+@router.get("/qa-queue")
+def pending_qa(
+    actor: Principal = Depends(authenticated), db=Depends(db_connection),
+):
+    """Minimal unreviewed completed-task metadata for independent QA staff.
+
+    QA reviewers do not receive a broad task:read permission.
+    """
+    allowed(db, actor, "qa:read")
+    return [dict(row) for row in db.execute(
+        """SELECT t.id,t.action,t.status,t.assignee_id,t.approval_id
+           FROM ago_governed_tasks t
+           WHERE t.tenant_id=%s AND t.status='completed'
+             AND NOT EXISTS (
+               SELECT 1 FROM ago_task_reviews r
+               WHERE r.tenant_id=t.tenant_id AND r.task_id=t.id
+             )
+           ORDER BY t.created_at DESC,t.id LIMIT 100""",
+        (actor.tenant_id,),
+    ).fetchall()]
