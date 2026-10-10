@@ -134,3 +134,26 @@ def test_private_calendar_and_append_only_responses(case):
     assert [item["event"] for item in history.json()] == [
         "scheduled", "accepted", "cancelled",
     ]
+
+
+def test_independent_knowledge_review_and_graph(case):
+    client, headers, ids = case
+    new_node = "/v1/knowledge/nodes"
+    first = post(client, new_node, headers["founder"], {
+        "kind": "fact", "label": "Internal baseline",
+        "statement": "Historical baseline recorded for peer review",
+        "source_ref": "internal:artifact:baseline",
+    })
+    second = post(client, new_node, headers["founder"], {
+        "kind": "artifact", "label": "Review evidence",
+        "statement": "Supporting internal evidence was attached",
+        "source_ref": "internal:artifact:source-2",
+    })
+    assert client.get(new_node, headers=headers["founder"]).json() == []
+    first_review = f"/v1/knowledge/nodes/{first['id']}/review"
+    post(client, first_review, headers["founder"],
+         {"approve": True, "note": "Self-review"}, expected=403)
+    post(client, first_review, headers["reviewer1"],
+         {"approve": True, "note": "Source inspected"})
+    post(client, f"/v1/knowledge/nodes/{second['id']}/review", headers["reviewer2"],
+         {"approve": True, "note": "Artifact inspected"})
