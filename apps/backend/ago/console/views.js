@@ -96,7 +96,7 @@ export function renderOverview(data, state) {
     .map(x => '<div class="list-row"><span class="row-icon">' + icon("shield") +
     '</span><div class="row-main"><strong>' + maybe(x.action) +
     '</strong><small>Requested ' + safe(dateText(x.created_at)) + '</small></div>' +
-    (capability(state, "approval:decide") ? action("Review","review-approval",x.id) : badge("pending")) + "</div>").join("");
+    (capability(state, "approval:decide") && x.requester_id !== state.me?.id ? action("Review","review-approval",x.id) : badge("pending")) + "</div>").join("");
   const intelligence = brief?.snapshot;
   const risksHTML = intelligence ? risks(intelligence.risk_flags) : risks(["insufficient_data"]);
   const intelligenceBody = '<div class="panel-body">' +
@@ -158,7 +158,7 @@ export function renderGovernance(data, state) {
   const aRows = approvals.map(x => '<tr><td class="primary">' + maybe(x.action) +
     '<div class="text-mono">' + safe(shortId(x.id)) + '</div></td><td>' +
     badge(x.status) + '</td><td>' + safe(dateText(x.created_at)) +
-    '</td><td>' + (x.status==="pending" && capability(state,"approval:decide")
+    '</td><td>' + (x.status==="pending" && x.requester_id !== state.me?.id && capability(state,"approval:decide")
       ? '<div class="inline-actions">' + action("Approve","approve",x.id,"primary") +
         action("Reject","reject",x.id,"danger") + "</div>"
       : '<span class="muted">—</span>') + '</td></tr>');
@@ -171,7 +171,7 @@ export function renderGovernance(data, state) {
     '<div class="muted">' + maybe(x.rationale) + '</div></td><td>' + badge(x.status) +
     '</td><td>' + num(Number(x.yes_votes)||0) + "/" + num(x.required_votes) +
     ' yes</td><td><div class="inline-actions">' +
-    (x.status==="open" ? action("Vote","council-vote",x.id) +
+    (x.status==="open" ? (x.proposer_id !== state.me?.id && capability(state,"council:vote") ? action("Vote","council-vote",x.id) : "") +
       (capability(state,"council:finalize") ? action("Finalize","council-finalize",x.id,"primary") : "")
       : "") + "</div></td></tr>");
   return layout("governance",capability(state,"council:propose") ?
@@ -238,7 +238,7 @@ export function renderKnowledge(data, state) {
     '</span><div class="row-main"><strong>' + maybe(x.label) +
     '</strong><small>' + maybe(x.statement) +
     '</small><small>Source: ' + maybe(x.source_ref) + '</small></div>' +
-    (capability(state,"knowledge:review") ?
+    (capability(state,"knowledge:review") && x.author_id !== state.me?.id ?
       action("Review","knowledge-review",x.id) : badge("pending")) + "</div>").join("");
   return layout("knowledge", capability(state,"knowledge:write") ?
     action("Propose evidence","new-knowledge","","primary") : "",
@@ -254,6 +254,7 @@ export function renderKnowledge(data, state) {
 export function renderTools(data, state) {
   const enrollments = list(data,"enrollments"), runs = list(data,"runs");
   const rules = list(data,"rules"), tasks = list(data,"tasks");
+  const approvals = list(data,"approvals");
   const activeCodes = new Set(enrollments.filter(x => x.status==="active").map(x=>x.tool_code));
   const eRows = enrollments.map(x => '<tr><td class="primary">' + maybe(x.tool_code) +
     '</td><td>' + badge(x.status) + '</td><td><span class="text-mono">' +
@@ -269,14 +270,15 @@ export function renderTools(data, state) {
   const runsRows = runs.map(x => '<tr><td class="primary">' + maybe(x.tool_code) +
     '</td><td>' + badge(x.status) + '</td><td>' + safe(dateText(x.started_at)) +
     '</td><td><span class="text-mono">' + safe(shortId(x.id)) + '</span></td></tr>');
+  const approvedIds = new Set(approvals.filter(x => x.status === "approved").map(x => x.id));
   const ready = tasks.filter(x => String(x.action||"").startsWith("tool:") &&
     x.status === "waiting_approval");
   const readyRows = ready.map(x => '<div class="list-row"><span class="row-icon">' +
     icon("bolt") + '</span><div class="row-main"><strong>' +
     maybe(x.action) + '</strong><small>' + safe(shortId(x.id)) +
     " · Requires per-task M2 approval</small></div>" +
-    (capability(state,"tool:dispatch") ? action("Run approved task","tool-run",x.id,"primary")
-      : badge("pending")) + '</div>').join("");
+    (capability(state,"tool:dispatch") && approvedIds.has(x.approval_id) ?
+      action("Run approved task","tool-run",x.id,"primary") : badge("pending")) + '</div>').join("");
   return layout("tools", (capability(state,"tool:enroll") ?
     action("Enroll a tool","new-enrollment") : "") +
     (capability(state,"automation:manage") ? action("New automation","new-rule") : "") +
