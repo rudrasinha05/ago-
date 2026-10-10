@@ -124,7 +124,8 @@ jobs:
             sleep 1
           done
           test "$passed" = "1"
-          curl --retry 5 --retry-connrefused --retry-delay 1 -fsS \\\n            -o /tmp/ago-console-smoke.html http://127.0.0.1:18765/console/\n          grep -q 'login-form' /tmp/ago-console-smoke.html
+          curl --retry 5 --retry-connrefused --retry-delay 1 -fsS -o /tmp/ago-console-smoke.html http://127.0.0.1:18765/console/
+          grep -q 'login-form' /tmp/ago-console-smoke.html
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18765/v1/console/me)" = "401"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18765/health/ready)" = "503"
       - name: Publish image gate
