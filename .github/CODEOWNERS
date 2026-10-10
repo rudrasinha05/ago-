@@ -1,0 +1,8 @@
+# AGO architectural contract ownership (Section 14).
+# GitHub repository administrator must configure branch protection:
+# require CODEOWNERS review and passing Section 14 CI for protected branch.
+# CODEOWNERS by itself is advisory, not proof of independent approval.
+/apps/backend/ago/architecture_policy.json @rudrasinha05
+/apps/backend/ago/architecture_guard.py @rudrasinha05
+/docs/architecture/ @rudrasinha05
+/.github/CODEOWNERS @rudrasinha05
