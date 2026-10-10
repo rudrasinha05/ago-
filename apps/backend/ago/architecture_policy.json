@@ -332,6 +332,15 @@
       "layer": "domain",
       "imports": []
     },
+    "enterprise_store": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "enterprise_domains",
+        "security"
+      ]
+    },
     "event_contracts": {
       "context": "platform",
       "layer": "domain",
