@@ -1068,3 +1068,62 @@ def read_enterprise_asset_payload(
     return enterprise_call(lambda: repositories.resolve(
         EnterpriseOperationsStorePort).asset_payload_read(
         actor=actor, asset_id=str(asset_id)))
+
+
+# Section 22: immutable, reviewed operational employee evidence.
+class EnterpriseAgentEvidenceInput(StrictInput):
+    kind: Literal["skill","knowledge","confidence","risk",
+                  "learning","permission_awareness"]
+    label: str = Field(min_length=1, max_length=160)
+    value_int: int | None = Field(default=None, ge=0, le=100)
+    evidence_ref: str = Field(min_length=1, max_length=1024)
+    note: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/enterprise/agents/{employee_id}/evidence/approval")
+def enterprise_agent_evidence_approval(
+    employee_id: UUID, data: EnterpriseAgentEvidenceInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    store = repositories.resolve(EnterpriseOperationsStorePort)
+    normalized = enterprise_call(lambda: store.normalize_agent_evidence(
+        employee_id=str(employee_id), kind=data.kind,
+        label=data.label, value_int=data.value_int,
+        evidence_ref=data.evidence_ref, note=data.note))
+    digest = normalized["intent_digest"]
+    with db.transaction():
+        approval = issue_enterprise_approval(
+            repositories, actor, "enterprise:agent-evidence:" +
+            str(employee_id) + ":" + digest)
+        record = store.propose_agent_evidence(
+            actor=actor, approval_id=approval["approval_id"],
+            payload=normalized["review_payload"], intent_digest=digest)
+    return {**approval, "intent_id": record["id"],
+            "review_payload": normalized["review_payload"],
+            "intent_digest": digest}
+
+
+@router.post("/enterprise/agents/{employee_id}/evidence/{intent_id}/apply")
+def enterprise_agent_evidence_apply(
+    employee_id: UUID, intent_id: UUID, data: ApprovalReference,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).apply_agent_evidence(
+        actor=actor, intent_id=str(intent_id),
+        approval_id=str(data.approval_id)))
+
+
+@router.get("/enterprise/agents/{employee_id}/evidence")
+def enterprise_agent_evidence_list(
+    employee_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).agent_evidence(
+        tenant_id=actor.tenant_id, employee_id=str(employee_id))
