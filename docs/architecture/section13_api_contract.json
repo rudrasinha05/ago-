@@ -38,6 +38,7 @@
     "GET /v1/operations/calendar": "b8576020c5bc486d2b1b30c9da7c31be15cbaa92fb0231fc4562672ec8914a3d",
     "GET /v1/operations/calendar/{event_id}/attendees": "8c493ccc866c6c3375c3c86ac4e497123eb6b84a84ecf76ce0bc041722b295c0",
     "GET /v1/operations/calendar/{event_id}/history": "a0d6898b689a1b29767ab4168b278f81eefea25f8c7a4db8f787f0e0d8e241d0",
+    "GET /v1/operations/enterprise/agents/{employee_id}/autonomy": "9f89c09cb79b7bef3e9d2d91dc158d17f3fc526e64cc09a508ea46fa31b1d7d6",
     "GET /v1/operations/enterprise/agents/{employee_id}/evidence": "deced7f11f339b37475eef52aeb4df1115cd210a01e6be5e34faf226466448ca",
     "GET /v1/operations/enterprise/agents/{employee_id}/history": "982bcd4c66a94e5490abde73f971d5f71ca645ca1ab0a45876c4add5c6681435",
     "GET /v1/operations/enterprise/agents/{employee_id}/state": "cbcc142e844532f8bef02ff8e86e577ec29746e596b8c5e35576b25cec6d3e62",
