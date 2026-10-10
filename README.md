@@ -19,6 +19,27 @@ AGO is a **governed, multi-tenant AI-native organizational operating system**, c
 - **M11 — Pilot Browser Acceptance:** real Chromium against live FastAPI/PostgreSQL, founder/reviewer workflow and mobile navigation, corrected approval-driven strategy activation, least-privilege independent QA queue, evidence screenshots and guarded logouts.
 - **M12 — Local Founder Onboarding:** read-only redacted environment/schema doctor, existing tenant UUID listing, atomic local founder + independent reviewer provisioning, loopback-only one-command launch and safe Windows PowerShell operator helper. No destructive automatic migrations or password storage.
 
+## Completed architecture section: 14 — Module Dependency Rules
+
+The original 1–34 architecture checklist is tracked **separately** from
+M1–M12 implementation milestones. **Section 14** now has an enforceable,
+versioned architecture baseline: 76 owned root modules, 145 reviewed
+existing internal import edges, a six-layer dependency matrix, cycle bans,
+three protected approval/QA SQL ownership boundaries, a time-limited
+exception process, service extraction/event contract specifications and
+CI tests on Python 3.11/3.12/3.14.
+
+```powershell
+cd apps\backend
+python -m ago.architecture_guard check
+```
+
+Read the [Section 14 module contract](docs/architecture/SECTION_14_MODULE_DEPENDENCY_RULES.md)
+and [verification report](docs/reports/SECTION14_FINAL_ACCEPTANCE.md).
+Other enterprise architecture sections remain independently pending; an
+approved architecture exception still requires separately configured GitHub
+branch protection for real code-owner approval.
+
 ## Fast local start (Windows)
 
 From `apps/backend` after setting your own **localhost** `AGO_POSTGRES_DSN` and applying any reviewed development migrations:
