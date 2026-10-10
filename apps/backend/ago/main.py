@@ -12,6 +12,7 @@ from ago.api_insights import router as insights_router
 from ago.api_brain import router as brain_router
 from ago.api_m2 import router as m2_router
 from ago.api_meta import router as meta_router
+from ago.api_tools import router as tools_router
 from ago.api_operations import router as operations_router
 from ago.api_knowledge import router as knowledge_router
 from ago.api_council import router as council_router
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router)
     app.include_router(council_router)
     app.include_router(meta_router)
+    app.include_router(tools_router)
 
     try:
         import psycopg
