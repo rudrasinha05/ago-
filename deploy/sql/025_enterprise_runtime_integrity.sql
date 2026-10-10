@@ -180,7 +180,7 @@ CREATE TRIGGER ago_marketplace_use_active_guard
 CREATE FUNCTION ago_twin_provenance_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF (NEW.result->>'read_only') IS DISTINCT FROM 'true'
-    OR (NEW.result->>'applied') IS DISTINCT FROM 'false' OR NEW.calibrated THEN
+    OR (NEW.result ? 'applied' AND (NEW.result->>'applied') IS DISTINCT FROM 'false') OR NEW.calibrated THEN
    RAISE EXCEPTION 'Simulated data cannot authorize or claim production mutations';
  END IF;
  IF NOT EXISTS(SELECT 1 FROM ago_executive_snapshots
