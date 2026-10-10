@@ -141,6 +141,7 @@ def test_release_preflight_output_cannot_expose_connection_secrets(monkeypatch):
                             "production", ("ago.example.com",), 1048576,
                         )))
     monkeypatch.setattr(release_ops, "schema_integrity", lambda *_: True)
+    monkeypatch.setenv("AGO_ENVIRONMENT", "production")
     monkeypatch.setenv("AGO_POSTGRES_DSN", SOURCE)
     monkeypatch.setenv("AGO_M8_EXTERNAL_ENABLED", "false")
     monkeypatch.setenv("AGO_ENABLE_PAID_MODELS", "false")
