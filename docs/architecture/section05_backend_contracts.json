@@ -440,6 +440,18 @@
           "arguments": "self, *, actor: Principal, snapshot_id: str, actions: int, cost_per_action: str, budget: str, failure_pct: int, hiring: int = 0, layoffs: int = 0, market_shock_pct: int = 0",
           "returns": "dict"
         },
+        "worker_transition": {
+          "arguments": "self, *, actor: Principal, employee_id: str, state: str, approval_id: str, reason: str, expires_at: datetime | None = None",
+          "returns": "dict"
+        },
+        "worker_history": {
+          "arguments": "self, *, tenant_id: str, employee_id: str",
+          "returns": "list[dict]"
+        },
+        "asset_retire": {
+          "arguments": "self, *, actor: Principal, asset_id: str, target_state: str, approval_id: str, reason: str",
+          "returns": "dict"
+        },
         "twin_runs": {
           "arguments": "self, *, tenant_id: str",
           "returns": "list[dict]"
