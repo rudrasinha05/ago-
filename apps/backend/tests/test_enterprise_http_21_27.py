@@ -177,3 +177,76 @@ def test_evolution_has_no_automatic_application_and_twin_is_hypothetical(case):
     assert len(client.get("/v1/operations/enterprise/twin", headers=founder).json()) == 1
     post(client, "/v1/operations/enterprise/twin", founder,
          {**values, "snapshot_id": str(uuid4())}, expected=404)
+
+
+def test_worker_state_reviewed_pause_resume_blocks_real_task_dispatch(case):
+    import psycopg
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    dept = department(client, founder)
+    agent = employee(client, founder, dept)
+    path = "/v1/operations/enterprise/agents/" + agent
+    request = post(client, path + "/approval", founder, {"state": "paused"})
+    expiry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    attempted = {"state": "paused", "approval_id": request["approval_id"],
+                 "reason": "QA review pause", "expires_at": expiry}
+    post(client, path + "/transition", founder, attempted, expected=403)
+    decide(client, reviewer, request["approval_id"])
+    paused = post(client, path + "/transition", founder, attempted)
+    assert paused["state"] == "paused" and paused["sequence"] == 1
+    assert client.get(path + "/state", headers=founder).json()["availability_state"] == "paused"
+    task = post(client, "/v1/tasks", founder,
+                {"assignee_id": agent, "action": "internal:brief"})
+    approval = post(client, "/v1/governance/approvals", founder,
+                    {"action": "internal:brief"})
+    post(client, f"/v1/tasks/{task['id']}/approval", founder,
+         {"approval_id": approval["request_id"]})
+    decide(client, reviewer, approval["request_id"])
+    with __import__("pytest").raises(psycopg.errors.RaiseException):
+        with info["db"].transaction():
+            info["db"].execute(
+                "UPDATE ago_governed_tasks SET status='running' WHERE tenant_id=%s AND id=%s",
+                (info["tenant"], task["id"]),
+            )
+    resume = post(client, path + "/approval", founder, {"state": "available"})
+    decide(client, reviewer, resume["approval_id"])
+    post(client, path + "/transition", founder,
+         {"state": "available", "approval_id": resume["approval_id"],
+          "reason": "Evidence verified and work may safely resume"})
+    assert [h["state"] for h in client.get(path + "/history", headers=founder).json()] == [
+        "available", "paused"
+    ]
+    with info["db"].transaction():
+        info["db"].execute(
+            "UPDATE ago_governed_tasks SET status='running' WHERE tenant_id=%s AND id=%s",
+            (info["tenant"], task["id"]),
+        )
+
+
+def test_published_asset_retirement_halts_new_usage_without_erasing_history(case):
+    client, headers, _ = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    dept = department(client, founder)
+    item = post(client, "/v1/operations/enterprise/marketplace", founder, {
+        "department_id": dept, "name": "Dated Workflow " + uuid4().hex[:8],
+        "kind": "workflow", "version": "1.0.0", "license_id": "internal-only",
+        "sha256_digest": "a" * 64, "manifest": {"reviewed": True},
+    })
+    path = "/v1/operations/enterprise/marketplace/" + item["id"]
+    request = post(client, path + "/approval", founder)
+    decide(client, reviewer, request["approval_id"])
+    post(client, path + "/publish", founder)
+    retirement = post(client, path + "/lifecycle/approval",
+                      founder, {"target_state": "deprecated"})
+    payload = {"target_state": "deprecated", "approval_id": retirement["approval_id"],
+               "reason": "A newer reviewed version replaces this asset"}
+    post(client, path + "/lifecycle", founder, payload, expected=403)
+    decide(client, reviewer, retirement["approval_id"])
+    assert post(client, path + "/lifecycle", founder, payload)["status"] == "deprecated"
+    use = post(client, path + "/consume/approval", founder)
+    decide(client, reviewer, use["approval_id"])
+    post(client, path + "/consume", founder,
+         {"department_id": dept, "approval_id": use["approval_id"],
+          "evidence_ref": "test:post-retirement"}, expected=403)
+    listed = client.get("/v1/operations/enterprise/marketplace", headers=founder).json()
+    assert next(a["status"] for a in listed if str(a["id"]) == item["id"]) == "deprecated"
