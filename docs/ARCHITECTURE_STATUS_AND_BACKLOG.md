@@ -4,6 +4,24 @@
 Treat this file as an honest delta register, not proof of Artificial General
 Intelligence or completion of the original entire enterprise architecture.
 
+## Section-level implementation ledger (independent of M1–M12 milestones)
+
+- **Section 14 — Module Dependency Rules:** engineering implementation
+  **CI-accepted** against the six requirements in the 1–34 checklist.
+  Versioned manifest maps 76 AGO root modules and 145 observed internal
+  imports, enforces layering and cycle bans, protects approval/QA write
+  ownership, documents extraction contracts and requires bounded reviewed
+  exception records. Graphviz diagrams and negative tests are generated
+  by `python -m ago.architecture_guard check --dot <path>`.
+  Evidence: `docs/reports/SECTION14_FINAL_ACCEPTANCE.md`.
+  **External control not inferred:** mandatory GitHub CODEOWNER
+  approvals/branch protection must be separately enabled and audited by
+  the repository administrator before independent human review is considered
+  operationally enforced.
+- Every other unfinished section is **still separately pending**. Code-level
+  closure of Section 14 does not upgrade the implementation status of
+  Sections 1–13 or 15–34, nor imply the full original blueprint is available.
+
 ## Evidence and provenance caveat
 
 The repository's `docs/PROJECT_HANDOVER.md` says the original blueprint has
