@@ -7,15 +7,18 @@ manual cross-browser visual certification**.
 ## Verified evidence, October 10, 2026
 
 - Verified functional `develop` commit:
-  `74fa4aaf592cb0af5d8ef4faa77d13c0cbe935d7`
+  `6a381b5501973609f4ad47d3612ab75f405956ac`
 - Passing GitHub Actions run:
-  https://github.com/rudrasinha05/ago-/actions/runs/38021148014
+  https://github.com/rudrasinha05/ago-/actions/runs/38021442610
 - Python 3.11: **212 passed, zero failed; one pre-existing Starlette warning**.
 - Python 3.14: **212 passed, zero failed; one pre-existing warning**.
 - First-party JavaScript on Node 22: **13 passed, zero failed** on both CI jobs.
 - PostgreSQL 16: all existing migrations **001–018 apply successfully**.
   **M9 adds no new SQL migration or database.**
 - Ruff and JS syntax validation: **both passed**.
+- Both Python versions built the distribution wheel and verified `index.html`,
+  `styles.css`, `app.js`, `core.js`, `views.js` and `actions.js`
+  are packaged as importable first-party console assets.
 - M1–M8 backend regressions remain green.
 
 ## Six accepted M9 gates
