@@ -29,7 +29,7 @@ python -m uvicorn ago.main:app --reload
 
 API documentation: `http://127.0.0.1:8000/docs`. The M3–M7 APIs are under `/v1/brain`, `/v1/agents`, `/v1/insights`, `/v1/operations`, `/v1/knowledge`, `/v1/council` and `/v1/meta`.
 
-CI acceptance: [M3–M5 evidence](docs/reports/M3_M5_FINAL_ACCEPTANCE.md). M6 CI evidence: [155-test acceptance](docs/reports/M6_FINAL_ACCEPTANCE.md). Operator setup: [M6 Guide](docs/reports/M6_OPERATOR_GUIDE.md) and [M7 Guide](docs/reports/M7_OPERATOR_GUIDE.md).
+CI acceptance: [M3–M5 evidence](docs/reports/M3_M5_FINAL_ACCEPTANCE.md). M6 CI evidence: [155-test acceptance](docs/reports/M6_FINAL_ACCEPTANCE.md). [M7 CI evidence: 175-test acceptance](docs/reports/M7_FINAL_ACCEPTANCE.md). Operator setup: [M6 Guide](docs/reports/M6_OPERATOR_GUIDE.md) and [M7 Guide](docs/reports/M7_OPERATOR_GUIDE.md).
 
 A fresh tenant must be provisioned by the **local operator** using `python -m ago.bootstrap`; an independent human reviewer must be provisioned using `python -m ago.provision`. See `docs/reports/M3_M5_OPERATOR_AND_ACCEPTANCE.md` for details.
 
