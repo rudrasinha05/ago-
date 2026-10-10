@@ -161,3 +161,14 @@ def executive_brief(
 ):
     allowed(db, actor, "meta:read")
     return MetaBrain(db).brief(tenant_id=actor.tenant_id)
+
+
+@router.get("/snapshots/{snapshot_id}/verify")
+def verify_snapshot(
+    snapshot_id: UUID, db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+):
+    allowed(db, actor, "meta:read")
+    return call(lambda: ExecutiveIntelligence(db).verify(
+        tenant_id=actor.tenant_id, snapshot_id=str(snapshot_id),
+    ))
