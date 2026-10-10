@@ -227,9 +227,11 @@ def test_handler_failure_is_a_terminal_record_not_a_silent_retry(case, monkeypat
     def fail(_task):
         raise RuntimeError("provider token should never be exposed")
 
-    monkeypatch.setattr(
-        runtime_module, "handlers", lambda _db: {"tool:scorecard": fail},
-    )
+    def injected_handlers(connection, *, repositories):
+        assert repositories.connection is connection
+        return {"tool:scorecard": fail}
+
+    monkeypatch.setattr(runtime_module, "handlers", injected_handlers)
     url = f"/v1/tools/tasks/{task['id']}/run"
     response = client.post(url, headers=founder)
     assert response.status_code == 502
