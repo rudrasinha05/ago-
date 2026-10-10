@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "name": "AGO Section 14 \u2014 enforceable module boundary contract",
+  "name": "AGO Section 14 — enforceable module boundary contract",
   "approved_baseline": "2026-10-10",
   "review_reference": "SECTION05-LAYERS-AND-INJECTION-001",
   "layers": {
@@ -70,6 +70,13 @@
         "task_store"
       ]
     },
+    "agent_runtime_queries": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
     "api_agents": {
       "context": "transport",
       "layer": "transport",
@@ -92,6 +99,11 @@
         "repository_ports",
         "security"
       ]
+    },
+    "api_contracts": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": []
     },
     "api_council": {
       "context": "transport",
@@ -202,6 +214,11 @@
         "security"
       ]
     },
+    "backend_contracts": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
     "bootstrap": {
       "context": "entrypoints",
       "layer": "composition",
@@ -234,6 +251,25 @@
       "layer": "transport",
       "imports": []
     },
+    "console_service": {
+      "context": "governance",
+      "layer": "service",
+      "imports": [
+        "backend_contracts",
+        "console_store",
+        "governance",
+        "security",
+        "task_store"
+      ]
+    },
+    "console_store": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "security"
+      ]
+    },
     "council_store": {
       "context": "governance",
       "layer": "persistence",
@@ -244,12 +280,26 @@
         "security_controls"
       ]
     },
+    "credit_domain": {
+      "context": "economics",
+      "layer": "domain",
+      "imports": []
+    },
     "credits": {
       "context": "economics",
       "layer": "persistence",
       "imports": [
         "backend_contracts",
         "credit_domain"
+      ]
+    },
+    "database_store": {
+      "context": "knowledge",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "security",
+        "storage_adapters"
       ]
     },
     "department_automation": {
@@ -264,6 +314,23 @@
         "tool_catalog",
         "tool_enrollment"
       ]
+    },
+    "department_automation_queries": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
+    "dna_domain": {
+      "context": "strategy",
+      "layer": "domain",
+      "imports": []
+    },
+    "enterprise_domains": {
+      "context": "operations",
+      "layer": "domain",
+      "imports": []
     },
     "event_contracts": {
       "context": "platform",
@@ -324,6 +391,13 @@
         "organizational_dna"
       ]
     },
+    "executive_intelligence_queries": {
+      "context": "strategy",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
     "experiments": {
       "context": "strategy",
       "layer": "persistence",
@@ -353,6 +427,13 @@
         "governance_domain"
       ]
     },
+    "governance_domain": {
+      "context": "governance",
+      "layer": "domain",
+      "imports": [
+        "approvals"
+      ]
+    },
     "governed_execution": {
       "context": "governance",
       "layer": "service",
@@ -372,12 +453,37 @@
         "security_controls"
       ]
     },
+    "http_errors": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": []
+    },
     "identity": {
       "context": "governance",
       "layer": "persistence",
       "imports": [
         "backend_contracts",
         "security"
+      ]
+    },
+    "identity_factors": {
+      "context": "governance",
+      "layer": "foundation",
+      "imports": [
+        "security"
+      ]
+    },
+    "identity_security_store": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "identity",
+        "identity_factors",
+        "login_security",
+        "security",
+        "security_controls",
+        "sso_provider"
       ]
     },
     "knowledge_store": {
@@ -454,6 +560,34 @@
       "layer": "domain",
       "imports": []
     },
+    "memory_policies": {
+      "context": "knowledge",
+      "layer": "domain",
+      "imports": []
+    },
+    "message_contracts": {
+      "context": "platform",
+      "layer": "domain",
+      "imports": []
+    },
+    "message_ops": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "backend_contracts",
+        "message_store"
+      ]
+    },
+    "message_store": {
+      "context": "platform",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "message_contracts",
+        "security",
+        "security_controls"
+      ]
+    },
     "meta_brain": {
       "context": "strategy",
       "layer": "service",
@@ -463,6 +597,13 @@
         "governance",
         "meta_brain_queries",
         "organizational_dna"
+      ]
+    },
+    "meta_brain_queries": {
+      "context": "strategy",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
       ]
     },
     "metrics": {
@@ -515,6 +656,13 @@
         "governance",
         "plan_execution_queries",
         "task_store"
+      ]
+    },
+    "plan_execution_queries": {
+      "context": "strategy",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
       ]
     },
     "plan_store": {
@@ -595,138 +743,6 @@
         "sso_provider"
       ]
     },
-    "scheduler": {
-      "context": "platform",
-      "layer": "foundation",
-      "imports": []
-    },
-    "scorecard": {
-      "context": "economics",
-      "layer": "service",
-      "imports": [
-        "backend_contracts",
-        "credits",
-        "scorecard_queries"
-      ]
-    },
-    "security": {
-      "context": "governance",
-      "layer": "domain",
-      "imports": []
-    },
-    "security_controls": {
-      "context": "governance",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts",
-        "security"
-      ]
-    },
-    "simulation": {
-      "context": "strategy",
-      "layer": "service",
-      "imports": [
-        "credits"
-      ]
-    },
-    "task_store": {
-      "context": "workforce",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts",
-        "security",
-        "security_controls",
-        "workflows"
-      ]
-    },
-    "tool_catalog": {
-      "context": "operations",
-      "layer": "service",
-      "imports": [
-        "backend_contracts",
-        "scorecard",
-        "tool_catalog_queries"
-      ]
-    },
-    "tool_enrollment": {
-      "context": "operations",
-      "layer": "service",
-      "imports": [
-        "backend_contracts",
-        "governance",
-        "security",
-        "tool_catalog",
-        "tool_enrollment_queries"
-      ]
-    },
-    "tool_runtime": {
-      "context": "operations",
-      "layer": "service",
-      "imports": [
-        "backend_contracts",
-        "security_controls",
-        "task_store",
-        "tool_catalog",
-        "tool_enrollment",
-        "tool_runtime_queries"
-      ]
-    },
-    "workflows": {
-      "context": "workforce",
-      "layer": "domain",
-      "imports": []
-    },
-    "backend_contracts": {
-      "context": "platform",
-      "layer": "foundation",
-      "imports": []
-    },
-    "api_contracts": {
-      "context": "transport",
-      "layer": "transport",
-      "imports": []
-    },
-    "http_errors": {
-      "context": "transport",
-      "layer": "transport",
-      "imports": []
-    },
-    "console_store": {
-      "context": "governance",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts",
-        "security"
-      ]
-    },
-    "console_service": {
-      "context": "governance",
-      "layer": "service",
-      "imports": [
-        "backend_contracts",
-        "console_store",
-        "governance",
-        "security",
-        "task_store"
-      ]
-    },
-    "governance_domain": {
-      "context": "governance",
-      "layer": "domain",
-      "imports": [
-        "approvals"
-      ]
-    },
-    "credit_domain": {
-      "context": "economics",
-      "layer": "domain",
-      "imports": []
-    },
-    "dna_domain": {
-      "context": "strategy",
-      "layer": "domain",
-      "imports": []
-    },
     "repository_ports": {
       "context": "platform",
       "layer": "service",
@@ -781,50 +797,18 @@
         "workflows"
       ]
     },
-    "session_service": {
-      "context": "governance",
+    "scheduler": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "scorecard": {
+      "context": "economics",
       "layer": "service",
       "imports": [
         "backend_contracts",
-        "identity",
-        "identity_security_store",
-        "login_security",
-        "security"
-      ]
-    },
-    "agent_runtime_queries": {
-      "context": "workforce",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts"
-      ]
-    },
-    "department_automation_queries": {
-      "context": "operations",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts"
-      ]
-    },
-    "executive_intelligence_queries": {
-      "context": "strategy",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts"
-      ]
-    },
-    "meta_brain_queries": {
-      "context": "strategy",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts"
-      ]
-    },
-    "plan_execution_queries": {
-      "context": "strategy",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts"
+        "credits",
+        "scorecard_queries"
       ]
     },
     "scorecard_queries": {
@@ -834,77 +818,25 @@
         "backend_contracts"
       ]
     },
-    "tool_catalog_queries": {
-      "context": "operations",
+    "security": {
+      "context": "governance",
+      "layer": "domain",
+      "imports": []
+    },
+    "security_controls": {
+      "context": "governance",
       "layer": "persistence",
       "imports": [
-        "backend_contracts"
+        "backend_contracts",
+        "security"
       ]
     },
-    "tool_enrollment_queries": {
-      "context": "operations",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts"
-      ]
-    },
-    "tool_runtime_queries": {
-      "context": "operations",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts"
-      ]
-    },
-    "storage_adapters": {
+    "security_material": {
       "context": "platform",
       "layer": "foundation",
-      "imports": []
-    },
-    "database_store": {
-      "context": "knowledge",
-      "layer": "persistence",
       "imports": [
-        "backend_contracts",
-        "security",
-        "storage_adapters"
+        "security"
       ]
-    },
-    "storage_ops": {
-      "context": "entrypoints",
-      "layer": "composition",
-      "imports": [
-        "backend_contracts",
-        "database_store",
-        "storage_adapters"
-      ]
-    },
-    "message_contracts": {
-      "context": "platform",
-      "layer": "domain",
-      "imports": []
-    },
-    "message_store": {
-      "context": "platform",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts",
-        "message_contracts",
-        "security",
-        "security_controls"
-      ]
-    },
-    "message_ops": {
-      "context": "entrypoints",
-      "layer": "composition",
-      "imports": [
-        "backend_contracts",
-        "message_store"
-      ]
-    },
-    "memory_policies": {
-      "context": "knowledge",
-      "layer": "domain",
-      "imports": []
     },
     "semantic_memory_store": {
       "context": "knowledge",
@@ -917,18 +849,22 @@
         "storage_adapters"
       ]
     },
-    "identity_factors": {
+    "session_service": {
       "context": "governance",
-      "layer": "foundation",
+      "layer": "service",
       "imports": [
+        "backend_contracts",
+        "identity",
+        "identity_security_store",
+        "login_security",
         "security"
       ]
     },
-    "security_material": {
-      "context": "platform",
-      "layer": "foundation",
+    "simulation": {
+      "context": "strategy",
+      "layer": "service",
       "imports": [
-        "security"
+        "credits"
       ]
     },
     "sso_provider": {
@@ -939,18 +875,87 @@
         "security_material"
       ]
     },
-    "identity_security_store": {
-      "context": "governance",
+    "storage_adapters": {
+      "context": "platform",
+      "layer": "foundation",
+      "imports": []
+    },
+    "storage_ops": {
+      "context": "entrypoints",
+      "layer": "composition",
+      "imports": [
+        "backend_contracts",
+        "database_store",
+        "storage_adapters"
+      ]
+    },
+    "task_store": {
+      "context": "workforce",
       "layer": "persistence",
       "imports": [
         "backend_contracts",
-        "identity",
-        "identity_factors",
-        "login_security",
         "security",
         "security_controls",
-        "sso_provider"
+        "workflows"
       ]
+    },
+    "tool_catalog": {
+      "context": "operations",
+      "layer": "service",
+      "imports": [
+        "backend_contracts",
+        "scorecard",
+        "tool_catalog_queries"
+      ]
+    },
+    "tool_catalog_queries": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
+    "tool_enrollment": {
+      "context": "operations",
+      "layer": "service",
+      "imports": [
+        "backend_contracts",
+        "governance",
+        "security",
+        "tool_catalog",
+        "tool_enrollment_queries"
+      ]
+    },
+    "tool_enrollment_queries": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
+    "tool_runtime": {
+      "context": "operations",
+      "layer": "service",
+      "imports": [
+        "backend_contracts",
+        "security_controls",
+        "task_store",
+        "tool_catalog",
+        "tool_enrollment",
+        "tool_runtime_queries"
+      ]
+    },
+    "tool_runtime_queries": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
+    "workflows": {
+      "context": "workforce",
+      "layer": "domain",
+      "imports": []
     }
   },
   "protected_sql_writers": {
