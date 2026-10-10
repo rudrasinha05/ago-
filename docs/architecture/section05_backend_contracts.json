@@ -372,6 +372,22 @@
           "arguments": "self, *, tenant_id: str, scope_kind: str='company', scope_id: str | None=None",
           "returns": "dict"
         },
+        "normalize_agent_evidence": {
+          "arguments": "self, *, employee_id: str, kind: str, label: str, value_int: int | None, evidence_ref: str, note: str",
+          "returns": "dict"
+        },
+        "propose_agent_evidence": {
+          "arguments": "self, *, actor: Principal, approval_id: str, payload: dict, intent_digest: str",
+          "returns": "dict"
+        },
+        "apply_agent_evidence": {
+          "arguments": "self, *, actor: Principal, intent_id: str, approval_id: str",
+          "returns": "dict"
+        },
+        "agent_evidence": {
+          "arguments": "self, *, tenant_id: str, employee_id: str",
+          "returns": "list[dict]"
+        },
         "worker_state": {
           "arguments": "self, *, tenant_id: str, employee_id: str",
           "returns": "dict"
