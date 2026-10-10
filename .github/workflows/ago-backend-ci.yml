@@ -1,4 +1,4 @@
-name: AGO Architecture Sections 1 & 14 and M1-M12 CI
+name: AGO Architecture Sections 1, 2 & 14 and M1-M12 CI
 on:
   push:
     branches: [develop]
@@ -70,6 +70,12 @@ jobs:
           if-no-files-found: ignore
       - name: Enforce Section 1 system architecture traceability
         run: python ../../scripts/check_system_architecture.py
+      - name: Enforce Section 2 component diagrams and source evidence
+        run: python ../../scripts/check_component_diagrams.py
+      - name: Parse all six Section 2 Mermaid component views
+        run: |
+          npm install --prefix /tmp/ago-diagram-check mermaid@11.12.0 jsdom@26.1.0 --no-audit --no-fund
+          node ../../scripts/check_component_mermaid.mjs /tmp/ago-diagram-check/node_modules
       - name: Apply PostgreSQL migrations
         id: migration
         run: python -m ago.event_runtime migrate
@@ -80,7 +86,7 @@ jobs:
           python -m ago.local_ops tenants
       - name: Lint
         id: lint
-        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py
+        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py
       - name: Validate first-party console JS and UI unit tests
         id: javascript
         run: |

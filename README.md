@@ -36,6 +36,17 @@ and [Section 1 acceptance evidence](docs/reports/SECTION01_FINAL_ACCEPTANCE.md).
 Original full-blueprint parity remains unverified; other sections retain their
 independent status.
 
+## Architecture section 2 — High-Level Component Diagram
+
+Six source-linked Mermaid views cover leadership, organization, orchestration,
+knowledge/communication, execution/evidence and infrastructure/security. Current
+and proposed relationships are explicitly distinguished. CI validates source
+symbols, diagram drift, Mermaid syntax and a real brain-to-agent-to-QA workflow.
+Read [Section 2 component architecture](docs/architecture/SECTION_02_HIGH_LEVEL_COMPONENT_DIAGRAM.md),
+[all six component views](docs/architecture/SECTION_02_COMPONENT_VIEWS.md) and
+[acceptance evidence](docs/reports/SECTION02_FINAL_ACCEPTANCE.md).
+No missing subsystem is marked implemented because it appears in a diagram.
+
 ## Completed architecture section: 14 — Module Dependency Rules
 
 The original 1–34 architecture checklist is tracked **separately** from

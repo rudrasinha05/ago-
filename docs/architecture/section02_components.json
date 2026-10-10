@@ -1,0 +1,555 @@
+{
+  "version": 1,
+  "components": {
+    "brain": {
+      "label": "Company Brain",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/goals.py#GoalStore",
+        "apps/backend/ago/plan_execution.py#PlanExecution"
+      ]
+    },
+    "meta": {
+      "label": "Meta Brain advisory",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/meta_brain.py#MetaBrain.generate"
+      ]
+    },
+    "council": {
+      "label": "Executive Council",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/council_store.py#CouncilStore.finalize"
+      ]
+    },
+    "approval": {
+      "label": "Independent human approval",
+      "status": "bounded",
+      "sources": [
+        "apps/backend/ago/governance.py#ApprovalRepository.decide"
+      ]
+    },
+    "dna": {
+      "label": "Versioned DNA thresholds",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/organizational_dna.py#GenomeStore"
+      ]
+    },
+    "departments": {
+      "label": "Departments",
+      "status": "bounded",
+      "sources": [
+        "apps/backend/ago/organization_store.py#OrganizationStore.add_department"
+      ]
+    },
+    "managers": {
+      "label": "Manager relationships",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/organization_store.py#OrganizationStore.hire"
+      ]
+    },
+    "employees": {
+      "label": "Human / AI employee registry",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/organization.py#Employee"
+      ]
+    },
+    "handoffs": {
+      "label": "Internal handoffs",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/handoffs.py#HandoffStore.transition"
+      ]
+    },
+    "tasks": {
+      "label": "Governed task queue / states",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/task_store.py#TaskStore.authorize_and_start"
+      ]
+    },
+    "oos": {
+      "label": "Full OOS \u2014 future",
+      "status": "planned",
+      "sources": []
+    },
+    "scheduler": {
+      "label": "In-process scheduler",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/scheduler.py#IntervalScheduler"
+      ]
+    },
+    "workflow": {
+      "label": "Plan dependency orchestration",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/plan_execution.py#PlanExecution.materialize"
+      ]
+    },
+    "execution": {
+      "label": "Allowlisted execution",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/agent_runtime.py#AgentRuntime.run"
+      ]
+    },
+    "memory": {
+      "label": "Private persistent memory",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/organization_store.py#MemoryStore"
+      ]
+    },
+    "graph": {
+      "label": "Evidence-reviewed knowledge graph",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/knowledge_store.py#KnowledgeStore.review"
+      ]
+    },
+    "calendar": {
+      "label": "Internal calendar",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/calendar_store.py#CalendarStore.respond"
+      ]
+    },
+    "communications": {
+      "label": "External communications \u2014 future",
+      "status": "planned",
+      "sources": []
+    },
+    "qa": {
+      "label": "Independent QA",
+      "status": "bounded",
+      "sources": [
+        "apps/backend/ago/quality_store.py#QualityStore.review"
+      ]
+    },
+    "audit": {
+      "label": "Approval / review audit evidence",
+      "status": "bounded",
+      "sources": [
+        "apps/backend/ago/governance.py#ApprovalRepository",
+        "apps/backend/ago/quality_store.py#QualityStore"
+      ]
+    },
+    "twin": {
+      "label": "Deterministic Digital Twin scenarios",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/simulation.py#ScenarioSimulator.estimate"
+      ]
+    },
+    "dashboard": {
+      "label": "Eight-workspace Control Center",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/console_host.py#register_console"
+      ]
+    },
+    "analytics": {
+      "label": "Operational scorecards",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/scorecard.py#Scorecard"
+      ]
+    },
+    "api": {
+      "label": "FastAPI monolith / routes",
+      "status": "bounded",
+      "sources": [
+        "apps/backend/ago/main.py#create_app"
+      ]
+    },
+    "security": {
+      "label": "Signed sessions / RBAC perimeter",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/api_m2.py#authenticated",
+        "apps/backend/ago/release_security.py#install_release_perimeter"
+      ]
+    },
+    "postgres": {
+      "label": "Shared tenant-scoped PostgreSQL",
+      "status": "bounded",
+      "sources": [
+        "apps/backend/ago/api_m2.py#db_connection"
+      ]
+    },
+    "outbox": {
+      "label": "Durable outbox / leased worker",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/event_worker.py#EventWorker.run_once"
+      ]
+    },
+    "provider": {
+      "label": "Optional model provider",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/model_provider.py#ResponsesTextProvider"
+      ]
+    },
+    "infrastructure": {
+      "label": "Docker / migration / recovery tooling",
+      "status": "partial",
+      "sources": [
+        "apps/backend/ago/release_security.py#schema_integrity"
+      ]
+    }
+  },
+  "views": [
+    {
+      "id": "leadership",
+      "title": "Company Brain, Meta Brain and Executive Council",
+      "nodes": [
+        "brain",
+        "meta",
+        "council",
+        "approval",
+        "dna"
+      ],
+      "edges": [
+        {
+          "from": "brain",
+          "to": "approval",
+          "label": "submit / activate approved plans",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/plan_execution.py#PlanExecution.activate"
+          ]
+        },
+        {
+          "from": "meta",
+          "to": "approval",
+          "label": "submit advisory proposals for review",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/meta_brain.py#MetaBrain.generate"
+          ]
+        },
+        {
+          "from": "council",
+          "to": "approval",
+          "label": "quorum then second human approval",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/council_store.py#CouncilStore.finalize"
+          ]
+        },
+        {
+          "from": "meta",
+          "to": "dna",
+          "label": "evaluate threshold evidence",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/meta_brain.py#MetaBrain.generate"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "organization",
+      "title": "Departments, managers and employees",
+      "nodes": [
+        "departments",
+        "managers",
+        "employees",
+        "tasks",
+        "handoffs"
+      ],
+      "edges": [
+        {
+          "from": "departments",
+          "to": "managers",
+          "label": "same-department manager constraint",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/organization_store.py#OrganizationStore.hire"
+          ]
+        },
+        {
+          "from": "managers",
+          "to": "employees",
+          "label": "optional manager_id relationship",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/organization_store.py#OrganizationStore.hire"
+          ]
+        },
+        {
+          "from": "employees",
+          "to": "tasks",
+          "label": "tenant-scoped assignee relationship",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/task_store.py#TaskStore.propose"
+          ]
+        },
+        {
+          "from": "tasks",
+          "to": "handoffs",
+          "label": "reviewed cross-department handoff",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/handoffs.py#HandoffStore.request"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "orchestration",
+      "title": "OOS, workflow engine and task queue",
+      "nodes": [
+        "oos",
+        "scheduler",
+        "workflow",
+        "tasks",
+        "approval",
+        "execution"
+      ],
+      "edges": [
+        {
+          "from": "oos",
+          "to": "scheduler",
+          "label": "future resource / lifecycle coordination",
+          "kind": "proposed",
+          "evidence": []
+        },
+        {
+          "from": "oos",
+          "to": "workflow",
+          "label": "future durable organizational control",
+          "kind": "proposed",
+          "evidence": []
+        },
+        {
+          "from": "workflow",
+          "to": "approval",
+          "label": "check strategic approval",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/plan_execution.py#PlanExecution.activate"
+          ]
+        },
+        {
+          "from": "workflow",
+          "to": "tasks",
+          "label": "materialize dependency-linked tasks",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/plan_execution.py#PlanExecution.materialize"
+          ]
+        },
+        {
+          "from": "execution",
+          "to": "tasks",
+          "label": "start only approved eligible tasks",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/agent_runtime.py#AgentRuntime.run"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "knowledge",
+      "title": "Memory, knowledge graph and communication",
+      "nodes": [
+        "memory",
+        "graph",
+        "handoffs",
+        "calendar",
+        "audit",
+        "communications"
+      ],
+      "edges": [
+        {
+          "from": "graph",
+          "to": "audit",
+          "label": "review facts with independent evidence",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/knowledge_store.py#KnowledgeStore.review"
+          ]
+        },
+        {
+          "from": "handoffs",
+          "to": "audit",
+          "label": "record attributable transition history",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/handoffs.py#HandoffStore.history"
+          ]
+        },
+        {
+          "from": "calendar",
+          "to": "audit",
+          "label": "record event response history",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/calendar_store.py#CalendarStore.history"
+          ]
+        },
+        {
+          "from": "graph",
+          "to": "memory",
+          "label": "future comprehensive synchronization",
+          "kind": "proposed",
+          "evidence": []
+        },
+        {
+          "from": "communications",
+          "to": "handoffs",
+          "label": "future external delivery connectors",
+          "kind": "proposed",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "evidence",
+      "title": "Execution, QA, audit, simulation and dashboards",
+      "nodes": [
+        "execution",
+        "tasks",
+        "qa",
+        "audit",
+        "twin",
+        "dashboard",
+        "analytics"
+      ],
+      "edges": [
+        {
+          "from": "execution",
+          "to": "tasks",
+          "label": "capture run and finish task",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/agent_runtime.py#AgentRuntime._execute"
+          ]
+        },
+        {
+          "from": "qa",
+          "to": "tasks",
+          "label": "independent task verdict",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/quality_store.py#QualityStore.review"
+          ]
+        },
+        {
+          "from": "qa",
+          "to": "audit",
+          "label": "retain review evidence",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/quality_store.py#QualityStore.review"
+          ]
+        },
+        {
+          "from": "dashboard",
+          "to": "qa",
+          "label": "query pending QA queue",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/console_api.py#pending_qa"
+          ]
+        },
+        {
+          "from": "dashboard",
+          "to": "analytics",
+          "label": "query tenant operational scorecard",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/api_insights.py#scorecard"
+          ]
+        },
+        {
+          "from": "dashboard",
+          "to": "twin",
+          "label": "request hypothetical assessment",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/api_insights.py#simulate"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "deployment",
+      "title": "Infrastructure, stores and security boundaries",
+      "nodes": [
+        "dashboard",
+        "api",
+        "security",
+        "postgres",
+        "outbox",
+        "provider",
+        "infrastructure"
+      ],
+      "edges": [
+        {
+          "from": "dashboard",
+          "to": "api",
+          "label": "same-origin authenticated REST",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/main.py#create_app"
+          ]
+        },
+        {
+          "from": "api",
+          "to": "security",
+          "label": "signed-session tenant checks",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/api_m2.py#authenticated"
+          ]
+        },
+        {
+          "from": "security",
+          "to": "postgres",
+          "label": "revocation and active-account checks",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/api_m2.py#authenticated"
+          ]
+        },
+        {
+          "from": "outbox",
+          "to": "postgres",
+          "label": "owned lease claim / acknowledgement",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/event_worker.py#EventWorker.run_once"
+          ]
+        },
+        {
+          "from": "api",
+          "to": "provider",
+          "label": "opt-in bounded handler enrollment",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/model_handlers.py#optional_model_handlers"
+          ]
+        },
+        {
+          "from": "infrastructure",
+          "to": "postgres",
+          "label": "checksum migration readiness",
+          "kind": "current",
+          "evidence": [
+            "apps/backend/ago/release_security.py#schema_integrity"
+          ]
+        }
+      ]
+    }
+  ]
+}

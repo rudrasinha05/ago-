@@ -15,6 +15,12 @@ Intelligence or completion of the original entire enterprise architecture.
   Docker and PostgreSQL restore gates passed in CI run `38034834604`.
   Acceptance evidence: `docs/reports/SECTION01_FINAL_ACCEPTANCE.md`.
   This is not proof of parity with the missing full original blueprint.
+- **Section 2 — High-Level Component Diagram:** all seven supplied gates
+  have deliverables: six source-linked component views with explicit capability
+  status and relationship evidence, deterministic catalog/diagram generation,
+  Mermaid syntax checks and a real integrated Company Brain / approvals / agent
+  / independent QA / audit regression. Acceptance is pending the new commit's
+  CI; evidence: `docs/reports/SECTION02_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
   Versioned manifest maps 76 AGO root modules and 145 observed internal
@@ -28,7 +34,7 @@ Intelligence or completion of the original entire enterprise architecture.
   the repository administrator before independent human review is considered
   operationally enforced.
 - Every other unfinished section is **still separately pending**. Closure of
-  Sections 1 and 14 does not upgrade Sections 2–13 or 15–34, nor imply
+  Sections 1, 2 and 14 does not upgrade Sections 3–13 or 15–34, nor imply
   that the full original blueprint is available.
 
 ## Evidence and provenance caveat
