@@ -170,6 +170,13 @@ def test_invalid_evaluation_order_unendorsed_and_cross_tenant_sources(case):
     post(c, "/v1/meta/evaluations", h["founder"], data, expected=403)
     data["after_id"] = str(uuid4())
     post(c, "/v1/meta/evaluations", h["founder"], data, expected=404)
+    from ago.bootstrap import bootstrap
+    from ago.executive_intelligence import ExecutiveIntelligence
+    other, author = bootstrap(info["db"], organization="Foreign evidence",
+                              email="foreign-evidence@example.test", password="foreign-password-123")
+    foreign = ExecutiveIntelligence(info["db"]).capture(tenant_id=other, analyst_id=author)
+    data["after_id"] = foreign["id"]
+    post(c, "/v1/meta/evaluations", h["founder"], data, expected=404)
     assert c.get("/v1/meta/reflection?limit=1000", headers=h["founder"]).status_code == 422
     assert c.get("/v1/meta/reflection").status_code == 401
 
@@ -191,6 +198,13 @@ def test_architecture_change_review_has_immutable_evidence_and_no_auto_apply(cas
     assert rows[0]["specification"] == spec
     post(c, url, h["founder"], expected=403)
     post(c, "/v1/meta/architecture/changes", h["founder"],
+         {"change_key": "ARCH-120", "specification": spec}, expected=400)
+    rejected = post(c, "/v1/meta/architecture/changes", h["founder"],
+                    {"change_key": "ARCH-123", "specification": spec})
+    decide(c, h["reviewer"], rejected["approval_id"], approve=False)
+    assert post(c, f"/v1/meta/architecture/changes/{rejected['id']}/reconcile",
+                h["founder"])["status"] == "rejected"
+    post(c, "/v1/meta/architecture/changes", h["founder"],
          {"change_key": "ARCH-121", "specification": {**spec, "sections": [29]}}, expected=403)
     post(c, "/v1/meta/architecture/changes", h["reviewer"],
          {"change_key": "ARCH-122", "specification": spec}, expected=403)
@@ -211,3 +225,26 @@ def test_twenty_snapshot_reflection_has_bounded_warmed_latency(case):
         assert result.json()["sample_count"] == 20
         samples.append(time.monotonic() - started)
     assert max(samples) < 3, f"Twenty-source reflection p95 regression: {samples}"
+
+
+def test_reflection_observes_actual_independently_approved_company_brain_decision(case):
+    c, h, info = case
+    _, employee = team(c, h["founder"])
+    goal = post(c, "/v1/brain/goals", h["founder"], {"title": "Evidence-based research"})
+    plan = post(c, "/v1/brain/plans", h["founder"],
+                {"goal_id": goal["id"], "title": "Reviewed internal brief"})
+    post(c, f"/v1/brain/plans/{plan['id']}/steps", h["founder"],
+         {"action": "internal:brief", "assignee_id": employee["id"]})
+    pending = post(c, f"/v1/brain/plans/{plan['id']}/submit", h["founder"])
+    decide(c, h["reviewer"], pending["approval_id"])
+    post(c, f"/v1/brain/plans/{plan['id']}/activate", h["founder"])
+    post(c, "/v1/meta/snapshots", h["founder"])
+    post(c, "/v1/meta/snapshots", h["founder"])
+    reflection = c.get("/v1/meta/reflection", headers=h["reviewer"]).json()
+    decisions = reflection["decision_review"]["company_brain_decisions"]
+    assert len(decisions) == 1
+    assert decisions[0]["id"] == plan["id"]
+    assert decisions[0]["status"] == "active"
+    assert decisions[0]["approval_status"] == "approved"
+    assert decisions[0]["reviewer_id"] == info["reviewer_id"]
+    assert reflection["automatic_execution"] is False

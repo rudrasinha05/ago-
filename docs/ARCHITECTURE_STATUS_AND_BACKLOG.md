@@ -186,3 +186,10 @@ or silently approved architecture changes:
 For pilot operation follow `docs/reports/M12_LOCAL_QUICKSTART.md`.
 Prior acceptance: `docs/reports/M11_FINAL_ACCEPTANCE.md`; M10 security:
 `docs/reports/M10_FINAL_ACCEPTANCE.md`.
+
+
+## Sections12–20 local batch
+
+Owner scope: personal localhost; no production deployment. Fourteen ADRs, enforced engineering/coverage/API contracts, all original13 phases/all34 section ownership mappings, governed immutable architecture proposals and weekly read-only audit configuration are delivered. MetaBrain now verifies historical reflection and independently reviewed actual outcome comparisons; full18-field DNA inherits company→department→employee with nonweakening overrides, preserved human authority and immutable runtime lineage. Existing Twin/Governance UI covers the two-human workflow.
+
+Evidence: docs/reports/SECTIONS12_20_ACCEPTANCE.md and final-head Actions/master checklist. Sections12/13/14/16/19/20 can close on green configured final-head CI. Sections15/17/18 documentation is delivered but exact generated original-source fidelity remains blocked; do not mark those original criteria complete. Section14 external GitHub branch protection is unverified and separate from the owner's local-use scope. Keep Sections21–34 unchanged, including full Section29 constitutional amendments and research claims.

@@ -230,10 +230,11 @@ class MetaBrain:
                                  "proposal": "Review the frozen module contract before approving changes."})
         recommendations = self.list(tenant_id=tenant_id)
         return {
-            "decision_review": {"proposed": sum(r["status"] == "proposed" for r in recommendations),
+            "decision_review": {"company_brain_decisions": organization.get("strategic_decisions", []) if organization else [],
+                                "proposed": sum(r["status"] == "proposed" for r in recommendations),
                                 "endorsed": sum(r["status"] == "endorsed" for r in recommendations),
                                 "rejected": sum(r["status"] == "rejected" for r in recommendations),
-                                "scope": "latest 100 tenant recommendations"},
+                                "scope": "first 100 tenant recommendations in stable historical order; latest 100 strategic decisions"},
             "reflection_findings": findings,
             "optimization_policy": "Propose bounded experiments; compare reviewed outcomes before adoption.",
             "status": "observed" if len(sources) >= 2 else "insufficient_history",

@@ -102,7 +102,7 @@ class ExecutiveIntelligence:
         # One SQL statement provides a statement-level consistent operational view.
         row = (
             self.repositories.resolve(ExecutiveIntelligenceQueries)
-            .select_ago_governed_tasks_01((tenant_id,) * 16)
+            .select_ago_governed_tasks_01((tenant_id,) * 17)
             .fetchone()
         )
         if row is None:
@@ -124,7 +124,7 @@ class ExecutiveIntelligence:
             "budget_ceiling": str(row["budget_ceiling"] or "0"),
             "budget_consumed": str(row["budget_consumed"] or "0"),
             "organization_observation": {k: row[k] for k in
-                ("goals", "plans", "departments", "ai_employees", "human_employees", "failed_tasks")},
+                ("goals", "plans", "strategic_decisions", "departments", "ai_employees", "human_employees", "failed_tasks")},
         }
 
     def capture(self, *, tenant_id: str, analyst_id: str) -> dict:

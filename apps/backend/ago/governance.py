@@ -138,6 +138,16 @@ class ApprovalRepository:
         specification = validate_architecture_change(change_key, specification)
         identifier = str(uuid4())
         with self.connection.transaction():
+            tenant = self.connection.execute(
+                "SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE", (str(UUID(tenant_id)),),
+            ).fetchone()
+            if tenant is None:
+                raise LookupError("Tenant not found")
+            if self.connection.execute(
+                "SELECT id FROM ago_architecture_changes WHERE tenant_id=%s AND change_key=%s",
+                (tenant_id, change_key),
+            ).fetchone() is not None:
+                raise ValueError("Architecture change key already exists; use a new versioned record")
             approval = self.propose(tenant_id=tenant_id, requester_id=requester_id,
                                     action=f"architecture:review:{identifier}")
             import json

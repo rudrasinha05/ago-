@@ -319,6 +319,7 @@
       "ago_approval_requests",
       "ago_architecture_changes",
       "ago_employees",
+      "ago_tenants",
       "ago_users"
     ],
     "governance_domain": [],
