@@ -1036,3 +1036,35 @@ def enterprise_capacity_write(
         scope_kind=data.scope_kind,
         scope_id=str(data.scope_id) if data.scope_id else None,
         max_running=data.max_running, rationale=data.rationale))
+
+
+# Section 25: local, checksum-verifiable asset bytes, never arbitrary execution.
+class EnterpriseAssetPayload(StrictInput):
+    content_type: Literal["text/plain", "text/markdown",
+                          "application/json", "application/octet-stream"]
+    content_base64: str = Field(min_length=1, max_length=1400000)
+
+
+@router.post("/enterprise/marketplace/{asset_id}/payload")
+def upload_enterprise_asset_payload(
+    asset_id: UUID, data: EnterpriseAssetPayload,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).asset_payload_upload(
+        actor=actor, asset_id=str(asset_id), content_base64=data.content_base64,
+        content_type=data.content_type))
+
+
+@router.get("/enterprise/marketplace/{asset_id}/payload")
+def read_enterprise_asset_payload(
+    asset_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).asset_payload_read(
+        actor=actor, asset_id=str(asset_id)))
