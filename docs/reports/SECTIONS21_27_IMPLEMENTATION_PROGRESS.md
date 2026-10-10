@@ -62,3 +62,26 @@ The initial report above is preserved as a historical state, **not the latest mi
 **Windows safety:** migrations 023–028 are additive in the repo but **have not been applied on the owner's Windows PostgreSQL**. Existing local data must be backed up, code fast-forward pulled once, stopped writers confirmed, isolated-restore evidence reviewed and explicit migration executed only with founder consent.
 
 **Do not label Sections 21–27 fully complete.** Source/test progress is substantial; full original scoped acceptance and real-world evidence gates remain open.
+
+
+## 2026-10-11 follow-up: exact review, capacity, reusable content and planning evidence
+
+**Verified source revision:** `a27a9526c104b3216a45f454804c1c6f16129805`. Backend quality workflow
+`https://github.com/rudrasinha05/ago-/actions/runs/38093351424` **SUCCESS**:
+**524 passed PostgreSQL/Python tests, 1 warning, Ruff lint and architecture audit green**.
+Eight-job full release matrix `38093351396` is queued at this evidence timestamp;
+do **not** convert this to final batch acceptance until all final-head jobs pass.
+
+- **21 (OOS):** SQL 029 stores immutable *full-payload* HR approval intents (department/name/manager/role/reason); no approved request can be used for different facts. SQL 030 adds transaction-serialized company/department/employee running-task limits, repaired in additive SQL 032 after a real SQL variable-collision regression; source tested. Read-only autonomy assessments use independently reviewed task/QA records, blocking-help status and load to provide conservative advisory tiers **without granting authority**.
+- **22 (Agent evidence):** SQL 033 + strengthened SQL 035 store bounded, exact hash-verified preapproval records for skill/knowledge/confidence/risk/learning/permission awareness, requiring a separate active human reviewer. APIs expose confidence as *uncalibrated, human-reviewed reported evidence*, never subjective consciousness or permission escalation; missing evidence stays unknown. Path owner/tenant binding hardened.
+- **23 (Planning):** SQL 034 + strengthened SQL 035 establish independent full-payload plan-revision review, immutable version history, stale version rejection, parent budget/calendar bounds and protection of existing descendants/linked task evidence. Effective revision shown in enterprise plan listing and consulted during subsequent child plan creation and task linking; original approved plan and task rows stay immutable. Revisions never automatically execute/approve tasks.
+- **25 (Marketplace):** SQL 031 stores actual bounded 1 MiB tenant-scoped immutable asset bytes with SHA-256/catalog digest consistency, draft-only publisher upload, consent-controlled reads and required payload checks before publish/consume. Version dependency and revocation guards from prior batch remain.
+- **26/27:** Preserved exact-action human-reviewed evolution outcomes and descriptive historical twin comparisons; no fabricated calibration or silent deployment.
+
+**New negative-path files:** `test_enterprise_hr_21.py`, `test_enterprise_capacity_21.py`, `test_agent_evidence_22.py`, `test_enterprise_plan_revisions_23.py`, `test_enterprise_autonomy_21.py`, `test_marketplace_payload_25.py`. Other prior Section 21–27 tests were rerun in the verified 524-test full backend suite; old M1–M12 tests were not silently disabled.
+
+**Still open under the original frozen acceptance scope:** crash-recoverable fair priority scheduling/worker leasing, end-to-end company lifecycle and role-specific approval UI, source-verified skill and knowledge assessment with safe learning, complete strategy→calendar→task propagation and live QA replan feedback, externally verified invoices/revenue/opportunity cost/ROI and controlled real spend, broader marketplace reuse/version sunset UI, safe approved policy deployment and rollback with outcome monitoring, full organizational Digital Twin projects/calendars and held-out empirical calibration with genuine later outcomes.
+
+**External verification dependencies:** real financial provider statements, observed revenue and a genuine later operational observation series cannot be invented or marked passed; founder explicitly chose personal/local operation, so production cloud/Vault/external audit remains out of current scope.
+
+**Operator safety:** Source migrations 029–035 are additive only. No user's Windows/PostgreSQL data was changed from this chat. Founder must explicitly back up, pull and apply migrations in order on their own machine with stopped writers and a tested restore path. CI PASS is not the same as Windows/local acceptance or 100% completion of Sections 21–27.
