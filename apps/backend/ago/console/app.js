@@ -89,6 +89,7 @@ function endpoints(page) {
       ["approvals","/v1/governance/approvals"],
       ["tasks","/v1/tasks"],
       ["motions","/v1/council/motions"],
+      ["reviews","/v1/console/task-reviews"],
     ],
     organization: [
       ["departments","/v1/organization/departments"],
