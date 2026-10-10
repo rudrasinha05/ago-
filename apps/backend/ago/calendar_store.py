@@ -73,6 +73,7 @@ class CalendarStore:
                  detail, starts_at, ends_at, visibility, operation_key,
                  goal_id, task_id),
             )
+            self._audit(actor, event_id, 'scheduled', title.strip())
             for employee_id in attendee_ids:
                 self.db.execute(
                     """INSERT INTO ago_calendar_attendees(tenant_id,event_id,employee_id)
@@ -119,6 +120,7 @@ class CalendarStore:
                    WHERE tenant_id=%s AND id=%s""",
                 (actor.tenant_id, event_id),
             )
+            self._audit(actor, event_id, "cancelled", "Creator cancelled event")
 
     def respond(self, *, actor: Principal, event_id: str, response: str) -> None:
         UUID(event_id)
@@ -140,6 +142,7 @@ class CalendarStore:
             ).fetchone()
             if changed is None:
                 raise PermissionError("Only invited employee may respond")
+            self._audit(actor, event_id, response, "Attendee response")
 
     def attendees(self, *, actor: Principal, event_id: str) -> list[dict]:
         UUID(event_id)
@@ -158,5 +161,22 @@ class CalendarStore:
         return [dict(row) for row in self.db.execute(
             """SELECT employee_id,response FROM ago_calendar_attendees
                WHERE tenant_id=%s AND event_id=%s ORDER BY employee_id""",
+            (actor.tenant_id, event_id),
+        ).fetchall()]
+
+    def _audit(self, actor: Principal, event_id: str, event: str, note: str) -> None:
+        self.db.execute(
+            """INSERT INTO ago_calendar_audit
+               (id,tenant_id,event_id,actor_id,event,note)
+               VALUES (%s,%s,%s,%s,%s,%s)""",
+            (str(uuid4()), actor.tenant_id, event_id, actor.subject, event, note),
+        )
+
+    def history(self, *, actor: Principal, event_id: str) -> list[dict]:
+        self.attendees(actor=actor, event_id=event_id)
+        return [dict(row) for row in self.db.execute(
+            """SELECT actor_id,event,note,occurred_at FROM ago_calendar_audit
+               WHERE tenant_id=%s AND event_id=%s
+               ORDER BY occurred_at,id LIMIT 500""",
             (actor.tenant_id, event_id),
         ).fetchall()]
