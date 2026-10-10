@@ -164,8 +164,8 @@ export function renderStrategy(data, state) {
 export function renderGovernance(data, state) {
   const approvals = list(data,"approvals"), tasks = list(data,"tasks");
   const motions = list(data,"motions"), reviews = list(data,"reviews");
+  const qaqueue = list(data,"qaqueue");
   const approvedIds = new Set(approvals.filter(x=>x.status==="approved").map(x=>x.id));
-  const reviewedIds = new Set(reviews.map(x=>x.task_id));
   const aRows = approvals.map(x => '<tr><td class="primary">' + maybe(x.action) +
     '<div class="text-mono">' + safe(shortId(x.id)) + '</div></td><td>' +
     badge(x.status) + '</td><td>' + safe(dateText(x.created_at)) +
@@ -186,9 +186,6 @@ export function renderGovernance(data, state) {
         capability(state,"agent:dispatch"))
         return action("Run approved AI","agent-run",x.id,"primary");
     }
-    if (x.status==="completed" && !reviewedIds.has(x.id) &&
-        resource(data,"reviews") !== null && capability(state,"qa:review"))
-      return action("Review outcome","qa-review",x.id,"primary");
     return '<span class="muted">—</span>';
   };
   const tRows = tasks.map(x => '<tr><td class="primary">' + maybe(x.action) +
@@ -196,6 +193,12 @@ export function renderGovernance(data, state) {
     safe(shortId(x.assignee_id)) + '</span></td><td>' +
     (x.approval_id ? '<span class="text-mono">' + safe(shortId(x.approval_id)) +
     '</span>' : "—") + '</td><td>' + nextAction(x) + '</td></tr>');
+  const pendingQaRows = qaqueue.map(x => '<tr><td class="primary">' +
+    maybe(x.action) + '</td><td>' + badge(x.status) +
+    '</td><td><span class="text-mono">' + safe(shortId(x.id)) +
+    '</span></td><td>' + (capability(state,"qa:review")
+      ? action("Review outcome","qa-review",x.id,"primary")
+      : '<span class="muted">Read only</span>') + '</td></tr>');
   const qaRows = reviews.map(x=>'<tr><td class="primary"><span class="text-mono">' +
     safe(shortId(x.task_id)) + '</span></td><td>' + badge(x.verdict) +
     '</td><td><span class="text-mono">' + safe(shortId(x.reviewer_id)) +
@@ -220,7 +223,11 @@ export function renderGovernance(data, state) {
     panel("Task register",unavailable(data,"tasks",table(
       ["Action","State","Assignee","Approval","Next step"],tRows,
       empty("No governed tasks"),
-    ))) + section("Independent quality assurance",num(reviews.length)+" reviews") +
+    ))) + section("Independent quality assurance",num(qaqueue.length)+" awaiting review") +
+    panel("Pending QA",unavailable(data,"qaqueue",table(
+      ["Completed task","State","Task ID","Action"],pendingQaRows,
+      empty("No completed tasks awaiting independent QA"),
+    ))) +
     panel("QA outcomes",unavailable(data,"reviews",table(
       ["Task","Verdict","Reviewer","Recorded"],qaRows,empty("No QA verdicts yet"),
     ))) + section("Executive council","Human quorum") +
