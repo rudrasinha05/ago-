@@ -168,3 +168,88 @@ def test_console_self_profile_cannot_be_switched_by_query_parameter(live_console
     assert result.status_code == 200
     assert result.json()["tenant_id"] == tenant
     assert result.json()["id"] == founder
+
+
+def test_console_completes_separately_approved_task_and_human_qa(live_console):
+    client, db, tenant, founder, reviewer = live_console
+    def login(email, password):
+        response = client.post("/v1/sessions", json={
+            "tenant_id": tenant, "email": email, "password": password,
+        })
+        assert response.status_code == 200, response.text
+        return {"Authorization": "Bearer " + response.json()["access_token"]}
+
+    owner = login("m9founder@example.test", "founder-password-123")
+    human = login("m9reviewer@example.test", "reviewer-password-123")
+    department = client.get("/v1/organization/departments", headers=owner).json()[0]["id"]
+    ai = client.post("/v1/organization/employees", headers=owner, json={
+        "department_id":department,"name":"M9 governed operator","kind":"ai",
+    })
+    assert ai.status_code == 200, ai.text
+    task = client.post("/v1/tasks", headers=owner, json={
+        "action":"internal:brief","assignee_id":ai.json()["id"],
+    })
+    assert task.status_code == 200, task.text
+    task_id = task.json()["id"]
+    request_url = f"/v1/console/tasks/{task_id}/request-approval"
+    assert client.post(request_url, headers=human).status_code == 403
+    proposed = client.post(request_url, headers=owner)
+    assert proposed.status_code == 200, proposed.text
+    approval = proposed.json()["approval_id"]
+    assert proposed.json()["status"] == "waiting_approval"
+    assert client.post(request_url, headers=owner).status_code == 403
+    count = db.execute(
+        "SELECT count(*) AS total FROM ago_approval_requests WHERE tenant_id=%s AND action=%s",
+        (tenant, "internal:brief"),
+    ).fetchone()["total"]
+    assert count == 1
+    assert client.post(f"/v1/agents/tasks/{task_id}/run",headers=owner).status_code == 403
+    decision_url = f"/v1/governance/approvals/{approval}/decision"
+    assert client.post(decision_url, headers=owner, json={
+        "approve":True,"reason":"Forbidden self approval",
+    }).status_code == 403
+    approved = client.post(decision_url,headers=human,json={
+        "approve":True,"reason":"Independent review of task scope",
+    })
+    assert approved.status_code == 200, approved.text
+    executed = client.post(f"/v1/agents/tasks/{task_id}/run",headers=owner)
+    assert executed.status_code == 200, executed.text
+    assert executed.json()["status"] == "completed"
+    empty = client.get("/v1/console/task-reviews",headers=human)
+    assert empty.status_code == 200
+    assert empty.json() == []
+    reviewed = client.post(f"/v1/tasks/{task_id}/review",headers=human,json={
+        "verdict":"pass","evidence":"Independent human inspected generated brief",
+    })
+    assert reviewed.status_code == 200, reviewed.text
+    recorded = client.get("/v1/console/task-reviews",headers=human)
+    assert recorded.status_code == 200
+    assert recorded.json()[0]["task_id"] == task_id
+    assert recorded.json()[0]["verdict"] == "pass"
+    assert client.get("/v1/console/task-reviews").status_code == 401
+
+
+def test_console_approval_request_rejects_foreign_tenant_without_orphans(live_console):
+    client, db, tenant, founder, reviewer = live_console
+    from ago.bootstrap import bootstrap as new_tenant
+    foreign, foreign_user = new_tenant(
+        db, organization="M9 Other " + str(uuid4()),
+        email="m9other@example.test",password="other-password-123",
+    )
+    session = client.post("/v1/sessions",json={
+        "tenant_id":foreign,"email":"m9other@example.test",
+        "password":"other-password-123",
+    })
+    assert session.status_code == 200
+    headers = {"Authorization":"Bearer "+session.json()["access_token"]}
+    missing = str(uuid4())
+    response = client.post(
+        f"/v1/console/tasks/{missing}/request-approval",headers=headers,
+    )
+    assert response.status_code == 404
+    approval_count = db.execute(
+        "SELECT count(*) AS total FROM ago_approval_requests WHERE tenant_id=%s",
+        (foreign,),
+    ).fetchone()["total"]
+    assert approval_count == 0
+    assert client.get("/v1/console/task-reviews",headers=headers).json() == []
