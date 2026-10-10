@@ -157,3 +157,16 @@ def test_independent_knowledge_review_and_graph(case):
          {"approve": True, "note": "Source inspected"})
     post(client, f"/v1/knowledge/nodes/{second['id']}/review", headers["reviewer2"],
          {"approve": True, "note": "Artifact inspected"})
+    verified = client.get(new_node, headers=headers["reviewer1"])
+    assert verified.status_code == 200
+    assert len(verified.json()) == 2
+    edge = post(client, "/v1/knowledge/edges", headers["founder"], {
+        "from_id": first["id"], "to_id": second["id"], "relation": "supports",
+    })
+    assert edge["id"]
+    edges = client.get(
+        f"/v1/knowledge/nodes/{first['id']}/edges", headers=headers["founder"],
+    )
+    assert edges.status_code == 200 and len(edges.json()) == 1
+    post(client, first_review, headers["reviewer2"],
+         {"approve": False, "note": "Replay"}, expected=403)
