@@ -4,9 +4,14 @@ Only current actor's information; no privilege mutation or cross-tenant lookup.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
-from ago.api_m2 import authenticated, db_connection
+from fastapi import APIRouter, Depends, Security
+from fastapi.security import HTTPAuthorizationCredentials
+
+from ago.api_m2 import authenticated, bearer, db_connection
+from ago.security_controls import SecurityControls
 from ago.security import Principal
 
 router = APIRouter(prefix="/v1/console", tags=["M9 Control Center"])
@@ -41,3 +46,20 @@ def me(db=Depends(db_connection), actor: Principal = Depends(authenticated)):
         "roles": [record["role"] for record in roles],
         "permissions": [record["permission"] for record in permissions],
     }
+
+
+@router.post("/logout")
+def logout(
+    db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Security(bearer)
+    ] = None,
+):
+    """Revoke the exact current bearer, then let the browser discard its copy."""
+    if credentials is not None:
+        SecurityControls(db).revoke_session(
+            credentials.credentials, actor.tenant_id,
+            datetime.now(timezone.utc) + timedelta(days=1),
+        )
+    return {"status": "revoked"}
