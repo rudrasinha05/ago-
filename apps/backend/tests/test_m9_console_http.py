@@ -215,6 +215,11 @@ def test_console_completes_separately_approved_task_and_human_qa(live_console):
     executed = client.post(f"/v1/agents/tasks/{task_id}/run",headers=owner)
     assert executed.status_code == 200, executed.text
     assert executed.json()["status"] == "completed"
+    assert client.get("/v1/tasks", headers=human).status_code == 403
+    pending_qa = client.get("/v1/console/qa-queue", headers=human)
+    assert pending_qa.status_code == 200
+    assert [row["id"] for row in pending_qa.json()] == [task_id]
+    assert pending_qa.json()[0]["action"] == "internal:brief"
     empty = client.get("/v1/console/task-reviews",headers=human)
     assert empty.status_code == 200
     assert empty.json() == []
@@ -226,7 +231,9 @@ def test_console_completes_separately_approved_task_and_human_qa(live_console):
     assert recorded.status_code == 200
     assert recorded.json()[0]["task_id"] == task_id
     assert recorded.json()[0]["verdict"] == "pass"
+    assert client.get("/v1/console/qa-queue", headers=human).json() == []
     assert client.get("/v1/console/task-reviews").status_code == 401
+    assert client.get("/v1/console/qa-queue").status_code == 401
 
 
 def test_console_approval_request_rejects_foreign_tenant_without_orphans(live_console):
@@ -253,6 +260,7 @@ def test_console_approval_request_rejects_foreign_tenant_without_orphans(live_co
     ).fetchone()["total"]
     assert approval_count == 0
     assert client.get("/v1/console/task-reviews",headers=headers).json() == []
+    assert client.get("/v1/console/qa-queue",headers=headers).json() == []
 
 
 def test_calendar_invitee_flag_matches_actual_server_visibility(live_console):
