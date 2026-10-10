@@ -13,7 +13,10 @@ from ago.postgres_event_store import PostgresEventStore
 
 
 def migration_directory() -> Path:
-    return Path(__file__).resolve().parents[3] / "deploy" / "sql"
+    configured = os.getenv("AGO_MIGRATIONS_DIR")
+    return Path(configured).resolve() if configured else (
+        Path(__file__).resolve().parents[3] / "deploy" / "sql"
+    )
 
 
 def migrate(dsn: str, directory: Path | None = None) -> list[str]:
