@@ -484,6 +484,14 @@
           "arguments": "self, *, tenant_id: str",
           "returns": "list[dict]"
         },
+        "capacity_limits": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
+        "set_capacity": {
+          "arguments": "self, *, actor: Principal, approval_id: str, scope_kind: str, scope_id: str | None, max_running: int, rationale: str",
+          "returns": "dict"
+        },
         "organization_change": {
           "arguments": "self, *, actor: Principal, change_kind: str, target_id: str, approval_id: str, reason: str, department_id: str | None=None, name: str | None=None, manager_id: str | None=None, role_level: int | None=None",
           "returns": "dict"
