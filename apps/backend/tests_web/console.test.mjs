@@ -176,6 +176,8 @@ test("governance reveals only authorized independently approved task actions", (
         action:"internal:brief",status:"completed",assignee_id:TENANT},
     ]),
     motions:loaded([]),reviews:loaded([]),
+    qaqueue:loaded([{id:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      action:"internal:brief",status:"completed",assignee_id:TENANT}]),
   };
   const state=mockState([
     "approval:decide","task:create","approval:request",
