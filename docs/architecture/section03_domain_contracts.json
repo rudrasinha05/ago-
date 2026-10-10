@@ -296,10 +296,12 @@
       "ago_governed_tasks",
       "ago_horizon_plans",
       "ago_marketplace_assets",
+      "ago_marketplace_lifecycle_events",
       "ago_observed_costs",
       "ago_oos_mode_events",
       "ago_tenants",
-      "ago_twin_scenarios"
+      "ago_twin_scenarios",
+      "ago_worker_state_events"
     ],
     "event_contracts": [],
     "event_migrations": [
