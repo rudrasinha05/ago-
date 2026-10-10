@@ -18,6 +18,7 @@ from ago.api_knowledge import router as knowledge_router
 from ago.api_council import router as council_router
 from ago.platform import Settings, build_container, configure_logging, request_id
 from ago.console_host import console_headers, register_console
+from ago.console_api import router as console_router
 from ago.readiness import ReadinessChecks
 
 
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(council_router)
     app.include_router(meta_router)
     app.include_router(tools_router)
+    app.include_router(console_router)
     register_console(app)
 
     try:
