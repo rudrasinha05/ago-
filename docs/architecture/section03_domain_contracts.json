@@ -295,6 +295,7 @@
       "ago_employee_help_requests",
       "ago_employees",
       "ago_evolution_observations",
+      "ago_evolution_review_events",
       "ago_executive_snapshots",
       "ago_governed_tasks",
       "ago_horizon_plans",
@@ -306,6 +307,7 @@
       "ago_personnel_events",
       "ago_task_reviews",
       "ago_tenants",
+      "ago_twin_observed_comparisons",
       "ago_twin_scenarios",
       "ago_worker_state_events"
     ],
