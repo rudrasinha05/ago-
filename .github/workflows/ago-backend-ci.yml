@@ -1,4 +1,4 @@
-name: AGO Release Candidate M1-M10 CI
+name: AGO Pilot Acceptance M1-M11 CI
 on:
   push:
     branches: [develop]
@@ -11,7 +11,7 @@ permissions:
   statuses: write
 
 jobs:
-  foundation-through-m10:
+  foundation-through-m11:
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +62,7 @@ jobs:
         run: python -m ago.event_runtime migrate
       - name: Lint
         id: lint
-        run: python -m ruff check ago tests
+        run: python -m ruff check ago tests tests_browser
       - name: Validate first-party console JS and UI unit tests
         id: javascript
         run: |
@@ -87,7 +87,7 @@ jobs:
         run: |
           if [ "$RUN_STATUS" = "success" ]; then STATE=success; else STATE=failure; fi
           gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
-            -f state="$STATE" -f context="ago/m1-m10/py${{ matrix.python }}/i=$INSTALL_RESULT/w=$WHEEL_RESULT/d=$MIGRATION_RESULT/l=$LINT_RESULT/j=$JS_RESULT/t=$TEST_RESULT" \
+            -f state="$STATE" -f context="ago/m1-m11/py${{ matrix.python }}/i=$INSTALL_RESULT/w=$WHEEL_RESULT/d=$MIGRATION_RESULT/l=$LINT_RESULT/j=$JS_RESULT/t=$TEST_RESULT" \
             -f description="CI $RUN_STATUS wheel:$WHEEL_RESULT db:$MIGRATION_RESULT js:$JS_RESULT tests:$TEST_RESULT" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/$CI_RUN_ID"
 
@@ -205,4 +205,72 @@ jobs:
           gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
             -f state="$STATE" -f context="ago/m10/restore-drill=$RUN_STATUS" \
             -f description="Actual PostgreSQL dump, checksum and isolated restore $RUN_STATUS" \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  pilot-browser-chromium:
+    name: M11 Real Chromium Pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      statuses: write
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ago_test
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: ago_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ago_test -d ago_test"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      AGO_ENVIRONMENT: development
+      AGO_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_TEST_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_SESSION_SECRET: ci_only_signing_key_change_outside_ci_123456789
+      AGO_ENABLE_PAID_MODELS: "false"
+      AGO_M8_EXTERNAL_ENABLED: "false"
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install AGO and pinned Chromium test runner
+        run: |
+          python -m pip install -e ".[dev,postgres]"
+          python -m pip install "playwright==1.55.0"
+          python -m playwright install --with-deps chromium
+      - name: Apply verified SQL migrations
+        run: python -m ago.event_runtime migrate
+      - name: Execute complete independent Chromium journeys
+        id: browser
+        run: |
+          python -m pytest -q tests_browser
+      - name: Retain pilot screenshots (disposable test accounts only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ago-m11-pilot-chromium
+          path: apps/backend/tests_browser/artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Report browser acceptance
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          RUN_STATUS: ${{ job.status }}
+        run: |
+          if [ "$RUN_STATUS" = "success" ]; then STATE=success; else STATE=failure; fi
+          gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
+            -f state="$STATE" -f context="ago/m11/real-chromium=$RUN_STATUS" \
+            -f description="AGO M11 Chromium eight-page pilot, reviewer RBAC, mobile and simulation $RUN_STATUS" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
