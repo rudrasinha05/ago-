@@ -727,6 +727,19 @@ class EnterpriseOperationsStorePort(Protocol):
     def allocate_preview(self, *, tenant_id: str, employee_id: str,
                          available_units: int) -> dict: ...
 
+    def normalize_plan_revision(self, *, plan_id: str, base_revision: int,
+                                title: str, starts_at: datetime, ends_at: datetime,
+                                budget_ceiling: str, evidence_ref: str,
+                                rationale: str) -> dict: ...
+
+    def propose_plan_revision(self, *, actor: Principal, approval_id: str,
+                              payload: dict, intent_digest: str) -> dict: ...
+
+    def apply_plan_revision(self, *, actor: Principal, intent_id: str,
+                            approval_id: str) -> dict: ...
+
+    def plan_revisions(self, *, tenant_id: str, plan_id: str) -> list[dict]: ...
+
     def plan(self, *, actor: Principal, identifier: str, horizon: str,
              parent_id: str | None, title: str, starts_at: datetime,
              ends_at: datetime, budget_ceiling: str, approval_id: str,
