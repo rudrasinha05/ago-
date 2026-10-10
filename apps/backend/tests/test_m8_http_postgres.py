@@ -135,7 +135,7 @@ def test_verified_department_trigger_requires_separate_task_review(case):
     result = post(client, run_url, founder)
     assert result["status"] == "completed"
     assert result["requires_independent_qa"] is True
-    assert result["result"]["data"] if False else result["result"]["verified"] >= 1
+    assert result["result"]["verified"] >= 1
     post(client, run_url, founder, expected=403)
     logs = client.get(f"/v1/tools/runs/{result['id']}/evidence",
                       headers=founder)
@@ -148,3 +148,59 @@ def test_verified_department_trigger_requires_separate_task_review(case):
     assert score.status_code == 200
     assert score.json()["counts"]["tool_runs"] == 1
     assert score.json()["counts"]["automation_firings"] == 1
+
+
+def test_pending_rejected_and_disabled_tool_enrollments_fail_closed(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    dept, ai = create_ai(client, founder)
+    task = post(client, "/v1/tasks", founder, {
+        "assignee_id": ai, "action": "tool:scorecard",
+    })
+    approval = post(client, "/v1/governance/approvals", founder, {
+        "action": "tool:scorecard",
+    })
+    post(client, f"/v1/tasks/{task['id']}/approval", founder, {
+        "approval_id": approval["request_id"],
+    })
+    decision(client, reviewer, approval["request_id"])
+    run_url = f"/v1/tools/tasks/{task['id']}/run"
+    post(client, run_url, founder, expected=403)
+    proposed = post(client, "/v1/tools/enrollments", founder, {
+        "code": "tool:scorecard", "rationale": "Read-only business report",
+    })
+    post(client, run_url, founder, expected=403)
+    decision(client, reviewer, proposed["approval_id"], approve=False)
+    assert post(client, f"/v1/tools/enrollments/{proposed['id']}/reconcile",
+                founder)["status"] == "rejected"
+    post(client, run_url, founder, expected=403)
+    enabled = enroll(client, founder, reviewer, "tool:scorecard")
+    result = post(client, run_url, founder)
+    assert result["result"]["kind"] == "tenant_scorecard"
+    assert result["result"]["data"]["counts"]["tool_runs"] == 1
+    disabled = post(client, f"/v1/tools/enrollments/{enabled['id']}/disable",
+                    founder, {"reason": "Operator disabled after review"})
+    assert disabled["status"] == "disabled"
+    post(client, f"/v1/tools/enrollments/{enabled['id']}/disable", founder,
+         {"reason": "Duplicate disable"}, expected=403)
+    assert client.post("/v1/tools/enrollments", headers=reviewer,
+                       json={"code": "tool:scorecard",
+                             "rationale": "Unauthorized"}).status_code == 403
+    assert client.get("/v1/tools/runs", headers=reviewer).status_code == 200
+
+
+def test_cross_tenant_cannot_read_or_claim_foreign_tool_activity(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    enrollment = enroll(client, founder, reviewer, "tool:knowledge_digest")
+    from ago.bootstrap import bootstrap as new_tenant
+    another, _ = new_tenant(
+        info["db"], organization=f"Separate-M8-{uuid4()}",
+        email="outside@m8.test", password="outside-password-123",
+    )
+    outsider = info["login"]("outside@m8.test", "outside-password-123", another)
+    assert client.get("/v1/tools/enrollments", headers=outsider).json() == []
+    assert client.get("/v1/tools/runs", headers=outsider).json() == []
+    assert client.get("/v1/tools/automation/rules", headers=outsider).json() == []
+    post(client, f"/v1/tools/enrollments/{enrollment['id']}/disable",
+         outsider, {"reason": "Unauthorized"}, expected=404)
