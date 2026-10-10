@@ -1,4 +1,4 @@
-name: AGO Architecture Section 14 & M1-M12 CI
+name: AGO Architecture Sections 1 & 14 and M1-M12 CI
 on:
   push:
     branches: [develop]
@@ -68,6 +68,8 @@ jobs:
           path: apps/backend/section14-dependency-graph.dot
           retention-days: 30
           if-no-files-found: ignore
+      - name: Enforce Section 1 system architecture traceability
+        run: python ../../scripts/check_system_architecture.py
       - name: Apply PostgreSQL migrations
         id: migration
         run: python -m ago.event_runtime migrate
@@ -78,7 +80,7 @@ jobs:
           python -m ago.local_ops tenants
       - name: Lint
         id: lint
-        run: python -m ruff check ago tests tests_browser
+        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py
       - name: Validate first-party console JS and UI unit tests
         id: javascript
         run: |

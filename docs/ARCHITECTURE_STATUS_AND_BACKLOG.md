@@ -6,6 +6,13 @@ Intelligence or completion of the original entire enterprise architecture.
 
 ## Section-level implementation ledger (independent of M1–M12 milestones)
 
+- **Section 1 — Overall System Architecture:** seven bounded checklist gates
+  implemented with a complete source-linked module inventory, layer/context
+  responsibilities, reviewed dependency direction, synchronous/asynchronous
+  contracts, governed lifecycle, tenancy, fault and scaling boundaries.
+  Read-only traceability gate and anonymous-perimeter negative tests are in CI.
+  Acceptance evidence: `docs/reports/SECTION01_FINAL_ACCEPTANCE.md`.
+  This is not proof of parity with the missing full original blueprint.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
   Versioned manifest maps 76 AGO root modules and 145 observed internal
@@ -18,9 +25,9 @@ Intelligence or completion of the original entire enterprise architecture.
   approvals/branch protection must be separately enabled and audited by
   the repository administrator before independent human review is considered
   operationally enforced.
-- Every other unfinished section is **still separately pending**. Code-level
-  closure of Section 14 does not upgrade the implementation status of
-  Sections 1–13 or 15–34, nor imply the full original blueprint is available.
+- Every other unfinished section is **still separately pending**. Closure of
+  Sections 1 and 14 does not upgrade Sections 2–13 or 15–34, nor imply
+  that the full original blueprint is available.
 
 ## Evidence and provenance caveat
 

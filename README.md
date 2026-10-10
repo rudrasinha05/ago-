@@ -24,6 +24,16 @@ all tests and evidence before starting another](docs/BDR_SECTION_DELIVERY_RULE.m
 A section blocked on external human/cloud settings is never mislabeled
 fully accepted.
 
+## Architecture section 1 — Overall System Architecture
+
+Section 1 now has a source-linked layer/context catalog, complete module
+inventory, synchronous/asynchronous contracts, governed lifecycle, tenancy,
+fault and scaling boundaries, and a read-only CI traceability gate.
+See [Section 1 architecture](docs/architecture/SECTION_01_OVERALL_SYSTEM_ARCHITECTURE.md)
+and [Section 1 acceptance evidence](docs/reports/SECTION01_FINAL_ACCEPTANCE.md).
+Original full-blueprint parity remains unverified; other sections retain their
+independent status.
+
 ## Completed architecture section: 14 — Module Dependency Rules
 
 The original 1–34 architecture checklist is tracked **separately** from
