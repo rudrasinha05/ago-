@@ -769,6 +769,7 @@
         "database_store",
         "department_automation",
         "department_automation_queries",
+        "enterprise_store",
         "executive_intelligence",
         "executive_intelligence_queries",
         "experiments",
