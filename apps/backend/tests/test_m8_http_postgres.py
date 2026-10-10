@@ -292,3 +292,92 @@ def test_stale_tool_run_reconciliation_requires_operator_and_never_replays(case)
         "SELECT status FROM ago_governed_tasks WHERE id=%s", (task["id"],),
     ).fetchone()["status"] == "failed"
     post(client, f"/v1/tools/tasks/{task['id']}/run", founder, expected=403)
+
+
+def test_qa_trigger_polls_sources_without_recursing_on_automation_outputs(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    enroll(client, founder, reviewer, "tool:scorecard")
+    dept, worker = create_ai(client, founder)
+    source_task = post(client, "/v1/tasks", founder, {
+        "action": "internal:brief", "assignee_id": worker,
+    })
+    approval = post(client, "/v1/governance/approvals", founder, {
+        "action": "internal:brief",
+    })
+    post(client, f"/v1/tasks/{source_task['id']}/approval", founder, {
+        "approval_id": approval["request_id"],
+    })
+    decision(client, reviewer, approval["request_id"])
+    post(client, f"/v1/agents/tasks/{source_task['id']}/run", founder)
+    post(client, f"/v1/tasks/{source_task['id']}/review", reviewer, {
+        "verdict": "pass", "evidence": "Original AI outcome passed independent QA",
+    })
+    rule = post(client, "/v1/tools/automation/rules", founder, {
+        "department_id": dept, "assignee_id": worker,
+        "code": "tool:scorecard", "trigger": "qa_pass",
+    })
+    scan = post(client, "/v1/tools/automation/scan", founder, {"limit": 5})
+    assert len(scan["firings"]) == 1
+    firing = scan["firings"][0]
+    assert firing["execution_permitted"] is False
+    assert post(client, "/v1/tools/automation/scan", founder, {
+        "limit": 5,
+    })["firings"] == []
+    decision(client, reviewer, firing["approval_id"])
+    post(client, f"/v1/tools/tasks/{firing['task_id']}/run", founder)
+    post(client, f"/v1/tasks/{firing['task_id']}/review", reviewer, {
+        "verdict": "pass", "evidence": "Automation report reviewed",
+    })
+    assert post(client, "/v1/tools/automation/scan", founder, {
+        "limit": 5,
+    })["firings"] == []
+    post(client, f"/v1/tools/automation/rules/{rule['id']}/fire", founder, {
+        "source_id": firing["task_id"],
+    }, expected=403)
+    post(client, f"/v1/tools/automation/rules/{rule['id']}/disable", founder)
+    post(client, f"/v1/tools/automation/rules/{rule['id']}/fire", founder, {
+        "source_id": source_task["id"],
+    }, expected=403)
+
+
+def test_postgresql_blocks_forged_enrollment_and_finished_run_tampering(case):
+    client, headers, info = case
+    psycopg = pytest.importorskip("psycopg")
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    pending = post(client, "/v1/tools/enrollments", founder, {
+        "code": "tool:scorecard", "rationale": "Approval not yet given",
+    })
+    with pytest.raises(psycopg.errors.RaiseException):
+        with info["db"].transaction():
+            info["db"].execute(
+                """UPDATE ago_tool_enrollments SET status='active',
+                   changed_at=now() WHERE id=%s""",
+                (pending["id"],),
+            )
+    decision(client, reviewer, pending["approval_id"])
+    post(client, f"/v1/tools/enrollments/{pending['id']}/reconcile", founder)
+    _, worker = create_ai(client, founder)
+    task = post(client, "/v1/tasks", founder, {
+        "action": "tool:scorecard", "assignee_id": worker,
+    })
+    request = post(client, "/v1/governance/approvals", founder, {
+        "action": "tool:scorecard",
+    })
+    post(client, f"/v1/tasks/{task['id']}/approval", founder, {
+        "approval_id": request["request_id"],
+    })
+    decision(client, reviewer, request["request_id"])
+    run = post(client, f"/v1/tools/tasks/{task['id']}/run", founder)
+    with pytest.raises(psycopg.errors.RaiseException):
+        with info["db"].transaction():
+            info["db"].execute(
+                "UPDATE ago_tool_runs SET output='{}'::jsonb WHERE id=%s",
+                (run["id"],),
+            )
+    with pytest.raises(psycopg.errors.RaiseException):
+        with info["db"].transaction():
+            info["db"].execute(
+                "DELETE FROM ago_tool_run_evidence WHERE run_id=%s",
+                (run["id"],),
+            )
