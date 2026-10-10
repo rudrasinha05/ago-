@@ -204,14 +204,20 @@ ALTER TABLE ago_asset_consumptions ADD CONSTRAINT ago_consumption_unique_approva
 CREATE FUNCTION ago_enterprise_write_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE expected text; a record;
 BEGIN
- IF TG_TABLE_NAME='ago_observed_costs' AND NEW.evidence_state<>'unverified' THEN
-   RAISE EXCEPTION 'Cost evidence requires external verification';
+ IF TG_TABLE_NAME='ago_observed_costs' THEN
+   IF NEW.evidence_state<>'unverified' THEN
+     RAISE EXCEPTION 'Cost evidence requires external verification';
+   END IF;
  END IF;
- IF TG_TABLE_NAME='ago_evolution_observations' AND NEW.review_state<>'unreviewed' THEN
-   RAISE EXCEPTION 'Evolution observations are not self-reviewed';
+ IF TG_TABLE_NAME='ago_evolution_observations' THEN
+   IF NEW.review_state<>'unreviewed' THEN
+     RAISE EXCEPTION 'Evolution observations are not self-reviewed';
+   END IF;
  END IF;
- IF TG_TABLE_NAME='ago_twin_scenarios' AND NEW.calibrated THEN
-   RAISE EXCEPTION 'Twin calibration requires independently measured outcomes';
+ IF TG_TABLE_NAME='ago_twin_scenarios' THEN
+   IF NEW.calibrated THEN
+     RAISE EXCEPTION 'Twin calibration requires independently measured outcomes';
+   END IF;
  END IF;
  IF TG_TABLE_NAME='ago_marketplace_assets' THEN
    IF TG_OP='INSERT' AND (NEW.status<>'draft' OR NEW.approval_id IS NOT NULL) THEN
@@ -250,10 +256,18 @@ BEGIN
       OR a.reviewer_id IS NULL OR a.reviewer_id=a.requester_id THEN
    RAISE EXCEPTION 'Exact independent human approval required';
  END IF;
- IF (TG_TABLE_NAME='ago_oos_mode_events' AND a.requester_id<>NEW.actor_id)
-    OR (TG_TABLE_NAME='ago_marketplace_assets' AND a.requester_id<>NEW.publisher_id)
-    OR (TG_TABLE_NAME='ago_asset_consumptions' AND a.requester_id<>NEW.actor_id) THEN
-   RAISE EXCEPTION 'Requesting actor must match approved identity';
+ IF TG_TABLE_NAME='ago_oos_mode_events' THEN
+   IF a.requester_id<>NEW.actor_id THEN
+     RAISE EXCEPTION 'Requesting actor must match approved identity';
+   END IF;
+ ELSIF TG_TABLE_NAME='ago_marketplace_assets' THEN
+   IF a.requester_id<>NEW.publisher_id THEN
+     RAISE EXCEPTION 'Requesting publisher must match approved identity';
+   END IF;
+ ELSIF TG_TABLE_NAME='ago_asset_consumptions' THEN
+   IF a.requester_id<>NEW.actor_id THEN
+     RAISE EXCEPTION 'Requesting consumer must match approved identity';
+   END IF;
  END IF;
  RETURN NEW;
 END;
