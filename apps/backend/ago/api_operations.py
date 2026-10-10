@@ -984,3 +984,55 @@ def twin_outcome_history(
     allowed(repositories, actor, "meta:read")
     return repositories.resolve(EnterpriseOperationsStorePort).twin_comparisons(
         tenant_id=actor.tenant_id)
+
+
+# Section 21: enforce bounded durable OOS capacities on actual task starts.
+class EnterpriseCapacityApproval(StrictInput):
+    scope_kind: Literal["company", "department", "employee"]
+    scope_id: UUID | None = None
+    max_running: int = Field(ge=1, le=1000)
+
+
+class EnterpriseCapacityChange(EnterpriseCapacityApproval):
+    approval_id: UUID
+    rationale: str = Field(min_length=1, max_length=1500)
+
+
+@router.get("/enterprise/capacity")
+def enterprise_capacity_read(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).capacity_limits(
+        tenant_id=actor.tenant_id)
+
+
+@router.post("/enterprise/capacity/approval")
+def enterprise_capacity_review(
+    data: EnterpriseCapacityApproval,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    if (data.scope_kind == "company") != (data.scope_id is None):
+        return enterprise_call(lambda: (_ for _ in ()).throw(ValueError("Invalid scope")))
+    action = ("enterprise:capacity:" + data.scope_kind + ":" +
+              (str(data.scope_id) if data.scope_id else "company")
+              + ":" + str(data.max_running))
+    return issue_enterprise_approval(repositories, actor, action)
+
+
+@router.post("/enterprise/capacity")
+def enterprise_capacity_write(
+    data: EnterpriseCapacityChange,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).set_capacity(
+        actor=actor, approval_id=str(data.approval_id),
+        scope_kind=data.scope_kind,
+        scope_id=str(data.scope_id) if data.scope_id else None,
+        max_running=data.max_running, rationale=data.rationale))
