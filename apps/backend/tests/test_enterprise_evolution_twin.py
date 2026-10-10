@@ -3,8 +3,6 @@
 No synthetic ROI, automated code promotion, external production mutation or
 claim of calibrated business predictions.
 """
-from uuid import uuid4
-
 from test_m7_http_postgres import case as case, decide, post
 
 
