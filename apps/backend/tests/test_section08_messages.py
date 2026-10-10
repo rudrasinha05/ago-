@@ -1,5 +1,8 @@
 """Envelope security and real transactional delivery, fencing and replay evidence."""
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -7,6 +10,7 @@ import test_m6_http_integration as m6
 
 from ago.message_contracts import MessageEnvelope
 from ago.message_store import MessageStore
+from ago.bootstrap import bootstrap
 from ago.security import Principal
 
 case = m6.case
@@ -97,3 +101,34 @@ def test_approval_envelope_never_grants_decision_authority(case):
     post(client, '/v1/knowledge/messages', headers['founder'], body, expected=403)
     body['payload']['approved'] = True
     post(client, '/v1/knowledge/messages', headers['founder'], body, expected=400)
+
+
+def test_real_independent_connections_publish_once_and_claim_disjoint():
+    dsn = os.getenv('AGO_TEST_POSTGRES_DSN')
+    if not dsn:
+        pytest.skip('Requires PostgreSQL independent connections')
+    import psycopg
+    from psycopg.rows import dict_row
+    with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as db:
+        tenant, founder = bootstrap(db, organization='Distributed workers',
+                                   email='worker@example.test', password='worker-test-password-123')
+        actor = Principal(founder, tenant, ('founder',))
+        barrier = Barrier(2)
+        def publish(number):
+            with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as connection:
+                barrier.wait(timeout=10)
+                return MessageStore(connection).publish(actor=actor, kind='event', name='example.created',
+                    payload={'safe': True}, operation_key='once', ordering_key='first')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(publish, range(2)))
+        assert results[0]['id'] == results[1]['id'] and sorted(r['duplicate'] for r in results) == [False, True]
+        MessageStore(db).publish(actor=actor, kind='notification', name='example.created',
+                                payload={}, operation_key='second', ordering_key='second')
+        def claim(number):
+            with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as connection:
+                barrier.wait(timeout=10)
+                return MessageStore(connection).claim(tenant_id=tenant, worker_id=f'worker-{number}', limit=1)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claimed = list(pool.map(claim, range(2)))
+        assert len(claimed[0]) == len(claimed[1]) == 1
+        assert claimed[0][0]['id'] != claimed[1][0]['id']
