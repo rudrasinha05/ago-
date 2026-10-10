@@ -39,6 +39,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [department_automation_queries](../../apps/backend/ago/department_automation_queries.py) | operations | persistence | backend_contracts |
 | [dna_domain](../../apps/backend/ago/dna_domain.py) | strategy | domain | None |
 | [enterprise_domains](../../apps/backend/ago/enterprise_domains.py) | operations | domain | None |
+| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | backend_contracts, enterprise_domains, security |
 | [event_contracts](../../apps/backend/ago/event_contracts.py) | platform | domain | events |
 | [event_migrations](../../apps/backend/ago/event_migrations.py) | platform | foundation | None |
 | [event_runtime](../../apps/backend/ago/event_runtime.py) | entrypoints | composition | event_migrations, event_worker, events, postgres_event_store |
