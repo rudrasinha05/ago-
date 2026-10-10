@@ -19,6 +19,11 @@ AGO is a **governed, multi-tenant AI-native organizational operating system**, c
 - **M11 — Pilot Browser Acceptance:** real Chromium against live FastAPI/PostgreSQL, founder/reviewer workflow and mobile navigation, corrected approval-driven strategy activation, least-privilege independent QA queue, evidence screenshots and guarded logouts.
 - **M12 — Local Founder Onboarding:** read-only redacted environment/schema doctor, existing tenant UUID listing, atomic local founder + independent reviewer provisioning, loopback-only one-command launch and safe Windows PowerShell operator helper. No destructive automatic migrations or password storage.
 
+**BDR delivery policy:** [Complete one architecture section per batch with
+all tests and evidence before starting another](docs/BDR_SECTION_DELIVERY_RULE.md).
+A section blocked on external human/cloud settings is never mislabeled
+fully accepted.
+
 ## Completed architecture section: 14 — Module Dependency Rules
 
 The original 1–34 architecture checklist is tracked **separately** from
