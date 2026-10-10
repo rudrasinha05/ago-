@@ -85,3 +85,16 @@ do **not** convert this to final batch acceptance until all final-head jobs pass
 **External verification dependencies:** real financial provider statements, observed revenue and a genuine later operational observation series cannot be invented or marked passed; founder explicitly chose personal/local operation, so production cloud/Vault/external audit remains out of current scope.
 
 **Operator safety:** Source migrations 029–035 are additive only. No user's Windows/PostgreSQL data was changed from this chat. Founder must explicitly back up, pull and apply migrations in order on their own machine with stopped writers and a tested restore path. CI PASS is not the same as Windows/local acceptance or 100% completion of Sections 21–27.
+
+
+## 2026-10-11 additional Section 21 durable fair queue acceptance delta
+
+Existing task/approval/agent architecture was **not replaced**. Migration `036_durable_fair_work_queue.sql` provides tenant-scoped unique idempotent queue entries and immutable lease/release/reconciliation events. Authorized queue admission requires an independently approved still-waiting task. Acquisition uses bounded fair priority with aging and filters paused company/department/employee modes, blocked assistance, terminated workers and M3 prerequisite QA. PostgreSQL tenant-row locks serialize contenders, existing runtime execution-capacity guards still apply to actual execution. Expired work is never automatically re-executed; historical agent attempts prohibit silent side-effect replay. The operator must deliberately execute through the original permission-checked TaskStore/AgentRuntime.
+
+Signed API: `GET/POST /v1/operations/enterprise/work-queue`, `POST /work-queue/claim`, and `POST /work-queue/{queue_id}/release`. Control Center now shows task priority, lifecycle and lease state. Scope checks are source-linked in Section 3/5/13 engineering fingerprints. Negative tests: `apps/backend/tests/test_enterprise_durable_queue_21.py`.
+
+**Verification:** source revision `1425a4bc90e713a9bfceaf569e5d02d2d3847bb2`, backend quality `https://github.com/rudrasinha05/ago-/actions/runs/38093964101` successful with **527 passed tests, 1 warning, successful Ruff lint and engineering architecture audit**. Full eight-job architecture/browser/recovery matrix `38093964085` was in progress when verified. Later UI-only commits and this report require their own final-head CI confirmation.
+
+**Still remaining in full frozen scope:** a self-running opt-in local worker service with crash/retry operational acceptance, full guided organizational life-cycle UI, independently source-validated competence and permission-aware scheduling, automatically propagated strategy-to-calendar-to-approved-task versions, production/provider-verified finance and real ROI, policy/prompt changes with independently reviewed execution/rollback, and real empirical Digital Twin forecast calibration. Do not mark any of these complete merely because an API, stored scenario or review proposal exists.
+
+**Migration/operator status:** SQL 036 and prior additions are present **only in the repository and disposable CI**; founder's Windows database has not been touched. No production deployment, provider invoice or local upgrade is claimed.
