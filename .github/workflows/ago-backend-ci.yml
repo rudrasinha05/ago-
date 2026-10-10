@@ -1,4 +1,4 @@
-name: AGO Backend M1-M8 CI
+name: AGO Full Stack M1-M9 CI
 on:
   push:
     branches: [develop]
@@ -11,7 +11,7 @@ permissions:
   statuses: write
 
 jobs:
-  foundation-through-m8:
+  foundation-through-m9:
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +44,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Install backend dependencies
         id: install
         run: |
@@ -55,6 +58,11 @@ jobs:
       - name: Lint
         id: lint
         run: python -m ruff check ago tests
+      - name: Validate first-party console JS and UI unit tests
+        id: javascript
+        run: |
+          for file in ago/console/{core,views,actions,app}.js; do node --check "$file"; done
+          node --test tests_web/*.test.mjs
       - name: Run unit and PostgreSQL integration tests
         id: tests
         run: python -m pytest -q
@@ -69,9 +77,10 @@ jobs:
           MIGRATION_RESULT: ${{ steps.migration.outcome }}
           LINT_RESULT: ${{ steps.lint.outcome }}
           TEST_RESULT: ${{ steps.tests.outcome }}
+          JS_RESULT: ${{ steps.javascript.outcome }}
         run: |
           if [ "$RUN_STATUS" = "success" ]; then STATE=success; else STATE=failure; fi
           gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
-            -f state="$STATE" -f context="ago/m1-m8/py${{ matrix.python }}/i=$INSTALL_RESULT/d=$MIGRATION_RESULT/l=$LINT_RESULT/t=$TEST_RESULT" \
-            -f description="CI $RUN_STATUS install:$INSTALL_RESULT db:$MIGRATION_RESULT lint:$LINT_RESULT tests:$TEST_RESULT" \
+            -f state="$STATE" -f context="ago/m1-m9/py${{ matrix.python }}/i=$INSTALL_RESULT/d=$MIGRATION_RESULT/l=$LINT_RESULT/j=$JS_RESULT/t=$TEST_RESULT" \
+            -f description="CI $RUN_STATUS db:$MIGRATION_RESULT lint:$LINT_RESULT js:$JS_RESULT tests:$TEST_RESULT" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/$CI_RUN_ID"
