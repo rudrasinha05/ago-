@@ -19,6 +19,9 @@ class Scorecard:
             "calendar_events": "ago_calendar_events",
             "knowledge_nodes": "ago_knowledge_nodes",
             "council_motions": "ago_council_motions",
+            "dna_versions": "ago_dna_versions",
+            "executive_snapshots": "ago_executive_snapshots",
+            "meta_recommendations": "ago_meta_recommendations",
         }
         # SQL identifiers come exclusively from trusted server-owned constants.
         for label, table in entities.items():
