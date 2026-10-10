@@ -1127,3 +1127,65 @@ def enterprise_agent_evidence_list(
     allowed(repositories, actor, "operations:read")
     return repositories.resolve(EnterpriseOperationsStorePort).agent_evidence(
         tenant_id=actor.tenant_id, employee_id=str(employee_id))
+
+
+# Section 23: reviewed immutable plan revisions, with no task auto-authorization.
+class EnterprisePlanRevisionInput(StrictInput):
+    base_revision: int = Field(ge=1)
+    title: str = Field(min_length=1, max_length=300)
+    starts_at: datetime
+    ends_at: datetime
+    budget_ceiling: Decimal = Field(ge=0)
+    evidence_ref: str = Field(min_length=1, max_length=1024)
+    rationale: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/enterprise/plans/{horizon_plan_id}/revisions/approval")
+def enterprise_plan_revision_approval(
+    horizon_plan_id: UUID, data: EnterprisePlanRevisionInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    store = repositories.resolve(EnterpriseOperationsStorePort)
+    normalized = enterprise_call(lambda: store.normalize_plan_revision(
+        plan_id=str(horizon_plan_id), base_revision=data.base_revision,
+        title=data.title, starts_at=data.starts_at, ends_at=data.ends_at,
+        budget_ceiling=str(data.budget_ceiling),
+        evidence_ref=data.evidence_ref, rationale=data.rationale))
+    digest = normalized["intent_digest"]
+    with db.transaction():
+        approval = issue_enterprise_approval(
+            repositories, actor, "enterprise:plan-revise:" +
+            str(horizon_plan_id) + ":" + digest)
+        intent = store.propose_plan_revision(
+            actor=actor, approval_id=approval["approval_id"],
+            payload=normalized["review_payload"], intent_digest=digest)
+    return {**approval, "intent_id": intent["id"],
+            "review_payload": normalized["review_payload"],
+            "intent_digest": digest}
+
+
+@router.post("/enterprise/plans/{horizon_plan_id}/revisions/{intent_id}/apply")
+def enterprise_plan_revision_apply(
+    horizon_plan_id: UUID, intent_id: UUID, data: ApprovalReference,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).apply_plan_revision(
+        actor=actor, intent_id=str(intent_id),
+        approval_id=str(data.approval_id)))
+
+
+@router.get("/enterprise/plans/{horizon_plan_id}/revisions")
+def enterprise_plan_revision_history(
+    horizon_plan_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(
+        EnterpriseOperationsStorePort).plan_revisions(
+        tenant_id=actor.tenant_id, plan_id=str(horizon_plan_id)))
