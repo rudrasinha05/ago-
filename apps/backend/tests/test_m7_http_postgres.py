@@ -78,3 +78,48 @@ def decide(client, reviewer, approval_id, *, approve=True):
         client, f"/v1/governance/approvals/{approval_id}/decision",
         reviewer, {"approve": approve, "reason": "Independent human governance review"},
     )
+
+
+def test_dna_requires_independent_approval_and_versions_are_immutable(case):
+    client, headers, info = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    assert client.get("/v1/meta/dna/active").status_code == 401
+    baseline = client.get("/v1/meta/dna/active", headers=founder)
+    assert baseline.status_code == 200
+    assert baseline.json()["source"] == "baseline"
+    assert baseline.json()["id"] is None
+    candidate = post(client, "/v1/meta/dna", founder, {
+        "profile": profile(backlog_limit=0),
+        "rationale": "Pilot stricter backlog monitoring.",
+    })
+    assert candidate["version"] == 1
+    post(client, f"/v1/meta/dna/{candidate['id']}/reconcile", founder, expected=403)
+    post(client, f"/v1/governance/approvals/{candidate['approval_id']}/decision",
+         founder, {"approve": True, "reason": "Self-review forbidden"}, expected=403)
+    decide(client, reviewer, candidate["approval_id"])
+    assert post(client, f"/v1/meta/dna/{candidate['id']}/reconcile", founder) == {
+        "id": candidate["id"], "version": 1, "status": "active",
+    }
+    assert client.get("/v1/meta/dna/active", headers=founder).json()["profile"] == (
+        profile(backlog_limit=0)
+    )
+    post(client, f"/v1/meta/dna/{candidate['id']}/reconcile", founder, expected=403)
+    second = post(client, "/v1/meta/dna", founder, {
+        "profile": profile(backlog_limit=3, qa_target_pct=90),
+        "rationale": "Make the next evaluated DNA version stricter.",
+    })
+    assert second["version"] == 2
+    decide(client, reviewer, second["approval_id"])
+    post(client, f"/v1/meta/dna/{second['id']}/reconcile", founder)
+    versions = client.get("/v1/meta/dna", headers=founder).json()
+    assert [version["status"] for version in versions] == ["active", "superseded"]
+    assert client.get("/v1/meta/dna/active", headers=reviewer).status_code == 200
+    assert client.post("/v1/meta/dna", json={"profile": profile(),
+                       "rationale": "Unauthorized"}, headers=reviewer).status_code == 403
+    psycopg = pytest.importorskip("psycopg")
+    with pytest.raises(psycopg.errors.RaiseException):
+        with info["db"].transaction():
+            info["db"].execute(
+                "UPDATE ago_dna_versions SET rationale='rewritten' WHERE id=%s",
+                (second["id"],),
+            )
