@@ -51,6 +51,7 @@ def add_reviewer(
             "calendar:read", "calendar:respond",
             "knowledge:review", "knowledge:read",
             "council:vote", "council:read",
+            "meta:dna:read", "meta:read",
         ):
             security.grant(tenant_id, "reviewer", permission)
         return reviewer.user_id
