@@ -1,6 +1,6 @@
 # AGO — Artificial General Organization
 
-AGO is a **governed, multi-tenant AI-native organizational operating system**, currently implemented as a modular Python/FastAPI backend, PostgreSQL and a first-party web console. Its milestone foundations M1–M10 are present; **this is not a production-ready autonomous organization**.
+AGO is a **governed, multi-tenant AI-native organizational operating system**, currently implemented as a modular Python/FastAPI backend, PostgreSQL and a first-party web console. Its milestone foundations M1–M11 are present; **this is not a production-ready autonomous organization**.
 
 ## Implemented software milestones
 - **M1 — Enterprise platform foundation:** configuration, logging, DI, outbox/inbox events, identity/RBAC, plugins, scheduler, observability.
@@ -16,6 +16,7 @@ AGO is a **governed, multi-tenant AI-native organizational operating system**, c
 
 - **M9 — Control Center & Digital Twin:** responsive same-origin console, secure tab-memory sessions, real governance/operations UI, role-based actions, evidence-backed what-if assessments and independently protected task workflows.
 - **M10 — Release Engineering & Security Gates:** fail-closed production configuration, HTTPS/host/body boundaries, schema-integrity readiness, non-root read-only Docker image, SHA-256 logical backups and isolated PostgreSQL recovery drills. **Not authorized for public production without separately approved operational controls.**
+- **M11 — Pilot Browser Acceptance:** real Chromium against live FastAPI/PostgreSQL, founder/reviewer workflow and mobile navigation, corrected approval-driven strategy activation, least-privilege independent QA queue, evidence screenshots and guarded logouts.
 
 ## Developer quick start
 Requires Python 3.11+ and PostgreSQL 15+:
@@ -37,12 +38,14 @@ API documentation: `http://127.0.0.1:8000/docs`. The M3–M9 APIs are under `/v1
 
 CI acceptance: [M3–M5 evidence](docs/reports/M3_M5_FINAL_ACCEPTANCE.md). M6 CI evidence: [155-test acceptance](docs/reports/M6_FINAL_ACCEPTANCE.md). [M7 CI evidence: 175-test acceptance](docs/reports/M7_FINAL_ACCEPTANCE.md). [M8 CI evidence: 202-test acceptance](docs/reports/M8_FINAL_ACCEPTANCE.md). Operator setup: [M6 Guide](docs/reports/M6_OPERATOR_GUIDE.md), [M7 Guide](docs/reports/M7_OPERATOR_GUIDE.md) and [M8 Guide](docs/reports/M8_OPERATOR_GUIDE.md). M9: [212 Python + 13 JS test evidence](docs/reports/M9_FINAL_ACCEPTANCE.md) and [control center operator guide](docs/reports/M9_OPERATOR_GUIDE.md).
 
+M11: [236 Python + 14 JS + 6 real browser tests](docs/reports/M11_FINAL_ACCEPTANCE.md) and [pilot operator guide](docs/reports/M11_PILOT_OPERATOR_GUIDE.md). Browser automation uses disposable PostgreSQL and never accesses production accounts.
+
 M10: [software acceptance and external release blockers](docs/reports/M10_FINAL_ACCEPTANCE.md), [operator runbook](docs/reports/M10_RELEASE_RUNBOOK.md) and [non-root preview stack](deploy/docker/compose.preview.yml). The real production preflight requires `AGO_ENVIRONMENT=production`, configured TLS, non-default secrets and verified migrations: `python -m ago.release_ops check`. A successful CI build is not a public deployment authorization.
 
 A fresh tenant must be provisioned by the **local operator** using `python -m ago.bootstrap`; an independent human reviewer must be provisioned using `python -m ago.provision`. See `docs/reports/M3_M5_OPERATOR_AND_ACCEPTANCE.md` for details.
 
 ## CI
-The GitHub Actions workflow `.github/workflows/ago-backend-ci.yml` uses disposable PostgreSQL and validates migrations, Ruff, JavaScript syntax/Node 22 UI tests, the complete pytest suite on **Python 3.11 and 3.14**, a constrained Docker runtime smoke and a genuine isolated PostgreSQL dump/restore drill. Do not use production DB credentials for tests.
+The GitHub Actions workflow `.github/workflows/ago-backend-ci.yml` uses disposable PostgreSQL and validates migrations, Ruff, JavaScript syntax/Node 22 UI tests, the complete pytest suite on **Python 3.11 and 3.14**, a constrained Docker runtime smoke, a genuine isolated PostgreSQL dump/restore drill and a separate real Chromium pilot against live FastAPI/PostgreSQL. Do not use production DB credentials for tests.
 
 ## Governance and safety
 Nothing invokes consequential external tools by default. High-impact work requires tenant-scoped human authorization; strategic plan consent never replaces per-task approval. Optional paid model use is disabled unless explicitly enabled and separately billed by the provider; AGO credit units are only an internal quota and **not actual currency**.
