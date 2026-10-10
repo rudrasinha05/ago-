@@ -33,3 +33,7 @@ Local44 targeted tests, JS15 and source checks passed before publication. An unc
 ## Honest remaining gates
 
 Sections12/13/14/16/19/20 are accepted for the frozen local scope when final-head checks are green. Sections15/17/18 artifacts and recovered prompt/roadmap mapping are delivered, but their exact complete-original-blueprint/bibliography verification checkbox remains open because that source was not recovered. These three are documentation delivered with source-verification blocked, not falsely fully complete. Sections10/11 production gates stay deferred under the owner's explicit local-use decision; Sections21–34 remain unchanged.
+
+## Final browser correction
+
+The strategy-provenance refinement5cc64ee passed actual backend/coverage checks, but its cross-browser matrix reported29/30: WebKit sampled insufficient contrast on a selected dashboard tab during background transition. This is recorded as a failed gate, not accepted as a flaky success. Dashboard tab color changes now have no transition so foreground/background switch together; no test or accessibility rule is disabled. Re-run the full final-head browser matrix and all nine jobs before checklist closure. Section18 additionally records verified OAuth security, authenticated-encryption and broker-reliability primary references.

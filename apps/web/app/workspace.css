@@ -4,3 +4,6 @@
 @media(max-width:970px){.workspace-body{display:block}.workspace-nav{display:none;border-right:0;border-bottom:1px solid var(--border)}.workspace-nav.open{display:flex}.nav-toggle{display:inline-flex}.workspace-header{padding:14px 16px;gap:12px}.workspace-header p{max-width:40%;overflow-wrap:anywhere}.screen{padding:24px 18px}.workspace-toolbar{margin-bottom:18px}}@media(max-width:420px){.workspace-header .brand{width:100%}.workspace-header p{margin-right:auto;max-width:45%}.screen{padding:20px 12px}.metric-grid{grid-template-columns:1fr}.dashboard-tabs .btn{flex:1;min-width:140px}.workspace-toolbar{align-items:flex-start}.page-head h1{overflow-wrap:anywhere}}
 
 .dashboard-tabs .btn[aria-pressed=true]:hover:not(:disabled){background:#d2c2ff;color:#101021}
+
+/* Keep tab foreground/background changes atomic across browser style frames. */
+.dashboard-tabs .btn{transition:none}
