@@ -43,7 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(insights_router)
     app.include_router(operations_router)
     app.include_router(knowledge_router)
-    app.include_router(council_router
+    app.include_router(council_router)
 
     try:
         import psycopg
