@@ -361,15 +361,15 @@
       "module": "enterprise_store",
       "methods": {
         "modes": {
-          "arguments": "self, *, tenant_id: str, scope_kind: str='company', scope_id: str | None=None",
+          "arguments": "self, *, tenant_id: str, scope_kind: str=\"company\", scope_id: str | None=None",
           "returns": "list[dict]"
         },
         "mode_change": {
-          "arguments": "self, *, actor: Principal, target: str, approval_id: str, reason: str, expires_at: datetime, scope_kind: str='company', scope_id: str | None=None",
+          "arguments": "self, *, actor: Principal, target: str, approval_id: str, reason: str, expires_at: datetime, scope_kind: str=\"company\", scope_id: str | None=None",
           "returns": "dict"
         },
         "effective_mode": {
-          "arguments": "self, *, tenant_id: str, scope_kind: str='company', scope_id: str | None=None",
+          "arguments": "self, *, tenant_id: str, scope_kind: str=\"company\", scope_id: str | None=None",
           "returns": "dict"
         },
         "worker_state": {
@@ -450,6 +450,26 @@
         },
         "asset_retire": {
           "arguments": "self, *, actor: Principal, asset_id: str, target_state: str, approval_id: str, reason: str",
+          "returns": "dict"
+        },
+        "request_assistance": {
+          "arguments": "self, *, actor: Principal, employee_id: str, task_id: str | None, reason: str, severity: str, summary: str, evidence_ref: str",
+          "returns": "dict"
+        },
+        "assistance": {
+          "arguments": "self, *, tenant_id: str, employee_id: str | None=None",
+          "returns": "list[dict]"
+        },
+        "resolve_assistance": {
+          "arguments": "self, *, actor: Principal, request_id: str, approval_id: str, outcome: str, explanation: str",
+          "returns": "dict"
+        },
+        "link_plan_task": {
+          "arguments": "self, *, actor: Principal, horizon_plan_id: str, task_id: str, approval_id: str, evidence_ref: str",
+          "returns": "dict"
+        },
+        "plan_feedback": {
+          "arguments": "self, *, tenant_id: str, horizon_plan_id: str",
           "returns": "dict"
         },
         "twin_runs": {
