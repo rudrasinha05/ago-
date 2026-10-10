@@ -780,6 +780,17 @@ class EnterpriseOperationsStorePort(Protocol):
 
     def plan_feedback(self, *, tenant_id: str, horizon_plan_id: str) -> dict: ...
 
+    def normalize_organization_intent(self, *, change_kind: str, target_id: str,
+                                      reason: str, department_id: str | None = None,
+                                      name: str | None = None,
+                                      manager_id: str | None = None,
+                                      role_level: int | None = None) -> dict: ...
+
+    def record_organization_intent(self, *, actor: Principal, approval_id: str,
+                                   payload: dict, intent_digest: str) -> dict: ...
+
+    def organization_intents(self, *, tenant_id: str) -> list[dict]: ...
+
     def organization_change(self, *, actor: Principal, change_kind: str,
                             target_id: str, approval_id: str, reason: str,
                             department_id: str | None = None,
