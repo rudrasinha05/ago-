@@ -624,18 +624,23 @@ class EnterpriseOperationsStore:
             ).fetchone()
             if not snap:
                 raise LookupError("Snapshot not found")
-            count = self.connection.execute(
-                """SELECT count(*) AS n FROM ago_employees WHERE tenant_id=%s AND kind='ai'""",
-                (actor.tenant_id,),
-            ).fetchone()["n"]
+            # Scenario state MUST come from the immutable captured snapshot.
+            # Current live headcount would corrupt historical provenance.
+            observed_org = snap["metrics"].get("organization_observation", {})
+            count = observed_org.get("ai_employees")
+            if type(count) is not int or not 0 <= count <= 100000:
+                raise ValueError("Snapshot does not contain valid historical workforce count")
             model = twin_scenario(
                 workers=count, actions=actions, cost_per_action=cost_per_action,
                 budget=budget, failure_pct=failure_pct, hiring=hiring, layoffs=layoffs,
                 market_shock_pct=market_shock_pct, observed_samples=0,
             )
             model["snapshot_created_at"] = snap["created_at"].isoformat()
-            model["observed_workers"] = count
+            model["snapshot_workers"] = count
+            model["snapshot_age_seconds"] = max(
+                0, int((datetime.now(timezone.utc) - snap["created_at"]).total_seconds()))
             model["data_coverage"] = "partial"
+            model["snapshot_source"] = "immutable_executive_metrics"
             assumptions = {
                 "actions": actions, "cost_per_action": cost_per_action, "budget": budget,
                 "failure_pct": failure_pct, "hiring": hiring, "layoffs": layoffs,
