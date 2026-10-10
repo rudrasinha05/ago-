@@ -60,6 +60,36 @@ def organization_change_intent(*, change_kind: str, target_id: str,
     return payload, sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def agent_evidence_intent(*, employee_id: str, kind: str, label: str,
+                          value_int: int | None, evidence_ref: str,
+                          note: str) -> tuple[dict, str]:
+    """Explicitly human-reviewed operational assertions, never privilege grants."""
+    from uuid import UUID
+
+    employee = str(UUID(employee_id))
+    if kind not in {"skill", "knowledge", "confidence", "risk",
+                    "learning", "permission_awareness"}:
+        raise ValueError("Unsupported operational evidence type")
+    if not 1 <= len(label.strip()) <= 160:
+        raise ValueError("Bounded named competence required")
+    if not 1 <= len(evidence_ref.strip()) <= 1024 or not (
+        1 <= len(note.strip()) <= 2000
+    ):
+        raise ValueError("Provenance and review note required")
+    if kind == "confidence":
+        if type(value_int) is not int or not 0 <= value_int <= 100:
+            raise ValueError("Confidence needs bounded self-report scale 0-100")
+    elif value_int is not None:
+        raise ValueError("Only confidence may use numerical observations")
+    record = {
+        "employee_id": employee, "kind": kind, "label": label.strip(),
+        "value_int": value_int, "evidence_ref": evidence_ref.strip(),
+        "note": note.strip(),
+    }
+    encoded = dumps(record, sort_keys=True, separators=(",", ":"))
+    return record, sha256(encoded.encode("utf-8")).hexdigest()
+
+
 class OperatingMode(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
