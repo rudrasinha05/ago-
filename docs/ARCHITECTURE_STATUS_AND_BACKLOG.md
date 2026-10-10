@@ -28,6 +28,10 @@ Intelligence or completion of the original entire enterprise architecture.
   semantics. All seven gates CI-accepted: `17729d5`, run `38036353999`,
   293 Python tests per matrix version, JS/browser/image/recovery green.
   Evidence: `docs/reports/SECTION03_FINAL_ACCEPTANCE.md`.
+- **Section 4 — Folder / Monorepo Architecture:** Next.js web/admin/docs
+  shells, preserved backend/API wrapper, seven mapped service boundaries and
+  UI/SDK/shared workspaces; reproducible lockfile and coupling checks.
+  Acceptance pending built-shell HTTP and full CI; `docs/reports/SECTION04_FINAL_ACCEPTANCE.md`.
 - **Section 14 — Module Dependency Rules:** engineering implementation
   **CI-accepted** against the six requirements in the 1–34 checklist.
   Versioned manifest maps 76 AGO root modules and 145 observed internal
@@ -41,7 +45,7 @@ Intelligence or completion of the original entire enterprise architecture.
   the repository administrator before independent human review is considered
   operationally enforced.
 - Every other unfinished section is **still separately pending**. Closure of
-  Sections 1–3 and 14 does not upgrade Sections 4–13 or 15–34, nor imply
+  Sections 1–4 and 14 does not upgrade Sections 5–13 or 15–34, nor imply
   that the full original blueprint is available.
 
 ## Evidence and provenance caveat

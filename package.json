@@ -1,0 +1,24 @@
+{
+  "name": "ago-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/admin",
+    "apps/docs",
+    "packages/ui",
+    "packages/shared",
+    "packages/sdk"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "node --test packages/sdk/tests/*.test.mjs",
+    "check:boundaries": "python scripts/check_monorepo.py",
+    "dev:web": "npm run dev --workspace @ago/web",
+    "dev:admin": "npm run dev --workspace @ago/admin",
+    "dev:docs": "npm run dev --workspace @ago/docs"
+  }
+}

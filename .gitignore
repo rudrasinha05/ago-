@@ -26,3 +26,7 @@ backups/
 
 # Local editable Python installation metadata
 *.egg-info/
+
+# Section 4 generated frontend exports and incremental compiler state
+out/
+*.tsbuildinfo

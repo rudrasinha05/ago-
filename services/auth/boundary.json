@@ -1,0 +1,12 @@
+{
+  "name": "auth",
+  "deployment": "modular-monolith",
+  "modules": [
+    "security",
+    "identity",
+    "security_controls",
+    "login_security"
+  ],
+  "contract": "../../docs/architecture/SECTION_03_DOMAIN_DRIVEN_DESIGN.md",
+  "extraction": "Requires reviewed versioned tenant/auth/idempotence/recovery contracts; not a separately deployed service"
+}

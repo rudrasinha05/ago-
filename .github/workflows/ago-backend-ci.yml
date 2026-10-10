@@ -78,6 +78,8 @@ jobs:
           node ../../scripts/check_component_mermaid.mjs /tmp/ago-diagram-check/node_modules
       - name: Enforce Section 3 domain context and SQL boundaries
         run: python ../../scripts/check_domain_contexts.py
+      - name: Enforce Section 4 monorepo boundaries
+        run: python ../../scripts/check_monorepo.py
       - name: Apply PostgreSQL migrations
         id: migration
         run: python -m ago.event_runtime migrate
@@ -88,7 +90,7 @@ jobs:
           python -m ago.local_ops tenants
       - name: Lint
         id: lint
-        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py ../../scripts/check_domain_contexts.py
+        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py ../../scripts/check_domain_contexts.py ../../scripts/check_monorepo.py ../../scripts/smoke_workspace_exports.py
       - name: Validate first-party console JS and UI unit tests
         id: javascript
         run: |
@@ -302,3 +304,29 @@ jobs:
             -f state="$STATE" -f context="ago/m11/real-chromium=$RUN_STATUS" \
             -f description="AGO M11 Chromium eight-page pilot, reviewer RBAC, mobile and simulation $RUN_STATUS" \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  monorepo-shells:
+    name: Section 4 Next.js Workspaces
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install reproducible workspace lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Check workspace ownership and coupling
+        run: python scripts/check_monorepo.py
+      - name: SDK origin and privacy regression
+        run: npm test
+      - name: Build all Next.js application shells
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+      - name: Serve actual exports and verify all workspace homepages
+        run: python scripts/smoke_workspace_exports.py

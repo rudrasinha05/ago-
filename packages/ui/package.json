@@ -1,0 +1,16 @@
+{
+  "name": "@ago/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.jsx",
+    "./styles.css": "./styles.css"
+  },
+  "dependencies": {
+    "@ago/shared": "0.1.0"
+  },
+  "peerDependencies": {
+    "react": "19.3.0"
+  }
+}

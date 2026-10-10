@@ -57,6 +57,16 @@ reviewed SQL-access boundaries in addition to Section 14 imports.
 Read [Section 3 contracts](docs/architecture/SECTION_03_DOMAIN_DRIVEN_DESIGN.md)
 and [acceptance evidence](docs/reports/SECTION03_FINAL_ACCEPTANCE.md).
 
+## Architecture section 4 — Monorepo and application shells
+
+The existing backend is preserved alongside Next.js web/admin/docs shells,
+a canonical API wrapper, seven machine-checked service boundaries and private
+UI/SDK/shared packages. Root `npm ci`, `npm test`, `npm run build` and
+`npm run dev:web` operate the new shells; existing Python/console commands
+remain valid without npm. See [Section 4 architecture](docs/architecture/SECTION_04_MONOREPO_ARCHITECTURE.md)
+and [acceptance evidence](docs/reports/SECTION04_FINAL_ACCEPTANCE.md).
+This scaffold does not claim full frontend parity or separately deployed services.
+
 ## Completed architecture section: 14 — Module Dependency Rules
 
 The original 1–34 architecture checklist is tracked **separately** from

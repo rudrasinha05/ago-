@@ -1,0 +1,12 @@
+{
+  "name": "notification",
+  "deployment": "modular-monolith",
+  "modules": [
+    "events",
+    "event_worker",
+    "handoffs",
+    "calendar_store"
+  ],
+  "contract": "../../docs/architecture/SECTION_03_DOMAIN_DRIVEN_DESIGN.md",
+  "extraction": "Requires reviewed versioned tenant/auth/idempotence/recovery contracts; not a separately deployed service"
+}

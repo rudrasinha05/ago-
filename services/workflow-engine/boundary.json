@@ -1,0 +1,11 @@
+{
+  "name": "workflow-engine",
+  "deployment": "modular-monolith",
+  "modules": [
+    "workflows",
+    "task_store",
+    "agent_runtime"
+  ],
+  "contract": "../../docs/architecture/SECTION_03_DOMAIN_DRIVEN_DESIGN.md",
+  "extraction": "Requires reviewed versioned tenant/auth/idempotence/recovery contracts; not a separately deployed service"
+}

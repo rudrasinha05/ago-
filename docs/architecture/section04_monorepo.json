@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "packages": {
+    "@ago/web": {
+      "path": "apps/web",
+      "allowed": [
+        "@ago/ui",
+        "@ago/shared"
+      ]
+    },
+    "@ago/admin": {
+      "path": "apps/admin",
+      "allowed": [
+        "@ago/ui",
+        "@ago/shared"
+      ]
+    },
+    "@ago/docs": {
+      "path": "apps/docs",
+      "allowed": [
+        "@ago/ui",
+        "@ago/shared"
+      ]
+    },
+    "@ago/ui": {
+      "path": "packages/ui",
+      "allowed": [
+        "@ago/shared"
+      ]
+    },
+    "@ago/sdk": {
+      "path": "packages/sdk",
+      "allowed": [
+        "@ago/shared"
+      ]
+    },
+    "@ago/shared": {
+      "path": "packages/shared",
+      "allowed": []
+    }
+  },
+  "services": {
+    "company-brain": [
+      "goals",
+      "plan_store",
+      "plan_execution",
+      "meta_brain"
+    ],
+    "workflow-engine": [
+      "workflows",
+      "task_store",
+      "agent_runtime"
+    ],
+    "memory": [
+      "memory",
+      "organization_store"
+    ],
+    "knowledge-graph": [
+      "knowledge_store"
+    ],
+    "auth": [
+      "security",
+      "identity",
+      "security_controls",
+      "login_security"
+    ],
+    "notification": [
+      "events",
+      "event_worker",
+      "handoffs",
+      "calendar_store"
+    ],
+    "analytics": [
+      "scorecard",
+      "executive_intelligence",
+      "simulation"
+    ]
+  },
+  "required_directories": [
+    "apps/backend",
+    "apps/api",
+    "apps/web",
+    "apps/admin",
+    "apps/docs",
+    "packages/ui",
+    "packages/sdk",
+    "packages/shared",
+    "infrastructure",
+    "docker",
+    "deployment",
+    "monitoring",
+    "tests",
+    "scripts",
+    "deploy",
+    "docs",
+    ".github/workflows"
+  ]
+}

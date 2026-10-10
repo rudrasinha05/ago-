@@ -1,0 +1,12 @@
+{
+  "name": "company-brain",
+  "deployment": "modular-monolith",
+  "modules": [
+    "goals",
+    "plan_store",
+    "plan_execution",
+    "meta_brain"
+  ],
+  "contract": "../../docs/architecture/SECTION_03_DOMAIN_DRIVEN_DESIGN.md",
+  "extraction": "Requires reviewed versioned tenant/auth/idempotence/recovery contracts; not a separately deployed service"
+}
