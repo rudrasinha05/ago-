@@ -105,5 +105,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     report = json.loads(args.coverage.read_text()) if args.coverage else None
     errors, measured = check(coverage=report)
+    if "unreviewed-api-contract-drift" in errors:
+        baseline = json.loads((ROOT / "docs/architecture/section13_api_contract.json").read_text())
+        current = api_contract()
+        delta = {
+            group: {key: value for key, value in current[group].items()
+                    if baseline[group].get(key) != value}
+            for group in ("operations", "schemas")
+        }
+        removed = {group: sorted(set(baseline[group]) - set(current[group]))
+                   for group in ("operations", "schemas")}
+        print(json.dumps({"api_additions_or_changes": delta, "removed": removed}))
     print(json.dumps({"passed": not errors, "violations": errors, "coverage": measured}))
     raise SystemExit(2 if errors else 0)
