@@ -716,6 +716,169 @@ class EnterpriseOperationsStore:
             )
         return {"id": asset_id, "status": target_state, "event_id": identifier}
 
+
+    def request_assistance(self, *, actor: Principal, employee_id: str,
+                           task_id: str | None, reason: str, severity: str,
+                           summary: str, evidence_ref: str) -> dict:
+        if reason not in ("overload", "low_confidence", "missing_permission",
+                          "dependency", "safety_risk", "assistance"):
+            raise ValueError("Unknown assistance cause")
+        if severity not in ("advisory", "blocking"):
+            raise ValueError("Unknown assistance severity")
+        if not 1 <= len(summary.strip()) <= 1500 or not 1 <= len(evidence_ref.strip()) <= 1024:
+            raise ValueError("Bounded summary and real evidence reference required")
+        employee = str(UUID(employee_id))
+        task = str(UUID(task_id)) if task_id else None
+        identifier = str(uuid4())
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            worker = self.connection.execute(
+                """SELECT kind FROM ago_employees WHERE tenant_id=%s AND id=%s""",
+                (actor.tenant_id, employee),
+            ).fetchone()
+            if not worker or worker["kind"] != "ai":
+                raise LookupError("Tenant AI employee missing")
+            if task and not self.connection.execute(
+                """SELECT 1 FROM ago_governed_tasks
+                   WHERE tenant_id=%s AND id=%s AND assignee_id=%s""",
+                (actor.tenant_id, task, employee),
+            ).fetchone():
+                raise PermissionError("Task must be assigned to this employee")
+            self.connection.execute(
+                """INSERT INTO ago_employee_help_requests
+                   (id,tenant_id,employee_id,task_id,submitted_by,reason,severity,summary,evidence_ref)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, employee, task, actor.subject,
+                 reason, severity, summary.strip(), evidence_ref.strip()),
+            )
+        return {"id": identifier, "employee_id": employee, "severity": severity,
+                "status": "open", "execution_guard": severity == "blocking"}
+
+    def assistance(self, *, tenant_id: str, employee_id: str | None = None) -> list[dict]:
+        if employee_id:
+            UUID(employee_id)
+        return [dict(row) for row in self.connection.execute(
+            """SELECT h.id,h.employee_id,h.task_id,h.reason,h.severity,h.summary,
+                      h.evidence_ref,h.created_at,d.outcome,d.explanation,
+                      d.created_at AS decided_at
+               FROM ago_employee_help_requests h
+               LEFT JOIN ago_employee_help_decisions d ON d.tenant_id=h.tenant_id
+                 AND d.request_id=h.id
+               WHERE h.tenant_id=%s AND (%s::uuid IS NULL OR h.employee_id=%s)
+               ORDER BY h.created_at DESC,h.id LIMIT 100""",
+            (str(UUID(tenant_id)), employee_id, employee_id),
+        ).fetchall()]
+
+    def resolve_assistance(self, *, actor: Principal, request_id: str,
+                           approval_id: str, outcome: str, explanation: str) -> dict:
+        request = str(UUID(request_id))
+        if outcome not in ("resolved", "rejected") or not 1 <= len(explanation.strip()) <= 1500:
+            raise ValueError("Reviewed outcome and explanation required")
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            earlier = self.connection.execute(
+                """SELECT id,approval_id,outcome,explanation FROM ago_employee_help_decisions
+                   WHERE tenant_id=%s AND request_id=%s""",
+                (actor.tenant_id, request),
+            ).fetchone()
+            if earlier:
+                if (str(earlier["approval_id"]) != str(UUID(approval_id))
+                    or earlier["outcome"] != outcome
+                    or earlier["explanation"] != explanation.strip()):
+                    raise PermissionError("Assistance decision is already immutable")
+                return {"id": str(earlier["id"]), "request_id": request,
+                        "outcome": outcome, "idempotent": True}
+            if not self.connection.execute(
+                "SELECT 1 FROM ago_employee_help_requests WHERE tenant_id=%s AND id=%s",
+                (actor.tenant_id, request),
+            ).fetchone():
+                raise LookupError("Assistance request not found")
+            self._approval(actor, approval_id, "enterprise:help:resolve:" + request)
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_employee_help_decisions
+                   (id,tenant_id,request_id,actor_id,approval_id,outcome,explanation)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, request, actor.subject,
+                 str(UUID(approval_id)), outcome, explanation.strip()),
+            )
+        return {"id": identifier, "request_id": request,
+                "outcome": outcome, "idempotent": False}
+
+    def link_plan_task(self, *, actor: Principal, horizon_plan_id: str, task_id: str,
+                       approval_id: str, evidence_ref: str) -> dict:
+        horizon, task = str(UUID(horizon_plan_id)), str(UUID(task_id))
+        if not 1 <= len(evidence_ref.strip()) <= 1024:
+            raise ValueError("Plan-task evidence required")
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            before = self.connection.execute(
+                """SELECT id,approval_id,evidence_ref FROM ago_horizon_task_links
+                   WHERE tenant_id=%s AND horizon_plan_id=%s AND task_id=%s""",
+                (actor.tenant_id, horizon, task),
+            ).fetchone()
+            if before:
+                if str(before["approval_id"]) != str(UUID(approval_id)) or (
+                    before["evidence_ref"] != evidence_ref.strip()
+                ):
+                    raise PermissionError("Cannot rewrite approved plan/task lineage")
+                return {"id": str(before["id"]), "idempotent": True}
+            self._approval(actor, approval_id,
+                           "enterprise:plan-task:" + horizon + ":" + task)
+            plan = self.connection.execute(
+                """SELECT starts_at,ends_at FROM ago_horizon_plans
+                   WHERE tenant_id=%s AND id=%s""",
+                (actor.tenant_id, horizon),
+            ).fetchone()
+            work = self.connection.execute(
+                """SELECT created_at FROM ago_governed_tasks
+                   WHERE tenant_id=%s AND id=%s""",
+                (actor.tenant_id, task),
+            ).fetchone()
+            if not plan or not work:
+                raise LookupError("Approved horizon plan or tenant task missing")
+            if not plan["starts_at"] <= work["created_at"] <= plan["ends_at"]:
+                raise PermissionError("Task cannot be attributed outside plan window")
+            identifier = str(uuid4())
+            self.connection.execute(
+                """INSERT INTO ago_horizon_task_links
+                   (id,tenant_id,horizon_plan_id,task_id,actor_id,approval_id,evidence_ref)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                (identifier, actor.tenant_id, horizon, task,
+                 actor.subject, str(UUID(approval_id)), evidence_ref.strip()),
+            )
+        return {"id": identifier, "horizon_plan_id": horizon, "task_id": task,
+                "idempotent": False, "execution_authorized": False}
+
+    def plan_feedback(self, *, tenant_id: str, horizon_plan_id: str) -> dict:
+        horizon = str(UUID(horizon_plan_id))
+        if not self.connection.execute(
+            "SELECT 1 FROM ago_horizon_plans WHERE tenant_id=%s AND id=%s",
+            (str(UUID(tenant_id)), horizon),
+        ).fetchone():
+            raise LookupError("Plan not found")
+        rows = self.connection.execute(
+            """SELECT t.id,t.status,r.verdict
+               FROM ago_horizon_task_links l
+               JOIN ago_governed_tasks t ON t.tenant_id=l.tenant_id AND t.id=l.task_id
+               LEFT JOIN ago_task_reviews r ON r.tenant_id=t.tenant_id AND r.task_id=t.id
+               WHERE l.tenant_id=%s AND l.horizon_plan_id=%s
+               ORDER BY t.created_at,t.id""",
+            (str(UUID(tenant_id)), horizon),
+        ).fetchall()
+        counts = {"qa_passed": 0, "qa_failed": 0, "awaiting_qa": 0}
+        for row in rows:
+            if row["status"] == "completed" and row["verdict"] == "pass":
+                counts["qa_passed"] += 1
+            elif row["status"] == "failed" or row["verdict"] == "fail":
+                counts["qa_failed"] += 1
+            else:
+                counts["awaiting_qa"] += 1
+        return {"horizon_plan_id": horizon, "linked_tasks": len(rows), **counts,
+                "status": "no_evidence" if not rows else "observed",
+                "source": "governed_tasks_and_independent_QA",
+                "replan_is_advisory": True, "automatically_replanned": False}
+
     def twin_runs(self, *, tenant_id: str) -> list[dict]:
         return [dict(row) for row in self.connection.execute(
             """SELECT id,snapshot_id,assumptions,result,calibrated,data_coverage,
