@@ -18,7 +18,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [api_knowledge](../../apps/backend/ago/api_knowledge.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security, storage_adapters |
 | [api_m2](../../apps/backend/ago/api_m2.py) | transport | transport | api_contracts, backend_contracts, governed_execution, memory, quality, repository_ports, security, security_material |
 | [api_meta](../../apps/backend/ago/api_meta.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
-| [api_operations](../../apps/backend/ago/api_operations.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
+| [api_operations](../../apps/backend/ago/api_operations.py) | transport | transport | agent_handlers, api_contracts, api_m2, backend_contracts, repository_ports, security |
 | [api_tools](../../apps/backend/ago/api_tools.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security, tool_catalog |
 | [approvals](../../apps/backend/ago/approvals.py) | governance | domain | None |
 | [architecture_guard](../../apps/backend/ago/architecture_guard.py) | entrypoints | foundation | None |

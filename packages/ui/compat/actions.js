@@ -104,6 +104,15 @@ async function reviewApproval(ctx, id, initial = "approved") {
   if (request?.requester_id === ctx.state.me?.id) {
     throw new Error("The requester cannot review their own approval.");
   }
+  let details = null;
+  if(request?.action?.startsWith("enterprise:")) {
+    const paths=["/evidence?kind=intent","/organization/intents","/planning/review-intents"];
+    const results=await Promise.allSettled(paths.map(path=>ctx.api.request("/v1/operations/enterprise"+path)));
+    for(const result of results)if(result.status==="fulfilled" && Array.isArray(result.value)) {
+      const found=result.value.find(x=>x.approval_id===id || x.payload?.approval_id===id);
+      if(found)details=found;
+    }
+  }
   openDialog(ctx, {
     title: "Independent approval decision",
     description: "Your decision is immutable. Approve only after personally reviewing the requested action.",
@@ -124,6 +133,11 @@ async function reviewApproval(ctx, id, initial = "approved") {
       return "Human approval decision recorded.";
     },
   });
+  if(details) {
+    const pre=document.createElement("pre");pre.textContent=JSON.stringify(details,null,2);
+    pre.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:35vh;overflow:auto";
+    document.getElementById("operation-form").prepend(pre);
+  }
 }
 async function planSteps(ctx, id) {
   id = uuid(id);
@@ -155,6 +169,7 @@ async function planSteps(ctx, id) {
 }
 export async function handleAction(key, id, ctx) {
   const { api, state, can } = ctx;
+  if (key.startsWith("enterprise-")) { await enterpriseAction(key,id,ctx); return; }
   if (key === "go-twin") { await ctx.goPage("twin"); return; }
   if (key === "refresh") { await ctx.refreshCurrent(); return; }
   if (["approve","reject","review-approval"].includes(key)) {
@@ -700,4 +715,242 @@ export async function handleAction(key, id, ctx) {
     return;
   }
   throw new Error("The requested action is not supported.");
+}
+
+const enterpriseBase = "/v1/operations/enterprise";
+const newOperation = () => crypto.randomUUID();
+const textField = (name,label,maxLength=1500) => ({name,label,type:"textarea",maxLength});
+const selectField = (name,label,options,required=true) => ({name,label,type:"select",options,required});
+const numericField = (name,label,value=0,max=1000000) => ({name,label,type:"number",min:0,max,value});
+const timeField = (name,label,value="") => ({name,label,type:"datetime-local",value});
+const instant = value => value ? new Date(value).toISOString() : null;
+function showEvidence(ctx,title,value) {
+  openDialog(ctx,{title,description:"Recorded source evidence. Review assumptions and scope before deciding.",
+    refresh:false,button:"Close",onSubmit:async()=>"Evidence viewed."});
+  const pre=document.createElement("pre");pre.textContent=JSON.stringify(value,null,2);
+  pre.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto";
+  document.getElementById("operation-form").prepend(pre);
+}
+async function enterpriseAction(key,id,ctx) {
+  const {api,state,can}=ctx;
+  const records=resource(state.data,"enterpriseEvidence") || [];
+  const post=async(path,body={})=>api.request(enterpriseBase+path,{method:"POST",body});
+  if(key==="enterprise-evidence") {
+    const record=records.find(x=>x.id===uuid(id));
+    if(!record)throw new Error("Refresh to load the current evidence.");
+    showEvidence(ctx,"Evidence and provenance",record);return;
+  }
+  if(key==="enterprise-apply-intent") {
+    confirmation(ctx,"Apply reviewed operation","This applies exactly the saved parameters. The server rechecks independent approval.",
+      async()=>{await post("/intents/"+uuid(id)+"/apply");return "Reviewed operation applied.";});return;
+  }
+  if(key==="enterprise-review-evidence") {
+    const record=records.find(x=>x.id===uuid(id));
+    if(!record)throw new Error("Evidence missing.");
+    const approvals=resource(state.data,"approvals") || [];
+    const action="enterprise:evidence:"+record.id+":"+record.digest;
+    const approved=approvals.find(x=>x.action===action && x.status==="approved" && x.requester_id===state.me.id);
+    confirmation(ctx,"Evidence review",approved?"Record the independent decision against this exact evidence digest.":
+      "Create an independent human review request. Review does not authenticate provider invoices or apply changes.",async()=>{
+        if(approved)await post("/evidence/"+record.id+"/review",{approval_id:approved.id});
+        else await post("/evidence/"+record.id+"/approval");
+        return approved?"Independent evidence review recorded.":"Review requested. Open Governance with the independent reviewer.";
+      });return;
+  }
+  if(key==="enterprise-apply-hr") {
+    const intents=resource(state.data,"enterpriseOrgIntents") || [];
+    const intent=intents.find(x=>x.id===uuid(id));
+    if(!intent)throw new Error("Recorded HR intent missing.");
+    confirmation(ctx,"Apply reviewed organization change","The exact saved request will be applied after the server verifies independent approval.",
+      async()=>{await post("/organization/apply",{...intent.payload,approval_id:intent.approval_id});return "Organization change applied.";});return;
+  }
+  if(key==="enterprise-apply-revision") {
+    const item=(resource(state.data,"enterpriseRevisions") || []).find(x=>x.id===uuid(id));
+    if(!item)throw new Error("Revision intent missing.");
+    confirmation(ctx,"Apply reviewed revision","The original plan stays immutable. Descendant boundaries and stale versions are checked.",async()=>{
+      await post("/plans/"+item.horizon_plan_id+"/revisions/"+item.id+"/apply",{approval_id:item.approval_id});return "Reviewed revision applied.";
+    });return;
+  }
+  if(key==="enterprise-claim") {
+    confirmation(ctx,"Run one approved offline task","Only an independently approved internal task is eligible. Separate human QA follows execution.",async()=>{
+      const claim=await post("/work-queue/offline-claim",{lease_seconds:600});
+      if(!claim.queue_id)return "No safe approved offline task is available.";
+      await post("/work-queue/"+claim.queue_id+"/run",{lease_id:claim.lease_id});
+      return "Offline task completed. Independent QA is pending.";
+    });return;
+  }
+  if(key==="enterprise-asset-view" || key==="enterprise-asset-impact") {
+    const path=key==="enterprise-asset-view"?"/payload":"/impact";
+    const result=await api.request(enterpriseBase+"/marketplace/"+uuid(id)+path);
+    if(result.content_base64 && result.content_type!=="application/octet-stream") {
+      result.text_preview=new TextDecoder().decode(Uint8Array.from(atob(result.content_base64),x=>x.charCodeAt(0)));
+      delete result.content_base64;
+    }
+    showEvidence(ctx,key==="enterprise-asset-view"?"Approved reusable content":"Version sunset and dependency impact",result);return;
+  }
+  if(key==="enterprise-publish") {
+    const asset=(resource(state.data,"enterpriseAssets") || []).find(x=>x.id===uuid(id));
+    const request=(resource(state.data,"approvals") || []).find(x=>x.action==="enterprise:publish:"+id && x.status==="approved" && x.requester_id===state.me.id);
+    confirmation(ctx,"Publish internal asset",request?"Publish the reviewed payload and exact version.":"Request independent review of stored content and dependency manifest.",async()=>{
+      if(request)await post("/marketplace/"+asset.id+"/publish");
+      else await post("/marketplace/"+asset.id+"/approval");
+      return request?"Asset published.":"Publication review requested.";
+    });return;
+  }
+  if(key!=="enterprise-command")throw new Error("Unknown enterprise action.");
+  if(!can("organization:manage"))throw new Error("Organization management permission required.");
+  openDialog(ctx,{title:"Organization operations",description:"Choose a workflow. Changes require independent review; evidence captures are read-only observations.",
+    fields:[selectField("command","Workflow",[
+      choose("cycle","Capture operating lifecycle"),choose("hr","Hire / promote / retire / department change"),
+      choose("mode","Company / department operating mode"),choose("worker","AI availability / pause / sleep / resume"),
+      choose("capacity","Execution capacity"),choose("assessment","Assess AI competence from actual QA"),
+      choose("help","Request assistance / refuse unsafe work"),choose("resolve","Resolve reviewed assistance"),
+      choose("plan","Create approved planning horizon"),choose("rollup","Capture planning feedback and conflicts"),
+      choose("replan","Propose a versioned plan revision"),choose("plan-link","Link an approved task to a horizon"),
+      choose("enqueue","Queue independently approved work"),choose("budget","Cost envelope"),
+      choose("cost","Record observed cost / revenue"),choose("finance","Assess cost / ROI assumptions"),
+      choose("asset","Store reusable asset draft"),choose("consume","Request approved asset reuse"),
+      choose("retire","Deprecate / revoke an asset"),choose("diagnostics","Capture evolution diagnostics"),
+      choose("experiment","Compare real reviewed task cohorts"),choose("twin-state","Capture organizational Twin state"),
+      choose("forecast","Freeze a task quality forecast"),choose("calibrate","Measure later forecast outcomes"),
+    ])],button:"Continue",refresh:false,onSubmit:async v=>{
+      // Close the chooser before opening the next native modal.
+      ctx.dialog.close();setTimeout(()=>enterpriseForm(v.command,ctx).catch(e=>ctx.toast(e.message)),0);
+      return "Workflow selected.";
+    }});
+}
+async function enterpriseForm(command,ctx) {
+  const {api,state}=ctx;
+  const base=enterpriseBase;
+  const post=(path,body)=>api.request(base+path,{method:"POST",body});
+  if(["cycle","diagnostics","twin-state"].includes(command)) {
+    const path={cycle:"/cycle",diagnostics:"/evolution/diagnostics","twin-state":"/twin/state"}[command];
+    confirmation(ctx,"Capture source evidence","Save current observed records and their immutable digest.",async()=>{
+      await post(path,{operation_key:newOperation()});return "Source evidence captured.";
+    });return;
+  }
+  const {departments,people}=await departmentsAndPeople(ctx);
+  const ai=people.filter(x=>x.kind==="ai");
+  const evidence=resource(state.data,"enterpriseEvidence") || [];
+  const plans=resource(state.data,"enterprisePlans") || [];
+  const assets=resource(state.data,"enterpriseAssets") || [];
+  const tasks=resource(state.data,"tasks") || [];
+  const approvalIds=new Set((resource(state.data,"approvals") || []).filter(x=>x.status==="approved").map(x=>x.id));
+  const approvedTasks=tasks.filter(t=>t.status==="waiting_approval" && approvalIds.has(t.approval_id));
+  const entity=(name,label,rows)=>selectField(name,label,choices(rows));
+  const note=textField("reason","Reason / review rationale");
+  let fields=[], submit;
+  const intent=async(operation,target_id,parameters)=>{
+    await post("/intents",{operation,target_id,parameters});
+    return "Exact operation saved. Independent reviewer can inspect it in Operations and decide in Governance.";
+  };
+  if(command==="hr") {
+    fields=[selectField("change_kind","Change",[choose("created","Create department"),choose("hired","Hire AI employee"),choose("promoted","Promote AI employee"),choose("terminated","Terminate AI employee"),choose("closed","Close department")]),
+      selectField("target_id","Existing target (promotion / termination / closure)",[choose("","Creating new target"),...choices([...ai,...departments])],false),
+      {name:"name",label:"New department / employee name",required:false,maxLength:200},
+      selectField("department_id","Hiring department",[choose("","Not hiring"),...choices(departments)],false),numericField("role_level","Promotion level (2–5)",2,5),note];
+    submit=async v=>{
+      const creating=["created","hired"].includes(v.change_kind);
+      const payload={change_kind:v.change_kind,target_id:creating?newOperation():v.target_id,reason:v.reason};
+      if(creating)payload.name=v.name;
+      if(v.change_kind==="hired")payload.department_id=v.department_id;
+      if(v.change_kind==="promoted")payload.role_level=Number(v.role_level);
+      await post("/organization/approval",payload);return "Exact HR review request saved.";
+    };
+  } else if(command==="mode" || command==="capacity" || command==="budget") {
+    fields=[selectField("scope_kind","Scope",[choose("company","Company"),choose("department","Department"),choose("employee","AI employee")]),
+      selectField("scope_id","Scope target (company leaves blank)",[choose("","Company"),...choices([...departments,...ai])],false)];
+    if(command==="mode")fields.push(selectField("target","Operating mode",["active","paused","maintenance","emergency","suspended"].map(x=>choose(x,x))),timeField("expires_at","Expires at"),note);
+    if(command==="capacity")fields.push(numericField("max_running","Maximum concurrent tasks",1,1000),note);
+    if(command==="budget")fields.push(numericField("ceiling","Observed-currency ceiling",0),{name:"currency",label:"Currency",value:"INR",maxLength:3});
+    submit=async v=>{
+      const params={scope_kind:v.scope_kind,scope_id:v.scope_kind==="company"?null:v.scope_id};
+      if(command==="mode")Object.assign(params,{target:v.target,expires_at:instant(v.expires_at),rationale:v.reason});
+      if(command==="capacity")Object.assign(params,{max_running:Number(v.max_running),rationale:v.reason});
+      if(command==="budget")Object.assign(params,{ceiling:v.ceiling,currency:v.currency});
+      return intent(command,null,params);
+    };
+  } else if(command==="worker" || command==="assessment") {
+    mustHave(ai,"Create an AI employee first.");fields=[entity("employee_id","AI employee",ai)];
+    if(command==="worker")fields.push(selectField("state","Availability",["available","idle","paused","sleeping","interrupted","unavailable"].map(x=>choose(x,x))),{...timeField("expires_at","Restriction expiry (required for temporary pause/sleep/interrupt)"),required:false},note);
+    submit=async v=>command==="assessment"?(await post("/agents/"+v.employee_id+"/assessment",{operation_key:newOperation()}),"Actual QA assessment saved."):
+      intent("worker",v.employee_id,{state:v.state,reason:v.reason,expires_at:instant(v.expires_at)});
+  } else if(command==="help" || command==="resolve") {
+    if(command==="help") {
+      fields=[entity("employee_id","AI employee",ai),selectField("reason","Reason",["overload","low_confidence","missing_permission","dependency","safety_risk","assistance"].map(x=>choose(x,x))),
+        selectField("severity","Severity",[choose("blocking","Block execution"),choose("advisory","Advisory")]),textField("summary","Help needed"),textField("evidence_ref","Evidence source",1024)];
+      submit=async v=>{await post("/assistance",v);return "Assistance requested; blockers affect scheduling.";};
+    } else {
+      const requests=(resource(state.data,"enterpriseAssistance") || []).filter(x=>x.outcome!=="resolved");
+      mustHave(requests,"No open assistance requests.");
+      fields=[entity("request_id","Assistance request",requests),selectField("outcome","Outcome",[choose("resolved","Resolved"),choose("rejected","Rejected; remains blocked")]),textField("explanation","Resolution evidence")];
+      submit=v=>intent("resolve",v.request_id,{outcome:v.outcome,explanation:v.explanation});
+    }
+  } else if(command==="plan" || command==="replan" || command==="rollup" || command==="plan-link") {
+    if(command==="rollup") {
+      mustHave(plans,"Create an approved horizon plan first.");fields=[entity("plan_id","Plan / hierarchy root",plans)];
+      submit=async v=>{await post("/plans/"+v.plan_id+"/rollup",{operation_key:newOperation()});return "Plan lineage, QA and conflicts captured.";};
+    } else if(command==="plan-link") {
+      fields=[entity("plan_id","Approved horizon",plans),entity("task_id","Approved governed task",approvedTasks),textField("evidence_ref","Strategy lineage evidence",1024)];
+      submit=v=>intent("link",null,{horizon_plan_id:v.plan_id,task_id:v.task_id,evidence_ref:v.evidence_ref});
+    } else {
+      fields=command==="plan"?[selectField("horizon","Planning horizon",["lifetime","five_year","annual","quarterly","monthly","weekly","daily","hourly","current_task"].map(x=>choose(x,x))),selectField("parent_id","Approved parent",[choose("","Lifetime root"),...choices(plans)],false)]:[entity("plan_id","Plan to revise",plans)];
+      fields.push({name:"title",label:"Plan title",maxLength:300},timeField("starts_at","Starts at"),timeField("ends_at","Ends at"),numericField("budget_ceiling","Virtual-credit ceiling"),textField("evidence_ref","Source evidence",1024));
+      if(command==="replan")fields.push(textField("rationale","Why this revision is needed"));
+      submit=async v=>{
+        const params={title:v.title,starts_at:instant(v.starts_at),ends_at:instant(v.ends_at),budget_ceiling:v.budget_ceiling,evidence_ref:v.evidence_ref};
+        if(command==="plan")return intent("plan",null,{...params,horizon:v.horizon,parent_id:v.parent_id||null});
+        const original=plans.find(x=>x.id===v.plan_id);
+        await post("/plans/"+v.plan_id+"/revisions/approval",{...params,base_revision:original.revision,rationale:v.rationale});
+        return "Immutable revision review requested. Apply its saved row after independent approval.";
+      };
+    }
+  } else if(command==="enqueue") {
+    mustHave(approvedTasks,"An independently approved task awaiting execution is required.");
+    fields=[entity("task_id","Approved task",approvedTasks),numericField("priority","Priority (0–100)",50,100)];
+    submit=async v=>{await post("/work-queue",{task_id:v.task_id,priority:Number(v.priority),operation_key:"queue:"+v.task_id,eligible_at:new Date().toISOString()});return "Approved task queued.";};
+  } else if(command==="cost") {
+    fields=[selectField("category","Observed category",["model","storage","tool","execution","time","revenue","other"].map(x=>choose(x,x))),
+      {name:"provider",label:"Provider / payer",maxLength:180},textField("source_ref","Actual source reference",1024),numericField("amount","Observed amount"),{name:"currency",label:"Currency",value:"INR",maxLength:3},timeField("period_start","Period starts"),timeField("period_end","Period ends")];
+    submit=async v=>{await post("/costs",{...v,operation_key:newOperation(),period_start:instant(v.period_start),period_end:instant(v.period_end)});return "Observed financial claim saved; provider verification pending.";};
+  } else if(command==="finance") {
+    const costs=resource(state.data,"enterpriseCosts") || [];mustHave(costs,"Record actual cost/revenue claims first.");
+    fields=[{name:"currency",label:"Analyze currency",value:"INR",maxLength:3},numericField("baseline_revenue","Baseline revenue assumption"),numericField("alternative_net","Alternative net benefit assumption"),textField("assumptions","Baseline, comparison period and limitations")];
+    submit=async v=>{await post("/finance/assessment",{...v,cost_ids:costs.filter(x=>x.currency===v.currency).map(x=>x.id),operation_key:newOperation()});return "Financial assessment saved with explicit assumptions.";};
+  } else if(command==="asset") {
+    fields=[entity("department_id","Publisher department",departments),{name:"name",label:"Asset name",maxLength:200},selectField("kind","Asset type",["service","library","dataset","research","design_system","template","agent","model","workflow"].map(x=>choose(x,x))),{name:"version",label:"Version",value:"1.0.0",maxLength:30},{name:"license_id",label:"License / reuse terms",maxLength:200},textField("content","Reusable text content",500000),{...textField("manifest","JSON compatibility manifest",16000),value:'{"dependencies":[]}'}];
+    submit=async v=>{
+      const bytes=new TextEncoder().encode(v.content);
+      const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),x=>x.toString(16).padStart(2,"0")).join("");
+      let raw="";for(const byte of bytes)raw+=String.fromCharCode(byte);
+      const asset=await post("/marketplace",{department_id:v.department_id,name:v.name,kind:v.kind,version:v.version,license_id:v.license_id,sha256_digest:hash,manifest:JSON.parse(v.manifest)});
+      await post("/marketplace/"+asset.id+"/payload",{content_type:"text/plain",content_base64:btoa(raw)});
+      return "Content stored in draft. Request independent publication review from the asset row.";
+    };
+  } else if(command==="consume" || command==="retire") {
+    const published=assets.filter(x=>x.status==="published");mustHave(published,"A published internal asset is required.");
+    fields=[entity("asset_id","Published asset",published)];
+    if(command==="consume")fields.push(entity("department_id","Consumer department",departments),textField("evidence_ref","Reuse purpose / evidence",1024));
+    else fields.push(selectField("target_state","Retirement",[choose("deprecated","Deprecate version"),choose("revoked","Revoke asset")]),note);
+    submit=v=>intent(command,v.asset_id,command==="consume"?{department_id:v.department_id,evidence_ref:v.evidence_ref}:{target_state:v.target_state,reason:v.reason});
+  } else if(command==="forecast") {
+    const snapshots=evidence.filter(x=>x.kind==="twin_state");mustHave(snapshots,"Capture organizational Twin state first.");
+    fields=[entity("snapshot_id","Frozen organizational state",snapshots),timeField("horizon_end","Observation window ends")];
+    submit=async v=>{
+      const snapshot=snapshots.find(x=>x.id===v.snapshot_id);
+      const ids=snapshot.payload.tasks.filter(t=>!t.verdict && !["completed","failed"].includes(t.status)).map(t=>t.id);
+      if(!ids.length)throw new Error("This snapshot has no unfinished forecast cohort.");
+      await post("/twin/forecast",{snapshot_id:v.snapshot_id,task_ids:ids,horizon_end:instant(v.horizon_end),operation_key:newOperation()});return "Forecast frozen before future QA outcomes.";
+    };
+  } else if(command==="calibrate") {
+    const forecasts=evidence.filter(x=>x.kind==="forecast");mustHave(forecasts,"Freeze a forecast before measuring later observations.");
+    fields=[entity("forecast_id","Frozen forecast",forecasts)];
+    submit=async v=>{await post("/twin/forecasts/"+v.forecast_id+"/calibrate",{operation_key:newOperation()});return "Later outcomes measured; pending observations remain explicit.";};
+  } else if(command==="experiment") {
+    const reviewed=tasks.filter(x=>["completed","failed"].includes(x.status));mustHave(reviewed,"Two independently QA-reviewed task cohorts are required.");
+    fields=[entity("baseline_id","Baseline reviewed task",reviewed),entity("candidate_id","Candidate reviewed task",reviewed),textField("hypothesis","Improvement hypothesis"),textField("rollback_plan","Rollback proposal")];
+    submit=async v=>{await post("/evolution/experiment",{baseline_task_ids:[v.baseline_id],candidate_task_ids:[v.candidate_id],hypothesis:v.hypothesis,rollback_plan:v.rollback_plan,operation_key:newOperation()});return "Source-verified comparison captured; independent proposal review required.";};
+  } else throw new Error("Workflow unavailable.");
+  openDialog(ctx,{title:"Organization · "+command.replaceAll("-"," "),description:"Saved operations retain source evidence and require the applicable independent review.",
+    fields,button:"Save workflow",onSubmit:submit});
 }

@@ -12,6 +12,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
+from typing import Callable
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.enterprise_domains import (
@@ -36,6 +37,15 @@ class EnterpriseOperationsStore:
             raise LookupError("Organization not found")
 
     def _approval(self, actor: Principal, approval_id: str, action: str) -> None:
+        # New guided requests bind all fields, not just target IDs. Legacy APIs
+        # cannot reuse such approvals with substituted parameters.
+        bound = self.connection.execute(
+            """SELECT 1 FROM ago_enterprise_evidence
+               WHERE tenant_id=%s AND kind='intent' AND operation_key=%s""",
+            (actor.tenant_id, str(UUID(approval_id))),
+        ).fetchone()
+        if bound and getattr(self, "_applying_intent", None) != str(UUID(approval_id)):
+            raise PermissionError("Apply the immutable complete action intent")
         row = self.connection.execute(
             """SELECT requester_id, reviewer_id, status, action
                FROM ago_approval_requests WHERE tenant_id=%s AND id=%s""",
@@ -1511,7 +1521,8 @@ class EnterpriseOperationsStore:
         return {"id": identifier, "task_id": task,
                 "idempotent": False, "executed": False}
 
-    def claim_work(self, *, actor: Principal, lease_seconds: int) -> dict:
+    def claim_work(self, *, actor: Principal, lease_seconds: int,
+                   offline_only: bool = False) -> dict:
         if type(lease_seconds) is not int or not 300 <= lease_seconds <= 3600:
             raise ValueError("Lease must be between five and sixty minutes")
         with self.connection.transaction():
@@ -1536,6 +1547,7 @@ class EnterpriseOperationsStore:
                       ORDER BY sequence DESC LIMIT 1
                    ) last ON true
                    WHERE q.tenant_id=%s AND q.eligible_at<=clock_timestamp()
+                     AND (%s=false OR t.action='internal:brief')
                      AND t.status='waiting_approval'
                      AND a.status='approved' AND a.action=t.action
                      AND (last.state IS NULL OR last.state='released'
@@ -1543,16 +1555,40 @@ class EnterpriseOperationsStore:
                      AND NOT EXISTS(
                        SELECT 1 FROM ago_agent_runs r
                        WHERE r.tenant_id=q.tenant_id AND r.task_id=q.task_id)
-                   ORDER BY (q.priority+LEAST(20,
+                   ORDER BY (q.priority+LEAST(100,
                      GREATEST(0,FLOOR(EXTRACT(EPOCH FROM
                        (clock_timestamp()-q.created_at))/3600)::int))) DESC,
                        q.created_at,q.id
                    LIMIT 100""",
-                (actor.tenant_id,),
+                (actor.tenant_id, offline_only),
             ).fetchall()
+            limits = self.capacity_limits(tenant_id=actor.tenant_id)
+            caps = {}
+            for policy in limits["policies"]:
+                caps.setdefault((policy["scope_kind"], str(policy["scope_id"]) if policy["scope_id"] else None),
+                                policy["max_running"])
+            reserved = self.connection.execute(
+                """SELECT t.assignee_id,e.department_id,count(*) AS running
+                   FROM ago_oos_queue_items q
+                   JOIN ago_governed_tasks t ON t.tenant_id=q.tenant_id AND t.id=q.task_id
+                   JOIN ago_employees e ON e.tenant_id=t.tenant_id AND e.id=t.assignee_id
+                   JOIN LATERAL (SELECT state,expires_at FROM ago_oos_queue_events
+                     WHERE tenant_id=q.tenant_id AND queue_id=q.id ORDER BY sequence DESC LIMIT 1) h ON true
+                   WHERE q.tenant_id=%s AND t.status='waiting_approval'
+                     AND h.state='leased' AND h.expires_at>clock_timestamp()
+                   GROUP BY t.assignee_id,e.department_id""", (actor.tenant_id,),
+            ).fetchall()
+            loads = limits["running"] + reserved
             for candidate in available:
                 department = str(candidate["department_id"])
                 worker = str(candidate["assignee_id"])
+                company_load = sum(int(x["running"]) for x in loads)
+                department_load = sum(int(x["running"]) for x in loads if str(x["department_id"]) == department)
+                employee_load = sum(int(x["running"]) for x in loads if str(x["assignee_id"]) == worker)
+                if any(load >= caps.get((kind, target), limits["defaults"][kind])
+                       for kind, target, load in (("company", None, company_load),
+                            ("department", department, department_load), ("employee", worker, employee_load))):
+                    continue
                 if (self.effective_mode(tenant_id=actor.tenant_id,
                          scope_kind="department",scope_id=department)["mode"] != "active"
                     or self.effective_mode(tenant_id=actor.tenant_id,
@@ -2031,5 +2067,515 @@ class EnterpriseOperationsStore:
             """SELECT id,snapshot_id,assumptions,result,calibrated,data_coverage,
                       source_digest,created_at FROM ago_twin_scenarios
                WHERE tenant_id=%s ORDER BY created_at DESC,id LIMIT 100""",
+            (str(UUID(tenant_id)),),
+        ).fetchall()]
+
+    def evidence(self, *, tenant_id: str, kind: str | None = None) -> list[dict]:
+        return [dict(r) for r in self.connection.execute(
+            """SELECT e.id,e.kind,e.operation_key,e.payload,e.digest,e.created_at,
+                      r.approval_id,r.created_at AS reviewed_at
+               FROM ago_enterprise_evidence e
+               LEFT JOIN ago_enterprise_evidence_reviews r
+                 ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+               WHERE e.tenant_id=%s AND (%s::text IS NULL OR e.kind=%s)
+               ORDER BY e.created_at DESC,e.id LIMIT 100""",
+            (str(UUID(tenant_id)), kind, kind),
+        ).fetchall()]
+
+    def _save_evidence(self, *, actor: Principal, kind: str,
+                       operation_key: str, payload: dict) -> dict:
+        from hashlib import sha256
+        if not 1 <= len(operation_key.strip()) <= 160:
+            raise ValueError("Bounded operation key required")
+        encoded = json.dumps(payload, sort_keys=True, default=str, allow_nan=False)
+        if len(encoded.encode()) > 2000000:
+            raise ValueError("Evidence snapshot too large")
+        digest = sha256(encoded.encode()).hexdigest()
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            previous = self.connection.execute(
+                """SELECT id,payload,digest,created_at FROM ago_enterprise_evidence
+                   WHERE tenant_id=%s AND kind=%s AND operation_key=%s""",
+                (actor.tenant_id, kind, operation_key.strip()),
+            ).fetchone()
+            if previous:
+                if previous["digest"] != digest:
+                    raise ValueError("Operation key already bound to different immutable evidence")
+                return {**dict(previous), "idempotent": True, "kind": kind}
+            identifier = str(uuid4())
+            row = self.connection.execute(
+                """INSERT INTO ago_enterprise_evidence
+                   (id,tenant_id,actor_id,kind,operation_key,payload,digest)
+                   VALUES(%s,%s,%s,%s,%s,%s::jsonb,%s) RETURNING created_at""",
+                (identifier, actor.tenant_id, actor.subject, kind, operation_key.strip(),
+                 encoded, digest),
+            ).fetchone()
+        return {"id": identifier, "kind": kind, "payload": payload,
+                "digest": digest, "created_at": row["created_at"], "idempotent": False}
+
+    def evidence_action(self, *, tenant_id: str, evidence_id: str) -> str:
+        row = self.connection.execute(
+            "SELECT digest FROM ago_enterprise_evidence WHERE tenant_id=%s AND id=%s",
+            (str(UUID(tenant_id)), str(UUID(evidence_id))),
+        ).fetchone()
+        if not row:
+            raise LookupError("Evidence not found")
+        return "enterprise:evidence:" + str(UUID(evidence_id)) + ":" + row["digest"]
+
+    def review_evidence(self, *, actor: Principal, evidence_id: str,
+                        approval_id: str) -> dict:
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            action = self.evidence_action(tenant_id=actor.tenant_id, evidence_id=evidence_id)
+            self._approval(actor, approval_id, action)
+            prior = self.connection.execute(
+                """SELECT approval_id FROM ago_enterprise_evidence_reviews
+                   WHERE tenant_id=%s AND evidence_id=%s""",
+                (actor.tenant_id, str(UUID(evidence_id))),
+            ).fetchone()
+            if prior and str(prior["approval_id"]) != str(UUID(approval_id)):
+                raise PermissionError("Reviewed evidence cannot be rewritten")
+            if not prior:
+                self.connection.execute(
+                    """INSERT INTO ago_enterprise_evidence_reviews
+                       (id,tenant_id,evidence_id,actor_id,approval_id) VALUES(%s,%s,%s,%s,%s)""",
+                    (str(uuid4()), actor.tenant_id, str(UUID(evidence_id)), actor.subject,
+                     str(UUID(approval_id))),
+                )
+        return {"evidence_id": str(UUID(evidence_id)), "reviewed": True,
+                "applied": False, "provider_authenticated": False,
+                "authority_granted": False, "idempotent": bool(prior)}
+
+    def execute_work_lease(self, *, actor: Principal, queue_id: str,
+                           lease_id: str, runner: Callable[..., dict]) -> dict:
+        """Atomic lease consumption for the deterministic, side-effect-free local handler."""
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            item = self.connection.execute(
+                """SELECT q.task_id,t.action,e.id,e.actor_id,e.state,e.expires_at
+                   FROM ago_oos_queue_items q
+                   JOIN ago_governed_tasks t ON t.tenant_id=q.tenant_id AND t.id=q.task_id
+                   JOIN LATERAL (
+                     SELECT id,actor_id,state,expires_at FROM ago_oos_queue_events
+                     WHERE tenant_id=q.tenant_id AND queue_id=q.id
+                     ORDER BY sequence DESC LIMIT 1) e ON true
+                   WHERE q.tenant_id=%s AND q.id=%s""",
+                (actor.tenant_id, str(UUID(queue_id))),
+            ).fetchone()
+            if not item or item["state"] != "leased" or (
+                str(item["id"]) != str(UUID(lease_id)) or str(item["actor_id"]) != actor.subject
+                or item["expires_at"] <= datetime.now(timezone.utc)
+            ):
+                raise PermissionError("Current owned unexpired lease required")
+            if item["action"] != "internal:brief":
+                raise PermissionError("Local worker supports offline internal:brief only")
+            # Original AgentRuntime and TaskStore recheck persistent permissions,
+            # approval, modes, capacity, termination and dependency QA at dispatch.
+            result = runner(task_id=str(item["task_id"]), actor=actor)
+            self.resolve_work_lease(actor=actor, queue_id=queue_id, status="reconciled",
+                                    explanation="Offline internal task completed; independent QA pending")
+        return {"queue_id": str(UUID(queue_id)), "executed": True,
+                "run": result, "independent_qa_required": True, "external_effects": False}
+
+    def _task_observations(self, *, tenant_id: str) -> list[dict]:
+        return [dict(r) for r in self.connection.execute(
+            """SELECT t.id,t.assignee_id,t.action,t.status,t.created_at,t.updated_at,
+                      e.department_id,s.plan_id,s.depends_on,p.goal_id,
+                      r.id AS review_id,r.verdict,r.evidence,r.created_at AS reviewed_at
+               FROM ago_governed_tasks t
+               JOIN ago_employees e ON e.tenant_id=t.tenant_id AND e.id=t.assignee_id
+               LEFT JOIN ago_plan_steps s ON s.tenant_id=t.tenant_id AND s.task_id=t.id
+               LEFT JOIN ago_strategy_plans p ON p.tenant_id=s.tenant_id AND p.id=s.plan_id
+               LEFT JOIN LATERAL (SELECT id,verdict,evidence,created_at FROM ago_task_reviews
+                 WHERE tenant_id=t.tenant_id AND task_id=t.id ORDER BY created_at DESC,id DESC
+                 LIMIT 1) r ON true
+               WHERE t.tenant_id=%s ORDER BY t.created_at,t.id LIMIT 1001""",
+            (str(UUID(tenant_id)),),
+        ).fetchall()]
+
+    def operating_cycle(self, *, actor: Principal, operation_key: str) -> dict:
+        tasks = self._task_observations(tenant_id=actor.tenant_id)
+        queue = self.work_queue(tenant_id=actor.tenant_id)
+        help_requests = self.assistance(tenant_id=actor.tenant_id)
+        mode = self.effective_mode(tenant_id=actor.tenant_id)
+        pending_help = [str(r["id"]) for r in help_requests if r["outcome"] != "resolved"]
+        failures = [str(t["id"]) for t in tasks if t["status"] == "failed" or t["verdict"] == "fail"]
+        state = ("restricted" if mode["mode"] != "active" else
+                 "blocked" if pending_help else "degraded" if failures else
+                 "working" if any(t["status"] == "running" for t in tasks) else
+                 "ready" if queue else "idle")
+        payload = {"phase": state, "mode": mode, "capacity": self.capacity_limits(
+            tenant_id=actor.tenant_id), "task_count": len(tasks[:1000]),
+            "truncated": len(tasks) > 1000, "pending_help_ids": pending_help,
+            "failed_task_ids": failures, "queue": queue,
+            "cycle": ["sense", "classify", "prioritize", "allocate", "monitor", "escalate"],
+            "escalation_route": "manager_and_independent_human_reviewer",
+            "next_action": "review_blockers" if pending_help or failures else "review_approved_queue",
+            "actions_executed": False, "authority_changed": False}
+        return self._save_evidence(actor=actor, kind="operations", operation_key=operation_key,
+                                   payload=payload)
+
+    def competence_assessment(self, *, actor: Principal, employee_id: str,
+                              operation_key: str) -> dict:
+        state = self.worker_state(tenant_id=actor.tenant_id, employee_id=employee_id)
+        rows = [t for t in self._task_observations(tenant_id=actor.tenant_id)
+                if str(t["assignee_id"]) == str(UUID(employee_id))]
+        actual = [r for r in rows if r["review_id"]]
+        by_action = {}
+        for r in actual:
+            measurement = by_action.setdefault(r["action"], {"passed": 0, "failed": 0,
+                                                            "task_ids": [], "review_ids": []})
+            passed = r["status"] == "completed" and r["verdict"] == "pass"
+            measurement["passed" if passed else "failed"] += 1
+            measurement["task_ids"].append(str(r["id"]))
+            measurement["review_ids"].append(str(r["review_id"]))
+        known = self.connection.execute(
+            """SELECT id,label,source_ref FROM ago_knowledge_nodes
+               WHERE tenant_id=%s AND status='verified' ORDER BY created_at DESC,id LIMIT 100""",
+            (actor.tenant_id,),
+        ).fetchall()
+        payload = {"employee_id": str(UUID(employee_id)), "state": state,
+                   "action_assessments": by_action, "sample_count": len(actual),
+                   "knowledge_sources": [dict(k) for k in known],
+                   "knowledge_level": "source_available_not_mastery" if known else "unknown",
+                   "confidence_calibration": "unavailable_without_paired_prior_confidence",
+                   "skills_scope": "observed_task_actions_only", "subjective_consciousness": False,
+                   "permission_boundary": {"task_approval_required": True,
+                      "executor_permissions_rechecked_at_dispatch": True,
+                      "employee_has_no_implicit_service_principal": True},
+                   "learning_references": [str(r["review_id"]) for r in actual if r["verdict"] == "fail"],
+                   "recommendation": "review_remediation" if any(r["verdict"] == "fail" for r in actual)
+                     else "collect_more_independent_qa" if len(actual) < 5 else "review_action_specific_competence",
+                   "authority_granted": False}
+        return self._save_evidence(actor=actor, kind="competence", operation_key=operation_key,
+                                   payload=payload)
+
+    def planning_rollup(self, *, actor: Principal, plan_id: str,
+                        operation_key: str) -> dict:
+        plans = self.plans(tenant_id=actor.tenant_id)
+        index = {str(p["id"]): p for p in plans}
+        root = str(UUID(plan_id))
+        if root not in index:
+            raise LookupError("Horizon plan not found")
+        descendants = {root}
+        for _ in range(len(plans)):
+            found = {str(p["id"]) for p in plans if str(p["parent_id"]) in descendants}
+            if found <= descendants:
+                break
+            descendants |= found
+        links = self.connection.execute(
+            """SELECT horizon_plan_id,task_id,evidence_ref FROM ago_horizon_task_links
+               WHERE tenant_id=%s AND horizon_plan_id=ANY(%s::uuid[])""",
+            (actor.tenant_id, sorted(descendants)),
+        ).fetchall()
+        task_ids = {str(link["task_id"]) for link in links}
+        tasks = [t for t in self._task_observations(tenant_id=actor.tenant_id)
+                 if str(t["id"]) in task_ids]
+        calendar = self.connection.execute(
+            """SELECT id,task_id,goal_id,starts_at,ends_at FROM ago_calendar_events
+               WHERE tenant_id=%s AND visibility='tenant' AND status='scheduled'
+                 AND task_id=ANY(%s::uuid[]) ORDER BY starts_at,id LIMIT 1000""",
+            (actor.tenant_id, sorted(task_ids)),
+        ).fetchall()
+        conflicts = []
+        windows = {}
+        for link in links:
+            plan = index[str(link["horizon_plan_id"])]
+            windows.setdefault(str(link["task_id"]), []).append(plan)
+        for event in calendar:
+            if any(event["starts_at"] < p["starts_at"] or event["ends_at"] > p["ends_at"]
+                   for p in windows.get(str(event["task_id"]), [])):
+                conflicts.append({"kind": "calendar_outside_plan", "event_id": str(event["id"]),
+                                  "task_id": str(event["task_id"])})
+        for parent in (index[x] for x in descendants):
+            children = [p for p in plans if str(p["parent_id"]) == str(parent["id"])]
+            if sum((p["budget_ceiling"] for p in children), Decimal(0)) > parent["budget_ceiling"]:
+                conflicts.append({"kind": "aggregate_child_budget", "plan_id": str(parent["id"])})
+            for child in children:
+                if child["starts_at"] < parent["starts_at"] or child["ends_at"] > parent["ends_at"]:
+                    conflicts.append({"kind": "child_window", "plan_id": str(child["id"])})
+        failed = [str(t["id"]) for t in tasks if t["status"] == "failed" or t["verdict"] == "fail"]
+        blocked = [str(t["id"]) for t in tasks if t["depends_on"] and t["status"] != "completed"]
+        payload = {"root_plan_id": root, "versions": {x: index[x]["revision"] for x in sorted(descendants)},
+                   "hierarchy": [index[x] for x in sorted(descendants)],
+                   "task_lineage": [dict(link) for link in links], "tasks": tasks,
+                   "goal_ids": sorted({str(t["goal_id"]) for t in tasks if t["goal_id"]}),
+                   "calendar": [dict(e) for e in calendar], "conflicts": conflicts,
+                   "qa_passed": sum(t["status"] == "completed" and t["verdict"] == "pass" for t in tasks),
+                   "qa_failed": len(failed), "awaiting_qa": sum(t["verdict"] is None for t in tasks),
+                   "replan_reasons": {"failed_task_ids": failed, "dependency_task_ids": blocked,
+                                      "conflicts": conflicts},
+                   "replan_required": bool(failed or blocked or conflicts),
+                   "proposal": {"plan_id": root, "base_revision": index[root]["revision"],
+                                "review_required": True, "descendants_must_stay_within_bounds": True},
+                   "automatically_approved": False, "tasks_executed": False,
+                   "coverage": "bounded_500_plans_1000_tasks_public_calendar"}
+        return self._save_evidence(actor=actor, kind="planning", operation_key=operation_key,
+                                   payload=payload)
+
+    def financial_assessment(self, *, actor: Principal, cost_ids: list[str],
+                             currency: str, baseline_revenue: str,
+                             alternative_net: str, assumptions: str,
+                             operation_key: str) -> dict:
+        from ago.enterprise_domains import finance_analysis
+        identifiers = [str(UUID(x)) for x in cost_ids]
+        if len(set(identifiers)) != len(identifiers) or not 1 <= len(identifiers) <= 1000:
+            raise ValueError("Unique bounded observed evidence IDs required")
+        rows = self.connection.execute(
+            """SELECT id,category,observed_amount,currency,provider,source_ref,
+                      period_start,period_end,evidence_state
+               FROM ago_observed_costs WHERE tenant_id=%s AND id=ANY(%s::uuid[])
+               ORDER BY id""", (actor.tenant_id, identifiers),
+        ).fetchall()
+        if len(rows) != len(identifiers):
+            raise LookupError("All financial evidence must belong to this tenant")
+        result = finance_analysis(rows, currency=currency, baseline_revenue=baseline_revenue,
+                                  alternative_net=alternative_net, assumptions=assumptions)
+        result["source_records"] = [dict(r) for r in rows]
+        result["provider_verification"] = "requires_actual_provider_records_and_reconciliation"
+        return self._save_evidence(actor=actor, kind="finance", operation_key=operation_key,
+                                   payload=result)
+
+    def marketplace_impact(self, *, tenant_id: str, asset_id: str) -> dict:
+        asset = str(UUID(asset_id))
+        assets = self.assets(tenant_id=tenant_id)
+        target = next((r for r in assets if str(r["id"]) == asset), None)
+        if not target:
+            raise LookupError("Asset not found")
+        dependents = []
+        for row in assets:
+            manifest = row.get("manifest") or {}
+            if any(str(d.get("asset_id")) == asset for d in manifest.get("dependencies", [])):
+                dependents.append({"id": str(row["id"]), "name": row["name"],
+                                   "version": row["version"], "status": row["status"]})
+        usage = self.connection.execute(
+            """SELECT consumer_department_id,count(*) AS uses FROM ago_asset_consumptions
+               WHERE tenant_id=%s AND asset_id=%s GROUP BY consumer_department_id""",
+            (str(UUID(tenant_id)), asset),
+        ).fetchall()
+        return {"asset_id": asset, "dependent_assets": dependents,
+                "consumer_departments": [dict(r) for r in usage],
+                "migration_guidance": "Publish and independently approve a compatible successor; explicitly reapprove every consumer.",
+                "reuse_blocked": target["status"] in ("deprecated", "revoked"),
+                "automatic_migration": False}
+
+    def evolution_diagnostics(self, *, actor: Principal, operation_key: str) -> dict:
+        tasks = self._task_observations(tenant_id=actor.tenant_id)
+        failed = [t for t in tasks if t["status"] == "failed" or t["verdict"] == "fail"]
+        backlog = [t for t in tasks if t["status"] in ("proposed", "waiting_approval", "running")]
+        groups = {}
+        for t in tasks:
+            for dimension, value in (("employee", t["assignee_id"]),
+                                     ("department", t["department_id"]), ("workflow", t["plan_id"]),
+                                     ("prompt_or_handler", t["action"])):
+                if value is None:
+                    continue
+                key = dimension + ":" + str(value)
+                group = groups.setdefault(key, {"task_ids": [], "failed": 0, "reviewed": 0})
+                group["task_ids"].append(str(t["id"]))
+                group["failed"] += int(t["status"] == "failed" or t["verdict"] == "fail")
+                group["reviewed"] += int(t["review_id"] is not None)
+        proposals = [{"type": "workflow", "evidence_task_ids": [str(t["id"]) for t in failed],
+                      "change": "Review failed actions and add bounded remediation before reassigning",
+                      "rollback": "Retain prior approved workflow; reject candidate if independent QA regresses"}]
+        if not failed:
+            proposals = []
+        payload = {"source_tasks": tasks, "grouped_observations": groups,
+                   "failure_count": len(failed), "backlog_count": len(backlog),
+                   "proposals": proposals, "prompt_quality": "only action-level QA observed; causal attribution unknown",
+                   "architecture_quality": "use existing checked Section14 contract; no automatic rewrite",
+                   "knowledge_gaps": [r for r in self.assistance(tenant_id=actor.tenant_id)
+                                      if r["outcome"] != "resolved"],
+                   "approval_required": True, "applied": False,
+                   "unknowns": ["causal bottleneck attribution", "unobserved model costs", "external incident series"]}
+        return self._save_evidence(actor=actor, kind="diagnostics", operation_key=operation_key,
+                                   payload=payload)
+
+    def evolution_experiment(self, *, actor: Principal, baseline_task_ids: list[str],
+                             candidate_task_ids: list[str], hypothesis: str,
+                             rollback_plan: str, operation_key: str) -> dict:
+        baseline, candidate = {str(UUID(x)) for x in baseline_task_ids}, {str(UUID(x)) for x in candidate_task_ids}
+        if not baseline or not candidate or baseline & candidate or max(len(baseline), len(candidate)) > 100:
+            raise ValueError("Disjoint bounded real comparison cohorts required")
+        if not 1 <= len(hypothesis.strip()) <= 2000 or not 1 <= len(rollback_plan.strip()) <= 2000:
+            raise ValueError("Hypothesis and rollback proposal required")
+        rows = self._task_observations(tenant_id=actor.tenant_id)
+        index = {str(t["id"]): t for t in rows}
+        if not baseline | candidate <= index.keys():
+            raise LookupError("Comparison evidence not in tenant snapshot")
+        if any(not index[x]["review_id"] or index[x]["status"] not in ("completed", "failed")
+               for x in baseline | candidate):
+            raise PermissionError("Completed independently QA-reviewed cohorts required")
+        if {index[x]["action"] for x in baseline} != {index[x]["action"] for x in candidate}:
+            raise ValueError("Comparable handler action cohorts required")
+        def metrics(ids):
+            selected = [index[x] for x in sorted(ids)]
+            return {"task_ids": sorted(ids), "samples": len(ids),
+                    "qa_pass_rate": sum(t["status"] == "completed" and t["verdict"] == "pass"
+                                        for t in selected)/len(ids),
+                    "mean_elapsed_seconds": sum((t["updated_at"]-t["created_at"]).total_seconds()
+                                                for t in selected)/len(ids),
+                    "source_reviews": [str(t["review_id"]) for t in selected]}
+        before, after = metrics(baseline), metrics(candidate)
+        payload = {"hypothesis": hypothesis.strip(), "baseline": before, "candidate": after,
+                   "pass_rate_delta": after["qa_pass_rate"]-before["qa_pass_rate"],
+                   "source_tasks": [index[x] for x in sorted(baseline | candidate)],
+                   "rollback_proposal": rollback_plan.strip(), "applied": False,
+                   "activation_proposal": "Independent governance review before applying any change",
+                   "uncertainty": "observational cohorts; not randomized or causal proof"}
+        return self._save_evidence(actor=actor, kind="experiment", operation_key=operation_key,
+                                   payload=payload)
+
+    def capture_twin_state(self, *, actor: Principal, operation_key: str) -> dict:
+        # Eventually consistent one-way read projection; private calendar and
+        # memories are excluded. Source rows retain their individual timestamps.
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            observations = self._task_observations(tenant_id=actor.tenant_id)
+            departments = self.connection.execute(
+                "SELECT id,name FROM ago_departments WHERE tenant_id=%s ORDER BY id LIMIT 1000",
+                (actor.tenant_id,),
+            ).fetchall()
+            employees = self.connection.execute(
+                """SELECT id,name,kind,department_id,manager_id FROM ago_employees
+                   WHERE tenant_id=%s ORDER BY id LIMIT 1000""", (actor.tenant_id,),
+            ).fetchall()
+            calendar = self.connection.execute(
+                """SELECT id,task_id,goal_id,starts_at,ends_at,status FROM ago_calendar_events
+                   WHERE tenant_id=%s AND visibility='tenant' ORDER BY starts_at,id LIMIT 1000""",
+                (actor.tenant_id,),
+            ).fetchall()
+            payload = {"model_version": "organization_projection_v1",
+                       "departments": [dict(r) for r in departments],
+                       "employees": [dict(r) for r in employees], "tasks": observations[:1000],
+                       "horizon_plans": self.plans(tenant_id=actor.tenant_id),
+                       "calendar": [dict(r) for r in calendar],
+                       "capacity": self.capacity_limits(tenant_id=actor.tenant_id),
+                       "queue": self.work_queue(tenant_id=actor.tenant_id),
+                       "budgets": self.budgets(tenant_id=actor.tenant_id),
+                       "observed_costs": self.costs(tenant_id=actor.tenant_id),
+                       "source_truncation": len(observations) > 1000,
+                       "sync_direction": "operational_to_twin_only",
+                       "consistency": "eventually_consistent_read_projection",
+                       "private_data": "excluded", "calibrated": False, "applied": False,
+                       "unknowns": ["provider-authenticated revenue", "market response", "hiring causality"]}
+            return self._save_evidence(actor=actor, kind="twin_state", operation_key=operation_key,
+                                       payload=payload)
+
+    def forecast_twin(self, *, actor: Principal, snapshot_id: str,
+                      task_ids: list[str], horizon_end: datetime,
+                      operation_key: str) -> dict:
+        from ago.enterprise_domains import forecast_quality
+        snapshot = self.connection.execute(
+            """SELECT id,payload,digest,created_at FROM ago_enterprise_evidence
+               WHERE tenant_id=%s AND id=%s AND kind='twin_state'""",
+            (actor.tenant_id, str(UUID(snapshot_id))),
+        ).fetchone()
+        if not snapshot:
+            raise LookupError("Organizational twin snapshot required")
+        if horizon_end.tzinfo is None or not snapshot["created_at"] < horizon_end <= (
+            snapshot["created_at"]+timedelta(days=365)):
+            raise ValueError("Forecast horizon must follow capture within one year")
+        ids = {str(UUID(x)) for x in task_ids}
+        if not ids or len(ids) != len(task_ids) or len(ids) > 1000:
+            raise ValueError("Unique nonempty forecast cohort required")
+        tasks = snapshot["payload"]["tasks"]
+        cohort = [t for t in tasks if str(t["id"]) in ids]
+        if len(cohort) != len(ids) or any(t.get("verdict") or t["status"] in ("completed", "failed") for t in cohort):
+            raise PermissionError("Forecast cohort must be unfinished and unreviewed at capture")
+        training = [t for t in tasks if str(t["id"]) not in ids and t.get("reviewed_at")]
+        prediction = forecast_quality(training, cohort)
+        prediction.update({"snapshot_id": str(UUID(snapshot_id)), "source_digest": snapshot["digest"],
+                           "source_created_at": str(snapshot["created_at"]),
+                           "horizon_end": horizon_end.isoformat(),
+                           "validation": "Later independent QA on exactly this frozen cohort"})
+        return self._save_evidence(actor=actor, kind="forecast", operation_key=operation_key,
+                                   payload=prediction)
+
+    def calibrate_twin(self, *, actor: Principal, forecast_id: str,
+                       operation_key: str) -> dict:
+        from ago.enterprise_domains import calibrate_quality
+        forecast = self.connection.execute(
+            """SELECT id,payload,digest,created_at FROM ago_enterprise_evidence
+               WHERE tenant_id=%s AND id=%s AND kind='forecast'""",
+            (actor.tenant_id, str(UUID(forecast_id))),
+        ).fetchone()
+        if not forecast:
+            raise LookupError("Frozen forecast not found")
+        source = forecast["payload"]
+        rows = self._task_observations(tenant_id=actor.tenant_id)
+        ids = set(source["cohort_task_ids"])
+        end = datetime.fromisoformat(source["horizon_end"])
+        outcomes = [r for r in rows if str(r["id"]) in ids and r.get("reviewed_at")
+                    and forecast["created_at"] < r["reviewed_at"] <= end]
+        result = calibrate_quality(source, outcomes)
+        result.update({"forecast_id": str(UUID(forecast_id)), "forecast_digest": forecast["digest"],
+                       "source_outcomes": outcomes, "observation_cutoff": end.isoformat(),
+                       "horizon_elapsed": datetime.now(timezone.utc) >= end,
+                       "no_training_leakage": True})
+        return self._save_evidence(actor=actor, kind="calibration", operation_key=operation_key,
+                                   payload=result)
+
+    def record_action_intent(self, *, actor: Principal, operation: str,
+                             action: str, parameters: dict, approval_id: str) -> dict:
+        return self._save_evidence(actor=actor, kind="intent", operation_key=approval_id,
+            payload={"operation": operation, "action": action, "parameters": parameters,
+                     "approval_id": approval_id, "requester_id": actor.subject})
+
+    def apply_action_intent(self, *, actor: Principal, intent_id: str) -> dict:
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            row = self.connection.execute(
+                """SELECT payload FROM ago_enterprise_evidence
+                   WHERE tenant_id=%s AND id=%s AND kind='intent'""",
+                (actor.tenant_id, str(UUID(intent_id))),
+            ).fetchone()
+            if not row:
+                raise LookupError("Recorded action intent missing")
+            payload = row["payload"]
+            if payload["requester_id"] != actor.subject:
+                raise PermissionError("Only original requester may apply exact reviewed intent")
+            self._applying_intent = str(UUID(payload["approval_id"]))
+            try:
+                self._approval(actor, payload["approval_id"], payload["action"])
+            finally:
+                self._applying_intent = None
+            prior = self.connection.execute(
+                """SELECT payload FROM ago_enterprise_evidence
+                   WHERE tenant_id=%s AND kind='intent_result' AND operation_key=%s""",
+                (actor.tenant_id, str(UUID(intent_id))),
+            ).fetchone()
+            if prior:
+                return {"intent_id": str(UUID(intent_id)), "idempotent": True, **prior["payload"]}
+            values = dict(payload["parameters"])
+            operation = payload["operation"]
+            for field in ("starts_at", "ends_at", "expires_at"):
+                if values.get(field):
+                    values[field] = datetime.fromisoformat(values[field])
+            methods = {"mode": self.mode_change, "worker": self.worker_transition,
+                       "capacity": self.set_capacity, "plan": self.plan,
+                       "budget": self.create_budget, "consume": self.asset_consume,
+                       "retire": self.asset_retire, "link": self.link_plan_task,
+                       "resolve": self.resolve_assistance}
+            if operation not in methods:
+                raise PermissionError("Intent operation outside approved local scope")
+            self._applying_intent = str(UUID(payload["approval_id"]))
+            try:
+                result = methods[operation](actor=actor, approval_id=payload["approval_id"], **values)
+            finally:
+                self._applying_intent = None
+            self._save_evidence(actor=actor, kind="intent_result", operation_key=str(UUID(intent_id)),
+                                payload={"operation": operation, "result": result})
+        return {"intent_id": str(UUID(intent_id)), "idempotent": False, "result": result}
+
+    def pending_plan_revisions(self, *, tenant_id: str) -> list[dict]:
+        return [dict(r) for r in self.connection.execute(
+            """SELECT i.id,i.horizon_plan_id,i.actor_id,i.approval_id,i.base_revision,
+                      i.title,i.starts_at,i.ends_at,i.budget_ceiling,i.evidence_ref,i.rationale,
+                      i.digest,a.status,r.revision AS applied_revision
+               FROM ago_horizon_replan_intents i
+               JOIN ago_approval_requests a ON a.tenant_id=i.tenant_id AND a.id=i.approval_id
+               LEFT JOIN ago_horizon_plan_revisions r ON r.tenant_id=i.tenant_id AND r.intent_id=i.id
+               WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id LIMIT 100""",
             (str(UUID(tenant_id)),),
         ).fetchall()]

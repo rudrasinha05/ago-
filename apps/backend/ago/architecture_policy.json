@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "name": "AGO Section 14 — enforceable module boundary contract",
+  "name": "AGO Section 14 \u2014 enforceable module boundary contract",
   "approved_baseline": "2026-10-10",
   "review_reference": "SECTION05-LAYERS-AND-INJECTION-001",
   "layers": {
@@ -169,6 +169,7 @@
       "context": "transport",
       "layer": "transport",
       "imports": [
+        "agent_handlers",
         "api_contracts",
         "api_m2",
         "backend_contracts",

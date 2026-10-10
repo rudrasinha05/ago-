@@ -1267,3 +1267,321 @@ def enterprise_close_work_lease(
         EnterpriseOperationsStorePort).resolve_work_lease(
         actor=actor, queue_id=str(queue_id),
         status=data.status, explanation=data.explanation))
+
+
+# Additive evidence APIs. Existing M1–M12 operation/schema contracts remain intact.
+class EvidenceCaptureInput(StrictInput):
+    operation_key: str = Field(min_length=1, max_length=160)
+
+
+class WorkLeaseExecutionInput(StrictInput):
+    lease_id: UUID
+
+
+class FinancialAssessmentInput(EvidenceCaptureInput):
+    cost_ids: list[UUID] = Field(min_length=1, max_length=1000)
+    currency: str = Field(min_length=3, max_length=3)
+    baseline_revenue: Decimal = Field(ge=0)
+    alternative_net: Decimal = Field(ge=0)
+    assumptions: str = Field(min_length=1, max_length=2000)
+
+
+class EvolutionExperimentInput(EvidenceCaptureInput):
+    baseline_task_ids: list[UUID] = Field(min_length=1, max_length=100)
+    candidate_task_ids: list[UUID] = Field(min_length=1, max_length=100)
+    hypothesis: str = Field(min_length=1, max_length=2000)
+    rollback_plan: str = Field(min_length=1, max_length=2000)
+
+
+class TwinForecastInput(EvidenceCaptureInput):
+    snapshot_id: UUID
+    task_ids: list[UUID] = Field(min_length=1, max_length=1000)
+    horizon_end: datetime
+
+
+@router.get("/enterprise/evidence")
+def enterprise_evidence_list(
+    kind: Literal["operations", "planning", "competence", "finance", "diagnostics",
+                  "twin_state", "forecast", "calibration", "experiment", "intent", "intent_result"] | None = None,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).evidence(
+        tenant_id=actor.tenant_id, kind=kind)
+
+
+@router.post("/enterprise/evidence/{evidence_id}/approval")
+def enterprise_evidence_approval(
+    evidence_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    action = enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).evidence_action(
+        tenant_id=actor.tenant_id, evidence_id=str(evidence_id)))
+    return issue_enterprise_approval(repositories, actor, action)
+
+
+@router.post("/enterprise/evidence/{evidence_id}/review")
+def enterprise_evidence_review(
+    evidence_id: UUID, data: ApprovalReference,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).review_evidence(
+        actor=actor, evidence_id=str(evidence_id), approval_id=str(data.approval_id)))
+
+
+@router.post("/enterprise/work-queue/{queue_id}/run")
+def enterprise_run_offline_lease(
+    queue_id: UUID, data: WorkLeaseExecutionInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    from ago.agent_handlers import BUILTIN_HANDLERS
+    from ago.repository_ports import AgentRuntimePort
+    allowed(repositories, actor, "task:execute")
+    allowed(repositories, actor, "agent:dispatch")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).execute_work_lease(
+        actor=actor, queue_id=str(queue_id), lease_id=str(data.lease_id),
+        runner=repositories.resolve(AgentRuntimePort, handlers=BUILTIN_HANDLERS).run))
+
+
+@router.post("/enterprise/cycle")
+def enterprise_capture_cycle(
+    data: EvidenceCaptureInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).operating_cycle(
+        actor=actor, operation_key=data.operation_key))
+
+
+@router.post("/enterprise/agents/{employee_id}/assessment")
+def enterprise_assess_competence(
+    employee_id: UUID, data: EvidenceCaptureInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).competence_assessment(
+        actor=actor, employee_id=str(employee_id), operation_key=data.operation_key))
+
+
+@router.post("/enterprise/plans/{horizon_plan_id}/rollup")
+def enterprise_capture_plan_rollup(
+    horizon_plan_id: UUID, data: EvidenceCaptureInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).planning_rollup(
+        actor=actor, plan_id=str(horizon_plan_id), operation_key=data.operation_key))
+
+
+@router.post("/enterprise/finance/assessment")
+def enterprise_assess_finance(
+    data: FinancialAssessmentInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).financial_assessment(
+        actor=actor, cost_ids=[str(x) for x in data.cost_ids], currency=data.currency,
+        baseline_revenue=str(data.baseline_revenue), alternative_net=str(data.alternative_net),
+        assumptions=data.assumptions, operation_key=data.operation_key))
+
+
+@router.get("/enterprise/marketplace/{asset_id}/impact")
+def enterprise_asset_impact(
+    asset_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).marketplace_impact(
+        tenant_id=actor.tenant_id, asset_id=str(asset_id)))
+
+
+@router.post("/enterprise/evolution/diagnostics")
+def enterprise_diagnose_evolution(
+    data: EvidenceCaptureInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).evolution_diagnostics(
+        actor=actor, operation_key=data.operation_key))
+
+
+@router.post("/enterprise/evolution/experiment")
+def enterprise_compare_real_cohorts(
+    data: EvolutionExperimentInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).evolution_experiment(
+        actor=actor, baseline_task_ids=[str(x) for x in data.baseline_task_ids],
+        candidate_task_ids=[str(x) for x in data.candidate_task_ids], hypothesis=data.hypothesis,
+        rollback_plan=data.rollback_plan, operation_key=data.operation_key))
+
+
+@router.post("/enterprise/twin/state")
+def enterprise_capture_organization_twin(
+    data: EvidenceCaptureInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).capture_twin_state(
+        actor=actor, operation_key=data.operation_key))
+
+
+@router.post("/enterprise/twin/forecast")
+def enterprise_forecast_cohort(
+    data: TwinForecastInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).forecast_twin(
+        actor=actor, snapshot_id=str(data.snapshot_id), task_ids=[str(x) for x in data.task_ids],
+        horizon_end=data.horizon_end, operation_key=data.operation_key))
+
+
+@router.post("/enterprise/twin/forecasts/{forecast_id}/calibrate")
+def enterprise_calibrate_frozen_forecast(
+    forecast_id: UUID, data: EvidenceCaptureInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).calibrate_twin(
+        actor=actor, forecast_id=str(forecast_id), operation_key=data.operation_key))
+
+
+@router.post("/enterprise/work-queue/offline-claim")
+def enterprise_claim_offline_work(
+    data: EnterpriseQueueClaimInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "task:execute")
+    allowed(repositories, actor, "agent:dispatch")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).claim_work(
+        actor=actor, lease_seconds=data.lease_seconds, offline_only=True))
+
+
+class EnterpriseActionIntentInput(StrictInput):
+    operation: Literal["mode", "worker", "capacity", "plan", "budget", "consume", "retire", "link", "resolve"]
+    target_id: UUID | None = None
+    parameters: dict
+
+
+class EnterprisePlanLinkIntent(StrictInput):
+    horizon_plan_id: UUID
+    task_id: UUID
+    evidence_ref: str = Field(min_length=1, max_length=1024)
+    approval_id: UUID
+
+
+def validate_action_intent(data: EnterpriseActionIntentInput) -> tuple[str, dict]:
+    """Typed whitelist; never accept an API path, SQL, handler or authority flag."""
+    from uuid import uuid4
+    from pydantic import ValidationError
+    models = {"mode": EnterpriseModeChange, "worker": EnterpriseWorkerTransition,
+              "capacity": EnterpriseCapacityChange, "plan": EnterprisePlanInput,
+              "budget": EnterpriseBudgetInput, "consume": AssetConsumption,
+              "retire": EnterpriseAssetLifecycle, "link": EnterprisePlanLinkIntent,
+              "resolve": AssistanceDecision}
+    if "approval_id" in data.parameters or len(str(data.parameters)) > 16000:
+        raise ValueError("Approval identity is generated by the server")
+    parameters = dict(data.parameters)
+    dummy = str(uuid4())
+    if data.operation == "plan":
+        parameters["plan_id"] = dummy
+    if data.operation == "budget":
+        parameters["budget_id"] = dummy
+    try:
+        values = models[data.operation].model_validate({**parameters, "approval_id": dummy}).model_dump(mode="json")
+    except ValidationError as exc:
+        raise ValueError("Invalid or unexpected operation parameters") from exc
+    values.pop("approval_id")
+    target = str(data.target_id) if data.target_id else None
+    if data.operation in ("worker", "consume", "retire", "resolve") and not target:
+        raise ValueError("Operation target required")
+    if data.operation in ("mode", "capacity", "plan", "budget", "link") and target:
+        raise ValueError("Unexpected operation target")
+    if data.operation == "mode":
+        if (values["scope_kind"] == "company") != (values["scope_id"] is None):
+            raise ValueError("Invalid mode scope")
+        action = "enterprise:mode:"+values["scope_kind"]+":"+(values["scope_id"] or "company")+":"+values["target"]
+        values["reason"] = values.pop("rationale")
+    elif data.operation == "worker":
+        action = "enterprise:worker:"+target+":"+values["state"]
+        values["employee_id"] = target
+    elif data.operation == "capacity":
+        action = "enterprise:capacity:"+values["scope_kind"]+":"+(values["scope_id"] or "company")+":"+str(values["max_running"])
+    elif data.operation == "plan":
+        action = "enterprise:plan:"+values["plan_id"]
+        values["identifier"] = values.pop("plan_id")
+    elif data.operation == "budget":
+        action = "enterprise:budget:"+values["budget_id"]
+        values["identifier"] = values.pop("budget_id")
+    elif data.operation == "consume":
+        action = "enterprise:consume:"+target
+        values["asset_id"] = target
+    elif data.operation == "retire":
+        action = "enterprise:asset:"+target+":"+values["target_state"]
+        values["asset_id"] = target
+    elif data.operation == "resolve":
+        action = "enterprise:help:resolve:"+target
+        values["request_id"] = target
+    elif data.operation == "link":
+        action = "enterprise:plan-task:"+values["horizon_plan_id"]+":"+values["task_id"]
+    else:
+        raise ValueError("Unsupported intent operation")
+    return action, values
+
+
+@router.post("/enterprise/intents")
+def enterprise_propose_action_intent(
+    data: EnterpriseActionIntentInput,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    def record():
+        action, values = validate_action_intent(data)
+        with db.transaction():
+            request = issue_enterprise_approval(repositories, actor, action)
+            intent = repositories.resolve(EnterpriseOperationsStorePort).record_action_intent(
+                actor=actor, operation=data.operation, action=action,
+                parameters=values, approval_id=request["approval_id"])
+        return {**intent, "approval_id": request["approval_id"], "status": "pending"}
+    return enterprise_call(record)
+
+
+@router.post("/enterprise/intents/{intent_id}/apply")
+def enterprise_apply_recorded_intent(
+    intent_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "organization:manage")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).apply_action_intent(
+        actor=actor, intent_id=str(intent_id)))
+
+
+@router.get("/enterprise/planning/review-intents")
+def enterprise_plan_review_intents(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).pending_plan_revisions(
+        tenant_id=actor.tenant_id)

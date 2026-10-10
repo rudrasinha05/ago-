@@ -263,3 +263,34 @@ def test_next_real_digital_twin_never_applies_thresholds(page, tenant, app_url):
             (tenant["id"],),
         ).fetchone()["n"]
         assert n == 0
+
+
+def test_next_exact_enterprise_capacity_review_survives_signin(page, app_url, tenant):
+    sign_in_next(page, app_url, tenant)
+    navigate_next(page, 'Operations & Tools', 'Enterprise operations')
+    page.get_by_role('button', name='Organization workflows', exact=True).click()
+    page.get_by_label('Workflow', exact=True).select_option('capacity')
+    page.locator('#operation-submit').click()
+    expect(page.get_by_label('Maximum concurrent tasks', exact=True)).to_be_visible()
+    page.get_by_label('Maximum concurrent tasks', exact=True).fill('2')
+    page.get_by_label('Reason / review rationale', exact=True).fill('Reviewed local concurrency envelope')
+    page.locator('#operation-submit').click()
+    expect(page.get_by_role('dialog')).to_be_hidden()
+    expect(page.locator('#screen')).to_contain_text('capacity')
+    page.get_by_role('button', name='Sign out', exact=True).click()
+    sign_in_next(page, app_url, tenant, 'reviewer')
+    navigate_next(page, 'Governance', 'Governance & oversight')
+    row = page.locator('tr').filter(has_text='enterprise:capacity:company:')
+    row.get_by_role('button', name='Approve', exact=True).click()
+    expect(page.get_by_role('dialog')).to_contain_text('Reviewed local concurrency envelope')
+    expect(page.get_by_role('dialog')).to_contain_text('max_running')
+    page.get_by_label('Review rationale', exact=True).fill('Independent human reviewed exact saved capacity')
+    page.locator('#operation-submit').click()
+    expect(page.get_by_role('dialog')).to_be_hidden()
+    page.get_by_role('button', name='Sign out', exact=True).click()
+    sign_in_next(page, app_url, tenant)
+    navigate_next(page, 'Operations & Tools', 'Enterprise operations')
+    page.get_by_role('button', name='Apply exact request', exact=True).click()
+    page.locator('#operation-submit').click()
+    expect(page.get_by_role('dialog')).to_be_hidden()
+    expect(page.locator('#screen')).to_contain_text('Reviewed local concurrency envelope')

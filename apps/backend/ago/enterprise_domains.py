@@ -15,6 +15,82 @@ from json import dumps
 from typing import Mapping, Sequence
 
 
+def finance_analysis(rows: Sequence[dict], *, currency: str,
+                     baseline_revenue: str, alternative_net: str,
+                     assumptions: str) -> dict:
+    """Observed scenario accounting; never authenticates invoices or money."""
+    if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or not currency.isupper():
+        raise ValueError("Three-letter currency required")
+    if not 1 <= len(assumptions.strip()) <= 2000:
+        raise ValueError("Explicit economic assumptions required")
+    if not rows or len(rows) > 1000 or any(r["currency"] != currency for r in rows):
+        raise ValueError("Nonempty single-currency evidence required")
+    baseline, alternative = _amount(baseline_revenue), _amount(alternative_net)
+    revenue = sum((_amount(str(r["observed_amount"])) for r in rows
+                   if r["category"] == "revenue"), Decimal(0))
+    costs = sum((_amount(str(r["observed_amount"])) for r in rows
+                 if r["category"] != "revenue"), Decimal(0))
+    net = revenue - costs
+    return {"currency": currency, "observed_cost": str(costs),
+            "observed_revenue": str(revenue), "observed_net": str(net),
+            "baseline_revenue": str(baseline), "alternative_net": str(alternative),
+            "incremental_roi_pct": str((revenue-baseline-costs)*100/costs) if costs else None,
+            "opportunity_cost": str(max(Decimal(0), alternative-net)),
+            "assumptions": assumptions.strip(), "financial_settlement": False,
+            "evidence_state": "operator_claims_not_provider_authenticated",
+            "optimization": "advisory; preserve safety, approvals and QA"}
+
+
+def forecast_quality(training: Sequence[dict], cohort: Sequence[dict]) -> dict:
+    """QA-only baseline; frozen cohort is excluded from training by caller."""
+    if len(training) > 1000 or len(cohort) > 1000:
+        raise ValueError("Bounded task cohorts required")
+    outcomes = [r["verdict"] == "pass" and r["status"] == "completed"
+                for r in training if r.get("verdict") in ("pass", "fail")]
+    rate = sum(outcomes) / len(outcomes) if outcomes else None
+    from math import sqrt
+    interval = None
+    if outcomes:
+        n, z = len(outcomes), 1.96
+        center = (rate+z*z/(2*n))/(1+z*z/n)
+        half = z*sqrt(rate*(1-rate)/n+z*z/(4*n*n))/(1+z*z/n)
+        interval = [round(max(0, center-half), 6), round(min(1, center+half), 6)]
+    return {"model_version": "qa_cohort_baseline_v1", "training_samples": len(outcomes),
+            "pass_probability": rate, "probability_interval_95": interval,
+            "cohort_task_ids": [str(r["id"]) for r in cohort],
+            "expected_qa_passes": rate*len(cohort) if rate is not None else None,
+            "calibrated": False, "applied": False,
+            "limitations": "QA outcome baseline; no cycle-time, revenue or hiring causality."}
+
+
+def calibrate_quality(prediction: dict, observations: Sequence[dict]) -> dict:
+    ids = set(prediction["cohort_task_ids"])
+    if len(ids) != len(prediction["cohort_task_ids"]):
+        raise ValueError("Unique frozen cohort required")
+    if any(str(r["id"]) not in ids for r in observations):
+        raise ValueError("Outcome outside forecast cohort")
+    if len({str(r["id"]) for r in observations}) != len(observations):
+        raise ValueError("Duplicate outcomes denied")
+    eligible = [r for r in observations if r.get("verdict") in ("pass", "fail")]
+    rate = prediction["pass_probability"]
+    if rate is not None and (type(rate) not in (float, int) or not 0 <= rate <= 1):
+        raise ValueError("Invalid forecast probability")
+    outcomes = [int(r["verdict"] == "pass" and r["status"] == "completed")
+                for r in eligible]
+    complete = bool(ids) and len(eligible) == len(ids)
+    brier = sum((rate-y)**2 for y in outcomes)/len(outcomes) if (
+        rate is not None and outcomes) else None
+    return {"cohort_size": len(ids), "observed_samples": len(outcomes),
+            "pending_samples": len(ids)-len(outcomes), "complete": complete,
+            "brier_score": brier,
+            "mean_absolute_error": sum(abs(rate-y) for y in outcomes)/len(outcomes)
+             if rate is not None and outcomes else None,
+            "observed_qa_passes": sum(outcomes),
+            "calibration_status": "held_out_measured" if complete and brier is not None
+             else "awaiting_observations_or_training", "accuracy_certified": False,
+            "applied": False, "limits": "Single frozen QA cohort; no general accuracy guarantee."}
+
+
 def plan_revision_intent(*, plan_id: str, base_revision: int, title: str,
                          starts_at: datetime, ends_at: datetime,
                          budget_ceiling: str, evidence_ref: str,

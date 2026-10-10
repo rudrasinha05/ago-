@@ -6,7 +6,7 @@
 1. Library: original V2 prompt `Pasted markdown (2).md`, chapters 21–27 (design requirements); V1 prompt `Pasted text.txt` (chapters 15–18 and non-goals); Phase 0–12 roadmap `Pasted text(1).txt`.
 2. Library: `AGO_Architecture_Sections_01_34_Master_Checklist.md` (46 Section 21–27 entries below).
 3. Repository baseline: `develop` at `d6e9c038c028d848927f2240e72cabac692d9123`, with M1–M12 bounded foundations.
-4. **Missing original generated blueprint:** `docs/ai-company-phase-minus-1-enterprise-architecture-blueprint.md`. Neither the original V1 prompt nor generated-chapter summaries substitute for the missing document. Section 15/17/18 **exact original-blueprint parity stays unchecked** until recovered and compared. Bounded prompt-based documentation can be reviewed independently.
+4. **Recovered original generated blueprint:** founder Library upload (6,115 lines), SHA-256 `6589bc4f7e4f30287a61cefe3979b01d0b2a8357e3bb76dd6bb058d9e1daa1c4`. Section 15/17/18 comparison is recorded in `docs/reports/SECTIONS15_18_SOURCE_VERIFICATION.md`. Recovery does not alter the frozen advisory scope below.
 
 ## Existing architecture — do not change
 - Modular FastAPI backend, Next.js/static console and same PostgreSQL; no replacement or extra database/service.

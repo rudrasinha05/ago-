@@ -20,6 +20,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
+from time import sleep
 from urllib.parse import urlsplit
 
 from ago.release_security import schema_integrity
@@ -234,6 +235,54 @@ def restore_local(archive: Path, *, confirmed: bool = False) -> dict:
     return restore_drill(_dsn(), target, archive, confirmed=confirmed)
 
 
+def work_local(*, port: int, tenant_id: str, email: str, password: str,
+               iterations: int = 1, poll_seconds: int = 5,
+               connection=http.client.HTTPConnection, pause=sleep) -> dict:
+    """Opt-in offline worker. Credentials/token stay in memory, every call reauths.
+
+    No models, external tools, automatic task creation, approval or QA. A crash
+    before a committed offline transaction is safe to retry; after commit the
+    original task/run and queue history block replay. Expired sessions stop work.
+    """
+    from uuid import UUID
+    UUID(tenant_id)
+    if _stage() not in _LOCAL_STAGES or not 1 <= port <= 65535 or not (
+        1 <= iterations <= 10000 and 1 <= poll_seconds <= 30
+    ):
+        raise ValueError("Bounded localhost development worker required")
+    token = None
+    def call(path, body):
+        conn = connection("127.0.0.1", port, timeout=30)
+        try:
+            headers = {"Content-Type": "application/json"}
+            if token:
+                headers["Authorization"] = "Bearer " + token
+            conn.request("POST", path, json.dumps(body), headers)
+            response = conn.getresponse()
+            raw = response.read(2000000)
+            if response.status != 200:
+                raise RuntimeError("Local worker stopped; review session, permissions or queue blockers")
+            return json.loads(raw)
+        finally:
+            conn.close()
+    session = call("/v1/sessions", {"tenant_id": tenant_id, "email": email, "password": password})
+    token = session["access_token"]
+    del password
+    completed = idle = 0
+    for iteration in range(iterations):
+        claim = call("/v1/operations/enterprise/work-queue/offline-claim", {"lease_seconds": 600})
+        if claim["queue_id"]:
+            call("/v1/operations/enterprise/work-queue/" + claim["queue_id"] + "/run",
+                 {"lease_id": claim["lease_id"]})
+            completed += 1
+        else:
+            idle += 1
+        if iteration+1 < iterations:
+            pause(poll_seconds)
+    return {"completed": completed, "idle_polls": idle, "external_effects": False,
+            "independent_qa_required": True}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AGO safe local operator workflow")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -244,6 +293,10 @@ def main(argv: list[str] | None = None) -> int:
     server.add_argument("--port", type=int, default=8000)
     monitor = sub.add_parser("monitor", help="Read-only local health probes and alert")
     monitor.add_argument("--port", type=int, default=8000)
+    worker = sub.add_parser("work", help="Opt-in localhost offline approved-task worker")
+    worker.add_argument("--port", type=int, default=8000)
+    worker.add_argument("--iterations", type=int, default=1)
+    worker.add_argument("--poll-seconds", type=int, default=5)
     backup = sub.add_parser("backup", help="Explicit local custom-format backup")
     backup.add_argument("--output", type=Path, required=True)
     backup.add_argument("--confirm", action="store_true")
@@ -256,6 +309,13 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(info, sort_keys=True))
         return 0 if info["ready"] else 2
     try:
+        if args.command == "work":
+            result = work_local(port=args.port, iterations=args.iterations,
+                poll_seconds=args.poll_seconds, tenant_id=input("Organization UUID: ").strip(),
+                email=input("Executor email: ").strip(),
+                password=getpass.getpass("Password (never saved): "))
+            print(json.dumps(result, sort_keys=True))
+            return 0
         if args.command == "monitor":
             report = monitor_local(port=args.port)
             print(json.dumps(report, sort_keys=True))

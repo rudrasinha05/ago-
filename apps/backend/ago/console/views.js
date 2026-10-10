@@ -298,7 +298,25 @@ export function renderKnowledge(data, state) {
       empty("No pending evidence"))));
 }
 export 
-function renderEnterpriseSummary(data) {
+function renderEnterpriseSummary(data, state = {}) {
+  const manage = capability(state,"organization:manage");
+  const approvals = list(data,"approvals");
+  const evidence = list(data,"enterpriseEvidence");
+  const revisions = list(data,"enterpriseRevisions");
+  const approval = id => approvals.find(x=>x.id===id);
+  const intentRowsSaved = evidence.filter(x=>x.kind==="intent").slice(0,20).map(x=>
+    '<tr><td>'+maybe(x.payload.operation)+'</td><td>'+badge(approval(x.payload.approval_id)?.status || "unknown")+
+    '</td><td>'+action("Review parameters","enterprise-evidence",x.id)+
+    (manage && approval(x.payload.approval_id)?.status==="approved" && x.payload.requester_id===state.me?.id
+      ?action("Apply exact request","enterprise-apply-intent",x.id):"")+ '</td></tr>');
+  const evidenceRows = evidence.filter(x=>!['intent','intent_result'].includes(x.kind)).slice(0,20).map(x=>
+    '<tr><td>'+maybe(x.kind)+'</td><td>'+safe(dateText(x.created_at))+'</td><td>'+badge(x.reviewed_at?"reviewed":"unreviewed")+
+    '</td><td>'+action("Inspect evidence","enterprise-evidence",x.id)+(manage && !x.reviewed_at?
+      action("Independent review","enterprise-review-evidence",x.id):"")+ '</td></tr>');
+  const revisionRows = revisions.slice(0,20).map(x=>'<tr><td>'+maybe(x.title)+'</td><td>'+maybe(x.base_revision)+
+    '</td><td>'+badge(x.applied_revision?"applied":x.status)+'</td><td>'+
+    (manage && x.status==="approved" && !x.applied_revision && x.actor_id===state.me?.id?
+      action("Apply revision","enterprise-apply-revision",x.id):"")+ '</td></tr>');
   const currentMode = resource(data,"enterpriseModes")?.effective;
   const capacity = resource(data,"enterpriseCapacity");
   const capacityPolicies = Array.isArray(capacity?.policies) ? capacity.policies : [];
@@ -323,7 +341,7 @@ function renderEnterpriseSummary(data) {
     '</td><td>'+maybe(x.budget_ceiling)+'</td></tr>');
   const assetRows = assets.slice(0,10).map(x=>'<tr><td class="primary">'+maybe(x.name)+
     '</td><td>'+maybe(x.asset_kind)+'</td><td>'+maybe(x.version)+
-    '</td><td>'+badge(x.status)+'</td></tr>');
+    '</td><td>'+badge(x.status)+'</td><td>'+action("Impact","enterprise-asset-impact",x.id)+action("Content","enterprise-asset-view",x.id)+(manage && ["draft","proposed"].includes(x.status)?action("Publish / request review","enterprise-publish",x.id):"")+'</td></tr>');
   const budgetRows = budgets.slice(0,10).map(x=>'<tr><td>'+maybe(x.scope_kind)+
     '</td><td>'+maybe(x.approved_ceiling)+' '+maybe(x.currency)+
     '</td><td>'+safe(shortId(x.approval_id))+'</td></tr>');
@@ -355,8 +373,13 @@ function renderEnterpriseSummary(data) {
   const intentRows = orgIntents.slice(0,10).map(x=>
     '<tr><td>'+maybe(x.change_kind)+'</td><td>'+
     maybe(x.payload?.name || x.payload?.target_id)+'</td><td>'+
-    maybe(x.payload?.reason)+'</td><td>'+badge(x.status)+'</td></tr>');
+    maybe(x.payload?.reason)+'</td><td>'+badge(x.status)+(manage && x.status==="approved"?action("Apply HR change","enterprise-apply-hr",x.id):"")+'</td></tr>');
   return section("Organizational operating system","Sections 21–27 · persisted evidence")+
+    (manage?'<div class="page-actions">'+action("Organization workflows","enterprise-command")+
+      action("Run one approved offline task","enterprise-claim")+'</div>':"")+
+    panel("Saved operation requests",table(["Workflow","Independent approval","Action"],intentRowsSaved,empty("No saved operation requests")))+
+    panel("Versioned plan review requests",table(["Plan","Base revision","Status","Action"],revisionRows,empty("No plan revisions awaiting review")))+
+    panel("Operational evidence and forecasts",unavailable(data,"enterpriseEvidence",table(["Evidence","Captured","Review","Action"],evidenceRows,empty("Capture an operating cycle, planning rollup or Twin state"))))+
     '<div class="info-strip">'+icon("shield")+
     '<span>Human approvals govern all operational changes. Costs are unverified unless independently reconciled; scenarios never apply changes.</span></div>'+
     '<div class="metric-grid">'+
@@ -386,7 +409,7 @@ function renderEnterpriseSummary(data) {
     panel("Governed departmental budgets",unavailable(data,"enterpriseBudgets",
       table(["Scope","Ceiling","Approval"],budgetRows,empty("No financial envelopes"))))+
     panel("Internal marketplace catalog",unavailable(data,"enterpriseAssets",
-      table(["Asset","Type","Version","Lifecycle"],assetRows,empty("No published or draft assets"))))+
+      table(["Asset","Type","Version","Lifecycle","Actions"],assetRows,empty("No published or draft assets"))))+
     panel("Approved asset consumption",unavailable(data,"enterpriseAssetUsage",
       table(["Asset","Recorded uses"],usageRows,empty("No asset reuse recorded"))))+
     panel("Digital Twin provenance",unavailable(data,"enterpriseTwin",
@@ -453,7 +476,7 @@ function renderTools(data, state) {
     section("Execution evidence",num(runs.length)+" runs") +
     panel("Enterprise tool runs",unavailable(data,"runs",table(
       ["Tool","State","Started","Run ID"],runsRows,empty("No tool runs recorded"),
-    ))) + renderEnterpriseSummary(data));
+    ))) + renderEnterpriseSummary(data,state));
 }
 export function renderCalendar(data, state) {
   const events = list(data,"events");
