@@ -10,3 +10,16 @@ __pycache__/
 node_modules/
 .next/
 dist/
+
+# M10 private operations artifacts and credential materials
+*.dump
+*.backup
+*.sql.gz
+*.manifest.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.partial
+backups/
+.backups/
