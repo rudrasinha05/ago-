@@ -59,10 +59,14 @@ def local_database(dsn: str) -> bool:
         return False
     try:
         parsed = urlsplit(dsn)
+        port = parsed.port  # Access eagerly: a malformed port raises ValueError.
         return (
             parsed.scheme in ("postgres", "postgresql")
             and parsed.hostname in _LOCAL_DB_HOSTS
+            and (port is None or 1 <= port <= 65535)
             and bool(parsed.path.strip("/"))
+            and bool(parsed.username)
+            and not parsed.fragment
         )
     except ValueError:
         return False
