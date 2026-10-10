@@ -472,6 +472,14 @@
           "arguments": "self, *, tenant_id: str, horizon_plan_id: str",
           "returns": "dict"
         },
+        "organization_change": {
+          "arguments": "self, *, actor: Principal, change_kind: str, target_id: str, approval_id: str, reason: str, department_id: str | None=None, name: str | None=None, manager_id: str | None=None, role_level: int | None=None",
+          "returns": "dict"
+        },
+        "organization_history": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
         "twin_runs": {
           "arguments": "self, *, tenant_id: str",
           "returns": "list[dict]"
