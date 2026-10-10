@@ -485,7 +485,8 @@ class EnterpriseOperationsStore:
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
             row = self.connection.execute(
-                """SELECT horizon_plan_id,actor_id,approval_id,base_revision,digest
+                """SELECT horizon_plan_id,actor_id,approval_id,base_revision,digest,
+                          starts_at,ends_at,budget_ceiling
                    FROM ago_horizon_replan_intents
                    WHERE tenant_id=%s AND id=%s FOR UPDATE""",
                 (actor.tenant_id, intent),
@@ -507,6 +508,44 @@ class EnterpriseOperationsStore:
                 return {"id": str(previous["id"]), "revision": previous["revision"],
                         "plan_id": plan_id, "idempotent": True,
                         "automatically_authorizes_tasks": False}
+            current = self.connection.execute(
+                """SELECT coalesce(max(revision),1) AS n FROM ago_horizon_plan_revisions
+                   WHERE tenant_id=%s AND horizon_plan_id=%s""",
+                (actor.tenant_id, plan_id),
+            ).fetchone()["n"]
+            if current != row["base_revision"]:
+                raise PermissionError("Plan revision is stale; request new independent review")
+            child_conflict = self.connection.execute(
+                """SELECT 1 FROM ago_horizon_plans child
+                   LEFT JOIN LATERAL (
+                      SELECT ri.starts_at,ri.ends_at,ri.budget_ceiling
+                      FROM ago_horizon_plan_revisions rv
+                      JOIN ago_horizon_replan_intents ri
+                        ON ri.tenant_id=rv.tenant_id AND ri.id=rv.intent_id
+                      WHERE rv.tenant_id=child.tenant_id AND rv.horizon_plan_id=child.id
+                      ORDER BY rv.revision DESC LIMIT 1
+                   ) latest ON true
+                   WHERE child.tenant_id=%s AND child.parent_id=%s
+                     AND (coalesce(latest.starts_at,child.starts_at)<%s
+                       OR coalesce(latest.ends_at,child.ends_at)>%s
+                       OR coalesce(latest.budget_ceiling,child.budget_ceiling)>%s)
+                   LIMIT 1""",
+                (actor.tenant_id, plan_id, row["starts_at"], row["ends_at"],
+                 row["budget_ceiling"]),
+            ).fetchone()
+            if child_conflict:
+                raise PermissionError("Revision would invalidate an approved descendant")
+            linked_conflict = self.connection.execute(
+                """SELECT 1 FROM ago_horizon_task_links l
+                   JOIN ago_governed_tasks t
+                     ON t.tenant_id=l.tenant_id AND t.id=l.task_id
+                   WHERE l.tenant_id=%s AND l.horizon_plan_id=%s
+                     AND (t.created_at<%s OR t.created_at>%s)
+                   LIMIT 1""",
+                (actor.tenant_id, plan_id, row["starts_at"], row["ends_at"]),
+            ).fetchone()
+            if linked_conflict:
+                raise PermissionError("Revision would invalidate approved task evidence")
             revision = int(row["base_revision"]) + 1
             identifier = str(uuid4())
             self.connection.execute(
