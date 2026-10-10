@@ -261,6 +261,17 @@ def test_real_browser_governed_plan_two_humans_execution_and_qa(
         viewport={"width": 1330, "height": 900}, reduced_motion="reduce",
     )
     reviewer = reviewer_context.new_page()
+
+    def task_rows(surface):
+        return surface.locator(".panel").filter(
+            has=surface.locator("h3", has_text="Task register"),
+        ).locator("tr").filter(has_text="internal:brief")
+
+    def task_approval_rows(surface):
+        return surface.locator(".panel").filter(
+            has=surface.locator("h3", has_text="Approvals"),
+        ).locator("tr").filter(has_text="internal:brief")
+
     try:
         sign_in(page, app_url, tenant)
         sign_in(reviewer, app_url, tenant, role="reviewer")
@@ -320,14 +331,14 @@ def test_real_browser_governed_plan_two_humans_execution_and_qa(
         expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
 
         navigate(page, "governance", "Governance & oversight")
-        task_row = page.locator("tr").filter(has_text="internal:brief")
+        task_row = task_rows(page)
         expect(task_row).to_be_visible()
         task_row.get_by_role("button", name="Request approval").click()
         page.locator("#operation-submit").click()
         expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
 
         reviewer.locator("#refresh").click()
-        task_review = reviewer.locator("tr").filter(has_text="internal:brief")
+        task_review = task_approval_rows(reviewer)
         expect(task_review).to_be_visible()
         task_review.get_by_role("button", name="Approve", exact=True).click()
         reviewer.locator("#dlg-reason").fill("Independent task execution authorization")
@@ -335,16 +346,16 @@ def test_real_browser_governed_plan_two_humans_execution_and_qa(
         expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
 
         page.locator("#refresh").click()
-        task_row = page.locator("tr").filter(has_text="internal:brief")
+        task_row = task_rows(page)
         task_row.get_by_role("button", name="Run approved AI").click()
         page.locator("#operation-submit").click()
         expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-        expect(page.locator("tr").filter(has_text="internal:brief")).to_contain_text(
+        expect(task_rows(page)).to_contain_text(
             "completed",
         )
 
         reviewer.locator("#refresh").click()
-        task_row = reviewer.locator("tr").filter(has_text="internal:brief")
+        task_row = task_rows(reviewer)
         task_row.get_by_role("button", name="Review outcome").click()
         reviewer.locator("#dlg-evidence").fill(
             "Independent quality inspection of the completed pilot brief",
