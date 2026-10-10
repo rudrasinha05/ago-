@@ -1,35 +1,34 @@
-# AGO Sections 21–27 — Bounded Engineering Progress (Not Full Acceptance)
+# AGO Sections 21–27 — Integrated Engineering Evidence and Remaining Acceptance
 
-**Status:** IN PROGRESS — original seven-section target is **not yet implemented end-to-end**. The files in this report are preliminary, auditable foundations and must not be described as a finished AI company or accepted Section 21–27 batch.
+**Status: integrated local beta; FULL FROZEN ACCEPTANCE NOT YET CERTIFIED.** Scope remains `docs/SECTIONS21_27_SCOPE.md`. This is an evidence ledger, not a completion claim. The original Corporate Constitution, Organizational DNA and one-`develop`-branch BDR remain unchanged.
 
-**Source baseline:** original V2 architecture prompt in Library `Pasted markdown (2).md` and current user-maintained `AGO_Architecture_Sections_01_34_Master_Checklist.md`. Scope `docs/SECTIONS21_27_SCOPE.md` remains frozen and unchanged; integration design `docs/architecture/SECTIONS_21_27_OPERATING_CONTRACTS.md` is architectural, not executable proof.
+## Actual implementation (existing PostgreSQL, FastAPI, Next.js)
+- **21 Operating System:** additive operating-mode history; company/department/employee restrictions; exact-action independent human approval; expiry fails closed; AI-worker lifecycle events (idle, pause, sleep, interrupt, resume/unavailable/terminated); DB triggers on actual governed-task and agent-run launch; read-only capacity-bounded priority preview; idempotent replay denial for altered approval requests.
+- **22 Operational Agent State:** real employee identity, manager, tenant and task joins, worker availability history, persisted bounded operational-load snapshots with provenance digest; no subjective consciousness claim, inferred confidence or fake knowledge scores.
+- **23 Multi-Level Planning:** nine-horizon hierarchy, individually reviewed root and child plans, bounded dates and child budgets, immutable rows and tenant FKs; existing goal/DAG→task approval remains authoritative.
+- **24 Economics:** original virtual-credit ledger retained; additive observed financial *claims* clearly labeled **unverified**, idempotent provider/source/period entries, approved parent-bounded department/employee envelopes; no bank transfer, real invoice verification or fabricated ROI.
+- **25 Internal Marketplace:** versioned tenant/department-owned draft asset catalog, publisher/provenance/license/digest; independent human approval for publication and consumption; immutable use history, consumption counts, independently reviewed deprecation and revocation; old consumed evidence retained.
+- **26 Evolution:** bounded baseline/candidate evidence comparisons with measured descriptive deltas and provenance SHA-256, immutable observation rows, no automatic promotion/self-modification; existing MetaBrain reviewed suggestions retained.
+- **27 Digital Twin:** snapshot-linked immutable read-only scenarios, real tenant AI headcount and source digest, hypothetical layoffs/hiring/shock/failure/cost and explicit noncalibration/coverage; no real action execution.
 
-## Code delivered in the initial foundation batch
-- `apps/backend/ago/enterprise_domains.py`: fail-closed pure domain guards for safe OOS/worker transitions, deterministic capacity-aware scheduling admission, non-subjective load, parent-bounded horizons, QA-required outcome rollups, hierarchical budget envelopes, tenant-guarded marketplace use, evidence-bound observed change comparison and read-only bounded twin simulation.
-- `apps/backend/tests/test_enterprise_domains_21_27.py`: positive/negative tests for policy constraints, no self authorization, no unbounded finance, missing evidence and invalid scenarios.
-- `deploy/sql/024_enterprise_operations.sql`: new additive records in existing PostgreSQL for mode-event history, AI state snapshots, planning horizons, cost evidence, budget approvals, internal assets/consumption, evolution evidence and twin scenarios; no new database or cloud resource.
-- `apps/backend/tests/test_enterprise_storage_21_27.py`: actual PostgreSQL negative tests for cross-tenant references, independent human approval, immutable history, duplicate financial records, draft-to-published transitions and uncalibrated twin evidence.
-- Registered source-linked module inventory and Section 3 ownership/SQL access maps are preserved with stricter CI drift checks, not bypassed.
-- Sections 15/17/18 original-generated-blueprint reconciliation is separately recorded in `docs/reports/SECTIONS15_18_SOURCE_VERIFICATION.md`. Neither new V2-based code nor tests can close exact full generated-chapter parity.
+**Live integration:** `apps/backend/ago/enterprise_store.py`, 29 authenticated `/v1/operations/enterprise/*` API endpoints, registered `EnterpriseOperationsStorePort`, migration `024_enterprise_operations.sql` and runtime-integrity migration `025_enterprise_runtime_integrity.sql`, Next.js Operations & Tools evidence panels and original M1–M12 endpoint contract hashes preserved. Source-linked Section 1/3/5 and additive Section 13 fingerprints prevent unreviewed drift.
 
-## Scope not yet closed — do not mark checklist complete
+**Tests added:** `test_enterprise_domains_21_27.py`, `test_enterprise_storage_21_27.py`, `test_enterprise_http_21_27.py`. Positive and negative checks cover authenticated browser sessions, real PostgreSQL FK constraints, independent human approval, idempotent replay, direct SQL dispatch denial during pause, worker resume, layered budgets, immutable QA/evidence, marketplace approval and retirement, and hypothetical simulations.
 
-| Section | Remaining required operational capability |
+## Mandatory remaining gates (do not close just because a helper/API exists)
+| Section | Scope item not yet demonstrated end-to-end |
 |---|---|
-| 21 OOS | Atomic scheduling/reservation/recovery, audit-bound company+department lifecycle, HR approval APIs, actual background worker pause/resume, autonomy and emergency escalation, UI tests |
-| 22 Agent operational state | Real run/plan/task-derived state ingestion, skills and knowledge provenance, workload alarms, assistance escalation, managed snapshots and permission-controlled UI |
-| 23 Multi-level planning | Full hierarchy creation/activation through governance, horizon revisions, live parent-to-task scheduling, calendar/budget/dependency reconciliation and upstream QA feedback |
-| 24 Economics | Provider-verified actual costs and revenue reconciliation, authoritative invoices, departmental/employee budget transactions, observed opportunity cost/ROI and guarded optimization |
-| 25 Marketplace | Discovery, publication and approvals workflow/API/UI, version compatibility, lifecycle transitions, governed consumption and usage analysis |
-| 26 Autonomous evolution | Integrated evidence acquisition, measured candidate experiments, reviewed activation/rollback, cross-department analysis and complete audit UI; never automatic policy mutation |
-| 27 Digital Twin | Full immutable company data synchronization, evidenced market/revenue assumptions, scenarios across employees/projects/deadlines, calibrated forecast confidence and follow-up error tracking |
+| 21 | Durable fair multi-department reservations and crash/retry workload queues; constitution-bound HR hire/promotion/termination and department organization changes; quantified autonomy levels/escalation; complete organization lifecycle and accessible approval UI |
+| 22 | Validated skills/knowledge/evidence/confidence and access-scope awareness, help/refusal and learning references fed back into safe scheduling and visible in employee UI |
+| 23 | Strategic goal↔horizon↔approved DAG task propagation, persistent live QA rollups, reviewed versioned replanning after calendar/dependency/budget conflicts |
+| 24 | Verified provider billing/storage/tool/time invoices, reconciled bank/revenue and currency settlements, measured opportunity cost/ROI, real spending gates and audited profit optimization; **blocked on trusted external data/credentials** |
+| 25 | Actual asset payload storage/reuse compatibility/semver dependency enforcement, delegated access/approval UI, comprehensive usage analytics and deprecation migration impact |
+| 26 | Source-linked prompt/architecture/workflow diagnostics, reproducible controlled experiments, reviewed production activation and separately approved rollback with outcome monitoring; no unsafe autonomous code rewrite |
+| 27 | Project, people, calendar and deadline snapshots with full synchronization, independently measured forecast calibration/uncertainty, revenue/growth and market response against observed actuals; **blocked on trustworthy outcome data** |
 
-## Non-negotiable acceptance
-1. Add service/repository ports, authenticated API handlers and linked frontend to the existing modular monolith and frozen public API contract; do not accept an unused Python helper as working organization software.
-2. Independently governed human approval and QA for organizational, financial and workflow changes. No creator self approval, no privilege escalation, no unreviewed third-party execution.
-3. Real PostgreSQL, Python matrix, frontend/JS/browser accessibility, Docker, migration/restore and negative tenant/security tests must pass at the **final** source SHA.
-4. Evidence-backed costs, ROI and calibration require actual trusted external data. Until provided, mark exact gates **operationally blocked**, never invent provider settlement or financial success.
-5. The original generated architecture blueprint is missing from repo/Library and GitHub current-history checks. Sections 15/17/18 exact original chapter parity remains **source-verification blocked**.
-6. The founder's Windows database has not been migrated. Do not pull/apply migration 024 as though this unfinished batch were final; backup and explicitly review all migrations after final engineering acceptance.
+**Original blueprint Sections 15, 17 and 18:** recovered original 6,115-line founder upload, SHA-256 `6589bc4f7e4f30287a61cefe3979b01d0b2a8357e3bb76dd6bb058d9e1daa1c4`; source-verification crosswalk in `SECTIONS15_18_SOURCE_VERIFICATION.md`. Former “source not available” claim is no longer correct; original versus current roadmap divergences remain explicitly disclosed.
 
-**Completion claim:** NONE. New code, migration and tests are meaningful engineering progress; frozen seven-section acceptance remains open.
+## Verification/rollout conditions
+No source commit is acceptance without green **final-head** backend, CI Python matrix, real PostgreSQL migrations and negative tests, frontend/JS/browser, Docker/backup/restore, independent QA and local founder acceptance. Never automatically migrate the user's Windows/PostgreSQL instance: take verified backup, explicit operator review, then manually apply additive 024–025. Full financial/provider and calibration gates remain marked external-data blocked until genuine invoices/observations exist. **No cloud account or paid model is required for the remaining local engineering steps.**
+
+This report is intentionally conservative: a successful CI run certifies the tested implementation scope, **not** the unimplemented remaining checklist items above.
