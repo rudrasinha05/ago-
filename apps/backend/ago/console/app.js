@@ -91,6 +91,7 @@ function endpoints(page) {
       ["tasks","/v1/tasks"],
       ["motions","/v1/council/motions"],
       ["reviews","/v1/console/task-reviews"],
+      ["qaqueue","/v1/console/qa-queue"],
     ],
     organization: [
       ["departments","/v1/organization/departments"],
