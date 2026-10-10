@@ -190,3 +190,36 @@ class ExecutiveIntelligence:
             "assessment": evaluate(snapshot["metrics"], candidate),
             "applied": False,
         }
+
+    def verify(self, *, tenant_id: str, snapshot_id: str) -> dict:
+        """Recompute the immutable source digest using frozen historical DNA."""
+        snapshot = self.get(tenant_id=tenant_id, snapshot_id=snapshot_id)
+        if snapshot["dna_id"]:
+            row = self.db.execute(
+                """SELECT profile FROM ago_dna_versions
+                   WHERE tenant_id=%s AND id=%s""",
+                (tenant_id, snapshot["dna_id"]),
+            ).fetchone()
+            if row is None:
+                raise PermissionError("Historical DNA source is missing")
+            profile = validate_profile(row["profile"])
+        else:
+            from ago.organizational_dna import BASELINE_PROFILE
+
+            profile = dict(BASELINE_PROFILE)
+        assessment = evaluate(snapshot["metrics"], profile)
+        evidence = {
+            "metrics": snapshot["metrics"],
+            "dna_id": snapshot["dna_id"],
+            "profile": profile, "assessment": assessment,
+        }
+        digest = hashlib.sha256(
+            json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        return {
+            "snapshot_id": snapshot["id"],
+            "verified": digest == snapshot["digest"],
+            "expected_digest": snapshot["digest"],
+            "recomputed_digest": digest,
+            "advisory_only": True,
+        }
