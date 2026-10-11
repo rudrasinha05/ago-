@@ -4,7 +4,7 @@
 
 This implements the frozen **personal localhost, existing architecture, advisory evolution** scope in `docs/SECTIONS21_27_SCOPE.md`. The original blueprint was recovered and read before this batch; its wider production and empirical requirements are not silently redefined as complete. Sections 1–20 interfaces and authority rules remain in force. No user Windows database has been migrated.
 
-Final acceptance is pending the corrected source-head CI. Earlier reports remain historical. A test pass with an absent database is a skip, not database acceptance.
+Acceptance covers the bounded engineering workflows below, with the wider original gates listed separately. Earlier reports remain historical. A test pass with an absent database is a skip, not database acceptance. The verified source-head CI evidence is recorded below; the closing documentation head is independently verified before operator handoff.
 
 ## Delivered workflows
 
@@ -46,4 +46,17 @@ Rollback: stop the new worker/server and use the prior compatible code only afte
 
 ## Verification
 
-Local evidence: existing API fingerprints preserved; architecture/domain/backend/frontend checks and lint passed; SDK 10 tests passed; Next.js build and packaged routes passed; Chromium desktop five browser/accessibility journeys passed. Local new non-database tests passed, but database integration awaits real CI. Source-head CI results and exact counts will be appended after all gates pass.
+Source head: `4deb612ab1be75e902f2f7979493913b51b80a65`. Main workflow: [38097668011](https://github.com/rudrasinha05/ago-/actions/runs/38097668011). Independent backend quality: [38097668047](https://github.com/rudrasinha05/ago-/actions/runs/38097668047). Both workflows **SUCCESS**; all eight main jobs and the independent backend job passed on this exact source SHA.
+
+| Gate | Actual result |
+|---|---|
+| Python3.11,3.14 and independent3.12 | 549 passed on each, one existing Starlette/httpx deprecation warning; actual PostgreSQL, no database skips |
+| Coverage | 87.28% overall on3.11; governance90.88%, workforce93.30%, strategy91.64%; all unchanged required floors passed |
+| Frontend | 30 browser/device/accessibility cases passed across Chromium, Firefox and WebKit; seven actual signed-session/PostgreSQL Next.js journeys passed |
+| Console | Six real Chromium console journeys; canonical generated adapters retained |
+| Storage and recovery | Fresh/idempotent checksum migrations, real model/Redis/private bytes recovery, PostgreSQL backup/restore and nonroot Docker smoke |
+| Contracts/build/lint | Existing API fingerprints preserved, strict architecture/domain/backend/frontend/monorepo checks, actual Next.js exports and lint |
+
+The completion-batch test file contains22 new cases, including9 typed operation parameter sets. It exercises execution/replay, reservation/recovery, exact approval substitution and self-review denial, immutable source review, actual-QA competence/cohorts, planning hierarchy/assignment feedback, frozen later-outcome metrics, claimed economics and actual stored asset publication/reuse/sunset. Source data generated in disposable CI proves behavior, not real financial results or predictive validity for the owner's organization.
+
+The closing documentation commit changes no execution behavior. Its own final-head CI must also pass before the owner is given the consolidated pull point; exact closing SHA/workflow links are written to the master checklist after verification.
