@@ -3087,7 +3087,9 @@ class EnterpriseOperationsStore:
 
     def _measurement_rows(self, actor: Principal, kind: str, *, reviewed: bool = True) -> list[dict]:
         rows = self.connection.execute(
-            """SELECT e.id,e.kind,e.payload,e.digest,e.created_at,r.approval_id,r.created_at AS reviewed_at
+            """SELECT e.id,e.kind,
+               (e.payload-'content_base64') || jsonb_build_object('intent',(e.payload->'intent')-'content_base64') AS payload,
+               e.digest,e.created_at,r.approval_id,r.created_at AS reviewed_at
                FROM ago_enterprise_evidence e LEFT JOIN ago_enterprise_evidence_reviews r
                ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
                WHERE e.tenant_id=%s AND e.kind=%s AND (%s=false OR r.evidence_id IS NOT NULL)

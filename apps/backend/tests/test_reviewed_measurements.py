@@ -35,7 +35,7 @@ def shift_clock(monkeypatch, now):
     monkeypatch.setattr(enterprise_store, "datetime", LogicalClock)
 
 
-def accounting_period(client, f, r, *, start, end, key, amount="100", categories=("model",), revenue="200"):
+def accounting_period(client, f, r, *, start, end, key, amount="100", categories=("model",), revenue="200", budget_id=None):
     matches = []
     for category in (*categories, "revenue"):
         cost = post(client, BASE + "/costs", f, {
@@ -55,6 +55,8 @@ def accounting_period(client, f, r, *, start, end, key, amount="100", categories
     data = {"operation_key": key+"period", "reconciliation_ids": [reconciled["id"]],
             "currency": "INR", "period_start": start.isoformat(), "period_end": end.isoformat(),
             "assumptions": "Same selected scope; no unsupported financial acceptance"}
+    if budget_id:
+        data["budget_id"] = budget_id
     period = post(client, MEASURE + "economic-period", f, data)
     return period, data
 
@@ -148,6 +150,10 @@ def test_economic_comparison_prospective_actual_change_and_financial_outcomes(ca
     now = stamp()
     before, _ = accounting_period(client, f, r, start=now-timedelta(days=2), end=now-timedelta(days=1), key="baseline")
     review(client, f, r, before)
+    budget = post(client, BASE+"/budgets/approval", f)
+    decide(client, r, budget["approval_id"])
+    post(client, BASE+"/budgets", f, {
+        "budget_id": budget["budget_id"], "approval_id": budget["approval_id"], "scope_kind": "company", "ceiling": "100", "currency": "INR"})
     change = post(client, BASE+"/intents", f, {"operation": "capacity", "parameters": {
         "scope_kind": "company", "scope_id": None, "max_running": 3, "rationale": "Disposable capacity experiment"}})
     start, end = now+timedelta(days=1), now+timedelta(days=2)
@@ -159,20 +165,40 @@ def test_economic_comparison_prospective_actual_change_and_financial_outcomes(ca
     post(client, BASE+"/intents/"+change["id"]+"/apply", f)
     actual = next(x for x in client.get(BASE+"/evidence?kind=intent_result", headers=f).json() if x["operation_key"] == change["id"])
     review(client, f, r, actual)
+    snapshot = post(client, BASE+"/twin/state", f, {"operation_key": "economic-state"})
+    financial_forecast = post(client, MEASURE+"longitudinal-forecast", f, {
+        "operation_key": "financial-forecast", "snapshot_id": snapshot["id"], "model_version": "financial-test-v1",
+        "predictions": [{"series": {"dimension": d, "metric": m, "unit": "INR", "entity_ref": "company"},
+            "period_start": start.isoformat(), "period_end": end.isoformat(), "predicted_value": value,
+            "lower": value, "upper": value, "interval_basis": "Exact disposable fixture hypothesis"}
+            for d,m,value in (("cost", "total_cost", "80"), ("revenue", "total_revenue", "250"))],
+        "assumptions": "Logical test periods, no real owner financial prediction", "sensitivity_factors": "Expense mix and demand"})
+    review(client, f, r, financial_forecast)
     shift_clock(monkeypatch, end+timedelta(days=1))
-    after, _ = accounting_period(client, f, r, start=start, end=end, key="candidate", amount="80", revenue="250")
+    after, _ = accounting_period(client, f, r, start=start, end=end, key="candidate", amount="80", revenue="250", budget_id=budget["budget_id"])
     params = {"operation_key": "comparison", "baseline_period_id": before["id"], "candidate_period_id": after["id"],
               "study_id": study["id"], "change_evidence_id": actual["id"], "assumptions": "Logical disposable periods; descriptive, no causal proof"}
     post(client, MEASURE+"economic-comparison", f, params, expected=403)
     review(client, f, r, after)
     result = post(client, MEASURE+"economic-comparison", f, params)["payload"]
     assert result["incremental_roi_pct"] == "87.5" and result["optimization_audit"]["change_id"] == actual["id"]
+    assert result["candidate"]["budget"]["within_envelope"] and Decimal(result["candidate"]["budget"]["variance"]) == -20
     assert result["recommendation"].startswith("retain") and not result["automatically_applied"]
     post(client, MEASURE+"economic-comparison", f, {**params, "operation_key": "same", "candidate_period_id": before["id"]}, expected=400)
     metric = {"operation_key": "actual-cost", "series": {"dimension": "cost", "metric": "total_cost", "unit": "INR", "entity_ref": "company"},
               "period_start": start.isoformat(), "period_end": end.isoformat(), "economic_period_id": after["id"], "source_ref": "reviewed period", "methodology": "Exact reconciled total"}
     outcome = post(client, MEASURE+"metric-outcome", f, metric)
     assert Decimal(outcome["payload"]["value"]) == 80 and outcome["payload"]["economic_period_digest"] == after["digest"]
+    review(client, f, r, outcome)
+    revenue_outcome = post(client, MEASURE+"metric-outcome", f, {**metric, "operation_key": "actual-revenue",
+        "series": {"dimension": "revenue", "metric": "total_revenue", "unit": "INR", "entity_ref": "company"}})
+    review(client, f, r, revenue_outcome)
+    calibrated = post(client, MEASURE+"longitudinal-calibration", f, {"operation_key": "financial-calibration", "forecast_ids": [financial_forecast["id"]]})["payload"]
+    assert calibrated["observed_samples"] == 2 and all(s["mean_absolute_error"] == 0 and s["interval_coverage"] == 1 for s in calibrated["series"].values())
+    synced = post(client, BASE+"/twin/state", f, {"operation_key": "financial-sync"})["payload"]
+    assert {s["dimension"] for s in synced["reviewed_metric_series"]} == {"cost", "revenue"}
+    post(client, MEASURE+"metric-outcome", f, {**metric, "operation_key": "missing-time",
+        "series": {**metric["series"], "metric": "time"}}, expected=400)
     post(client, MEASURE+"metric-outcome", f, {**metric, "operation_key": "fake", "value": "999"}, expected=400)
     post(client, MEASURE+"metric-outcome", f, {**metric, "operation_key": "duplicate"}, expected=400)
 
@@ -251,6 +277,34 @@ def test_multi_period_business_forecasts_actuals_intervals_and_no_leakage(case, 
     assert post(client, MEASURE+"longitudinal-forecast", f, params)["idempotent"]
     post(client, MEASURE+"longitudinal-forecast", f, {**params, "operation_key": "retroactive"}, expected=400)
     post(client, MEASURE+"longitudinal-calibration", f, {"operation_key": "foreign", "forecast_ids": [str(uuid4())]}, expected=403)
+
+
+def test_actual_market_risk_headcount_reviewed_training_and_tenant_isolation(case):
+    from ago.bootstrap import bootstrap
+    client, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    now = stamp()
+    for dimension, unit, value in (("market", "points", "101.5"), ("risk", "probability", "0.1"), ("headcount", "count", "4")):
+        item = post(client, MEASURE+"metric-outcome", f, {"operation_key": dimension,
+            "series": {"dimension": dimension, "metric": "observed-"+dimension, "unit": unit, "entity_ref": "company"},
+            "period_start": (now-timedelta(days=2)).isoformat(), "period_end": (now-timedelta(days=1)).isoformat(),
+            "value": value, "content_base64": encoded("Exact actual "+dimension+" record"), "source_ref": "owner:"+dimension,
+            "methodology": "Independently inspect source and period"})
+        review(client, f, r, item)
+    snapshot = post(client, BASE+"/twin/state", f, {"operation_key": "state"})
+    result = post(client, MEASURE+"longitudinal-forecast", f, {"operation_key": "trained", "snapshot_id": snapshot["id"],
+        "model_version": "market-v1", "predictions": [{"series": {"dimension": "market", "metric": "observed-market", "unit": "points", "entity_ref": "company"},
+            "period_start": (now+timedelta(days=1)).isoformat(), "period_end": (now+timedelta(days=2)).isoformat(),
+            "predicted_value": "102", "lower": "90", "upper": "120", "interval_basis": "Owner declared range"}],
+        "assumptions": "Same market index definition", "sensitivity_factors": "Market response"})["payload"]
+    assert result["predictions"][0]["training_samples"] == 1 and Decimal(result["predictions"][0]["historical_mean"]) == Decimal("101.5")
+    tenant, _ = bootstrap(info["db"], organization="Other tenant", email="other@example.test", password="other-test-password-123")
+    foreign = info["login"]("other@example.test", "other-test-password-123", tenant)
+    subject = post(client, MEASURE+"quality-subject", foreign, {"operation_key": "private", "dimension": "prompt", "entity_ref": "p", "version": "1", "source_ref": "private", "content_base64": encoded("Other tenant private prompt")})
+    post(client, MEASURE+"quality-study", f, {"operation_key": "cross-tenant", "baseline_subject_id": subject["id"], "candidate_subject_id": subject["id"],
+        "rubric": [{"name": "quality", "maximum": "100", "weight": "1"}], "expected_per_variant": 1,
+        "hypothesis": "Forbidden foreign source", "rollback_plan": "Retain baseline", "sampling_plan": "Forbidden"}, expected=403)
+    assert not any(x["id"] == subject["id"] for x in client.get(BASE+"/evidence?kind=quality_subject", headers=f).json())
 
 
 def test_measurement_signed_rbac_unknown_sources_bounds_and_independent_review(case):
