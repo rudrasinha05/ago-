@@ -7,7 +7,7 @@ export function readPlan(page, now = new Date()) {
   const plans = {
     overview: [['score','/v1/insights/scorecard'],['tasks','/v1/tasks'],['approvals','/v1/governance/approvals'],['brief','/v1/meta/brief']],
     strategy: [['goals','/v1/brain/goals'],['plans','/v1/brain/plans'],['approvals','/v1/governance/approvals']],
-    governance: [['approvals','/v1/governance/approvals'],['tasks','/v1/tasks'],['motions','/v1/council/motions'],['reviews','/v1/console/task-reviews'],['qaqueue','/v1/console/qa-queue']],
+    governance: [['constitution','/v1/governance/constitution'],['approvals','/v1/governance/approvals'],['tasks','/v1/tasks'],['motions','/v1/council/motions'],['reviews','/v1/console/task-reviews'],['qaqueue','/v1/console/qa-queue']],
     organization: [['departments','/v1/organization/departments']],
     knowledge: [['verified','/v1/knowledge/nodes'],['pending','/v1/knowledge/pending']],
     tools: [

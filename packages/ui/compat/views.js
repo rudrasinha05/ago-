@@ -162,6 +162,8 @@ export function renderStrategy(data, state) {
     ))));
 }
 export function renderGovernance(data, state) {
+  const constitution = resource(data,"constitution");
+  const constitutionManage = capability(state,"organization:manage");
   const approvals = list(data,"approvals"), tasks = list(data,"tasks");
   const motions = list(data,"motions"), reviews = list(data,"reviews");
   const qaqueue = list(data,"qaqueue");
@@ -216,7 +218,7 @@ export function renderGovernance(data, state) {
     action("Propose motion","new-motion","","primary") : "",
     '<div class="info-strip">' + icon("shield") +
     "<span>Approvals remain independent. You cannot approve your own requests. Council motions are advisory only.</span></div>" +
-    section("Independent review","Human decisions") +
+    renderConstitution(constitution,constitutionManage) + section("Independent review","Human decisions") +
     panel("Approvals",unavailable(data,"approvals",table(
       ["Request","Status","Created","Decision"],aRows,empty("Review queue is clear"),
     ))) + section("Task control","Governed execution") +
@@ -627,4 +629,20 @@ export function renderPage(page,data,state) {
   }[page];
   if (!fn) return '<div class="error-card">Unknown workspace</div>';
   return fn(data,state);
+}
+
+
+function renderConstitution(record,manage) {
+  if(!record)return panel("Corporate Constitution",empty("Constitution data unavailable","Refresh Governance to load current policy."));
+  const head=record.active || {}, proposals=record.proposals || [], incidents=record.emergencies || [];
+  const laws=Object.values(record.laws || {}).map(x=>'<li>'+safe(x)+'</li>').join('');
+  const rows=proposals.map(x=>'<tr><td>'+maybe(x.specification?.title)+'</td><td>'+maybe(x.revision ?? "Awaiting review")+'</td><td>'+maybe(x.specification?.blocked_contexts?.join(", ") || "No added restrictions")+'</td><td>'+action("Inspect package","constitution-view",x.id)+(manage && !x.revision?action("Adopt reviewed version","constitution-adopt",x.id):"")+'</td></tr>');
+  const emergencyRows=incidents.map(x=>'<tr><td>'+maybe(x.reason)+'</td><td>'+maybe(x.blocked_contexts?.join(", "))+'</td><td>'+safe(dateText(x.expires_at))+'</td><td>'+badge(x.active?"active":x.retrospective_review_pending?"review pending":"closed")+'</td><td>'+action("Inspect incident","constitution-incident",x.id)+(manage && x.retrospective_review_pending?action("Prepare recovery review","constitution-review-incident",x.id):"")+'</td></tr>');
+  const reviews=(record.emergency_reviews || []).map(x=>'<tr><td>'+safe(shortId(x.emergency_id))+'</td><td>'+maybe(x.postmortem)+'</td><td>'+badge(x.status)+'</td><td>'+(manage && x.status==="approved"?action("Close reviewed incident","constitution-close",x.id):"")+'</td></tr>');
+  return section("Corporate Constitution","Highest policy · version "+String(head.revision ?? 0))+
+    (manage?'<div class="page-actions">'+action("Propose constitutional version","constitution-propose")+action("Emergency stop","constitution-emergency","","danger")+'</div>':"")+
+    panel("Immutable organizational laws",'<p>Active restrictions: '+maybe(head.blocked_contexts?.join(", ") || "None")+'</p><ul>'+laws+'</ul>')+
+    panel("Amendment review packages",table(["Proposal","Version","Restricted operations","Actions"],rows,empty("No amendments proposed")))+
+    panel("Emergency containment",table(["Incident","Restricted operations","Expiry","State","Action"],emergencyRows,empty("No emergency incidents")))+
+    panel("Post-incident reviews",table(["Incident","Postmortem","Independent review","Action"],reviews,empty("No recovery reviews")));
 }

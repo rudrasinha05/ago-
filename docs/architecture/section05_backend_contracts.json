@@ -775,6 +775,14 @@
         "reconcile_architecture": {
           "arguments": "self, *, tenant_id: str, change_id: str",
           "returns": "dict"
+        },
+        "constitution_state": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
+        "constitution_command": {
+          "arguments": "self, *, actor: Principal, command: str, data: dict",
+          "returns": "dict"
         }
       }
     },
@@ -1216,6 +1224,10 @@
         },
         "permitted": {
           "arguments": "self, principal: Principal, permission: str, tenant_id: str",
+          "returns": "bool"
+        },
+        "constitution_allowed": {
+          "arguments": "self, principal: Principal, context: str",
           "returns": "bool"
         },
         "token_hash": {

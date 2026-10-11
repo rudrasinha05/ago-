@@ -37,6 +37,7 @@ from ago.repository_ports import (
 )
 from ago.security import AuthenticationError, Principal, SessionTokens
 from ago.security_material import RotatingSessionTokens
+from ago.governance_domain import constitutional_context
 
 router = APIRouter(prefix="/v1", tags=["M2 organization"])
 bearer = HTTPBearer(auto_error=False)
@@ -143,6 +144,7 @@ def verified_bearer(
 
 
 def authenticated(
+    request: Request,
     verified: Annotated[tuple[Principal, str], Depends(verified_bearer)],
     db=Depends(db_connection),
     repositories: RepositoryScope = Depends(repository_scope),
@@ -157,6 +159,10 @@ def authenticated(
         )
         if not active:
             raise AuthenticationError("Inactive account")
+        context = constitutional_context(request.url.path)
+        if request.method not in ("GET", "HEAD", "OPTIONS") and context:
+            if not security.constitution_allowed(principal, context):
+                raise HTTPException(403, "Constitution or emergency containment blocks this operation; review Governance")
         return principal
     except (AuthenticationError, ValueError) as exc:
         raise HTTPException(401, "Invalid session", headers={"WWW-Authenticate": "Bearer"}) from exc
@@ -608,3 +614,72 @@ def get_task_review(
 ):
     allowed(repositories, actor, "qa:read")
     return repositories.resolve(ConsoleStorePort).review(str(task_id), actor.tenant_id)
+
+
+class ConstitutionProposalInput(StrictInput):
+    operation_key: str = Field(min_length=1,max_length=160)
+    base_revision: int = Field(ge=0, strict=True)
+    effective_at: str = Field(min_length=10,max_length=80)
+    specification: dict
+
+
+class ConstitutionAdoptInput(StrictInput):
+    proposal_id: UUID
+
+
+class ConstitutionalEmergencyInput(StrictInput):
+    operation_key: str = Field(min_length=1,max_length=160)
+    blocked_contexts: list[str] = Field(min_length=1,max_length=13)
+    reason: str = Field(min_length=1,max_length=3000)
+    containment: str = Field(min_length=1,max_length=3000)
+    expires_at: str = Field(min_length=10,max_length=80)
+
+
+class ConstitutionalIncidentReviewInput(StrictInput):
+    emergency_id: UUID
+    postmortem: str = Field(min_length=1,max_length=3000)
+    recovery_evidence: str = Field(min_length=1,max_length=3000)
+
+
+class ConstitutionalIncidentCloseInput(StrictInput):
+    review_id: UUID
+
+
+@router.get("/governance/constitution")
+def constitution_state(actor: Principal = Depends(authenticated), repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories,actor,"approval:read")
+    return repositories.resolve(ApprovalRepositoryPort).constitution_state(tenant_id=actor.tenant_id)
+
+
+def constitutional_command(repositories, actor, command, data):
+    allowed(repositories,actor,"approval:request")
+    try:
+        return repositories.resolve(ApprovalRepositoryPort).constitution_command(
+            actor=actor, command=command, data=data.model_dump(mode="json"))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
+@router.post("/governance/constitution/proposals")
+def constitution_propose(data: ConstitutionProposalInput,actor: Principal = Depends(authenticated),repositories: RepositoryScope = Depends(repository_scope)):
+    return constitutional_command(repositories,actor,"propose",data)
+
+
+@router.post("/governance/constitution/adopt")
+def constitution_adopt(data: ConstitutionAdoptInput,actor: Principal = Depends(authenticated),repositories: RepositoryScope = Depends(repository_scope)):
+    return constitutional_command(repositories,actor,"adopt",data)
+
+
+@router.post("/governance/constitution/emergencies")
+def constitution_emergency(data: ConstitutionalEmergencyInput,actor: Principal = Depends(authenticated),repositories: RepositoryScope = Depends(repository_scope)):
+    return constitutional_command(repositories,actor,"emergency",data)
+
+
+@router.post("/governance/constitution/incident-review")
+def constitution_incident_review(data: ConstitutionalIncidentReviewInput,actor: Principal = Depends(authenticated),repositories: RepositoryScope = Depends(repository_scope)):
+    return constitutional_command(repositories,actor,"incident-review",data)
+
+
+@router.post("/governance/constitution/close-incident")
+def constitution_close_incident(data: ConstitutionalIncidentCloseInput,actor: Principal = Depends(authenticated),repositories: RepositoryScope = Depends(repository_scope)):
+    return constitutional_command(repositories,actor,"close-incident",data)

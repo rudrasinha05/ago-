@@ -119,6 +119,11 @@ async function reviewApproval(ctx, id, initial = "approved") {
       delete details.details.content_base64;
     }
   }
+  if(request?.action?.startsWith("constitution:")) {
+    const c=await ctx.api.request("/v1/governance/constitution");
+    details=(c.proposals || []).find(x=>Object.values(x.reviews || {}).includes(id)) || (c.emergency_reviews || []).find(x=>x.approval_id===id);
+    if(!details)throw new Error("Exact constitutional source package unavailable; review cancelled.");
+  }
   openDialog(ctx, {
     title: "Independent approval decision",
     description: "Your decision is immutable. Approve only after personally reviewing the requested action.",
@@ -170,6 +175,7 @@ async function planSteps(ctx, id) {
   }
 }
 export async function handleAction(key, id, ctx) {
+  if(key.startsWith("constitution-"))return constitutionalAction(key,id,ctx);
   const { api, state, can } = ctx;
   if (key.startsWith("enterprise-")) { await enterpriseAction(key,id,ctx); return; }
   if (key === "go-twin") { await ctx.goPage("twin"); return; }
@@ -1136,4 +1142,48 @@ async function qualityScoreForm(ctx,study) {
     await ctx.api.request(enterpriseBase+"/measurements/quality-sample",{method:"POST",body:{operation_key:newOperation(),study_id:study.id,variant:v.variant,sample_ref:v.sample_ref,observed_at:instant(v.observed_at),scores:Object.fromEntries(rubric.map((r,i)=>[r.name,v["score_"+i]])),rationale:v.rationale,content_base64:await sourceBase64(v)}});
     return "Actual output and rubric scores saved. Independent review is required before measurement.";
   }});
+}
+
+
+async function constitutionalAction(key,id,ctx) {
+  const base="/v1/governance/constitution", record=await ctx.api.request(base);
+  const post=(path,body)=>ctx.api.request(base+path,{method:"POST",body});
+  if(key==="constitution-view" || key==="constitution-incident") {
+    const row=(key==="constitution-view"?record.proposals:record.emergencies)?.find(x=>x.id===uuid(id));
+    if(!row)throw new Error("Constitutional record unavailable.");
+    showEvidence(ctx,"Immutable constitutional record",row);return;
+  }
+  if(key==="constitution-adopt" || key==="constitution-close") {
+    confirmation(ctx,key==="constitution-adopt"?"Adopt reviewed constitution":"Close reviewed emergency","The exact package must have independent human approval. Existing laws and audit remain enforced.",async()=>{
+      await post(key==="constitution-adopt"?"/adopt":"/close-incident",key==="constitution-adopt"?{proposal_id:uuid(id)}:{review_id:uuid(id)});
+      return "Constitutional decision recorded.";
+    });return;
+  }
+  const contexts=["brain","meta","organization","tasks","agents","tools","knowledge","operations","council","memory","insights","calendar","messages"];
+  const fields=[], text=(name,label)=>({name,label,type:"textarea",maxLength:3000});
+  let submit;
+  if(key==="constitution-propose") {
+    const simulations=await ctx.api.request("/v1/operations/enterprise/twin");
+    mustHave(simulations,"Capture executive evidence and run a Twin scenario first in Operations.");
+    fields.push({name:"simulation_id",label:"Source Twin scenario",type:"select",options:choices(simulations,x=>"Scenario "+x.id)},
+      {name:"operation_key",label:"Unique amendment reference",type:"text",maxLength:160},
+      {name:"effective_at",label:"Earliest effective time",type:"datetime-local"},
+      {name:"blocked_contexts",label:"Operations restricted by this version (optional)",type:"multiselect",required:false,options:contexts.map(x=>choose(x,x))},
+      ...[["title","Amendment title"],["rationale","Why change?"],["risk","Impact and operational risk"],["affected_rights","Affected rights and authority"],["alternatives","Alternatives considered"],["dissent","Dissent and known uncertainty"],["rollback","Rollback procedure"],["monitoring","How will outcomes be reviewed?"],["propagation","Policy, DNA and workflow propagation plan"]].map(x=>text(...x)));
+    submit=async v=>{
+      const specification=Object.fromEntries(["title","rationale","risk","affected_rights","alternatives","dissent","rollback","monitoring","propagation","simulation_id","blocked_contexts"].map(x=>[x,v[x]]));
+      await post("/proposals",{operation_key:v.operation_key,base_revision:record.active.revision,effective_at:new Date(v.effective_at).toISOString(),specification});
+      return "Package saved with five independent review requests in Governance.";
+    };
+  } else if(key==="constitution-emergency") {
+    fields.push({name:"operation_key",label:"Unique incident reference",type:"text",maxLength:160},
+      {name:"blocked_contexts",label:"Immediately freeze these operations",type:"multiselect",options:contexts.map(x=>choose(x,x))},
+      text("reason","Incident and reason"),text("containment","Containment and safe recovery plan"),
+      {name:"expires_at",label:"Stop expires within 24 hours",type:"datetime-local"});
+    submit=async v=>{await post("/emergencies",{...v,expires_at:new Date(v.expires_at).toISOString()});return "Containment active. Independent post-incident review is required.";};
+  } else if(key==="constitution-review-incident") {
+    fields.push(text("postmortem","What happened and what was learned?"),text("recovery_evidence","Actual recovery evidence"));
+    submit=async v=>{await post("/incident-review",{emergency_id:uuid(id),...v});return "Recovery package saved for independent review in Governance.";};
+  } else throw new Error("Unknown constitutional action.");
+  openDialog(ctx,{title:key==="constitution-emergency"?"Emergency containment":"Constitutional evidence package",description:"Human authority, independent review and immutable audit remain active.",fields,button:key==="constitution-emergency"?"Freeze selected operations":"Submit evidence",danger:key==="constitution-emergency",onSubmit:submit});
 }

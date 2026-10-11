@@ -16,7 +16,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [api_council](../../apps/backend/ago/api_council.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
 | [api_insights](../../apps/backend/ago/api_insights.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security, simulation |
 | [api_knowledge](../../apps/backend/ago/api_knowledge.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security, storage_adapters |
-| [api_m2](../../apps/backend/ago/api_m2.py) | transport | transport | api_contracts, backend_contracts, governed_execution, memory, quality, repository_ports, security, security_material |
+| [api_m2](../../apps/backend/ago/api_m2.py) | transport | transport | api_contracts, backend_contracts, governance_domain, governed_execution, memory, quality, repository_ports, security, security_material |
 | [api_meta](../../apps/backend/ago/api_meta.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
 | [api_operations](../../apps/backend/ago/api_operations.py) | transport | transport | agent_handlers, api_contracts, api_m2, backend_contracts, repository_ports, security |
 | [api_tools](../../apps/backend/ago/api_tools.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security, tool_catalog |
@@ -39,7 +39,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [department_automation_queries](../../apps/backend/ago/department_automation_queries.py) | operations | persistence | backend_contracts |
 | [dna_domain](../../apps/backend/ago/dna_domain.py) | strategy | domain | None |
 | [enterprise_domains](../../apps/backend/ago/enterprise_domains.py) | operations | domain | None |
-| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | backend_contracts, enterprise_domains, security, architecture_guard |
+| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | architecture_guard, backend_contracts, enterprise_domains, governance_domain, security |
 | [event_contracts](../../apps/backend/ago/event_contracts.py) | platform | domain | events |
 | [event_migrations](../../apps/backend/ago/event_migrations.py) | platform | foundation | None |
 | [event_runtime](../../apps/backend/ago/event_runtime.py) | entrypoints | composition | event_migrations, event_worker, events, postgres_event_store |
@@ -52,7 +52,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [experiments](../../apps/backend/ago/experiments.py) | strategy | persistence | backend_contracts, governance |
 | [feature_flags](../../apps/backend/ago/feature_flags.py) | platform | foundation | None |
 | [goals](../../apps/backend/ago/goals.py) | strategy | persistence | backend_contracts |
-| [governance](../../apps/backend/ago/governance.py) | governance | persistence | approvals, backend_contracts, governance_domain |
+| [governance](../../apps/backend/ago/governance.py) | governance | persistence | approvals, backend_contracts, governance_domain, security |
 | [governance_domain](../../apps/backend/ago/governance_domain.py) | governance | domain | approvals |
 | [governed_execution](../../apps/backend/ago/governed_execution.py) | governance | service | governance, security, security_controls, workflows |
 | [handoffs](../../apps/backend/ago/handoffs.py) | operations | persistence | backend_contracts, security, security_controls |
@@ -98,7 +98,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [scorecard](../../apps/backend/ago/scorecard.py) | economics | service | backend_contracts, credits, scorecard_queries |
 | [scorecard_queries](../../apps/backend/ago/scorecard_queries.py) | economics | persistence | backend_contracts |
 | [security](../../apps/backend/ago/security.py) | governance | domain | None |
-| [security_controls](../../apps/backend/ago/security_controls.py) | governance | persistence | backend_contracts, security |
+| [security_controls](../../apps/backend/ago/security_controls.py) | governance | persistence | backend_contracts, governance_domain, security |
 | [security_material](../../apps/backend/ago/security_material.py) | platform | foundation | security |
 | [semantic_memory_store](../../apps/backend/ago/semantic_memory_store.py) | knowledge | persistence | backend_contracts, memory_policies, security, security_controls, storage_adapters |
 | [session_service](../../apps/backend/ago/session_service.py) | governance | service | backend_contracts, identity, identity_security_store, login_security, security |

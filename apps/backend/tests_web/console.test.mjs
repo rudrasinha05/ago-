@@ -291,3 +291,18 @@ test("measurement tables expose unknowns and escape supplied metric names", () =
   assert.match(html,/Observed economics/);assert.match(html,/Longitudinal prediction accuracy/);
   assert.match(html,/&lt;script&gt;metric/);assert.doesNotMatch(html,/<script>|<img/);
 });
+
+test('constitution shows immutable authority and escapes amendment and incident evidence', async () => {
+  const {renderGovernance}=await import('../ago/console/views.js');
+  const constitution={active:{revision:2,blocked_contexts:['tools']},laws:{human:'Human leadership remains final authority'},
+    proposals:[{id:'11111111-1111-4111-8111-111111111111',specification:{title:'<script>amend()</script>',blocked_contexts:['tools']}}],
+    emergencies:[{id:'22222222-2222-4222-8222-222222222222',reason:'<img src=x onerror=attack()>',active:true,retrospective_review_pending:true,blocked_contexts:['tools']}],emergency_reviews:[]};
+  const html=renderGovernance({constitution:loaded(constitution)}, {me:{permissions:['organization:manage']}});
+  assert.match(html,/Human leadership remains final authority/);
+  assert.match(html,/Emergency stop/);
+  assert.match(html,/version 2/);
+  assert.ok(!html.includes('<script>amend()'));
+  assert.ok(!html.includes('<img src=x'));
+  assert.match(html,/Inspect package/);
+  assert.match(html,/Prepare recovery review/);
+});

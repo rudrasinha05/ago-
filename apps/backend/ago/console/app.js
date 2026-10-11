@@ -87,6 +87,7 @@ function endpoints(page) {
       ["approvals","/v1/governance/approvals"],
     ],
     governance: [
+      ["constitution","/v1/governance/constitution"],
       ["approvals","/v1/governance/approvals"],
       ["tasks","/v1/tasks"],
       ["motions","/v1/council/motions"],

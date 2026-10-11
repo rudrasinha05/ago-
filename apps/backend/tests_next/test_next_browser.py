@@ -335,3 +335,70 @@ def test_next_quality_source_exact_bytes_distinct_review_and_measurement_tables(
     page.locator('#operation-submit').click()
     expect(page.get_by_role('dialog')).to_be_hidden()
     expect(page.locator('tr').filter(has_text='quality_subject')).to_contain_text('reviewed')
+
+
+def test_next_constitution_emergency_stop_and_independent_recovery(page, browser, app_url, tenant):
+    from datetime import datetime, timedelta
+
+    context = browser.new_context(viewport={"width": 1330, "height": 900})
+    reviewer = context.new_page()
+    try:
+        sign_in_next(page, app_url, tenant)
+        navigate_next(page, "Governance", "Governance & oversight")
+        expect(page.locator("#screen")).to_contain_text(
+            "Authenticated human leadership retains final constitutional authority"
+        )
+        page.get_by_role("button", name="Emergency stop", exact=True).click()
+        page.locator("#dlg-operation_key").fill("browser-incident")
+        page.locator("#dlg-blocked_contexts").select_option(["organization"])
+        page.locator("#dlg-reason").fill("Browser containment test")
+        page.locator("#dlg-containment").fill("Freeze changes while preserving review and recovery")
+        page.locator("#dlg-expires_at").fill(
+            (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")
+        )
+        page.locator("#operation-submit").click()
+        expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("#screen")).to_contain_text("Browser containment test")
+        navigate_next(page, "Organization", "People & departments")
+        page.get_by_role("button", name="New department", exact=True).click()
+        page.locator("#dlg-name").fill("Blocked company change")
+        page.locator("#operation-submit").click()
+        expect(page.locator("#operation-error")).to_contain_text(
+            "Constitution or emergency containment"
+        )
+        page.get_by_role("button", name="Cancel", exact=True).click()
+        navigate_next(page, "Governance", "Governance & oversight")
+        page.get_by_role("button", name="Prepare recovery review", exact=True).click()
+        page.locator("#dlg-postmortem").fill(
+            "Independent browser source review of containment and root cause"
+        )
+        page.locator("#dlg-recovery_evidence").fill(
+            "Actual local test interface and service remained available"
+        )
+        page.locator("#operation-submit").click()
+        expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
+        sign_in_next(reviewer, app_url, tenant, "reviewer")
+        navigate_next(reviewer, "Governance", "Governance & oversight")
+        expect(reviewer.get_by_role("button", name="Emergency stop", exact=True)).to_have_count(0)
+        row = reviewer.locator("tr").filter(has_text="constitution:emergency-review:")
+        row.get_by_role("button", name="Approve", exact=True).click()
+        expect(reviewer.locator("#operation-form")).to_contain_text(
+            "Independent browser source review of containment and root cause"
+        )
+        reviewer.locator("#dlg-reason").fill(
+            "Actual incident and recovery package independently inspected"
+        )
+        reviewer.locator("#operation-submit").click()
+        expect(reviewer.get_by_role("dialog")).to_be_hidden(timeout=15000)
+        page.get_by_role("button", name="Refresh", exact=True).click()
+        page.get_by_role("button", name="Close reviewed incident", exact=True).click()
+        page.locator("#operation-submit").click()
+        expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
+        navigate_next(page, "Organization", "People & departments")
+        page.get_by_role("button", name="New department", exact=True).click()
+        page.locator("#dlg-name").fill("Recovered constitutional organization")
+        page.locator("#operation-submit").click()
+        expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("#screen")).to_contain_text("Recovered constitutional organization")
+    finally:
+        context.close()

@@ -147,6 +147,7 @@
       "imports": [
         "api_contracts",
         "backend_contracts",
+        "governance_domain",
         "governed_execution",
         "memory",
         "quality",
@@ -338,10 +339,11 @@
       "context": "operations",
       "layer": "persistence",
       "imports": [
+        "architecture_guard",
         "backend_contracts",
         "enterprise_domains",
-        "security",
-        "architecture_guard"
+        "governance_domain",
+        "security"
       ]
     },
     "event_contracts": {
@@ -436,7 +438,8 @@
       "imports": [
         "approvals",
         "backend_contracts",
-        "governance_domain"
+        "governance_domain",
+        "security"
       ]
     },
     "governance_domain": {
@@ -841,6 +844,7 @@
       "layer": "persistence",
       "imports": [
         "backend_contracts",
+        "governance_domain",
         "security"
       ]
     },
@@ -986,6 +990,21 @@
     ],
     "ago_document_objects": [
       "database_store"
+    ],
+    "ago_constitution_proposals": [
+      "governance"
+    ],
+    "ago_constitution_adoptions": [
+      "governance"
+    ],
+    "ago_constitution_emergencies": [
+      "governance"
+    ],
+    "ago_constitution_emergency_reviews": [
+      "governance"
+    ],
+    "ago_constitution_emergency_closures": [
+      "governance"
     ]
   },
   "exceptions": []

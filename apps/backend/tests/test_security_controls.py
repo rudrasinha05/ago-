@@ -19,7 +19,7 @@ class DB:
 
     def execute(self, query, params):
         self.calls.append((query, params))
-        return Cursor({"ok": True} if self.found else None)
+        return Cursor(None if "ago_constitution_adoptions" in query else ({"ok": True} if self.found else None))
 
 
 def test_tenant_scoped_persistent_grants_and_revocation():

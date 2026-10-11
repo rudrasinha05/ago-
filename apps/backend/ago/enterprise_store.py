@@ -21,6 +21,7 @@ from ago.enterprise_domains import (
     transition_mode, transition_worker, twin_scenario, validate_horizon,
 )
 from ago.security import Principal
+from ago.governance_domain import CONSTITUTION_LAWS
 
 
 class EnterpriseOperationsStore:
@@ -355,6 +356,9 @@ class EnterpriseOperationsStore:
             "knowledge_evidence": [x["label"] for x in competence
                                    if x["kind"] == "knowledge"],
             "permission_awareness": "requires_runtime_policy_evaluation",
+            "constitutional_awareness": {"laws": list(CONSTITUTION_LAWS),
+                "priority": "above_DNA", "human_authority": True,
+                "evaluation": "runtime_security_controls", "subjective_understanding": False},
             "learning_evidence": [x["evidence_ref"] for x in competence
                                   if x["kind"] == "learning"],
             "risk": "needs_policy_review" if any(
