@@ -11,6 +11,51 @@ permissions:
   statuses: write
 
 jobs:
+  comparative-architecture:
+    name: Section28 Native Graph and Organizational Governance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ago_test
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: ago_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ago_test -d ago_test"
+          --health-interval 3s --health-timeout 5s --health-retries 15
+    env:
+      AGO_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_TEST_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      LANGSMITH_TRACING: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated pinned native comparator and backend
+        run: python -m pip install -e 'apps/backend[dev,postgres]' -r apps/backend/tests_comparative/requirements.txt
+      - name: Apply actual checksum migrations
+        run: python -m ago.event_runtime migrate
+      - name: Check original comparison and run actual graph authority experiments
+        working-directory: apps/backend
+        run: |
+          python ../../scripts/check_section28_comparison.py
+          python -m ruff check tests_comparative tests/test_section28_comparison.py ../../scripts/check_section28_comparison.py
+          python -m pytest -q -s tests_comparative tests/test_section28_comparison.py | tee /tmp/ago-section28-native-results.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          python -m pip freeze > /tmp/ago-section28-dependencies.txt
+      - name: Retain actual reproducible comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ago-section28-native-comparison
+          path: /tmp/ago-section28-*.txt
+          retention-days: 30
+          if-no-files-found: error
+
   database-architecture:
     name: Sections 7-9 Real Model Redis Memory and Recovery
     runs-on: ubuntu-latest

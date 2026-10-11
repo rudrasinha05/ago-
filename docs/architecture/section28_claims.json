@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "reviewed": "2026-10-11",
+  "source_subsections": [
+    "28.1",
+    "28.2",
+    "28.3",
+    "28.4",
+    "28.5",
+    "28.6",
+    "28.7",
+    "28.8",
+    "28.9",
+    "28.10",
+    "28.11",
+    "28.12"
+  ],
+  "sources": [
+    {
+      "id": "crewai",
+      "url": "https://docs.crewai.com/v1.15.27/en/concepts/flows",
+      "version": "1.15.27"
+    },
+    {
+      "id": "autogen",
+      "url": "https://microsoft.github.io/autogen/stable/index.html",
+      "version": "stable reviewed 2026-10-11"
+    },
+    {
+      "id": "langgraph",
+      "url": "https://docs.langchain.com/oss/python/langgraph/overview",
+      "version": "native lab 1.2.13"
+    },
+    {
+      "id": "openhands",
+      "url": "https://docs.openhands.dev/sdk/guides/security",
+      "version": "reviewed 2026-10-11"
+    },
+    {
+      "id": "bpm",
+      "url": "https://docs.camunda.io/docs/8.7/components/agentic-orchestration/",
+      "version": "Camunda8.7"
+    },
+    {
+      "id": "erp",
+      "url": "https://www.odoo.com/documentation/19.0/applications/services/project/project_management/project_dashboard.html",
+      "version": "Odoo19.0"
+    },
+    {
+      "id": "project",
+      "url": "https://www.atlassian.com/software/jira/features",
+      "version": "reviewed 2026-10-11"
+    }
+  ],
+  "claims": [
+    {
+      "id": "organizational_identity",
+      "kind": "bounded_contract",
+      "sources": [
+        "crewai",
+        "autogen",
+        "langgraph",
+        "openhands",
+        "bpm",
+        "erp",
+        "project"
+      ],
+      "evidence": [
+        "apps/backend/ago/identity.py",
+        "apps/backend/ago/organization_store.py"
+      ]
+    },
+    {
+      "id": "independent_approval_qa",
+      "kind": "bounded_contract",
+      "sources": [
+        "crewai",
+        "autogen",
+        "langgraph",
+        "openhands",
+        "bpm",
+        "erp",
+        "project"
+      ],
+      "evidence": [
+        "apps/backend/ago/governance.py",
+        "apps/backend/ago/quality_store.py"
+      ]
+    },
+    {
+      "id": "constitutional_containment",
+      "kind": "bounded_contract",
+      "sources": [
+        "crewai",
+        "autogen",
+        "langgraph",
+        "openhands",
+        "bpm",
+        "erp",
+        "project"
+      ],
+      "evidence": [
+        "apps/backend/ago/security_controls.py",
+        "deploy/sql/040_corporate_constitution.sql",
+        "apps/backend/tests/test_section29_constitution.py"
+      ]
+    },
+    {
+      "id": "organization_feedback",
+      "kind": "bounded_contract",
+      "sources": [
+        "crewai",
+        "autogen",
+        "langgraph",
+        "openhands",
+        "bpm",
+        "erp",
+        "project"
+      ],
+      "evidence": [
+        "apps/backend/ago/enterprise_store.py",
+        "apps/backend/tests/test_reviewed_measurements.py"
+      ]
+    },
+    {
+      "id": "native_graph_application_boundary",
+      "kind": "bounded_contract",
+      "sources": [
+        "crewai",
+        "autogen",
+        "langgraph",
+        "openhands",
+        "bpm",
+        "erp",
+        "project"
+      ],
+      "evidence": [
+        "apps/backend/tests_comparative/test_architecture_comparison.py"
+      ]
+    }
+  ],
+  "limits": [
+    "No performance superiority",
+    "Only LangGraph native runtime sampled",
+    "No external legal/security certification",
+    "Wider original vision sections remain open"
+  ]
+}
