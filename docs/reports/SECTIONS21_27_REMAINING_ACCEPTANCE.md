@@ -83,9 +83,12 @@ old endpoint/schema fingerprints are retained except the additive evidence-kind 
 
 ## Original acceptance still dependent on real evidence
 
-The local mechanics cover five previously open narrow engineering checks:
-organization lifecycle, measured quality, controlled comparisons, real approval/
-rollback auditing and one-way periodic synchronization. Four Section24 gates still
+Four previously open narrow engineering checks are implemented: organization
+lifecycle, controlled comparisons, real approval/rollback auditing and one-way
+periodic synchronization. The broader Section26 quality gate stays open: handler/
+packet output QA and architecture-contract compliance are measured, but arbitrary
+LLM prompt quality and general architecture quality are not independently established.
+Four Section24 gates still
 need genuine owner financial sources and observed business value. Section27 broad
 calibration still needs prior predictions and later true deadline/cost/revenue/growth/
 market outcomes over time. Tests prove software behavior, not these real outcomes.
@@ -109,3 +112,26 @@ source/assignment/reconciliation history. Older code cannot dispatch enrolled
 experiment tasks safely, so do not downgrade while enrolled work remains active.
 Use the existing isolated restore-drill procedure with a verified pre-upgrade
 backup if recovery is necessary; never overwrite the founder's live database.
+
+## Verified closing source
+
+Closing implementation: `777fce1f88977047be9ee7c3d9d8b7921e03c31a`.
+Main [38115995121](https://github.com/rudrasinha05/ago-/actions/runs/38115995121)
+and independent backend [38115995149](https://github.com/rudrasinha05/ago-/actions/runs/38115995149)
+**SUCCESS**, all nine jobs and decoded logs checked on this exact SHA.
+
+| Gate | Actual result |
+|---|---|
+|Backend Python3.11,3.12,3.14|574 passed on each; actual PostgreSQL, no database skips; one existing Starlette/httpx deprecation warning|
+|Coverage|87.58% on3.11,87.57% on3.14; all unchanged floors passed|
+|Console/SDK|16 console JavaScript and10 SDK tests passed|
+|Browsers|30 browser/device/accessibility,seven real Next.js signed-session/PostgreSQL journeys,six console Chromium journeys passed|
+|Database/recovery|Fresh/idempotent migrations through038,PostgreSQL backup/restore,31 real storage/model/Redis tests,recovery and nonroot image smoke passed|
+|Source contracts|109 modules,303 approved imports,zero violations; original API fingerprints retained except additive evidence kinds; all workspace builds/exports passed|
+
+The documentation closing commit has no execution changes. Its own exact final
+head/CI links are recorded in the master checklist after that final CI succeeds.
+Sections21–27 tracking:46 checks,40 marked,6 wider original/empirical checks remain
+open. These are Section24's four real-financial gates, Section26's general prompt/
+architecture quality gate and Section27's broad longitudinal calibration gate.
+This is bounded local implementation acceptance, not full original blueprint parity.
