@@ -550,3 +550,110 @@ def test_continuous_worker_two_real_signed_api_cycles_sync_and_replay_safety(cas
         and snapshots[0]["payload"]["previous_snapshot_id"] == snapshots[1]["id"]
     )
     assert len(client.get("/v1/agents/runs", headers=f).json()) == 1
+
+
+def test_lifecycle_coordinate_failure_rolls_back_lease_and_checkpoint(case):
+    from ago.enterprise_store import EnterpriseOperationsStore
+    from ago.security import Principal
+
+    client, headers, context = case
+    f, r = headers["founder"], headers["reviewer"]
+    worker = employee(client, f, department(client, f))
+    task = _approved_task(client, f, r, worker)
+    _enqueue(client, f, task, 20)
+    cursor = None
+    for i in range(4):
+        cursor = post(
+            client,
+            BASE + "/lifecycle/advance",
+            f,
+            {"operation_key": "before-" + str(i), "expected_event_id": cursor},
+        )["id"]
+    store = EnterpriseOperationsStore(context["db"])
+    actor = Principal(context["founder_id"], context["tenant"], ("founder",))
+
+    def fail(**kwargs):
+        raise RuntimeError("Disposable offline crash before any external effect")
+
+    with pytest.raises(RuntimeError, match="offline crash"):
+        store.advance_lifecycle(
+            actor=actor,
+            operation_key="crash",
+            expected_event_id=cursor,
+            execute_one=True,
+            runner=fail,
+        )
+    assert client.get(BASE + "/lifecycle", headers=f).json()["checkpoint"]["id"] == cursor
+    queue = client.get(BASE + "/work-queue", headers=f).json()
+    assert queue[0]["lease_state"] is None
+    result = post(
+        client,
+        BASE + "/lifecycle/advance",
+        f,
+        {"operation_key": "crash", "expected_event_id": cursor, "execute_one": True},
+    )
+    assert result["payload"]["execution"]["executed"]
+
+
+def test_runtime_forecast_deadline_later_qa_and_exact_retry(case):
+    from test_enterprise_completion_batch import _finish_reviewed
+
+    client, headers, _ = case
+    f, r = headers["founder"], headers["reviewer"]
+    worker = employee(client, f, department(client, f))
+    _finish_reviewed(client, f, r, worker)
+    task = _approved_task(client, f, r, worker)
+    now = datetime.now(timezone.utc)
+    post(
+        client,
+        "/v1/operations/calendar",
+        f,
+        {
+            "title": "Observed task deadline",
+            "task_id": task,
+            "operation_key": "deadline",
+            "starts_at": now.isoformat(),
+            "ends_at": (now + timedelta(hours=1)).isoformat(),
+        },
+    )
+    snapshot = post(client, BASE + "/twin/state", f, {"operation_key": "runtime-state"})
+    params = {
+        "operation_key": "runtime-forecast",
+        "snapshot_id": snapshot["id"],
+        "task_ids": [task],
+        "horizon_end": (now + timedelta(days=1)).isoformat(),
+    }
+    forecast = post(client, BASE + "/twin/forecast", f, params)
+    assert forecast["payload"]["runtime"]["training_samples"] == 1
+    assert forecast["payload"]["runtime"]["tasks"][0]["deadline"]
+    post(client, "/v1/agents/tasks/" + task + "/run", f)
+    post(
+        client,
+        "/v1/tasks/" + task + "/review",
+        r,
+        {"verdict": "pass", "evidence": "Actual later runtime/deadline QA"},
+    )
+    assert post(client, BASE + "/twin/forecast", f, params)["idempotent"]
+    observed = post(
+        client,
+        BASE + "/twin/forecasts/" + forecast["id"] + "/calibrate",
+        f,
+        {"operation_key": "runtime-actual"},
+    )["payload"]
+    assert observed["runtime"]["observed_samples"] == 1
+    assert observed["runtime"]["pending_samples"] == 0
+    assert observed["runtime"]["deadline_observed_samples"] == 1
+    assert observed["runtime"]["mean_absolute_error_seconds"] is not None
+    assert not observed["runtime"]["accuracy_certified"]
+
+
+def test_continuous_evidence_does_not_hide_pending_financial_review(case):
+    client, headers, _ = case
+    f = headers["founder"]
+    item = document(client, f, cost(client, f, "source"), "invoice", "source-document")
+    for i in range(12):
+        post(client, BASE + "/twin/state", f, {"operation_key": "capture-" + str(i)})
+    dashboard = client.get(BASE + "/evidence", headers=f).json()
+    assert sum(x["kind"] == "twin_state" for x in dashboard) == 1
+    assert any(x["id"] == item["id"] for x in dashboard)
+    assert len(client.get(BASE + "/evidence?kind=twin_state", headers=f).json()) == 12

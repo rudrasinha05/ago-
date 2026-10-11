@@ -1,5 +1,7 @@
 # Sections 21–27 consolidated local batch
 
+This is the initial verified batch record. Current closing implementation, remaining real-data gates and consolidated migration038/rollback guidance are in `SECTIONS21_27_REMAINING_ACCEPTANCE.md`; the single master checklist records the final verified head.
+
 ## Acceptance boundary
 
 This implements the frozen **personal localhost, existing architecture, advisory evolution** scope in `docs/SECTIONS21_27_SCOPE.md`. The original blueprint was recovered and read before this batch; its wider production and empirical requirements are not silently redefined as complete. Sections 1–20 interfaces and authority rules remain in force. No user Windows database has been migrated.

@@ -255,3 +255,18 @@ test("Strategy activation waits for an independently approved real DB plan statu
   assert.match(rejected,/rejected/);
   assert.doesNotMatch(rejected,/data-action="plan-activate"/);
 });
+
+test("financial source review exposes exact text without mutating immutable evidence", async () => {
+  const {evidencePreview}=await import('../ago/console/actions.js');
+  const raw='<img src=x onerror=alert(1)> Invoice INR 100';
+  const source={kind:'financial_document',digest:'a'.repeat(64),payload:{content_base64:btoa(raw),document_digest:'b'.repeat(64)}};
+  const preview=evidencePreview(source);
+  assert.equal(preview.payload.document_text,raw);
+  assert.equal(preview.payload.content_base64,undefined);
+  assert.equal(source.payload.content_base64,btoa(raw));
+  assert.equal(preview.digest,source.digest);
+  const wrapped=evidencePreview({details:source});
+  assert.equal(wrapped.details.payload.document_text,raw);
+  const binary=evidencePreview({...source,payload:{content_base64:btoa(String.fromCharCode(255,254))}});
+  assert.match(binary.payload.document_text,/Binary source/);
+});

@@ -10,6 +10,9 @@ function fieldHTML(field) {
     (field.maxLength ? ' maxlength="' + Number(field.maxLength) + '"' : "") +
     (field.min !== undefined ? ' min="' + Number(field.min) + '"' : "") +
     (field.max !== undefined ? ' max="' + Number(field.max) + '"' : "");
+  if (field.type === "file") {
+    return label+'<input type="file"'+attrs+' accept=".pdf,.txt,.csv,.json,.png,.jpg,.jpeg">';
+  }
   if (field.type === "select") {
     const choices = (field.options || []).map(option =>
       '<option value="' + safe(option.value) + '"' +
@@ -134,11 +137,7 @@ async function reviewApproval(ctx, id, initial = "approved") {
       return "Human approval decision recorded.";
     },
   });
-  if(details) {
-    const pre=document.createElement("pre");pre.textContent=JSON.stringify(details,null,2);
-    pre.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:35vh;overflow:auto";
-    document.getElementById("operation-form").prepend(pre);
-  }
+  if(details) appendEvidence(document.getElementById("operation-form"),details);
 }
 async function planSteps(ctx, id) {
   id = uuid(id);
@@ -725,12 +724,40 @@ const selectField = (name,label,options,required=true) => ({name,label,type:"sel
 const numericField = (name,label,value=0,max=1000000) => ({name,label,type:"number",min:0,max,value});
 const timeField = (name,label,value="") => ({name,label,type:"datetime-local",value});
 const instant = value => value ? new Date(value).toISOString() : null;
+export function evidencePreview(value) {
+  const result=structuredClone(value);
+  const item=result.details || result;
+  if(item.kind==="financial_document" && item.payload?.content_base64) {
+    try {
+      const bytes=Uint8Array.from(atob(item.payload.content_base64),x=>x.charCodeAt(0));
+      try {item.payload.document_text=new TextDecoder("utf-8",{fatal:true}).decode(bytes);}
+      catch {item.payload.document_text="Binary source: download the exact document to inspect before deciding.";}
+      delete item.payload.content_base64;
+    } catch {item.payload.document_text="Invalid source bytes: do not approve this document.";}
+  }
+  return result;
+}
+function appendEvidence(host,value) {
+  const pre=document.createElement("pre");pre.textContent=JSON.stringify(evidencePreview(value),null,2);
+  pre.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto";
+  host.prepend(pre);
+  const item=value.details || value;
+  if(item.kind==="financial_document" && item.payload?.content_base64) {
+    const button=document.createElement("button");button.type="button";button.className="btn btn-soft";
+    button.textContent="Download exact source document";
+    button.addEventListener("click",()=>{
+      const bytes=Uint8Array.from(atob(item.payload.content_base64),x=>x.charCodeAt(0));
+      const pdf=String.fromCharCode(...bytes.slice(0,5))==="%PDF-";
+      const url=URL.createObjectURL(new Blob([bytes],{type:pdf?"application/pdf":"application/octet-stream"}));
+      const link=document.createElement("a");link.href=url;link.download=pdf?"financial-source.pdf":"financial-source.bin";
+      link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    });host.prepend(button);
+  }
+}
 function showEvidence(ctx,title,value) {
   openDialog(ctx,{title,description:"Recorded source evidence. Review assumptions and scope before deciding.",
     refresh:false,button:"Close",onSubmit:async()=>"Evidence viewed."});
-  const pre=document.createElement("pre");pre.textContent=JSON.stringify(value,null,2);
-  pre.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto";
-  document.getElementById("operation-form").prepend(pre);
+  appendEvidence(document.getElementById("operation-form"),value);
 }
 async function enterpriseAction(key,id,ctx) {
   const {api,state,can}=ctx;
@@ -996,8 +1023,8 @@ async function enterpriseForm(command,ctx) {
     submit=async v=>{await post("/evolution/policy-audit",{...v,operation_key:newOperation()});return "Actual reviewed capacity applications and exact baseline restoration audited. Evolution applied no change.";};
   } else if(command==="financial-document") {
     const costs=resource(state.data,"enterpriseCosts") || [];mustHave(costs,"Record the corresponding cost / revenue claim first.");
-    fields=[entity("cost_id","Cost / revenue claim",costs),selectField("document_type","Source type",[choose("invoice","Invoice / revenue record"),choose("bank","Bank transaction record")]),textField("content","Exact source document text",180000)];
-    submit=async v=>{const bytes=new TextEncoder().encode(v.content);let raw="";for(const byte of bytes)raw+=String.fromCharCode(byte);await post("/finance/documents",{cost_id:v.cost_id,document_type:v.document_type,content_base64:btoa(raw),operation_key:newOperation()});return "Exact source bytes stored. Request independent evidence review before reconciliation.";};
+    fields=[entity("cost_id","Cost / revenue claim",costs),selectField("document_type","Source type",[choose("invoice","Invoice / revenue record"),choose("bank","Bank transaction record")]),{name:"source_file",label:"Exact invoice / bank document (up to 200KB)",type:"file",required:false},{...textField("content","Or paste exact source text",180000),required:false}];
+    submit=async v=>{const file=v.source_file;if(file?.size>200000)throw new Error("Source document must be at most 200KB.");const bytes=file?.size?new Uint8Array(await file.arrayBuffer()):new TextEncoder().encode(v.content || "");let raw="";for(const byte of bytes)raw+=String.fromCharCode(byte);await post("/finance/documents",{cost_id:v.cost_id,document_type:v.document_type,content_base64:btoa(raw),operation_key:newOperation()});return "Exact source bytes stored. Request independent evidence review before reconciliation.";};
   } else if(command==="reconcile") {
     const documents=evidence.filter(x=>x.kind==="financial_document" && x.reviewed_at);
     const invoices=documents.filter(x=>x.payload.document_type==="invoice"),banks=documents.filter(x=>x.payload.document_type==="bank");

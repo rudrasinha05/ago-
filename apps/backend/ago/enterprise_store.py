@@ -2088,8 +2088,12 @@ class EnterpriseOperationsStore:
                LEFT JOIN ago_enterprise_evidence_reviews r
                  ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
                WHERE e.tenant_id=%s AND (%s::text IS NULL OR e.kind=%s)
+                 AND (%s::text IS NOT NULL OR e.kind NOT IN ('lifecycle','operations','twin_state','diagnostics')
+                      OR e.id=(SELECT latest.id FROM ago_enterprise_evidence latest
+                         WHERE latest.tenant_id=e.tenant_id AND latest.kind=e.kind
+                         ORDER BY latest.created_at DESC,latest.id DESC LIMIT 1))
                ORDER BY e.created_at DESC,e.id LIMIT 100""",
-            (str(UUID(tenant_id)), kind, kind),
+            (str(UUID(tenant_id)), kind, kind, kind),
         ).fetchall()]
 
     def _save_evidence(self, *, actor: Principal, kind: str,
@@ -2468,7 +2472,7 @@ class EnterpriseOperationsStore:
             previous = self.twin_sync_status(tenant_id=actor.tenant_id)["snapshot"]
             observations = self._task_observations(tenant_id=actor.tenant_id)
             departments = self.connection.execute(
-                "SELECT id,name FROM ago_departments WHERE tenant_id=%s ORDER BY id LIMIT 1000",
+                "SELECT id,name FROM ago_departments WHERE tenant_id=%s ORDER BY id LIMIT 1001",
                 (actor.tenant_id,),
             ).fetchall()
             employees = self.connection.execute(
@@ -2483,19 +2487,20 @@ class EnterpriseOperationsStore:
             ).fetchall()
             calendar = self.connection.execute(
                 """SELECT id,task_id,goal_id,starts_at,ends_at,status FROM ago_calendar_events
-                   WHERE tenant_id=%s AND visibility='tenant' ORDER BY starts_at,id LIMIT 1000""",
+                   WHERE tenant_id=%s AND visibility='tenant' ORDER BY starts_at,id LIMIT 1001""",
                 (actor.tenant_id,),
             ).fetchall()
             payload = {"model_version": "organization_projection_v1",
-                       "departments": [dict(r) for r in departments],
+                       "departments": [dict(r) for r in departments[:1000]],
                        "employees": [dict(r) for r in employees[:1000]], "tasks": observations[:1000],
                        "horizon_plans": self.plans(tenant_id=actor.tenant_id),
-                       "calendar": [dict(r) for r in calendar],
+                       "calendar": [dict(r) for r in calendar[:1000]],
                        "capacity": self.capacity_limits(tenant_id=actor.tenant_id),
                        "queue": self.work_queue(tenant_id=actor.tenant_id),
                        "budgets": self.budgets(tenant_id=actor.tenant_id),
                        "observed_costs": self.costs(tenant_id=actor.tenant_id),
-                       "source_truncation": len(observations) > 1000 or len(employees) > 1000,
+                       "source_truncation": (len(observations) > 1000 or len(employees) > 1000
+                                             or len(departments) > 1000 or len(calendar) > 1000),
                        "previous_snapshot_id": str(previous["id"]) if previous else None,
                        "previous_snapshot_digest": previous["digest"] if previous else None,
                        "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -2506,6 +2511,10 @@ class EnterpriseOperationsStore:
                        "consistency": "eventually_consistent_read_projection",
                        "private_data": "excluded", "calibrated": False, "applied": False,
                        "unknowns": ["provider-authenticated revenue", "market response", "hiring causality"]}
+            payload["source_caps_reached"] = [key for key, limit in (
+                ("horizon_plans",500),("queue",100),("budgets",100),("observed_costs",100))
+                if len(payload[key]) >= limit]
+            payload["source_truncation"] |= bool(payload["source_caps_reached"])
             return self._save_evidence(actor=actor, kind="twin_state", operation_key=operation_key,
                                        payload=payload)
 
@@ -2532,6 +2541,13 @@ class EnterpriseOperationsStore:
         cohort = [t for t in tasks if str(t["id"]) in ids]
         if len(cohort) != len(ids) or any(t.get("verdict") or t["status"] in ("completed", "failed") for t in cohort):
             raise PermissionError("Forecast cohort must be unfinished and unreviewed at capture")
+        previous = self._prior_evidence(actor, "forecast", operation_key)
+        if previous:
+            frozen = previous["payload"]
+            if frozen["snapshot_id"] != str(UUID(snapshot_id)) or set(frozen["cohort_task_ids"]) != ids or (
+                datetime.fromisoformat(frozen["horizon_end"]) != horizon_end):
+                raise ValueError("Forecast key already bound to different immutable parameters")
+            return previous
         current = self.connection.execute(
             """SELECT t.id,t.status FROM ago_governed_tasks t WHERE t.tenant_id=%s
                AND t.id=ANY(%s::uuid[]) AND (t.status IN ('completed','failed') OR EXISTS(
