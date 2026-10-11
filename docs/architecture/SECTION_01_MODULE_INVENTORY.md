@@ -8,7 +8,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [__init__](../../apps/backend/ago/__init__.py) | entrypoints | composition | None |
 | [access](../../apps/backend/ago/access.py) | governance | persistence | backend_contracts, security |
 | [agent_handlers](../../apps/backend/ago/agent_handlers.py) | workforce | service | workflows |
-| [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, organizational_dna, task_store |
+| [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, organizational_dna, task_store, enterprise_store |
 | [agent_runtime_queries](../../apps/backend/ago/agent_runtime_queries.py) | workforce | persistence | backend_contracts |
 | [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, model_handlers, repository_ports, security |
 | [api_brain](../../apps/backend/ago/api_brain.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
@@ -39,7 +39,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [department_automation_queries](../../apps/backend/ago/department_automation_queries.py) | operations | persistence | backend_contracts |
 | [dna_domain](../../apps/backend/ago/dna_domain.py) | strategy | domain | None |
 | [enterprise_domains](../../apps/backend/ago/enterprise_domains.py) | operations | domain | None |
-| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | backend_contracts, enterprise_domains, security |
+| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | backend_contracts, enterprise_domains, security, architecture_guard |
 | [event_contracts](../../apps/backend/ago/event_contracts.py) | platform | domain | events |
 | [event_migrations](../../apps/backend/ago/event_migrations.py) | platform | foundation | None |
 | [event_runtime](../../apps/backend/ago/event_runtime.py) | entrypoints | composition | event_migrations, event_worker, events, postgres_event_store |

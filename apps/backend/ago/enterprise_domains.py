@@ -15,6 +15,74 @@ from json import dumps
 from typing import Mapping, Sequence
 
 
+LIFECYCLE_PHASES = ("sense", "classify", "prioritize", "allocate", "coordinate",
+                    "monitor", "escalate", "learn")
+
+
+def next_lifecycle_phase(previous: str | None) -> str:
+    if previous is None:
+        return LIFECYCLE_PHASES[0]
+    if previous not in LIFECYCLE_PHASES:
+        raise ValueError("Unknown lifecycle checkpoint; recovery review required")
+    return LIFECYCLE_PHASES[(LIFECYCLE_PHASES.index(previous)+1) % len(LIFECYCLE_PHASES)]
+
+
+def controlled_assignment(task_ids: Sequence[str], seed: str) -> dict:
+    """Reproducible balanced assignment before outcomes; seed is immutable."""
+    from uuid import UUID
+    ids = [str(UUID(x)) for x in task_ids]
+    if not 2 <= len(ids) <= 100 or len(set(ids)) != len(ids) or not 1 <= len(seed.strip()) <= 160:
+        raise ValueError("Unique bounded prospective cohort and seed required")
+    ordered = sorted(ids, key=lambda x: sha256((seed+":"+x).encode()).hexdigest())
+    return {x: "baseline" if i % 2 == 0 else "candidate" for i, x in enumerate(ordered)}
+
+
+def forecast_runtime(training: Sequence[dict], cohort: Sequence[dict]) -> dict:
+    """Empirical baseline and interval, strictly frozen before cohort outcomes."""
+    values = sorted(float(t["elapsed_seconds"]) for t in training
+                    if t.get("elapsed_seconds") is not None and t["elapsed_seconds"] >= 0)
+    center = sum(values)/len(values) if values else None
+    interval = [values[0], values[-1]] if values else None
+    return {"model_version": "empirical_elapsed_baseline_v1", "training_samples": len(values),
+            "mean_elapsed_seconds": center, "empirical_range_seconds": interval,
+            "tasks": [{"task_id": str(t["id"]), "deadline": t.get("deadline"),
+                       "created_at": t["created_at"]} for t in cohort],
+            "limitations": "Elapsed time includes approval waits; range is empirical, not a confidence guarantee."}
+
+
+def calibrate_runtime(prediction: dict, outcomes: Sequence[dict]) -> dict:
+    index = {str(t["id"]): t for t in outcomes}
+    ids = {t["task_id"] for t in prediction["tasks"]}
+    if len(index) != len(outcomes) or not index.keys() <= ids:
+        raise ValueError("Unique same-cohort runtime outcomes required")
+    mean, interval = prediction["mean_elapsed_seconds"], prediction["empirical_range_seconds"]
+    observed, deadline_observed, deadline_errors = [], 0, []
+    from datetime import datetime
+    for t in prediction["tasks"]:
+        row = index.get(t["task_id"])
+        if not row or row.get("elapsed_seconds") is None:
+            continue
+        value = float(row["elapsed_seconds"])
+        if value < 0:
+            raise ValueError("Invalid observed elapsed time")
+        observed.append(value)
+        if t.get("deadline") and mean is not None:
+            deadline = datetime.fromisoformat(t["deadline"])
+            created = datetime.fromisoformat(t["created_at"])
+            deadline_observed += 1
+            allowance = (deadline-created).total_seconds()
+            deadline_errors.append(int((mean <= allowance) != (value <= allowance)))
+    return {"observed_samples": len(observed), "pending_samples": len(ids)-len(observed),
+            "mean_absolute_error_seconds": sum(abs(mean-x) for x in observed)/len(observed)
+              if mean is not None and observed else None,
+            "empirical_range_coverage": sum(interval[0] <= x <= interval[1] for x in observed)/len(observed)
+              if interval and observed else None,
+            "deadline_observed_samples": deadline_observed,
+            "deadline_classification_error_rate": sum(deadline_errors)/deadline_observed
+              if deadline_observed else None, "accuracy_certified": False,
+            "unknown_dimensions": ["revenue", "growth", "market", "hiring_causality"]}
+
+
 def finance_analysis(rows: Sequence[dict], *, currency: str,
                      baseline_revenue: str, alternative_net: str,
                      assumptions: str) -> dict:

@@ -237,7 +237,8 @@ def restore_local(archive: Path, *, confirmed: bool = False) -> dict:
 
 def work_local(*, port: int, tenant_id: str, email: str, password: str,
                iterations: int = 1, poll_seconds: int = 5,
-               connection=http.client.HTTPConnection, pause=sleep) -> dict:
+               connection=http.client.HTTPConnection, pause=sleep,
+               lifecycle: bool = False) -> dict:
     """Opt-in offline worker. Credentials/token stay in memory, every call reauths.
 
     No models, external tools, automatic task creation, approval or QA. A crash
@@ -251,13 +252,13 @@ def work_local(*, port: int, tenant_id: str, email: str, password: str,
     ):
         raise ValueError("Bounded localhost development worker required")
     token = None
-    def call(path, body):
+    def call(path, body=None, method="POST"):
         conn = connection("127.0.0.1", port, timeout=30)
         try:
             headers = {"Content-Type": "application/json"}
             if token:
                 headers["Authorization"] = "Bearer " + token
-            conn.request("POST", path, json.dumps(body), headers)
+            conn.request(method, path, json.dumps(body) if body is not None else None, headers)
             response = conn.getresponse()
             raw = response.read(2000000)
             if response.status != 200:
@@ -270,6 +271,22 @@ def work_local(*, port: int, tenant_id: str, email: str, password: str,
     del password
     completed = idle = 0
     for iteration in range(iterations):
+        if lifecycle:
+            from uuid import uuid4
+            cycle_completed = False
+            checkpoint = call("/v1/operations/enterprise/lifecycle", method="GET")["checkpoint"]
+            for _ in range(8):
+                checkpoint = call("/v1/operations/enterprise/lifecycle/advance", {
+                    "operation_key": str(uuid4()),
+                    "expected_event_id": str(checkpoint["id"]) if checkpoint else None,
+                    "execute_one": True})
+                if checkpoint["payload"].get("execution"):
+                    completed += 1
+                    cycle_completed = True
+            idle += int(not cycle_completed)
+            if iteration+1 < iterations:
+                pause(poll_seconds)
+            continue
         claim = call("/v1/operations/enterprise/work-queue/offline-claim", {"lease_seconds": 600})
         if claim["queue_id"]:
             call("/v1/operations/enterprise/work-queue/" + claim["queue_id"] + "/run",
@@ -297,6 +314,10 @@ def main(argv: list[str] | None = None) -> int:
     worker.add_argument("--port", type=int, default=8000)
     worker.add_argument("--iterations", type=int, default=1)
     worker.add_argument("--poll-seconds", type=int, default=5)
+    operating = sub.add_parser("operate", help="Opt-in durable organization lifecycle and one-way Twin sync")
+    operating.add_argument("--port", type=int, default=8000)
+    operating.add_argument("--iterations", type=int, default=1)
+    operating.add_argument("--poll-seconds", type=int, default=5)
     backup = sub.add_parser("backup", help="Explicit local custom-format backup")
     backup.add_argument("--output", type=Path, required=True)
     backup.add_argument("--confirm", action="store_true")
@@ -309,9 +330,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(info, sort_keys=True))
         return 0 if info["ready"] else 2
     try:
-        if args.command == "work":
+        if args.command in ("work", "operate"):
             result = work_local(port=args.port, iterations=args.iterations,
-                poll_seconds=args.poll_seconds, tenant_id=input("Organization UUID: ").strip(),
+                poll_seconds=args.poll_seconds, lifecycle=args.command == "operate",
+                tenant_id=input("Organization UUID: ").strip(),
                 email=input("Executor email: ").strip(),
                 password=getpass.getpass("Password (never saved): "))
             print(json.dumps(result, sort_keys=True))

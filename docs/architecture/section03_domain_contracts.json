@@ -303,6 +303,8 @@
       "ago_evolution_observations",
       "ago_evolution_review_events",
       "ago_executive_snapshots",
+      "ago_experiment_assignments",
+      "ago_financial_matches",
       "ago_goals",
       "ago_governed_tasks",
       "ago_horizon_plan_revisions",

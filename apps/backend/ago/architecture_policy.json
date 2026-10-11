@@ -67,7 +67,8 @@
         "agent_runtime_queries",
         "backend_contracts",
         "organizational_dna",
-        "task_store"
+        "task_store",
+        "enterprise_store"
       ]
     },
     "agent_runtime_queries": {
@@ -339,7 +340,8 @@
       "imports": [
         "backend_contracts",
         "enterprise_domains",
-        "security"
+        "security",
+        "architecture_guard"
       ]
     },
     "event_contracts": {

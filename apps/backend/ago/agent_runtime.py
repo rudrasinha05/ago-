@@ -10,6 +10,7 @@ from ago.agent_runtime_queries import AgentRuntimeQueries
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.task_store import TaskStore
 from ago.organizational_dna import GenomeStore
+from ago.enterprise_store import EnterpriseOperationsStore
 
 
 class AgentRuntime:
@@ -37,13 +38,15 @@ class AgentRuntime:
             )
             if employee is None or employee["kind"] != "ai":
                 raise PermissionError("Task requires an AI employee")
+            experiment = self.repositories.resolve(EnterpriseOperationsStore).experiment_variant(
+                tenant_id=actor.tenant_id, task_id=task_id)
             task = self.repositories.resolve(TaskStore).authorize_and_start(
                 task_id=task_id,
                 principal=actor,
             )
             dna = self.repositories.resolve(GenomeStore).effective(
                 tenant_id=actor.tenant_id, employee_id=str(row["assignee_id"]))
-            task = replace(task, dna_context=dna)
+            task = replace(task, dna_context=dna, experiment_context=experiment)
             run_id = str(uuid4())
             self.repositories.resolve(AgentRuntimeQueries).insert_ago_agent_runs_03(
                 (run_id, actor.tenant_id, task_id, row["assignee_id"], actor.subject,

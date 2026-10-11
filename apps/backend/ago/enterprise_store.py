@@ -2136,6 +2136,12 @@ class EnterpriseOperationsStore:
                         approval_id: str) -> dict:
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
+            author = self.connection.execute(
+                "SELECT actor_id FROM ago_enterprise_evidence WHERE tenant_id=%s AND id=%s",
+                (actor.tenant_id, str(UUID(evidence_id))),
+            ).fetchone()
+            if author and str(author["actor_id"]) != actor.subject:
+                raise PermissionError("Original evidence author must reconcile the independent review")
             action = self.evidence_action(tenant_id=actor.tenant_id, evidence_id=evidence_id)
             self._approval(actor, approval_id, action)
             prior = self.connection.execute(
@@ -2370,6 +2376,10 @@ class EnterpriseOperationsStore:
                 "automatic_migration": False}
 
     def evolution_diagnostics(self, *, actor: Principal, operation_key: str) -> dict:
+        from ago.architecture_guard import verify, POLICY_FILE
+        from pathlib import Path
+        from hashlib import sha256
+        architecture = verify()
         tasks = self._task_observations(tenant_id=actor.tenant_id)
         failed = [t for t in tasks if t["status"] == "failed" or t["verdict"] == "fail"]
         backlog = [t for t in tasks if t["status"] in ("proposed", "waiting_approval", "running")]
@@ -2385,6 +2395,12 @@ class EnterpriseOperationsStore:
                 group["task_ids"].append(str(t["id"]))
                 group["failed"] += int(t["status"] == "failed" or t["verdict"] == "fail")
                 group["reviewed"] += int(t["review_id"] is not None)
+        for group in groups.values():
+            selected = [t for t in tasks if str(t["id"]) in group["task_ids"] and t["review_id"]]
+            group["qa_pass_rate"] = sum(t["verdict"] == "pass" and t["status"] == "completed"
+                                         for t in selected)/len(selected) if selected else None
+            group["pending_qa"] = len(group["task_ids"])-len(selected)
+        source_dir = Path(__file__).resolve().parent
         proposals = [{"type": "workflow", "evidence_task_ids": [str(t["id"]) for t in failed],
                       "change": "Review failed actions and add bounded remediation before reassigning",
                       "rollback": "Retain prior approved workflow; reject candidate if independent QA regresses"}]
@@ -2394,6 +2410,11 @@ class EnterpriseOperationsStore:
                    "failure_count": len(failed), "backlog_count": len(backlog),
                    "proposals": proposals, "prompt_quality": "only action-level QA observed; causal attribution unknown",
                    "architecture_quality": "use existing checked Section14 contract; no automatic rewrite",
+                   "architecture_measurement": {**architecture.as_dict(),
+                      "policy_digest": sha256(POLICY_FILE.read_bytes()).hexdigest(),
+                      "metric": "checked_module_dependency_contract"},
+                   "handler_version_digest": sha256((source_dir/"agent_handlers.py").read_bytes()).hexdigest(),
+                   "quality_limits": "QA pass rates measure observed outputs; architecture checks measure contract compliance, not general design superiority.",
                    "knowledge_gaps": [r for r in self.assistance(tenant_id=actor.tenant_id)
                                       if r["outcome"] != "resolved"],
                    "approval_required": True, "applied": False,
@@ -2441,6 +2462,10 @@ class EnterpriseOperationsStore:
         # memories are excluded. Source rows retain their individual timestamps.
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
+            prior = self._prior_evidence(actor, "twin_state", operation_key)
+            if prior:
+                return prior
+            previous = self.twin_sync_status(tenant_id=actor.tenant_id)["snapshot"]
             observations = self._task_observations(tenant_id=actor.tenant_id)
             departments = self.connection.execute(
                 "SELECT id,name FROM ago_departments WHERE tenant_id=%s ORDER BY id LIMIT 1000",
@@ -2471,6 +2496,9 @@ class EnterpriseOperationsStore:
                        "budgets": self.budgets(tenant_id=actor.tenant_id),
                        "observed_costs": self.costs(tenant_id=actor.tenant_id),
                        "source_truncation": len(observations) > 1000 or len(employees) > 1000,
+                       "previous_snapshot_id": str(previous["id"]) if previous else None,
+                       "previous_snapshot_digest": previous["digest"] if previous else None,
+                       "captured_at": datetime.now(timezone.utc).isoformat(),
                        "source_limits": {"tasks":1000,"employees":1000,"departments":1000,
                                          "calendar":1000,"horizon_plans":500,
                                          "queue":100,"budgets":100,"observed_costs":100},
@@ -2484,7 +2512,7 @@ class EnterpriseOperationsStore:
     def forecast_twin(self, *, actor: Principal, snapshot_id: str,
                       task_ids: list[str], horizon_end: datetime,
                       operation_key: str) -> dict:
-        from ago.enterprise_domains import forecast_quality
+        from ago.enterprise_domains import forecast_quality, forecast_runtime
         snapshot = self.connection.execute(
             """SELECT id,payload,digest,created_at FROM ago_enterprise_evidence
                WHERE tenant_id=%s AND id=%s AND kind='twin_state'""",
@@ -2492,6 +2520,8 @@ class EnterpriseOperationsStore:
         ).fetchone()
         if not snapshot:
             raise LookupError("Organizational twin snapshot required")
+        if snapshot["payload"].get("source_truncation"):
+            raise ValueError("Truncated Twin source cannot certify a forecast cohort")
         if horizon_end.tzinfo is None or not snapshot["created_at"] < horizon_end <= (
             snapshot["created_at"]+timedelta(days=365)):
             raise ValueError("Forecast horizon must follow capture within one year")
@@ -2502,8 +2532,29 @@ class EnterpriseOperationsStore:
         cohort = [t for t in tasks if str(t["id"]) in ids]
         if len(cohort) != len(ids) or any(t.get("verdict") or t["status"] in ("completed", "failed") for t in cohort):
             raise PermissionError("Forecast cohort must be unfinished and unreviewed at capture")
+        current = self.connection.execute(
+            """SELECT t.id,t.status FROM ago_governed_tasks t WHERE t.tenant_id=%s
+               AND t.id=ANY(%s::uuid[]) AND (t.status IN ('completed','failed') OR EXISTS(
+                 SELECT 1 FROM ago_task_reviews r WHERE r.tenant_id=t.tenant_id AND r.task_id=t.id))""",
+            (actor.tenant_id, sorted(ids)),
+        ).fetchall()
+        if current or horizon_end <= datetime.now(timezone.utc):
+            raise PermissionError("Future unobserved cohort and future horizon required at registration")
         training = [t for t in tasks if str(t["id"]) not in ids and t.get("reviewed_at")]
         prediction = forecast_quality(training, cohort)
+        deadlines = {}
+        for event in snapshot["payload"].get("calendar", []):
+            if event.get("task_id") and event["status"] == "scheduled":
+                key = str(event["task_id"])
+                deadlines[key] = min(deadlines.get(key, event["ends_at"]), event["ends_at"])
+        def runtime_row(t):
+            return {**t, "created_at": str(t["created_at"]).replace(" ", "T"),
+                    "elapsed_seconds": (datetime.fromisoformat(str(t["updated_at"]))-
+                                        datetime.fromisoformat(str(t["created_at"]))).total_seconds()
+                       if t.get("verdict") and t["status"] in ("completed", "failed") else None,
+                    "deadline": deadlines.get(str(t["id"]))}
+        prediction["runtime"] = forecast_runtime([runtime_row(t) for t in training],
+                                                  [runtime_row(t) for t in cohort])
         prediction.update({"snapshot_id": str(UUID(snapshot_id)), "source_digest": snapshot["digest"],
                            "source_created_at": str(snapshot["created_at"]),
                            "horizon_end": horizon_end.isoformat(),
@@ -2513,7 +2564,7 @@ class EnterpriseOperationsStore:
 
     def calibrate_twin(self, *, actor: Principal, forecast_id: str,
                        operation_key: str) -> dict:
-        from ago.enterprise_domains import calibrate_quality
+        from ago.enterprise_domains import calibrate_quality, calibrate_runtime
         forecast = self.connection.execute(
             """SELECT id,payload,digest,created_at FROM ago_enterprise_evidence
                WHERE tenant_id=%s AND id=%s AND kind='forecast'""",
@@ -2528,6 +2579,10 @@ class EnterpriseOperationsStore:
         outcomes = [r for r in rows if str(r["id"]) in ids and r.get("reviewed_at")
                     and forecast["created_at"] < r["reviewed_at"] <= end]
         result = calibrate_quality(source, outcomes)
+        if source.get("runtime"):
+            result["runtime"] = calibrate_runtime(source["runtime"], [
+                {**t, "elapsed_seconds": (t["updated_at"]-t["created_at"]).total_seconds()}
+                for t in outcomes if t["status"] in ("completed", "failed")])
         result.update({"forecast_id": str(UUID(forecast_id)), "forecast_digest": forecast["digest"],
                        "source_outcomes": outcomes, "observation_cutoff": end.isoformat(),
                        "horizon_elapsed": datetime.now(timezone.utc) >= end,
@@ -2656,3 +2711,326 @@ class EnterpriseOperationsStore:
         return {"request": dict(request), "details": details,
                 "legacy_action_only": details is None,
                 "authority_granted": False}
+
+    def _prior_evidence(self, actor: Principal, kind: str, operation_key: str) -> dict | None:
+        row = self.connection.execute(
+            """SELECT id,payload,digest,created_at,actor_id FROM ago_enterprise_evidence
+               WHERE tenant_id=%s AND kind=%s AND operation_key=%s""",
+            (actor.tenant_id, kind, operation_key.strip()),
+        ).fetchone()
+        if row and str(row['actor_id']) != actor.subject:
+            raise PermissionError('Operation key belongs to another actor')
+        return {**dict(row), 'kind': kind, 'idempotent': True} if row else None
+
+    def lifecycle_status(self, *, tenant_id: str) -> dict:
+        row = self.connection.execute(
+            """SELECT id,payload,digest,created_at FROM ago_enterprise_evidence
+               WHERE tenant_id=%s AND kind='lifecycle' ORDER BY created_at DESC,id DESC LIMIT 1""",
+            (str(UUID(tenant_id)),),
+        ).fetchone()
+        return {'checkpoint': dict(row) if row else None, 'automatic_authority': False}
+
+    def advance_lifecycle(self, *, actor: Principal, operation_key: str,
+                          expected_event_id: str | None, execute_one: bool,
+                          runner: Callable[..., dict]) -> dict:
+        from ago.enterprise_domains import next_lifecycle_phase
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            intent = {'expected_event_id': expected_event_id, 'execute_one': execute_one}
+            prior = self._prior_evidence(actor, 'lifecycle', operation_key)
+            if prior:
+                if prior['payload']['intent'] != intent:
+                    raise ValueError('Lifecycle key already bound to different parameters')
+                return prior
+            previous = self.lifecycle_status(tenant_id=actor.tenant_id)['checkpoint']
+            cursor = str(previous['id']) if previous else None
+            if cursor != expected_event_id:
+                raise ValueError('Stale lifecycle cursor; refresh before advancing')
+            phase = next_lifecycle_phase(previous['payload']['phase'] if previous else None)
+            observations = self.operating_cycle(actor=actor, operation_key='life:'+operation_key)
+            payload = {'phase': phase, 'previous_id': cursor,
+                       'previous_digest': previous['digest'] if previous else None,
+                       'sequence': previous['payload']['sequence']+1 if previous else 1,
+                       'intent': intent, 'observation_id': observations['id'],
+                       'source_digest': observations['digest'], 'authority_changed': False,
+                       'execution': None, 'recovery': 'atomic_commit_or_retry_same_key',
+                       'source_state': observations['payload']['phase']}
+            if phase == 'prioritize':
+                payload['eligible_queue'] = [q['id'] for q in observations['payload']['queue']
+                                             if q.get('lease_state') in (None, 'released')
+                                             and q['task_status'] == 'waiting_approval']
+            if phase == 'allocate':
+                payload['capacity'] = observations['payload']['capacity']
+            if phase == 'coordinate' and execute_one:
+                lease = self.claim_work(actor=actor, lease_seconds=600, offline_only=True)
+                if lease['queue_id']:
+                    payload['execution'] = self.execute_work_lease(
+                        actor=actor, queue_id=lease['queue_id'], lease_id=lease['lease_id'], runner=runner)
+            if phase == 'escalate':
+                payload['pending_help_ids'] = observations['payload']['pending_help_ids']
+                payload['failed_task_ids'] = observations['payload']['failed_task_ids']
+                payload['route'] = observations['payload']['escalation_route']
+            if phase == 'learn':
+                payload['diagnostics'] = self.evolution_diagnostics(
+                    actor=actor, operation_key='life:'+operation_key)['id']
+                payload['twin_snapshot'] = self.capture_twin_state(
+                    actor=actor, operation_key='life:'+operation_key)['id']
+            return self._save_evidence(actor=actor, kind='lifecycle', operation_key=operation_key,
+                                       payload=payload)
+
+    def register_experiment(self, *, actor: Principal, task_ids: list[str], seed: str,
+                            hypothesis: str, rollback_plan: str, operation_key: str) -> dict:
+        from ago.enterprise_domains import controlled_assignment
+        assignment = controlled_assignment(task_ids, seed)
+        intent = {'assignment': assignment, 'seed': seed, 'hypothesis': hypothesis.strip(),
+                  'rollback_plan': rollback_plan.strip(), 'variants': {
+                      'baseline': 'offline_plain_packet_v1', 'candidate': 'offline_checklist_packet_v1'}}
+        if not 1 <= len(intent['hypothesis']) <= 2000 or not 1 <= len(intent['rollback_plan']) <= 2000:
+            raise ValueError('Hypothesis and rollback required')
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            prior = self._prior_evidence(actor, 'experiment_registration', operation_key)
+            if prior:
+                if prior['payload']['intent'] != intent:
+                    raise ValueError('Experiment key already bound to a different registration')
+                return prior
+            rows = self.connection.execute(
+                """SELECT t.id,t.status,t.action,t.assignee_id,e.department_id FROM ago_governed_tasks t
+                   JOIN ago_employees e ON e.tenant_id=t.tenant_id AND e.id=t.assignee_id
+                   WHERE t.tenant_id=%s AND t.id=ANY(%s::uuid[]) ORDER BY t.id FOR UPDATE OF t""",
+                (actor.tenant_id, list(assignment)),
+            ).fetchall()
+            if len(rows) != len(assignment):
+                raise LookupError('All experiment tasks must belong to this tenant')
+            if any(r['status'] not in ('proposed', 'waiting_approval') or r['action'] != 'internal:brief'
+                   for r in rows):
+                raise PermissionError('Unexecuted offline internal tasks required before registration')
+            # Block retrospective enrollment even if a task status was restored.
+            if self.connection.execute(
+                "SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s AND task_id=ANY(%s::uuid[]) LIMIT 1",
+                (actor.tenant_id, list(assignment)),
+            ).fetchone() or self.connection.execute(
+                "SELECT 1 FROM ago_task_reviews WHERE tenant_id=%s AND task_id=ANY(%s::uuid[]) LIMIT 1",
+                (actor.tenant_id, list(assignment)),
+            ).fetchone():
+                raise PermissionError('Prospective tasks without any execution or outcome required')
+            if len({str(r['assignee_id']) for r in rows}) != 1:
+                raise ValueError('Same employee required to control employee/department confounding')
+            if self.connection.execute(
+                "SELECT 1 FROM ago_experiment_assignments WHERE tenant_id=%s AND task_id=ANY(%s::uuid[]) LIMIT 1",
+                (actor.tenant_id, list(assignment)),
+            ).fetchone():
+                raise ValueError('Tasks already enrolled in an immutable experiment')
+            record = self._save_evidence(actor=actor, kind='experiment_registration',
+                operation_key=operation_key, payload={'intent': intent, 'source_tasks': [dict(r) for r in rows],
+                    'assignment_method': 'balanced_seeded_sha256', 'approval_required': True,
+                    'scope': 'isolated_offline_packet_layouts', 'policy_promoted': False})
+            for task_id, variant in assignment.items():
+                self.connection.execute(
+                    "INSERT INTO ago_experiment_assignments(tenant_id,task_id,registration_id,variant) VALUES(%s,%s,%s,%s)",
+                    (actor.tenant_id, task_id, record['id'], variant),
+                )
+            return record
+
+    def experiment_variant(self, *, tenant_id: str, task_id: str) -> dict | None:
+        row = self.connection.execute(
+            """SELECT a.variant,a.registration_id,e.digest,r.approval_id FROM ago_experiment_assignments a
+               JOIN ago_enterprise_evidence e ON e.tenant_id=a.tenant_id AND e.id=a.registration_id
+               LEFT JOIN ago_enterprise_evidence_reviews r ON r.tenant_id=a.tenant_id AND r.evidence_id=e.id
+               WHERE a.tenant_id=%s AND a.task_id=%s""", (str(UUID(tenant_id)), str(UUID(task_id))),
+        ).fetchone()
+        if row and not row['approval_id']:
+            raise PermissionError('Independent experiment registration review required before dispatch')
+        return {'variant': row['variant'], 'registration_id': str(row['registration_id']),
+                'registration_digest': row['digest']} if row else None
+
+    def measure_experiment(self, *, actor: Principal, registration_id: str, operation_key: str) -> dict:
+        from ago.enterprise_domains import forecast_quality
+        registration = self.connection.execute(
+            """SELECT e.payload,e.digest,e.created_at,r.approval_id FROM ago_enterprise_evidence e
+               JOIN ago_enterprise_evidence_reviews r ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+               WHERE e.tenant_id=%s AND e.id=%s AND e.kind='experiment_registration'""",
+            (actor.tenant_id, str(UUID(registration_id))),
+        ).fetchone()
+        if not registration:
+            raise PermissionError('Reviewed prospective registration required')
+        assignment = registration['payload']['intent']['assignment']
+        rows = self.connection.execute(
+            """SELECT t.id,t.status,t.updated_at,t.created_at,r.id AS review_id,r.verdict,r.created_at AS reviewed_at,
+                      a.result,a.finished_at FROM ago_governed_tasks t
+               LEFT JOIN ago_task_reviews r ON r.tenant_id=t.tenant_id AND r.task_id=t.id
+               LEFT JOIN ago_agent_runs a ON a.tenant_id=t.tenant_id AND a.task_id=t.id AND a.status='completed'
+               WHERE t.tenant_id=%s AND t.id=ANY(%s::uuid[]) ORDER BY t.id""",
+            (actor.tenant_id, list(assignment)),
+        ).fetchall()
+        groups = {'baseline': [], 'candidate': []}
+        for row in rows:
+            actual = row['result'] or {}
+            if (row['review_id'] and row['reviewed_at'] > registration['created_at']
+                and actual.get('experiment', {}).get('registration_digest') == registration['digest']
+                and actual['experiment'].get('variant') == assignment[str(row['id'])]):
+                groups[assignment[str(row['id'])]].append(dict(row))
+        def metrics(variant):
+            selected = groups[variant]
+            qa = forecast_quality(selected, [])
+            return {'samples': len(selected), 'assigned': sum(x == variant for x in assignment.values()),
+                    'pass_rate': qa['pass_probability'], 'interval_95': qa['probability_interval_95'],
+                    'source_task_ids': [str(x['id']) for x in selected],
+                    'source_review_ids': [str(x['review_id']) for x in selected]}
+        before, after = metrics('baseline'), metrics('candidate')
+        pending = len(assignment)-len(groups['baseline'])-len(groups['candidate'])
+        return self._save_evidence(actor=actor, kind='experiment_measurement', operation_key=operation_key,
+            payload={'registration_id': str(UUID(registration_id)), 'registration_digest': registration['digest'],
+                     'baseline': before, 'candidate': after, 'pending_samples': pending,
+                     'complete': pending == 0,
+                     'pass_rate_delta': after['pass_rate']-before['pass_rate']
+                       if before['pass_rate'] is not None and after['pass_rate'] is not None else None,
+                     'source_outcomes': [dict(r) for r in rows], 'policy_promoted': False,
+                     'limits': 'Seeded bounded packet-layout intervention; small-sample outcomes do not establish general prompt or architecture superiority.'})
+
+    def financial_document(self, *, actor: Principal, cost_id: str, document_type: str,
+                           content_base64: str, operation_key: str) -> dict:
+        from hashlib import sha256
+        if document_type not in ('invoice', 'bank'):
+            raise ValueError('Invoice or bank document required')
+        try:
+            raw = base64.b64decode(content_base64, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError('Valid source document bytes required') from exc
+        if not 1 <= len(raw) <= 200000:
+            raise ValueError('Document must be nonempty and at most 200KB')
+        cost = self.connection.execute(
+            "SELECT id,category,provider,source_ref,observed_amount,currency,period_start,period_end FROM ago_observed_costs WHERE tenant_id=%s AND id=%s",
+            (actor.tenant_id, str(UUID(cost_id))),
+        ).fetchone()
+        if not cost:
+            raise LookupError('Tenant cost/revenue evidence required')
+        return self._save_evidence(actor=actor, kind='financial_document', operation_key=operation_key,
+            payload={'cost': dict(cost), 'document_type': document_type, 'content_base64': content_base64,
+                     'document_digest': sha256(raw).hexdigest(), 'document_bytes': len(raw),
+                     'provider_authenticated': False, 'verification': 'requires_independent_document_review'})
+
+    def reconcile_finance(self, *, actor: Principal, matches: list[dict], currency: str,
+                          baseline_revenue: str, alternative_net: str, assumptions: str,
+                          operation_key: str) -> dict:
+        from ago.enterprise_domains import finance_analysis
+        if not 1 <= len(matches) <= 100:
+            raise ValueError('Bounded nonempty document matches required')
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            intent = {'matches': matches, 'currency': currency, 'baseline_revenue': baseline_revenue,
+                      'alternative_net': alternative_net, 'assumptions': assumptions}
+            prior = self._prior_evidence(actor, 'reconciliation', operation_key)
+            if prior:
+                if prior['payload']['intent'] != intent:
+                    raise ValueError('Reconciliation key already bound to different parameters')
+                return prior
+            docs, cost_ids, sources = set(), set(), []
+            for match in matches:
+                invoice, bank = str(UUID(match['invoice_id'])), str(UUID(match['bank_id']))
+                if invoice == bank or docs & {invoice, bank}:
+                    raise ValueError('Unique distinct invoice and bank documents required')
+                docs.update((invoice, bank))
+                rows = self.connection.execute(
+                    """SELECT e.id,e.payload,e.digest,r.approval_id FROM ago_enterprise_evidence e
+                       JOIN ago_enterprise_evidence_reviews r ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+                       WHERE e.tenant_id=%s AND e.id=ANY(%s::uuid[]) AND e.kind='financial_document'""",
+                    (actor.tenant_id, [invoice, bank]),
+                ).fetchall()
+                index = {str(r['id']): r for r in rows}
+                if len(index) != 2:
+                    raise PermissionError('Both exact source documents need independent review')
+                left, right = index[invoice]['payload'], index[bank]['payload']
+                if left['document_type'] != 'invoice' or right['document_type'] != 'bank':
+                    raise ValueError('Correct invoice/bank document types required')
+                fields = ('category', 'observed_amount', 'currency', 'period_start', 'period_end')
+                if any(left['cost'][f] != right['cost'][f] for f in fields) or left['cost']['currency'] != currency:
+                    raise ValueError('Document amount/currency/category/period mismatch')
+                cost = left['cost']
+                if cost['id'] in cost_ids:
+                    raise ValueError('Cost/revenue evidence already included')
+                cost_ids.add(cost['id'])
+                if self.connection.execute(
+                    """SELECT 1 FROM ago_financial_matches WHERE tenant_id=%s AND
+                       (invoice_document_id=%s OR bank_document_id=%s OR cost_id=%s OR invoice_digest=%s OR bank_digest=%s)""",
+                    (actor.tenant_id, invoice, bank, cost['id'], left['document_digest'], right['document_digest']),
+                ).fetchone():
+                    raise ValueError('Invoice or bank document already reconciled')
+                sources.append({'invoice_id': invoice, 'bank_id': bank,
+                                'invoice_digest': index[invoice]['digest'], 'bank_digest': index[bank]['digest'],
+                                'invoice_content_digest': left['document_digest'],
+                                'bank_content_digest': right['document_digest'],
+                                'invoice_review': str(index[invoice]['approval_id']),
+                                'bank_review': str(index[bank]['approval_id']), 'cost': cost})
+            analysis = finance_analysis([r['cost'] for r in sources], currency=currency,
+                baseline_revenue=baseline_revenue, alternative_net=alternative_net, assumptions=assumptions)
+            analysis.update({'evidence_state': 'independently_reviewed_document_matches',
+                             'provider_authenticated': False, 'bank_connector_verified': False,
+                             'real_financial_acceptance': 'requires_authentic_owner_records',
+                             'intent': intent, 'sources': sources,
+                             'optimization': 'Review measured cost per QA deliverable; retain budget, safety and permission gates.'})
+            result = self._save_evidence(actor=actor, kind='reconciliation', operation_key=operation_key,
+                                         payload=analysis)
+            for source in sources:
+                self.connection.execute(
+                    """INSERT INTO ago_financial_matches(tenant_id,invoice_document_id,bank_document_id,
+                       reconciliation_id,cost_id,invoice_digest,bank_digest) VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                    (actor.tenant_id, source['invoice_id'], source['bank_id'], result['id'],
+                     source['cost']['id'], source['invoice_content_digest'], source['bank_content_digest']),
+                )
+            return result
+
+    def twin_sync_status(self, *, tenant_id: str) -> dict:
+        rows = self.connection.execute(
+            """SELECT id,payload,digest,created_at FROM ago_enterprise_evidence WHERE tenant_id=%s
+               AND kind='twin_state' ORDER BY created_at DESC,id DESC LIMIT 2""", (str(UUID(tenant_id)),),
+        ).fetchall()
+        if not rows:
+            return {'snapshot': None, 'freshness_seconds': None, 'continuous_worker': 'not_observed'}
+        latest = dict(rows[0])
+        return {'snapshot': latest, 'freshness_seconds': max(0, (datetime.now(timezone.utc)-latest['created_at']).total_seconds()),
+                'previous_id': latest['payload'].get('previous_snapshot_id'),
+                'sync_direction': 'operational_to_twin_only',
+                'continuous_worker': 'freshness_is_observed_not_worker_liveness', 'production_writes': False}
+
+    def audit_evolution_policy(self, *, actor: Principal, proposal_id: str,
+                              baseline_intent_id: str, candidate_intent_id: str,
+                              rollback_intent_id: str, operation_key: str) -> dict:
+        """Observe actual independently reviewed OOS changes; evolution never applies them."""
+        proposal = self.connection.execute(
+            """SELECT e.id,e.digest,r.approval_id FROM ago_enterprise_evidence e
+               JOIN ago_enterprise_evidence_reviews r ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+               WHERE e.tenant_id=%s AND e.id=%s AND e.kind IN ('diagnostics','experiment_measurement')""",
+            (actor.tenant_id, str(UUID(proposal_id))),
+        ).fetchone()
+        if not proposal:
+            raise PermissionError('Independently reviewed evolution source required')
+        ids = [str(UUID(x)) for x in (baseline_intent_id,candidate_intent_id,rollback_intent_id)]
+        if len(set(ids)) != 3:
+            raise ValueError('Distinct actual baseline, candidate and rollback required')
+        records = []
+        for identifier in ids:
+            row = self.connection.execute(
+                """SELECT i.id,i.digest,i.payload,r.id AS result_id,r.digest AS result_digest,
+                          r.created_at AS applied_at,r.payload AS result
+                   FROM ago_enterprise_evidence i JOIN ago_enterprise_evidence r
+                    ON r.tenant_id=i.tenant_id AND r.kind='intent_result' AND r.operation_key=i.id::text
+                   WHERE i.tenant_id=%s AND i.id=%s AND i.kind='intent'""",
+                (actor.tenant_id,identifier),
+            ).fetchone()
+            if not row or row['payload']['operation'] != 'capacity':
+                raise PermissionError('Actual reviewed capacity applications required; no simulated promotion')
+            records.append(dict(row))
+        if not records[0]['applied_at'] < records[1]['applied_at'] < records[2]['applied_at']:
+            raise ValueError('Baseline, candidate, rollback must follow actual application order')
+        params = [r['payload']['parameters'] for r in records]
+        if len({(p['scope_kind'],p.get('scope_id')) for p in params}) != 1 or (
+            params[0]['max_running'] != params[2]['max_running'] or
+            params[0]['max_running'] == params[1]['max_running']):
+            raise ValueError('Rollback must restore baseline capacity in exactly the same scope')
+        return self._save_evidence(actor=actor, kind='evolution_policy_audit', operation_key=operation_key,
+            payload={'proposal_id':str(proposal['id']),'proposal_digest':proposal['digest'],
+                     'proposal_review':str(proposal['approval_id']),'actual_policy_applications':records,
+                     'baseline_restored':True,'scope':'reviewed_oos_capacity_controls',
+                     'evolution_applied_change':False,'source_deployment':False,
+                     'authority_changed':False})

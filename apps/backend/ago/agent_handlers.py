@@ -5,12 +5,19 @@ from ago.workflows import GovernedTask
 def internal_brief(task: GovernedTask) -> dict:
     if task.action != "internal:brief":
         raise PermissionError("Handler not allowed for action")
-    return {
+    result = {
         "task_id": task.id,
         "kind": "internal_brief",
         "brief": "Internal review packet prepared for human QA.",
         "requires_human_qa": True,
     }
+    if task.experiment_context:
+        result["experiment"] = dict(task.experiment_context)
+        if task.experiment_context["variant"] == "candidate":
+            result["review_checklist"] = ["Verify task authorization", "Inspect deliverable", "Record independent QA evidence"]
+        else:
+            result["review_notes"] = "Verify authorization, inspect deliverable and record independent QA evidence."
+    return result
 
 
 BUILTIN_HANDLERS = {"internal:brief": internal_brief}

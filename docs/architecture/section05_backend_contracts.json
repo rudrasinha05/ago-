@@ -622,6 +622,42 @@
         "approval_details": {
           "arguments": "self, *, tenant_id: str, approval_id: str",
           "returns": "dict"
+        },
+        "lifecycle_status": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
+        "advance_lifecycle": {
+          "arguments": "self, *, actor: Principal, operation_key: str, expected_event_id: str | None, execute_one: bool, runner: Callable[..., dict]",
+          "returns": "dict"
+        },
+        "register_experiment": {
+          "arguments": "self, *, actor: Principal, task_ids: list[str], seed: str, hypothesis: str, rollback_plan: str, operation_key: str",
+          "returns": "dict"
+        },
+        "experiment_variant": {
+          "arguments": "self, *, tenant_id: str, task_id: str",
+          "returns": "dict | None"
+        },
+        "measure_experiment": {
+          "arguments": "self, *, actor: Principal, registration_id: str, operation_key: str",
+          "returns": "dict"
+        },
+        "financial_document": {
+          "arguments": "self, *, actor: Principal, cost_id: str, document_type: str, content_base64: str, operation_key: str",
+          "returns": "dict"
+        },
+        "reconcile_finance": {
+          "arguments": "self, *, actor: Principal, matches: list[dict], currency: str, baseline_revenue: str, alternative_net: str, assumptions: str, operation_key: str",
+          "returns": "dict"
+        },
+        "twin_sync_status": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
+        },
+        "audit_evolution_policy": {
+          "arguments": "self, *, actor: Principal, proposal_id: str, baseline_intent_id: str, candidate_intent_id: str, rollback_intent_id: str, operation_key: str",
+          "returns": "dict"
         }
       }
     },

@@ -811,7 +811,7 @@ async function enterpriseAction(key,id,ctx) {
   if(!can("organization:manage"))throw new Error("Organization management permission required.");
   openDialog(ctx,{title:"Organization operations",description:"Choose a workflow. Changes require independent review; evidence captures are read-only observations.",
     fields:[selectField("command","Workflow",[
-      choose("cycle","Capture operating lifecycle"),choose("hr","Hire / promote / retire / department change"),
+      choose("cycle","Capture operating lifecycle"),choose("lifecycle","Advance durable lifecycle phase"),choose("hr","Hire / promote / retire / department change"),
       choose("mode","Company / department operating mode"),choose("worker","AI availability / pause / sleep / resume"),
       choose("capacity","Execution capacity"),choose("assessment","Assess AI competence from actual QA"),
       choose("agent-state","Inspect employee state and autonomy boundaries"),choose("agent-evidence","Propose reported skills / confidence / learning evidence"),
@@ -819,10 +819,10 @@ async function enterpriseAction(key,id,ctx) {
       choose("plan","Create approved planning horizon"),choose("rollup","Capture planning feedback and conflicts"),
       choose("replan","Propose a versioned plan revision"),choose("plan-link","Link an approved task to a horizon"),
       choose("enqueue","Queue independently approved work"),choose("budget","Cost envelope"),
-      choose("cost","Record observed cost / revenue"),choose("finance","Assess cost / ROI assumptions"),
+      choose("cost","Record observed cost / revenue"),choose("finance","Assess cost / ROI assumptions"),choose("financial-document","Import invoice / bank source"),choose("reconcile","Reconcile reviewed financial sources"),
       choose("asset","Store reusable asset draft"),choose("consume","Request approved asset reuse"),
       choose("retire","Deprecate / revoke an asset"),choose("diagnostics","Capture evolution diagnostics"),
-      choose("experiment","Compare real reviewed task cohorts"),choose("twin-state","Capture organizational Twin state"),
+      choose("experiment","Compare real reviewed task cohorts"),choose("register-experiment","Register future packet experiment"),choose("measure-experiment","Measure registered experiment"),choose("policy-audit","Audit approved capacity change / rollback"),choose("twin-state","Capture organizational Twin state"),
       choose("forecast","Freeze a task quality forecast"),choose("calibrate","Measure later forecast outcomes"),
     ])],button:"Continue",refresh:false,onSubmit:async v=>{
       // Close the chooser before opening the next native modal.
@@ -834,6 +834,13 @@ async function enterpriseForm(command,ctx) {
   const {api,state}=ctx;
   const base=enterpriseBase;
   const post=(path,body)=>api.request(base+path,{method:"POST",body});
+  if(command==="lifecycle") {
+    confirmation(ctx,"Advance organization lifecycle","Advance one durable phase with source evidence. Offline execution remains opt-in through the local operator command.",async()=>{
+      const status=await api.request(base+"/lifecycle");
+      const result=await post("/lifecycle/advance",{operation_key:newOperation(),expected_event_id:status.checkpoint?.id || null,execute_one:false});
+      return "Lifecycle phase: "+result.payload.phase;
+    });return;
+  }
   if(["cycle","diagnostics","twin-state"].includes(command)) {
     const path={cycle:"/cycle",diagnostics:"/evolution/diagnostics","twin-state":"/twin/state"}[command];
     confirmation(ctx,"Capture source evidence","Save current observed records and their immutable digest.",async()=>{
@@ -971,6 +978,32 @@ async function enterpriseForm(command,ctx) {
     const forecasts=evidence.filter(x=>x.kind==="forecast");mustHave(forecasts,"Freeze a forecast before measuring later observations.");
     fields=[entity("forecast_id","Frozen forecast",forecasts)];
     submit=async v=>{await post("/twin/forecasts/"+v.forecast_id+"/calibrate",{operation_key:newOperation()});return "Later outcomes measured; pending observations remain explicit.";};
+  } else if(command==="register-experiment") {
+    const eligible=tasks.filter(x=>["proposed","waiting_approval"].includes(x.status));
+    mustHave(eligible,"At least two future internal tasks for the same employee are required.");
+    fields=[textField("task_ids","Future task UUIDs, comma separated",6000),textField("seed","Frozen assignment seed",160),textField("hypothesis","Packet layout hypothesis"),textField("rollback_plan","Rollback / retain baseline")];
+    submit=async v=>{await post("/evolution/register",{task_ids:v.task_ids.split(",").map(x=>uuid(x.trim())),seed:v.seed,hypothesis:v.hypothesis,rollback_plan:v.rollback_plan,operation_key:newOperation()});return "Prospective packet variants registered. Independent evidence review required before task execution.";};
+  } else if(command==="measure-experiment") {
+    const registered=evidence.filter(x=>x.kind==="experiment_registration");mustHave(registered,"Register a future experiment first.");
+    fields=[entity("registration_id","Registered experiment",registered)];
+    submit=async v=>{await post("/evolution/registrations/"+v.registration_id+"/measure",{operation_key:newOperation()});return "Later actual packet outputs and independent QA measured; missing outcomes remain pending.";};
+  } else if(command==="policy-audit") {
+    const proposals=evidence.filter(x=>["diagnostics","experiment_measurement"].includes(x.kind) && x.reviewed_at);
+    const results=new Set(evidence.filter(x=>x.kind==="intent_result").map(x=>x.operation_key));
+    const applied=evidence.filter(x=>x.kind==="intent" && x.payload.operation==="capacity" && results.has(x.id)).map(x=>({...x,name:"Capacity "+x.payload.parameters.max_running+" · "+x.id.slice(0,8)}));
+    mustHave(proposals,"Independently review a diagnostics or experiment source first.");mustHave(applied,"Apply independently approved baseline, candidate and rollback capacities through Operations first.");
+    fields=[entity("proposal_id","Reviewed evolution source",proposals),entity("baseline_intent_id","Actual baseline capacity",applied),entity("candidate_intent_id","Actual candidate capacity",applied),entity("rollback_intent_id","Actual restored baseline capacity",applied)];
+    submit=async v=>{await post("/evolution/policy-audit",{...v,operation_key:newOperation()});return "Actual reviewed capacity applications and exact baseline restoration audited. Evolution applied no change.";};
+  } else if(command==="financial-document") {
+    const costs=resource(state.data,"enterpriseCosts") || [];mustHave(costs,"Record the corresponding cost / revenue claim first.");
+    fields=[entity("cost_id","Cost / revenue claim",costs),selectField("document_type","Source type",[choose("invoice","Invoice / revenue record"),choose("bank","Bank transaction record")]),textField("content","Exact source document text",180000)];
+    submit=async v=>{const bytes=new TextEncoder().encode(v.content);let raw="";for(const byte of bytes)raw+=String.fromCharCode(byte);await post("/finance/documents",{cost_id:v.cost_id,document_type:v.document_type,content_base64:btoa(raw),operation_key:newOperation()});return "Exact source bytes stored. Request independent evidence review before reconciliation.";};
+  } else if(command==="reconcile") {
+    const documents=evidence.filter(x=>x.kind==="financial_document" && x.reviewed_at);
+    const invoices=documents.filter(x=>x.payload.document_type==="invoice"),banks=documents.filter(x=>x.payload.document_type==="bank");
+    mustHave(invoices,"An independently reviewed invoice is required.");mustHave(banks,"An independently reviewed bank source is required.");
+    fields=[entity("invoice_id","Reviewed invoice",invoices),entity("bank_id","Reviewed bank source",banks),{name:"currency",label:"Currency",value:"INR",maxLength:3},numericField("baseline_revenue","Assumed baseline revenue",0,1000000000),numericField("alternative_net","Assumed alternative net",0,1000000000),textField("assumptions","Period / baseline assumptions")];
+    submit=async v=>{await post("/finance/reconcile",{matches:[{invoice_id:v.invoice_id,bank_id:v.bank_id}],currency:v.currency,baseline_revenue:String(v.baseline_revenue),alternative_net:String(v.alternative_net),assumptions:v.assumptions,operation_key:newOperation()});return "Reviewed invoice/bank evidence reconciled. Provider authentication remains dependent on genuine records.";};
   } else if(command==="experiment") {
     const reviewed=tasks.filter(x=>["completed","failed"].includes(x.status));mustHave(reviewed,"Two independently QA-reviewed task cohorts are required.");
     fields=[entity("baseline_id","Baseline reviewed task",reviewed),entity("candidate_id","Candidate reviewed task",reviewed),textField("hypothesis","Improvement hypothesis"),textField("rollback_plan","Rollback proposal")];

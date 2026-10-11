@@ -1302,7 +1302,8 @@ class TwinForecastInput(EvidenceCaptureInput):
 @router.get("/enterprise/evidence")
 def enterprise_evidence_list(
     kind: Literal["operations", "planning", "competence", "finance", "diagnostics",
-                  "twin_state", "forecast", "calibration", "experiment", "intent", "intent_result"] | None = None,
+                  "twin_state", "forecast", "calibration", "experiment", "intent", "intent_result", "lifecycle", "experiment_registration",
+                  "experiment_measurement", "financial_document", "reconciliation", "evolution_policy_audit"] | None = None,
     db=Depends(db_connection), actor: Principal = Depends(authenticated),
     repositories: RepositoryScope = Depends(repository_scope),
 ):
@@ -1606,3 +1607,134 @@ def enterprise_approval_details(
     allowed(repositories, actor, "approval:decide")
     return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).approval_details(
         tenant_id=actor.tenant_id, approval_id=str(approval_id)))
+
+
+class LifecycleAdvanceInput(EvidenceCaptureInput):
+    expected_event_id: UUID | None = None
+    execute_one: bool = False
+
+
+class ProspectiveExperimentInput(EvidenceCaptureInput):
+    task_ids: list[UUID] = Field(min_length=2, max_length=100)
+    seed: str = Field(min_length=1, max_length=160)
+    hypothesis: str = Field(min_length=1, max_length=2000)
+    rollback_plan: str = Field(min_length=1, max_length=2000)
+
+
+class FinancialDocumentInput(EvidenceCaptureInput):
+    cost_id: UUID
+    document_type: Literal['invoice', 'bank']
+    content_base64: str = Field(min_length=1, max_length=270000)
+
+
+class FinancialMatchInput(StrictInput):
+    invoice_id: UUID
+    bank_id: UUID
+
+
+class FinanceReconciliationInput(EvidenceCaptureInput):
+    matches: list[FinancialMatchInput] = Field(min_length=1, max_length=100)
+    currency: str = Field(min_length=3, max_length=3)
+    baseline_revenue: Decimal = Field(ge=0)
+    alternative_net: Decimal = Field(ge=0)
+    assumptions: str = Field(min_length=1, max_length=2000)
+
+
+@router.get('/enterprise/lifecycle')
+def enterprise_lifecycle_status(
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, 'operations:read')
+    return repositories.resolve(EnterpriseOperationsStorePort).lifecycle_status(tenant_id=actor.tenant_id)
+
+
+@router.post('/enterprise/lifecycle/advance')
+def enterprise_advance_lifecycle(
+    data: LifecycleAdvanceInput, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    from ago.agent_handlers import BUILTIN_HANDLERS
+    from ago.repository_ports import AgentRuntimePort
+    allowed(repositories, actor, 'organization:manage')
+    if data.execute_one:
+        allowed(repositories, actor, 'task:execute')
+        allowed(repositories, actor, 'agent:dispatch')
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).advance_lifecycle(
+        actor=actor, operation_key=data.operation_key,
+        expected_event_id=str(data.expected_event_id) if data.expected_event_id else None,
+        execute_one=data.execute_one,
+        runner=repositories.resolve(AgentRuntimePort, handlers=BUILTIN_HANDLERS).run))
+
+
+@router.post('/enterprise/evolution/register')
+def enterprise_register_prospective_experiment(
+    data: ProspectiveExperimentInput, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, 'organization:manage')
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).register_experiment(
+        actor=actor, task_ids=[str(x) for x in data.task_ids], seed=data.seed,
+        hypothesis=data.hypothesis, rollback_plan=data.rollback_plan, operation_key=data.operation_key))
+
+
+@router.post('/enterprise/evolution/registrations/{registration_id}/measure')
+def enterprise_measure_prospective_experiment(
+    registration_id: UUID, data: EvidenceCaptureInput, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, 'organization:manage')
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).measure_experiment(
+        actor=actor, registration_id=str(registration_id), operation_key=data.operation_key))
+
+
+@router.post('/enterprise/finance/documents')
+def enterprise_import_financial_document(
+    data: FinancialDocumentInput, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, 'organization:manage')
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).financial_document(
+        actor=actor, cost_id=str(data.cost_id), document_type=data.document_type,
+        content_base64=data.content_base64, operation_key=data.operation_key))
+
+
+@router.post('/enterprise/finance/reconcile')
+def enterprise_reconcile_financial_sources(
+    data: FinanceReconciliationInput, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, 'organization:manage')
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).reconcile_finance(
+        actor=actor, matches=[{k:str(v) for k,v in m.model_dump().items()} for m in data.matches],
+        currency=data.currency, baseline_revenue=str(data.baseline_revenue),
+        alternative_net=str(data.alternative_net), assumptions=data.assumptions,
+        operation_key=data.operation_key))
+
+
+@router.get('/enterprise/twin/sync')
+def enterprise_twin_sync_status(
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, 'operations:read')
+    return repositories.resolve(EnterpriseOperationsStorePort).twin_sync_status(tenant_id=actor.tenant_id)
+
+
+class EvolutionPolicyAuditInput(EvidenceCaptureInput):
+    proposal_id: UUID
+    baseline_intent_id: UUID
+    candidate_intent_id: UUID
+    rollback_intent_id: UUID
+
+
+@router.post('/enterprise/evolution/policy-audit')
+def enterprise_audit_actual_policy_changes(
+    data: EvolutionPolicyAuditInput, actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, 'organization:manage')
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).audit_evolution_policy(
+        actor=actor, proposal_id=str(data.proposal_id), baseline_intent_id=str(data.baseline_intent_id),
+        candidate_intent_id=str(data.candidate_intent_id), rollback_intent_id=str(data.rollback_intent_id),
+        operation_key=data.operation_key))
