@@ -159,6 +159,155 @@ def calibrate_quality(prediction: dict, observations: Sequence[dict]) -> dict:
             "applied": False, "limits": "Single frozen QA cohort; no general accuracy guarantee."}
 
 
+EXPENSE_CATEGORIES = ("model", "storage", "execution", "tool", "time")
+QUALITY_DIMENSIONS = ("prompt", "architecture", "workflow", "department", "employee")
+
+
+def metric_number(value: object) -> Decimal:
+    """Signed, bounded measurements; unknown is never coerced to zero."""
+    if isinstance(value, bool):
+        raise ValueError("Finite bounded measurement required")
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError("Finite bounded measurement required") from exc
+    if not number.is_finite() or abs(number) > Decimal("1e18"):
+        raise ValueError("Finite bounded measurement required")
+    return number
+
+
+def measured_economics(rows: Sequence[dict], qa: Sequence[dict], *, currency: str) -> dict:
+    analysis = finance_analysis(rows, currency=currency, baseline_revenue="0",
+                                alternative_net="0", assumptions="Reviewed exact-period accounting")
+    totals = {}
+    for row in rows:
+        category = row["category"]
+        totals[category] = totals.get(category, Decimal(0)) + _amount(str(row["observed_amount"]))
+    passed = sum(r["verdict"] == "pass" and r["status"] == "completed" for r in qa)
+    return {"currency": currency, "observed_cost": analysis["observed_cost"],
+            "observed_revenue": analysis["observed_revenue"], "observed_net": analysis["observed_net"],
+            "category_totals": {k: str(v) for k, v in totals.items()},
+            "missing_expense_categories": [k for k in EXPENSE_CATEGORIES if k not in totals],
+            "qa_samples": len(qa), "qa_passed": passed,
+            "qa_pass_rate": passed/len(qa) if qa else None,
+            "cost_per_qa_output": str(Decimal(analysis["observed_cost"])/passed) if passed else None,
+            "provider_authenticated": False, "financial_settlement": False,
+            "limits": "Reviewed supplied records; absent categories and unreported value remain unknown. QA denominator is the selected cohort."}
+
+
+def compare_measured_economics(baseline: dict, candidate: dict, alternative: dict | None = None) -> dict:
+    if baseline["currency"] != candidate["currency"] or (
+        alternative and alternative["currency"] != candidate["currency"]
+    ):
+        raise ValueError("Same-currency measured periods required")
+    def daily(row, field):
+        duration = metric_number(row["duration_days"])
+        if duration <= 0:
+            raise ValueError("Positive measured duration required")
+        return metric_number(row[field])/duration
+    before, after = daily(baseline, "observed_net"), daily(candidate, "observed_net")
+    cost_before, cost_after = daily(baseline, "observed_cost"), daily(candidate, "observed_cost")
+    quality = baseline["qa_pass_rate"] is not None and candidate["qa_pass_rate"] is not None
+    safeguards = {"quality_nonregression": candidate["qa_pass_rate"] >= baseline["qa_pass_rate"] if quality else None,
+                  "budget_within_envelope": candidate.get("budget", {}).get("within_envelope"),
+                  "expense_coverage_complete": not baseline["missing_expense_categories"] and not candidate["missing_expense_categories"]}
+    supported = all(value is True for value in safeguards.values())
+    return {"currency": candidate["currency"], "baseline_net_per_day": str(before),
+            "candidate_net_per_day": str(after), "incremental_net_per_day": str(after-before),
+            "incremental_roi_pct": str((after-before)*100/cost_after) if cost_after else None,
+            "cost_saving_per_day": str(cost_before-cost_after),
+            "observed_opportunity_cost_per_day": str(max(Decimal(0), daily(alternative, "observed_net")-after)) if alternative else None,
+            "alternative_status": "observed_comparator" if alternative else "unknown_without_observed_alternative",
+            "safeguards": safeguards, "recommendation": "review_candidate" if supported and after > before else "retain_baseline_or_collect_missing_evidence",
+            "automatically_applied": False, "causal_effect_established": False,
+            "limits": "Descriptive daily normalization; workload, risk, strategic value and counterfactual comparability require human review."}
+
+
+def rubric_score(rubric: Sequence[dict], scores: Mapping[str, object]) -> float:
+    names = [r["name"] for r in rubric]
+    if not 1 <= len(rubric) <= 12 or len(set(names)) != len(names) or set(scores) != set(names):
+        raise ValueError("Exact unique bounded rubric metrics required")
+    total, weighted = Decimal(0), Decimal(0)
+    for metric in rubric:
+        name, maximum, weight = metric["name"], metric_number(metric["maximum"]), metric_number(metric["weight"])
+        score = metric_number(scores[name])
+        if not 1 <= len(name.strip()) <= 80 or not 0 < maximum <= 1000 or not 0 < weight <= 100 or not 0 <= score <= maximum:
+            raise ValueError("Rubric weights, maxima and scores outside bounds")
+        total += weight
+        weighted += weight*score/maximum
+    return float(weighted*100/total)
+
+
+def summarize_quality(rubric: Sequence[dict], samples: Sequence[dict], *, expected_per_variant: int) -> dict:
+    from math import sqrt
+    result = {}
+    for variant in ("baseline", "candidate"):
+        selected = [r for r in samples if r["variant"] == variant]
+        values = [rubric_score(rubric, r["scores"]) for r in selected]
+        mean = sum(values)/len(values) if values else None
+        se = sqrt(sum((v-mean)**2 for v in values)/(len(values)-1)/len(values)) if len(values) > 1 else None
+        result[variant] = {"samples": len(values), "expected_samples": expected_per_variant,
+                           "pending_samples": max(0, expected_per_variant-len(values)), "mean_score_pct": mean,
+                           "descriptive_mean_interval_95": [max(0, mean-1.96*se), min(100, mean+1.96*se)] if se is not None else None}
+    before, after = result["baseline"]["mean_score_pct"], result["candidate"]["mean_score_pct"]
+    return {**result, "score_delta_pct": after-before if before is not None and after is not None else None,
+            "complete": all(result[v]["pending_samples"] == 0 for v in result),
+            "measurement": "independently_reviewed_human_rubric", "causal_effect_established": False,
+            "limits": "Human-scored source artifacts; small-sample normal intervals are descriptive. Provider/model execution and general superiority are not certified."}
+
+
+def measurement_series(*, dimension: str, metric: str, unit: str, entity_ref: str) -> dict:
+    if dimension not in ("cost", "revenue", "growth", "market", "risk", "headcount") or any(
+        not 1 <= len(s.strip()) <= 160 for s in (metric, unit, entity_ref)
+    ):
+        raise ValueError("Bounded dimension, metric, unit and entity required")
+    if dimension in ("cost", "revenue") and (len(unit) != 3 or not unit.isascii() or not unit.isalpha() or not unit.isupper()):
+        raise ValueError("Financial series unit must be a three-letter currency")
+    if dimension == "risk" and unit != "probability":
+        raise ValueError("Risk series requires probability units")
+    value = {"dimension": dimension, "metric": metric.strip(), "unit": unit.strip(), "entity_ref": entity_ref.strip()}
+    return {**value, "series_key": evidence_digest([value])}
+
+
+def calibrate_series(predictions: Sequence[dict], observations: Sequence[dict]) -> dict:
+    from math import sqrt
+    actual = {(o["series_key"], o["period_start"], o["period_end"]): o for o in observations}
+    if len(actual) != len(observations):
+        raise ValueError("Unique exact-period observations required")
+    keys = [(p["series_key"], p["period_start"], p["period_end"]) for p in predictions]
+    if len(set(keys)) != len(keys):
+        raise ValueError("Unique frozen series-period predictions required")
+    groups, paired = {}, []
+    for prediction, key in zip(predictions, keys):
+        group = groups.setdefault(prediction["series_key"], {"dimension": prediction["dimension"], "metric": prediction["metric"],
+            "unit": prediction["unit"], "entity_ref": prediction["entity_ref"], "expected_samples": 0, "errors": [], "covered": []})
+        group["expected_samples"] += 1
+        observed = actual.get(key)
+        if observed is None:
+            continue
+        if any(observed[k] != prediction[k] for k in ("dimension", "metric", "unit", "entity_ref")):
+            raise ValueError("Observation series definition differs from forecast")
+        value, center = metric_number(observed["value"]), metric_number(prediction["predicted_value"])
+        low, high = metric_number(prediction["lower"]), metric_number(prediction["upper"])
+        error = float(center-value)
+        group["errors"].append(error)
+        group["covered"].append(low <= value <= high)
+        paired.append({"series_key": key[0], "period_start": key[1], "period_end": key[2],
+                       "prediction": prediction, "observed_value": str(value), "signed_error": error,
+                       "observation_id": observed["id"], "observation_digest": observed["digest"]})
+    for group in groups.values():
+        errors, coverage = group.pop("errors"), group.pop("covered")
+        n = len(errors)
+        group.update({"observed_samples": n, "pending_samples": group["expected_samples"]-n,
+                      "mean_absolute_error": sum(abs(e) for e in errors)/n if n else None,
+                      "root_mean_square_error": sqrt(sum(e*e for e in errors)/n) if n else None,
+                      "mean_signed_error": sum(errors)/n if n else None,
+                      "interval_coverage": sum(coverage)/n if n else None})
+    return {"series": groups, "pairs": paired, "observed_samples": len(paired),
+            "pending_samples": len(predictions)-len(paired), "accuracy_certified": False,
+            "applied": False, "limits": "Held-out exact-period errors on reviewed supplied outcomes; sample counts and interval coverage do not guarantee future accuracy."}
+
+
 def plan_revision_intent(*, plan_id: str, base_revision: int, title: str,
                          starts_at: datetime, ends_at: datetime,
                          budget_ceiling: str, evidence_ref: str,

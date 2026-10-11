@@ -2410,9 +2410,19 @@ class EnterpriseOperationsStore:
                       "rollback": "Retain prior approved workflow; reject candidate if independent QA regresses"}]
         if not failed:
             proposals = []
+        feedback = [dict(r) for r in self.connection.execute(
+            """SELECT DISTINCT ON(e.kind,coalesce(e.payload->>'dimension','summary')) e.id,e.kind,e.digest,e.payload,r.created_at AS reviewed_at
+               FROM ago_enterprise_evidence e JOIN ago_enterprise_evidence_reviews r
+               ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+               WHERE e.tenant_id=%s AND e.kind IN ('economic_comparison','quality_report','longitudinal_calibration')
+               ORDER BY e.kind,coalesce(e.payload->>'dimension','summary'),e.created_at DESC,e.id DESC""", (actor.tenant_id,),
+        ).fetchall()]
         payload = {"source_tasks": tasks, "grouped_observations": groups,
                    "failure_count": len(failed), "backlog_count": len(backlog),
-                   "proposals": proposals, "prompt_quality": "only action-level QA observed; causal attribution unknown",
+                   "proposals": proposals, "reviewed_measurement_feedback": feedback,
+                   "unmeasured_quality_dimensions": [d for d in ("prompt","architecture","workflow","department","employee")
+                       if not any(r["kind"] == "quality_report" and r["payload"]["dimension"] == d and r["payload"]["complete"] for r in feedback)],
+                   "prompt_quality": "action QA plus versioned independently reviewed artifact/rubric studies; causal attribution unknown",
                    "architecture_quality": "use existing checked Section14 contract; no automatic rewrite",
                    "architecture_measurement": {**architecture.as_dict(),
                       "policy_digest": sha256(POLICY_FILE.read_bytes()).hexdigest(),
@@ -2490,6 +2500,17 @@ class EnterpriseOperationsStore:
                    WHERE tenant_id=%s AND visibility='tenant' ORDER BY starts_at,id LIMIT 1001""",
                 (actor.tenant_id,),
             ).fetchall()
+            metric_series = self.connection.execute(
+                """SELECT DISTINCT ON(e.payload->>'series_key') e.id,e.digest,e.created_at,
+                   e.payload->>'series_key' AS series_key,e.payload->>'dimension' AS dimension,
+                   e.payload->>'metric' AS metric,e.payload->>'unit' AS unit,e.payload->>'entity_ref' AS entity_ref,
+                   e.payload->>'value' AS value,e.payload->'intent'->>'period_start' AS period_start,
+                   e.payload->'intent'->>'period_end' AS period_end,r.approval_id
+                   FROM ago_enterprise_evidence e JOIN ago_enterprise_evidence_reviews r
+                   ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+                   WHERE e.tenant_id=%s AND e.kind='metric_outcome'
+                   ORDER BY e.payload->>'series_key',e.created_at DESC,e.id DESC LIMIT 1001""", (actor.tenant_id,),
+            ).fetchall()
             payload = {"model_version": "organization_projection_v1",
                        "departments": [dict(r) for r in departments[:1000]],
                        "employees": [dict(r) for r in employees[:1000]], "tasks": observations[:1000],
@@ -2499,14 +2520,15 @@ class EnterpriseOperationsStore:
                        "queue": self.work_queue(tenant_id=actor.tenant_id),
                        "budgets": self.budgets(tenant_id=actor.tenant_id),
                        "observed_costs": self.costs(tenant_id=actor.tenant_id),
+                       "reviewed_metric_series": [dict(r) for r in metric_series[:1000]],
                        "source_truncation": (len(observations) > 1000 or len(employees) > 1000
-                                             or len(departments) > 1000 or len(calendar) > 1000),
+                                             or len(departments) > 1000 or len(calendar) > 1000 or len(metric_series) > 1000),
                        "previous_snapshot_id": str(previous["id"]) if previous else None,
                        "previous_snapshot_digest": previous["digest"] if previous else None,
                        "captured_at": datetime.now(timezone.utc).isoformat(),
                        "source_limits": {"tasks":1000,"employees":1000,"departments":1000,
                                          "calendar":1000,"horizon_plans":500,
-                                         "queue":100,"budgets":100,"observed_costs":100},
+                                         "queue":100,"budgets":100,"observed_costs":100,"reviewed_metric_series":1000},
                        "sync_direction": "operational_to_twin_only",
                        "consistency": "eventually_consistent_read_projection",
                        "private_data": "excluded", "calibrated": False, "applied": False,
@@ -3050,3 +3072,368 @@ class EnterpriseOperationsStore:
                      'baseline_restored':True,'scope':'reviewed_oos_capacity_controls',
                      'evolution_applied_change':False,'source_deployment':False,
                      'authority_changed':False})
+
+    def _reviewed_measurement(self, actor: Principal, identifier: str, kinds: tuple[str, ...]) -> dict:
+        row = self.connection.execute(
+            """SELECT e.id,e.kind,e.operation_key,e.payload,e.digest,e.created_at,r.approval_id,r.created_at AS reviewed_at
+               FROM ago_enterprise_evidence e JOIN ago_enterprise_evidence_reviews r
+               ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+               WHERE e.tenant_id=%s AND e.id=%s AND e.kind=ANY(%s::text[])""",
+            (actor.tenant_id, str(UUID(identifier)), list(kinds)),
+        ).fetchone()
+        if not row:
+            raise PermissionError("Exact tenant-owned independently reviewed measurement required")
+        return dict(row)
+
+    def _measurement_rows(self, actor: Principal, kind: str, *, reviewed: bool = True) -> list[dict]:
+        rows = self.connection.execute(
+            """SELECT e.id,e.kind,e.payload,e.digest,e.created_at,r.approval_id,r.created_at AS reviewed_at
+               FROM ago_enterprise_evidence e LEFT JOIN ago_enterprise_evidence_reviews r
+               ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+               WHERE e.tenant_id=%s AND e.kind=%s AND (%s=false OR r.evidence_id IS NOT NULL)
+               ORDER BY e.created_at,e.id LIMIT 1001""", (actor.tenant_id, kind, reviewed),
+        ).fetchall()
+        if len(rows) > 1000:
+            raise ValueError("Measurement history exceeds 1000; narrow or archive scope before acceptance")
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def _source_bytes(content: str) -> dict:
+        from hashlib import sha256
+        try:
+            raw = base64.b64decode(content, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("Valid exact source bytes required") from exc
+        if not 1 <= len(raw) <= 200000:
+            raise ValueError("Source must be nonempty and at most 200KB")
+        return {"content_base64": content, "content_digest": sha256(raw).hexdigest(), "content_bytes": len(raw)}
+
+    @staticmethod
+    def _measurement_period(data: dict, *, actual: bool = True) -> tuple[datetime, datetime]:
+        start, end = (datetime.fromisoformat(data[k]) for k in ("period_start", "period_end"))
+        if start.tzinfo is None or end.tzinfo is None or not start < end or end-start > timedelta(days=366):
+            raise ValueError("Timezone-aware positive period of at most one year required")
+        now = datetime.now(timezone.utc)
+        if actual and end > now:
+            raise ValueError("Actual observation period must have ended")
+        if not actual and start <= now:
+            raise ValueError("Prospective period must start after registration")
+        return start, end
+
+    def capture_measurement(self, *, actor: Principal, kind: str, data: dict, operation_key: str) -> dict:
+        """Typed transport supplies input; one tenant lock freezes sources and exact retries."""
+        handlers = {"economic_period": self._economic_period, "economic_study": self._economic_study,
+                    "economic_comparison": self._economic_comparison, "quality_subject": self._quality_subject,
+                    "quality_study": self._quality_study, "quality_sample": self._quality_sample,
+                    "quality_report": self._quality_report, "metric_outcome": self._metric_outcome,
+                    "longitudinal_forecast": self._longitudinal_forecast,
+                    "longitudinal_calibration": self._longitudinal_calibration}
+        if kind not in handlers:
+            raise ValueError("Unknown measurement workflow")
+        # Canonical UTC keys make equivalent timestamp offsets the same period.
+        data = json.loads(json.dumps(data, sort_keys=True, default=str, allow_nan=False))
+        def canonical_dates(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key in ("period_start", "period_end", "observed_at"):
+                        stamp = datetime.fromisoformat(item)
+                        if stamp.tzinfo is None:
+                            raise ValueError("Timezone-aware measurement timestamps required")
+                        value[key] = stamp.astimezone(timezone.utc).isoformat()
+                    else:
+                        if key in ("entity_ref", "metric", "unit", "version", "source_ref", "sample_ref", "rationale", "assumptions", "hypothesis", "sampling_plan", "rollback_plan", "methodology", "interval_basis", "sensitivity_factors", "model_version", "name") and isinstance(item, str):
+                            if not item.strip():
+                                raise ValueError("Nonblank measurement context and identity required")
+                            value[key] = item.strip()
+                        canonical_dates(item)
+            elif isinstance(value, list):
+                for item in value:
+                    canonical_dates(item)
+        canonical_dates(data)
+        with self.connection.transaction():
+            self._tenant_lock(actor.tenant_id)
+            prior = self._prior_evidence(actor, kind, operation_key)
+            if prior:
+                if prior["payload"]["intent"] != data:
+                    raise ValueError("Measurement key already bound to different immutable input")
+                return prior
+            payload = {**handlers[kind](actor, data), "intent": data,
+                       "authority_changed": False, "automatically_applied": False}
+            result = self._save_evidence(actor=actor, kind=kind, operation_key=operation_key, payload=payload)
+            if kind == "economic_period":
+                for cost_id in payload["cost_ids"]:
+                    self.connection.execute(
+                        "INSERT INTO ago_economic_period_costs(tenant_id,cost_id,period_id) VALUES(%s,%s,%s)",
+                        (actor.tenant_id, cost_id, result["id"]),
+                    )
+            return result
+
+    def _economic_period(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import measured_economics
+        start, end = self._measurement_period(data)
+        ids = [str(UUID(x)) for x in data["reconciliation_ids"]]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Unique reconciliation sources required")
+        sources = [self._reviewed_measurement(actor, x, ("reconciliation",)) for x in ids]
+        costs = [source["cost"] for r in sources for source in r["payload"]["sources"]]
+        cost_ids = [str(UUID(r["id"])) for r in costs]
+        if not costs or len(costs) > 1000 or len(set(cost_ids)) != len(cost_ids):
+            raise ValueError("Unique bounded reconciled expenses/revenue required")
+        if any(not start <= datetime.fromisoformat(r["period_start"]) < datetime.fromisoformat(r["period_end"]) <= end for r in costs):
+            raise ValueError("Reconciled costs must be fully inside the measured period")
+        if self.connection.execute(
+            "SELECT 1 FROM ago_economic_period_costs WHERE tenant_id=%s AND cost_id=ANY(%s::uuid[])",
+            (actor.tenant_id, cost_ids),
+        ).fetchone():
+            raise ValueError("Cost/revenue already attributed to an immutable economic period")
+        task_ids = {str(UUID(x)) for x in data["task_ids"]}
+        if len(task_ids) != len(data["task_ids"]):
+            raise ValueError("Unique QA cohort required")
+        qa = [r for r in self._task_observations(tenant_id=actor.tenant_id) if str(r["id"]) in task_ids]
+        if len(qa) != len(task_ids) or any(not r["review_id"] or not start <= r["reviewed_at"] <= end for r in qa):
+            raise PermissionError("Exact independently QA-reviewed tasks inside the measured period required")
+        analysis = measured_economics(costs, qa, currency=data["currency"])
+        budget = {"status": "unknown_without_approved_company_budget", "within_envelope": None}
+        if data.get("budget_id"):
+            row = self.connection.execute(
+                "SELECT * FROM ago_budget_envelopes WHERE tenant_id=%s AND id=%s AND scope_kind='company'",
+                (actor.tenant_id, str(UUID(data["budget_id"]))),
+            ).fetchone()
+            if not row or row["currency"] != data["currency"] or row["created_at"] > end:
+                raise PermissionError("Same-currency approved company budget effective before period end required")
+            ceiling, spend = row["approved_ceiling"], Decimal(analysis["observed_cost"])
+            budget = {"id": str(row["id"]), "approval_id": str(row["approval_id"]), "ceiling": str(ceiling),
+                      "variance": str(spend-ceiling), "within_envelope": spend <= ceiling,
+                      "status": "reviewed_envelope_comparison", "limits": "Envelope has no automatic renewal or period allocation; owner confirms allocation."}
+        return {**analysis, "period_start": start.isoformat(), "period_end": end.isoformat(),
+                "duration_days": str(Decimal(str((end-start).total_seconds()))/Decimal(86400)),
+                "cost_ids": cost_ids, "cost_sources": costs,
+                "reconciliation_sources": [{k:r[k] for k in ("id", "digest", "approval_id")} for r in sources],
+                "qa_sources": qa, "budget": budget, "assumptions": data["assumptions"],
+                "evidence_state": "independently_reviewed_document_matches", "real_use_acceptance": "requires_authentic_owner_records"}
+
+    def _economic_study(self, actor: Principal, data: dict) -> dict:
+        baseline = self._reviewed_measurement(actor, data["baseline_period_id"], ("economic_period",))
+        start, end = self._measurement_period(data, actual=False)
+        if datetime.fromisoformat(baseline["payload"]["period_end"]) > start:
+            raise ValueError("Candidate must follow the baseline period")
+        planned = self.connection.execute(
+            "SELECT id,digest FROM ago_enterprise_evidence WHERE tenant_id=%s AND id=%s AND kind='intent'",
+            (actor.tenant_id, str(UUID(data["change_ref"]))),
+        ).fetchone()
+        if not planned or self.connection.execute(
+            "SELECT 1 FROM ago_enterprise_evidence WHERE tenant_id=%s AND kind='intent_result' AND operation_key=%s",
+            (actor.tenant_id, str(planned["id"]) if planned else ""),
+        ).fetchone():
+            raise PermissionError("Exact unapplied tenant-owned governed change intent required")
+        return {"baseline_id": str(baseline["id"]), "baseline_digest": baseline["digest"],
+                "baseline_review": baseline["approval_id"], "candidate_period_start": start.isoformat(),
+                "candidate_period_end": end.isoformat(), "change_ref": str(planned["id"]), "change_intent_digest": planned["digest"],
+                "hypothesis": data["hypothesis"], "rollback_plan": data["rollback_plan"],
+                "independent_review_required_before_candidate": True, "advisory": True}
+
+    def _economic_comparison(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import compare_measured_economics
+        before = self._reviewed_measurement(actor, data["baseline_period_id"], ("economic_period",))
+        after = self._reviewed_measurement(actor, data["candidate_period_id"], ("economic_period",))
+        alternative = self._reviewed_measurement(actor, data["alternative_period_id"], ("economic_period",)) if data.get("alternative_period_id") else None
+        periods = [before, after] + ([alternative] if alternative else [])
+        if len({str(r["id"]) for r in periods}) != len(periods):
+            raise ValueError("Distinct observed comparison periods required")
+        intervals = [(datetime.fromisoformat(r["payload"]["period_start"]), datetime.fromisoformat(r["payload"]["period_end"])) for r in periods]
+        if intervals[0][1] > intervals[1][0] or any(max(a[0], b[0]) < min(a[1], b[1]) for i,a in enumerate(intervals) for b in intervals[i+1:]):
+            raise ValueError("Baseline/candidate/alternative periods must not overlap and candidate follows baseline")
+        result = compare_measured_economics(before["payload"], after["payload"], alternative["payload"] if alternative else None)
+        audit = None
+        if data.get("study_id"):
+            study = self._reviewed_measurement(actor, data["study_id"], ("economic_study",))
+            frozen = study["payload"]
+            if frozen["baseline_id"] != str(before["id"]) or (
+                frozen["candidate_period_start"], frozen["candidate_period_end"]) != (
+                after["payload"]["period_start"], after["payload"]["period_end"]) or study["reviewed_at"] >= intervals[1][0]:
+                raise PermissionError("Exact prospective independently reviewed economic study required")
+            change = self._reviewed_measurement(actor, data["change_evidence_id"], ("intent_result", "evolution_policy_audit")) if data.get("change_evidence_id") else None
+            if not change or not study["reviewed_at"] < change["created_at"] <= intervals[1][1]:
+                raise PermissionError("Actual reviewed change evidence after study review and before candidate end required")
+            actual_intent = change["operation_key"] if change["kind"] == "intent_result" else str(change["payload"]["actual_policy_applications"][1]["id"])
+            if actual_intent != frozen["change_ref"]:
+                raise PermissionError("Observed change differs from the exact frozen improvement intent")
+            audit = {"study_id": str(study["id"]), "study_digest": study["digest"],
+                     "change_id": str(change["id"]), "change_digest": change["digest"],
+                     "change_ref": frozen["change_ref"], "rollback_plan": frozen["rollback_plan"]}
+        elif data.get("change_evidence_id"):
+            raise ValueError("A change audit requires its prospective study")
+        return {**result, "sources": [{k:r[k] for k in ("id", "digest", "approval_id")} for r in periods],
+                "baseline": before["payload"], "candidate": after["payload"],
+                "optimization_audit": audit, "optimization_status": "reviewed_observed_intervention" if audit else "descriptive_comparison_only",
+                "assumptions": data["assumptions"], "provider_authenticated": False}
+
+    def _quality_subject(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import QUALITY_DIMENSIONS
+        if data["dimension"] not in QUALITY_DIMENSIONS:
+            raise ValueError("Unknown quality dimension")
+        if data["dimension"] in ("department", "employee"):
+            table = "ago_departments" if data["dimension"] == "department" else "ago_employees"
+            if not self.connection.execute(f"SELECT 1 FROM {table} WHERE tenant_id=%s AND id=%s",
+                                           (actor.tenant_id, str(UUID(data["entity_ref"])))).fetchone():
+                raise LookupError("Quality subject entity must belong to this tenant")
+        if any(r["payload"]["intent"]["dimension"] == data["dimension"] and r["payload"]["intent"]["entity_ref"] == data["entity_ref"] and r["payload"]["intent"]["version"] == data["version"]
+               for r in self._measurement_rows(actor, "quality_subject", reviewed=False)):
+            raise ValueError("Subject version already exists; create a new immutable version")
+        return {**self._source_bytes(data["content_base64"]), "dimension": data["dimension"],
+                "entity_ref": data["entity_ref"], "version": data["version"], "source_ref": data["source_ref"],
+                "verification": "requires_independent_artifact_review", "execution_verified": False}
+
+    def _quality_study(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import rubric_score
+        before = self._reviewed_measurement(actor, data["baseline_subject_id"], ("quality_subject",))
+        after = self._reviewed_measurement(actor, data["candidate_subject_id"], ("quality_subject",))
+        if before["id"] == after["id"] or before["payload"]["content_digest"] == after["payload"]["content_digest"] or any(
+            before["payload"][k] != after["payload"][k] for k in ("dimension", "entity_ref")
+        ):
+            raise ValueError("Distinct versions of the same dimension/entity required")
+        rubric_score(data["rubric"], {r["name"]: "0" for r in data["rubric"]})
+        return {"dimension": before["payload"]["dimension"], "entity_ref": before["payload"]["entity_ref"],
+                "subjects": {"baseline": {k:before[k] for k in ("id", "digest", "approval_id")},
+                             "candidate": {k:after[k] for k in ("id", "digest", "approval_id")}},
+                "rubric": data["rubric"], "expected_per_variant": data["expected_per_variant"],
+                "hypothesis": data["hypothesis"], "rollback_plan": data["rollback_plan"],
+                "sampling_plan": data["sampling_plan"], "auto_execution": False,
+                "independent_review_required_before_samples": True}
+
+    def _quality_sample(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import rubric_score
+        study = self._reviewed_measurement(actor, data["study_id"], ("quality_study",))
+        if not study["reviewed_at"] < datetime.fromisoformat(data["observed_at"]) <= datetime.now(timezone.utc):
+            raise PermissionError("Later actual sample after independent study review required")
+        existing = [r for r in self._measurement_rows(actor, "quality_sample", reviewed=False)
+                    if r["payload"]["intent"]["study_id"] == str(study["id"])]
+        if any(r["payload"]["intent"]["sample_ref"] == data["sample_ref"] for r in existing):
+            raise ValueError("Sample source already enrolled in this study")
+        if sum(r["payload"]["variant"] == data["variant"] for r in existing) >= study["payload"]["expected_per_variant"]:
+            raise ValueError("Frozen sample quota reached; do not cherry-pick extra samples")
+        source = self._source_bytes(data["content_base64"])
+        if any(r["payload"]["content_digest"] == source["content_digest"] for r in existing):
+            raise ValueError("Duplicate output bytes cannot become independent quality samples")
+        score = rubric_score(study["payload"]["rubric"], data["scores"])
+        return {**source, "study_id": str(study["id"]), "study_digest": study["digest"],
+                "subject": study["payload"]["subjects"][data["variant"]], "variant": data["variant"],
+                "scores": data["scores"], "weighted_score_pct": score,
+                "source_ref": data["sample_ref"], "rationale": data["rationale"],
+                "verification": "operator_observation_requires_independent_source_and_score_review",
+                "model_execution_verified": False}
+
+    def _quality_report(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import summarize_quality
+        study = self._reviewed_measurement(actor, data["study_id"], ("quality_study",))
+        rows = [r for r in self._measurement_rows(actor, "quality_sample", reviewed=False)
+                if r["payload"]["study_id"] == str(study["id"])]
+        reviewed = [r for r in rows if r["reviewed_at"]]
+        result = summarize_quality(study["payload"]["rubric"], [r["payload"] for r in reviewed],
+                                   expected_per_variant=study["payload"]["expected_per_variant"])
+        return {**result, "study_id": str(study["id"]), "study_digest": study["digest"],
+                "dimension": study["payload"]["dimension"], "entity_ref": study["payload"]["entity_ref"],
+                "unreviewed_samples": len(rows)-len(reviewed),
+                "source_samples": [{k:r[k] for k in ("id", "digest", "approval_id")} for r in reviewed],
+                "rubric": study["payload"]["rubric"], "sampling_plan": study["payload"]["sampling_plan"],
+                "recommendation": "human_review_candidate" if result["complete"] and result["score_delta_pct"] > 0 else "retain_baseline_or_collect_evidence"}
+
+    def _metric_outcome(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import measurement_series, metric_number
+        series = measurement_series(**data["series"])
+        start, end = self._measurement_period(data)
+        existing = self._measurement_rows(actor, "metric_outcome", reviewed=False)
+        if any(r["payload"]["series_key"] == series["series_key"] and max(start, datetime.fromisoformat(r["payload"]["intent"]["period_start"])) < min(end, datetime.fromisoformat(r["payload"]["intent"]["period_end"])) for r in existing):
+            raise ValueError("Overlapping outcomes for the same series denied")
+        source, value = {}, None
+        if series["dimension"] in ("cost", "revenue"):
+            if not data.get("economic_period_id") or data.get("content_base64") or data.get("value") is not None:
+                raise ValueError("Financial outcomes derive only from a reviewed economic period")
+            period = self._reviewed_measurement(actor, data["economic_period_id"], ("economic_period",))
+            payload = period["payload"]
+            if payload["currency"] != series["unit"] or (payload["period_start"], payload["period_end"]) != (start.isoformat(), end.isoformat()) or series["entity_ref"] != "company":
+                raise ValueError("Exact-period same-currency company financial series required")
+            value = payload["observed_cost" if series["dimension"] == "cost" else "observed_revenue"]
+            source = {"economic_period_id": str(period["id"]), "economic_period_digest": period["digest"],
+                      "economic_period_review": period["approval_id"], "provider_authenticated": False}
+        else:
+            if data.get("economic_period_id") or not data.get("content_base64") or data.get("value") is None:
+                raise ValueError("Exact actual source bytes and a measured nonfinancial value required")
+            value = str(metric_number(data["value"]))
+            source = {**self._source_bytes(data["content_base64"]), "provider_authenticated": False}
+            if series["dimension"] == "risk" and not 0 <= Decimal(value) <= 1:
+                raise ValueError("Observed risk must be within probability bounds")
+            if series["dimension"] == "headcount" and (Decimal(value) < 0 or Decimal(value) != Decimal(value).to_integral_value()):
+                raise ValueError("Headcount must be a nonnegative whole number")
+        return {**series, **source, "value": str(value), "source_ref": data["source_ref"],
+                "methodology": data["methodology"], "verification": "requires_independent_actual_outcome_review"}
+
+    def _longitudinal_forecast(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import measurement_series, metric_number
+        snapshot = self.connection.execute(
+            "SELECT id,digest,payload,created_at FROM ago_enterprise_evidence WHERE tenant_id=%s AND id=%s AND kind='twin_state'",
+            (actor.tenant_id, str(UUID(data["snapshot_id"]))),
+        ).fetchone()
+        if not snapshot or snapshot["payload"].get("source_truncation"):
+            raise PermissionError("Complete tenant Twin snapshot required")
+        predictions, sources, keys = [], [], set()
+        historical = self._measurement_rows(actor, "metric_outcome")
+        for target in data["predictions"]:
+            series = measurement_series(**target["series"])
+            start, end = self._measurement_period(target, actual=False)
+            if end > datetime.now(timezone.utc)+timedelta(days=366):
+                raise ValueError("Forecast horizon is bounded to one year")
+            key = (series["series_key"], start.isoformat(), end.isoformat())
+            if key in keys or any(r["series_key"] == series["series_key"] and max(start, datetime.fromisoformat(r["period_start"])) < min(end, datetime.fromisoformat(r["period_end"])) for r in predictions):
+                raise ValueError("Unique nonoverlapping series-period forecasts required")
+            keys.add(key)
+            center, low, high = (metric_number(target[k]) for k in ("predicted_value", "lower", "upper"))
+            if not low <= center <= high or series["dimension"] in ("cost", "revenue", "headcount") and low < 0 or series["dimension"] == "risk" and not 0 <= low <= high <= 1:
+                raise ValueError("Ordered valid prediction interval required")
+            training = [r for r in historical if r["payload"]["series_key"] == series["series_key"]]
+            values = [metric_number(r["payload"]["value"]) for r in training]
+            predictions.append({**series, "period_start": start.isoformat(), "period_end": end.isoformat(),
+                "predicted_value": str(center), "lower": str(low), "upper": str(high),
+                "interval_basis": target["interval_basis"], "training_samples": len(training),
+                "historical_mean": str(sum(values)/len(values)) if values else None,
+                "training_ids": [str(r["id"]) for r in training]})
+            sources.extend({k:r[k] for k in ("id", "digest", "approval_id")} for r in training)
+        return {"snapshot_id": str(snapshot["id"]), "snapshot_digest": snapshot["digest"],
+                "snapshot_created_at": str(snapshot["created_at"]), "model_version": data["model_version"],
+                "predictions": predictions, "historical_sources": list({str(r["id"]):r for r in sources}.values()),
+                "assumptions": data["assumptions"], "sensitivity_factors": data["sensitivity_factors"],
+                "validation": "Later independently reviewed exact-series, exact-unit and exact-period actuals",
+                "accuracy_certified": False, "source_freshness_seconds": (datetime.now(timezone.utc)-snapshot["created_at"]).total_seconds()}
+
+    def _longitudinal_calibration(self, actor: Principal, data: dict) -> dict:
+        from ago.enterprise_domains import calibrate_series
+        ids = [str(UUID(x)) for x in data["forecast_ids"]]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Unique frozen forecast IDs required")
+        forecasts = [self._reviewed_measurement(actor, x, ("longitudinal_forecast",)) for x in ids]
+        if any(r["reviewed_at"] >= min(datetime.fromisoformat(p["period_start"]) for p in r["payload"]["predictions"]) for r in forecasts):
+            raise PermissionError("Forecast must be independently reviewed before every target period starts")
+        if len({r["payload"]["model_version"] for r in forecasts}) != 1:
+            raise ValueError("Calibrate one model version at a time")
+        predictions = [p for r in forecasts for p in r["payload"]["predictions"]]
+        observations = self._measurement_rows(actor, "metric_outcome")
+        eligible, rejected = [], []
+        for forecast in forecasts:
+            for prediction in forecast["payload"]["predictions"]:
+                matches = [r for r in observations if r["payload"]["series_key"] == prediction["series_key"] and
+                           (r["payload"]["intent"]["period_start"], r["payload"]["intent"]["period_end"]) == (prediction["period_start"], prediction["period_end"])]
+                for row in matches:
+                    if not forecast["reviewed_at"] < datetime.fromisoformat(prediction["period_start"]) or row["created_at"] <= forecast["created_at"]:
+                        rejected.append(str(row["id"]))
+                        continue
+                    eligible.append({**row["payload"], "period_start": prediction["period_start"], "period_end": prediction["period_end"],
+                                     "id": str(row["id"]), "digest": row["digest"]})
+        result = calibrate_series(predictions, eligible)
+        paired = {(r["series_key"], r["period_start"], r["period_end"]) for r in result["pairs"]}
+        now = datetime.now(timezone.utc)
+        return {**result, "model_version": forecasts[0]["payload"]["model_version"],
+                "forecast_sources": [{k:r[k] for k in ("id", "digest", "approval_id")} for r in forecasts],
+                "rejected_observation_ids": rejected,
+                "overdue_missing_samples": sum(datetime.fromisoformat(p["period_end"]) < now and
+                    (p["series_key"], p["period_start"], p["period_end"]) not in paired for p in predictions),
+                "no_retrospective_forecasts": True}

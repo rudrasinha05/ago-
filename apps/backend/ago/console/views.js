@@ -314,6 +314,18 @@ function renderEnterpriseSummary(data, state = {}) {
     '<tr><td>'+maybe(x.kind)+'</td><td>'+safe(dateText(x.created_at))+'</td><td>'+badge(x.reviewed_at?"reviewed":"unreviewed")+
     '</td><td>'+action("Inspect evidence","enterprise-evidence",x.id)+(manage && !x.reviewed_at?
       action("Independent review","enterprise-review-evidence",x.id):"")+ '</td></tr>');
+  const economicsRows=evidence.filter(x=>x.kind==="economic_period").slice(0,8).map(x=>'<tr><td>'+safe(dateText(x.payload.period_start))+
+    '</td><td>'+maybe(x.payload.observed_cost)+' '+maybe(x.payload.currency)+'</td><td>'+maybe(x.payload.observed_revenue)+
+    '</td><td>'+maybe(x.payload.cost_per_qa_output)+'</td><td>'+maybe(x.payload.missing_expense_categories?.join(", ") || "All five recorded")+
+    '</td><td>'+action("Inspect period","enterprise-evidence",x.id)+'</td></tr>');
+  const qualityRows=evidence.filter(x=>x.kind==="quality_report").slice(0,8).map(x=>'<tr><td>'+maybe(x.payload.dimension)+
+    '</td><td>'+maybe(x.payload.baseline?.mean_score_pct)+'</td><td>'+maybe(x.payload.candidate?.mean_score_pct)+
+    '</td><td>'+maybe(x.payload.score_delta_pct)+'</td><td>'+maybe((x.payload.baseline?.pending_samples||0)+(x.payload.candidate?.pending_samples||0))+
+    '</td><td>'+action("Inspect rubric / sources","enterprise-evidence",x.id)+'</td></tr>');
+  const calibrationRows=evidence.filter(x=>x.kind==="longitudinal_calibration").slice(0,5).flatMap(x=>Object.values(x.payload.series || {}).map(s=>
+    '<tr><td>'+maybe(s.dimension)+" · "+maybe(s.metric)+'</td><td>'+maybe(s.unit)+'</td><td>'+maybe(s.observed_samples)+
+    '</td><td>'+maybe(s.mean_absolute_error)+'</td><td>'+maybe(s.interval_coverage)+'</td><td>'+maybe(s.pending_samples)+
+    '</td><td>'+action("Inspect prediction / actuals","enterprise-evidence",x.id)+'</td></tr>'));
   const revisionRows = revisions.slice(0,20).map(x=>'<tr><td>'+maybe(x.title)+'</td><td>'+maybe(x.base_revision)+
     '</td><td>'+badge(x.applied_revision?"applied":x.status)+'</td><td>'+
     (manage && x.status==="approved" && !x.applied_revision && x.actor_id===state.me?.id?
@@ -386,6 +398,9 @@ function renderEnterpriseSummary(data, state = {}) {
     panel("Versioned plan review requests",table(["Plan","Base revision","Status","Action"],revisionRows,empty("No plan revisions awaiting review")))+
     panel("Reported employee evidence requests",unavailable(data,"enterpriseAgentIntents",table(["Category","Observation","Status","Action"],agentIntentRows,empty("No employee evidence awaiting review"))))+
     panel("Operational evidence and forecasts",unavailable(data,"enterpriseEvidence",table(["Evidence","Captured","Review","Action"],evidenceRows,empty("Capture an operating cycle, planning rollup or Twin state"))))+
+    panel("Observed economics",unavailable(data,"enterpriseEvidence",table(["Period","Cost","Revenue","Cost / QA output","Missing costs","Sources"],economicsRows,empty("Review reconciliations, then measure an economic period"))))+
+    panel("Reviewed quality comparisons",unavailable(data,"enterpriseEvidence",table(["Dimension","Baseline score","Candidate score","Delta","Pending samples","Evidence"],qualityRows,empty("Freeze a rubric study and independently review source-backed samples"))))+
+    panel("Longitudinal prediction accuracy",unavailable(data,"enterpriseEvidence",table(["Metric","Unit","Actual samples","Mean absolute error","Interval coverage","Pending","Evidence"],calibrationRows,empty("Freeze future business predictions, then review later exact-period outcomes"))))+
     '<div class="info-strip">'+icon("shield")+
     '<span>Human approvals govern all operational changes. Costs are unverified unless independently reconciled; scenarios never apply changes.</span></div>'+
     '<div class="metric-grid">'+

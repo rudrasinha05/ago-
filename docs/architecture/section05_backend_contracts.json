@@ -658,6 +658,10 @@
         "audit_evolution_policy": {
           "arguments": "self, *, actor: Principal, proposal_id: str, baseline_intent_id: str, candidate_intent_id: str, rollback_intent_id: str, operation_key: str",
           "returns": "dict"
+        },
+        "capture_measurement": {
+          "arguments": "self, *, actor: Principal, kind: str, data: dict, operation_key: str",
+          "returns": "dict"
         }
       }
     },

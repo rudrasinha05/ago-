@@ -270,3 +270,24 @@ test("financial source review exposes exact text without mutating immutable evid
   const binary=evidencePreview({...source,payload:{content_base64:btoa(String.fromCharCode(255,254))}});
   assert.match(binary.payload.document_text,/Binary source/);
 });
+
+test("quality and outcome source previews decode nested copies without changing evidence", async () => {
+  const {evidencePreview}=await import('../ago/console/actions.js');
+  const bytes=btoa('<script>untrusted actual output</script>');
+  const source={kind:'quality_sample',payload:{content_base64:bytes,intent:{content_base64:bytes}}};
+  const preview=evidencePreview({details:source});
+  assert.equal(preview.details.payload.document_text,'<script>untrusted actual output</script>');
+  assert.equal(preview.details.payload.intent.content_base64,undefined);
+  assert.equal(source.payload.intent.content_base64,bytes);
+});
+
+test("measurement tables expose unknowns and escape supplied metric names", () => {
+  const data={enterpriseEvidence:loaded([
+    {id:TENANT,kind:'economic_period',payload:{period_start:'2026-10-10',observed_cost:'100',observed_revenue:'200',currency:'INR',missing_expense_categories:['time'],cost_per_qa_output:null}},
+    {id:TENANT,kind:'quality_report',payload:{dimension:'<img src=x>',baseline:{mean_score_pct:null,pending_samples:1},candidate:{mean_score_pct:85,pending_samples:0},score_delta_pct:null}},
+    {id:TENANT,kind:'longitudinal_calibration',payload:{series:{a:{dimension:'growth',metric:'<script>metric</script>',unit:'count',observed_samples:0,mean_absolute_error:null,interval_coverage:null,pending_samples:2}}}},
+  ])};
+  const html=renderPage('tools',data,mockState(['operations:read']));
+  assert.match(html,/Observed economics/);assert.match(html,/Longitudinal prediction accuracy/);
+  assert.match(html,/&lt;script&gt;metric/);assert.doesNotMatch(html,/<script>|<img/);
+});

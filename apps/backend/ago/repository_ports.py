@@ -937,6 +937,9 @@ class EnterpriseOperationsStorePort(Protocol):
     def audit_evolution_policy(self, *, actor: Principal, proposal_id: str, baseline_intent_id: str, candidate_intent_id: str, rollback_intent_id: str, operation_key: str) -> dict: ...
 
 
+    def capture_measurement(self, *, actor: Principal, kind: str, data: dict, operation_key: str) -> dict: ...
+
+
 REPOSITORY_BINDINGS = {
     EnterpriseOperationsStorePort: _EnterpriseOperationsStore,
     IdentitySecurityStorePort: _IdentitySecurityStore,

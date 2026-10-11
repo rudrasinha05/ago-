@@ -295,6 +295,7 @@
       "ago_calendar_events",
       "ago_department_lifecycle_events",
       "ago_departments",
+      "ago_economic_period_costs",
       "ago_employee_help_decisions",
       "ago_employee_help_requests",
       "ago_employees",

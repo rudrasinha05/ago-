@@ -11,14 +11,14 @@ function fieldHTML(field) {
     (field.min !== undefined ? ' min="' + Number(field.min) + '"' : "") +
     (field.max !== undefined ? ' max="' + Number(field.max) + '"' : "");
   if (field.type === "file") {
-    return label+'<input type="file"'+attrs+' accept=".pdf,.txt,.csv,.json,.png,.jpg,.jpeg">';
+    return label+'<input type="file"'+attrs+' accept=".pdf,.txt,.md,.csv,.json,.png,.jpg,.jpeg">';
   }
-  if (field.type === "select") {
+  if (["select","multiselect"].includes(field.type)) {
     const choices = (field.options || []).map(option =>
       '<option value="' + safe(option.value) + '"' +
       (String(option.value) === String(field.value ?? "") ? " selected" : "") +
       '>' + safe(option.label) + "</option>").join("");
-    return label + '<select' + attrs + ">" + choices + "</select>";
+    return label + '<select' + attrs + (field.type==="multiselect"?' multiple size="4"':"") + ">" + choices + "</select>";
   }
   if (field.type === "textarea") {
     return label + '<textarea' + attrs + ' placeholder="' +
@@ -27,7 +27,7 @@ function fieldHTML(field) {
   }
   const type = ["text","email","number","datetime-local"].includes(field.type)
     ? field.type : "text";
-  return label + '<input type="' + type + '"' + attrs +
+  return label + '<input type="' + type + '"' + attrs + (type==="number"?' step="any"':"") +
     ' placeholder="' + safe(field.placeholder || "") + '" value="' +
     safe(field.value ?? "") + '">';
 }
@@ -57,7 +57,9 @@ function openDialog(ctx, {
     const errorBox = document.getElementById("operation-error");
     submit.disabled = true;
     errorBox.hidden = true;
-    const values = Object.fromEntries(new FormData(form));
+    const formData = new FormData(form);
+    const values = Object.fromEntries(formData);
+    for(const field of fields)if(field.type==="multiselect")values[field.name]=formData.getAll(field.name);
     try {
       const message = await onSubmit(values);
       dialog.close();
@@ -726,15 +728,18 @@ const timeField = (name,label,value="") => ({name,label,type:"datetime-local",va
 const instant = value => value ? new Date(value).toISOString() : null;
 export function evidencePreview(value) {
   const result=structuredClone(value);
-  const item=result.details || result;
-  if(item.kind==="financial_document" && item.payload?.content_base64) {
-    try {
-      const bytes=Uint8Array.from(atob(item.payload.content_base64),x=>x.charCodeAt(0));
-      try {item.payload.document_text=new TextDecoder("utf-8",{fatal:true}).decode(bytes);}
-      catch {item.payload.document_text="Binary source: download the exact document to inspect before deciding.";}
-      delete item.payload.content_base64;
-    } catch {item.payload.document_text="Invalid source bytes: do not approve this document.";}
-  }
+  const visit=item=>{
+    if(!item || typeof item!=="object")return;
+    if(item.content_base64) {
+      try {
+        const bytes=Uint8Array.from(atob(item.content_base64),x=>x.charCodeAt(0));
+        try {item.document_text=new TextDecoder("utf-8",{fatal:true}).decode(bytes);}
+        catch {item.document_text="Binary source: download the exact document to inspect before deciding.";}
+      } catch {item.document_text="Invalid source bytes: do not approve this document.";}
+      delete item.content_base64;
+    }
+    for(const child of Object.values(item))visit(child);
+  };visit(result);
   return result;
 }
 function appendEvidence(host,value) {
@@ -742,14 +747,14 @@ function appendEvidence(host,value) {
   pre.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto";
   host.prepend(pre);
   const item=value.details || value;
-  if(item.kind==="financial_document" && item.payload?.content_base64) {
+  if(item.payload?.content_base64) {
     const button=document.createElement("button");button.type="button";button.className="btn btn-soft";
     button.textContent="Download exact source document";
     button.addEventListener("click",()=>{
       const bytes=Uint8Array.from(atob(item.payload.content_base64),x=>x.charCodeAt(0));
       const pdf=String.fromCharCode(...bytes.slice(0,5))==="%PDF-";
       const url=URL.createObjectURL(new Blob([bytes],{type:pdf?"application/pdf":"application/octet-stream"}));
-      const link=document.createElement("a");link.href=url;link.download=pdf?"financial-source.pdf":"financial-source.bin";
+      const link=document.createElement("a");link.href=url;link.download=pdf?"review-source.pdf":"review-source.bin";
       link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     });host.prepend(button);
   }
@@ -851,6 +856,9 @@ async function enterpriseAction(key,id,ctx) {
       choose("retire","Deprecate / revoke an asset"),choose("diagnostics","Capture evolution diagnostics"),
       choose("experiment","Compare real reviewed task cohorts"),choose("register-experiment","Register future packet experiment"),choose("measure-experiment","Measure registered experiment"),choose("policy-audit","Audit approved capacity change / rollback"),choose("twin-state","Capture organizational Twin state"),
       choose("forecast","Freeze a task quality forecast"),choose("calibrate","Measure later forecast outcomes"),
+      choose("economic-period","Measure reconciled economic period"),choose("economic-study","Register future cost improvement"),choose("economic-comparison","Compare observed ROI / cost / QA"),
+      choose("quality-subject","Store exact quality subject version"),choose("quality-study","Register rubric quality comparison"),choose("quality-sample","Record source-backed quality scores"),choose("quality-report","Measure reviewed quality comparison"),
+      choose("metric-outcome","Record actual business outcome"),choose("longitudinal-forecast","Freeze business prediction / interval"),choose("longitudinal-calibration","Measure prediction accuracy over time"),
     ])],button:"Continue",refresh:false,onSubmit:async v=>{
       // Close the chooser before opening the next native modal.
       ctx.dialog.close();setTimeout(()=>enterpriseForm(v.command,ctx).catch(e=>ctx.toast(e.message)),0);
@@ -858,6 +866,7 @@ async function enterpriseAction(key,id,ctx) {
     }});
 }
 async function enterpriseForm(command,ctx) {
+  if(["economic-period","economic-study","economic-comparison","quality-subject","quality-study","quality-sample","quality-report","metric-outcome","longitudinal-forecast","longitudinal-calibration"].includes(command))return measurementForm(command,ctx);
   const {api,state}=ctx;
   const base=enterpriseBase;
   const post=(path,body)=>api.request(base+path,{method:"POST",body});
@@ -1038,4 +1047,93 @@ async function enterpriseForm(command,ctx) {
   } else throw new Error("Workflow unavailable.");
   openDialog(ctx,{title:"Organization · "+command.replaceAll("-"," "),description:"Saved operations retain source evidence and require the applicable independent review.",
     fields,button:"Save workflow",onSubmit:submit});
+}
+
+async function sourceBase64(values) {
+  const file=values.source_file;
+  if(file?.size>200000)throw new Error("Source must be at most 200KB.");
+  const bytes=file?.size?new Uint8Array(await file.arrayBuffer()):new TextEncoder().encode(values.content || "");
+  if(!bytes.length)throw new Error("Attach the exact source file or paste its actual text.");
+  let raw="";for(const byte of bytes)raw+=String.fromCharCode(byte);return btoa(raw);
+}
+const sourceFields=()=>[{name:"source_file",label:"Exact source file (up to 200KB)",type:"file",required:false},
+  {...textField("content","Or paste exact actual source text",180000),required:false}];
+const periodFields=()=>[timeField("period_start","Period starts"),timeField("period_end","Period ends")];
+const seriesFields=()=>[selectField("dimension","Outcome dimension",["cost","revenue","growth","market","risk","headcount"].map(x=>choose(x,x))),
+  textField("metric","Stable metric name, e.g. total spend / customer count",160),{name:"unit",label:"Unit: currency, count, percent or probability",value:"INR",maxLength:160},
+  {name:"entity_ref",label:"Organization / measured entity",value:"company",maxLength:160}];
+const seriesValue=v=>({dimension:v.dimension,metric:v.metric,unit:v.unit,entity_ref:v.entity_ref});
+async function measurementForm(command,ctx) {
+  const post=body=>ctx.api.request(enterpriseBase+"/measurements/"+command,{method:"POST",body:{...body,operation_key:newOperation()}});
+  const load=async kind=>(await ctx.api.request(enterpriseBase+"/evidence?kind="+encodeURIComponent(kind))).map(x=>({...x,name:
+    [x.kind,x.payload?.dimension,x.payload?.version,x.payload?.period_start,x.id.slice(0,8)].filter(Boolean).join(" · ")}));
+  const reviewed=async kind=>(await load(kind)).filter(x=>x.reviewed_at);
+  const select=(name,label,rows,optional=false)=>selectField(name,label,[...(optional?[choose("","None / unknown")]:[]),...choices(rows)],!optional);
+  let fields=[],submit;
+  if(command==="economic-period") {
+    const matches=await reviewed("reconciliation");mustHave(matches,"Independently review reconciliations first.");
+    const budgets=resource(ctx.state.data,"enterpriseBudgets") || [],tasks=resource(ctx.state.data,"tasks") || [];
+    fields=[{...select("reconciliation_ids","Reviewed reconciliations (select all sources)",matches),type:"multiselect"},
+      {name:"currency",label:"Currency",value:"INR",maxLength:3},...periodFields(),
+      {...select("task_ids","QA task cohort (optional; selected outputs form the denominator)",tasks.filter(t=>["completed","failed"].includes(t.status)),true),type:"multiselect"},
+      select("budget_id","Approved company envelope",budgets.filter(b=>b.scope_kind==="company"),true),textField("assumptions","Period allocation, completeness and business context")];
+    submit=async v=>{await post({...v,task_ids:v.task_ids.filter(Boolean),budget_id:v.budget_id||null,period_start:instant(v.period_start),period_end:instant(v.period_end)});return "Observed period saved. Missing categories / QA / budget remain explicit; request independent review.";};
+  } else if(command==="economic-study") {
+    const periods=await reviewed("economic_period");mustHave(periods,"Independently review a baseline economic period first.");
+    const results=new Set((await load("intent_result")).map(x=>x.operation_key));
+    const changes=(await load("intent")).filter(x=>!results.has(x.id));mustHave(changes,"Save a governed change request before applying it, then register its measurement study.");
+    fields=[select("baseline_period_id","Observed baseline",periods),...periodFields(),select("change_ref","Exact saved, unapplied change request",changes),textField("hypothesis","Expected measured benefit"),textField("rollback_plan","How to restore the baseline")];
+    submit=async v=>{await post({...v,period_start:instant(v.period_start),period_end:instant(v.period_end)});return "Future intervention registered. Independently review it before the candidate period starts.";};
+  } else if(command==="economic-comparison") {
+    const periods=await reviewed("economic_period"),studies=await reviewed("economic_study");mustHave(periods,"Review observed economic periods first.");
+    const changes=[...await reviewed("intent_result"),...await reviewed("evolution_policy_audit")];
+    fields=[select("baseline_period_id","Observed baseline",periods),select("candidate_period_id","Later observed candidate",periods),select("alternative_period_id","Observed alternative (optional)",periods,true),
+      select("study_id","Prospective improvement study (optional)",studies,true),select("change_evidence_id","Actual independently reviewed change (required for a study)",changes,true),textField("assumptions","Comparable workload, value, risks and period allocation")];
+    submit=async v=>{for(const key of ["alternative_period_id","study_id","change_evidence_id"])v[key]=v[key]||null;await post(v);return "Observed ROI, opportunity cost and safeguards saved. Recommendations require human review.";};
+  } else if(command==="quality-subject") {
+    fields=[selectField("dimension","Quality dimension",["prompt","architecture","workflow","department","employee"].map(x=>choose(x,x))),
+      textField("entity_ref","Stable subject name (department/employee: existing entity ID)",160),{name:"version",label:"Immutable version",value:"1.0",maxLength:80},textField("source_ref","Original subject source reference",1024),...sourceFields()];
+    submit=async v=>{await post({dimension:v.dimension,entity_ref:v.entity_ref,version:v.version,source_ref:v.source_ref,content_base64:await sourceBase64(v)});return "Exact version stored. Independently review its source before enrollment.";};
+  } else if(command==="quality-study") {
+    const subjects=await reviewed("quality_subject");mustHave(subjects,"Review two distinct versions of the same subject first.");
+    fields=[select("baseline_subject_id","Reviewed baseline version",subjects),select("candidate_subject_id","Reviewed candidate version",subjects),
+      {name:"metric_name",label:"Rubric criterion 1",value:"correctness",maxLength:80},numericField("weight","Criterion 1 weight",1,100),
+      {name:"metric_name_2",label:"Rubric criterion 2",value:"safety",maxLength:80},numericField("weight_2","Criterion 2 weight",1,100),
+      numericField("expected_per_variant","Predeclared samples per version",5,100),textField("sampling_plan","How samples are selected fairly and comparably"),textField("hypothesis","Expected improvement"),textField("rollback_plan","Retain / restore baseline")];
+    submit=async v=>{await post({baseline_subject_id:v.baseline_subject_id,candidate_subject_id:v.candidate_subject_id,rubric:[{name:v.metric_name,maximum:"100",weight:v.weight},{name:v.metric_name_2,maximum:"100",weight:v.weight_2}],expected_per_variant:Number(v.expected_per_variant),sampling_plan:v.sampling_plan,hypothesis:v.hypothesis,rollback_plan:v.rollback_plan});return "Rubric and sample quotas frozen. Independent review required before recording samples.";};
+  } else if(command==="quality-sample") {
+    const studies=await reviewed("quality_study");mustHave(studies,"Independently review a rubric study first.");
+    openDialog(ctx,{title:"Select reviewed quality study",fields:[select("study_id","Frozen study",studies)],button:"Continue",refresh:false,onSubmit:async v=>{
+      ctx.dialog.close();setTimeout(()=>qualityScoreForm(ctx,studies.find(x=>x.id===v.study_id)).catch(e=>ctx.toast(e.message)),0);return "Study selected.";
+    }});return;
+  } else if(command==="quality-report") {
+    const studies=await reviewed("quality_study");mustHave(studies,"Review a rubric study first.");fields=[select("study_id","Frozen quality study",studies)];
+    submit=async v=>{await post(v);return "Reviewed rubric scores compared. Pending samples and uncertainty remain visible.";};
+  } else if(command==="metric-outcome") {
+    const periods=await reviewed("economic_period");
+    fields=[...seriesFields(),...periodFields(),{...numericField("value","Measured value (nonfinancial only)"),required:false,value:"",min:-1000000000},
+      select("economic_period_id","Reviewed economic period (cost / revenue only)",periods,true),textField("source_ref","Actual source reference",1024),textField("methodology","How this exact-period value was measured"),...sourceFields()];
+    submit=async v=>{const financial=["cost","revenue"].includes(v.dimension);await post({series:seriesValue(v),period_start:instant(v.period_start),period_end:instant(v.period_end),value:financial?null:v.value,economic_period_id:financial?v.economic_period_id||null:null,content_base64:financial?null:await sourceBase64(v),source_ref:v.source_ref,methodology:v.methodology});return "Actual outcome saved. Independent source review required before calibration.";};
+  } else if(command==="longitudinal-forecast") {
+    const snapshots=await load("twin_state");mustHave(snapshots,"Capture a complete Twin state first.");
+    fields=[select("snapshot_id","Frozen organizational state",snapshots),{name:"model_version",label:"Stable prediction model version",value:"owner-scenario-v1",maxLength:160},...seriesFields(),...periodFields(),
+      {...numericField("predicted_value","Predicted value"),min:-1000000000},{...numericField("lower","Lower uncertainty bound"),min:-1000000000},{...numericField("upper","Upper uncertainty bound"),min:-1000000000},
+      textField("interval_basis","How the uncertainty interval was obtained"),textField("assumptions","Prediction assumptions"),textField("sensitivity_factors","Factors that could change the outcome")];
+    submit=async v=>{await post({snapshot_id:v.snapshot_id,model_version:v.model_version,predictions:[{series:seriesValue(v),period_start:instant(v.period_start),period_end:instant(v.period_end),predicted_value:v.predicted_value,lower:v.lower,upper:v.upper,interval_basis:v.interval_basis}],assumptions:v.assumptions,sensitivity_factors:v.sensitivity_factors});return "Future prediction frozen. Independently review it before the target period starts.";};
+  } else if(command==="longitudinal-calibration") {
+    const forecasts=await reviewed("longitudinal_forecast");mustHave(forecasts,"Independently review future business forecasts first.");
+    fields=[{...select("forecast_ids","Same-model forecasts across periods (select all)",forecasts),type:"multiselect"}];
+    submit=async v=>{await post(v);return "Exact-period forecast errors and interval coverage measured. Missing/overdue actuals remain visible.";};
+  }
+  openDialog(ctx,{title:"Organization · "+command.replaceAll("-"," "),description:"Use actual source records. Saved measurements require independent review; forecasts and comparisons remain advisory.",fields,button:"Save measurement",onSubmit:submit});
+}
+async function qualityScoreForm(ctx,study) {
+  const rubric=study.payload.rubric;
+  const fields=[selectField("variant","Observed version",[choose("baseline","Baseline"),choose("candidate","Candidate")]),
+    textField("sample_ref","Unique actual sample / output source",160),timeField("observed_at","When this sample was actually observed"),
+    ...rubric.map((r,i)=>numericField("score_"+i,r.name+" score (0–"+r.maximum+")",0,Number(r.maximum))),textField("rationale","Evidence supporting these scores"),...sourceFields()];
+  openDialog(ctx,{title:"Score exact quality sample",description:study.payload.sampling_plan,fields,button:"Save for independent review",onSubmit:async v=>{
+    await ctx.api.request(enterpriseBase+"/measurements/quality-sample",{method:"POST",body:{operation_key:newOperation(),study_id:study.id,variant:v.variant,sample_ref:v.sample_ref,observed_at:instant(v.observed_at),scores:Object.fromEntries(rubric.map((r,i)=>[r.name,v["score_"+i]])),rationale:v.rationale,content_base64:await sourceBase64(v)}});
+    return "Actual output and rubric scores saved. Independent review is required before measurement.";
+  }});
 }

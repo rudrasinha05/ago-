@@ -1303,7 +1303,9 @@ class TwinForecastInput(EvidenceCaptureInput):
 def enterprise_evidence_list(
     kind: Literal["operations", "planning", "competence", "finance", "diagnostics",
                   "twin_state", "forecast", "calibration", "experiment", "intent", "intent_result", "lifecycle", "experiment_registration",
-                  "experiment_measurement", "financial_document", "reconciliation", "evolution_policy_audit"] | None = None,
+                  "experiment_measurement", "financial_document", "reconciliation", "evolution_policy_audit",
+                  "economic_period", "economic_study", "economic_comparison", "quality_subject", "quality_study",
+                  "quality_sample", "quality_report", "metric_outcome", "longitudinal_forecast", "longitudinal_calibration"] | None = None,
     db=Depends(db_connection), actor: Principal = Depends(authenticated),
     repositories: RepositoryScope = Depends(repository_scope),
 ):
@@ -1738,3 +1740,177 @@ def enterprise_audit_actual_policy_changes(
         actor=actor, proposal_id=str(data.proposal_id), baseline_intent_id=str(data.baseline_intent_id),
         candidate_intent_id=str(data.candidate_intent_id), rollback_intent_id=str(data.rollback_intent_id),
         operation_key=data.operation_key))
+
+
+# Six remaining gates share the existing exact-digest independent evidence review.
+class EconomicPeriodInput(EvidenceCaptureInput):
+    reconciliation_ids: list[UUID] = Field(min_length=1, max_length=100)
+    currency: str = Field(min_length=3, max_length=3)
+    period_start: datetime
+    period_end: datetime
+    task_ids: list[UUID] = Field(default_factory=list, max_length=1000)
+    budget_id: UUID | None = None
+    assumptions: str = Field(min_length=1, max_length=2000)
+
+
+class EconomicStudyInput(EvidenceCaptureInput):
+    baseline_period_id: UUID
+    period_start: datetime
+    period_end: datetime
+    change_ref: str = Field(min_length=1, max_length=1024)
+    hypothesis: str = Field(min_length=1, max_length=2000)
+    rollback_plan: str = Field(min_length=1, max_length=2000)
+
+
+class EconomicComparisonInput(EvidenceCaptureInput):
+    baseline_period_id: UUID
+    candidate_period_id: UUID
+    alternative_period_id: UUID | None = None
+    study_id: UUID | None = None
+    change_evidence_id: UUID | None = None
+    assumptions: str = Field(min_length=1, max_length=2000)
+
+
+class QualitySubjectInput(EvidenceCaptureInput):
+    dimension: Literal['prompt', 'architecture', 'workflow', 'department', 'employee']
+    entity_ref: str = Field(min_length=1, max_length=160)
+    version: str = Field(min_length=1, max_length=80)
+    source_ref: str = Field(min_length=1, max_length=1024)
+    content_base64: str = Field(min_length=1, max_length=270000)
+
+
+class QualityRubricMetric(StrictInput):
+    name: str = Field(min_length=1, max_length=80)
+    maximum: Decimal = Field(gt=0, le=1000)
+    weight: Decimal = Field(gt=0, le=100)
+
+
+class QualityStudyInput(EvidenceCaptureInput):
+    baseline_subject_id: UUID
+    candidate_subject_id: UUID
+    rubric: list[QualityRubricMetric] = Field(min_length=1, max_length=12)
+    expected_per_variant: int = Field(ge=1, le=100)
+    hypothesis: str = Field(min_length=1, max_length=2000)
+    rollback_plan: str = Field(min_length=1, max_length=2000)
+    sampling_plan: str = Field(min_length=1, max_length=2000)
+
+
+class QualitySampleInput(EvidenceCaptureInput):
+    study_id: UUID
+    variant: Literal['baseline', 'candidate']
+    sample_ref: str = Field(min_length=1, max_length=160)
+    observed_at: datetime
+    scores: dict[str, Decimal] = Field(min_length=1, max_length=12)
+    content_base64: str = Field(min_length=1, max_length=270000)
+    rationale: str = Field(min_length=1, max_length=2000)
+
+
+class QualityReportInput(EvidenceCaptureInput):
+    study_id: UUID
+
+
+class MeasurementSeriesInput(StrictInput):
+    dimension: Literal['cost', 'revenue', 'growth', 'market', 'risk', 'headcount']
+    metric: str = Field(min_length=1, max_length=160)
+    unit: str = Field(min_length=1, max_length=160)
+    entity_ref: str = Field(min_length=1, max_length=160)
+
+
+class MetricOutcomeInput(EvidenceCaptureInput):
+    series: MeasurementSeriesInput
+    period_start: datetime
+    period_end: datetime
+    value: Decimal | None = None
+    economic_period_id: UUID | None = None
+    content_base64: str | None = Field(default=None, min_length=1, max_length=270000)
+    source_ref: str = Field(min_length=1, max_length=1024)
+    methodology: str = Field(min_length=1, max_length=2000)
+
+
+class SeriesPredictionInput(StrictInput):
+    series: MeasurementSeriesInput
+    period_start: datetime
+    period_end: datetime
+    predicted_value: Decimal
+    lower: Decimal
+    upper: Decimal
+    interval_basis: str = Field(min_length=1, max_length=2000)
+
+
+class LongitudinalForecastInput(EvidenceCaptureInput):
+    snapshot_id: UUID
+    model_version: str = Field(min_length=1, max_length=160)
+    predictions: list[SeriesPredictionInput] = Field(min_length=1, max_length=12)
+    assumptions: str = Field(min_length=1, max_length=2000)
+    sensitivity_factors: str = Field(min_length=1, max_length=2000)
+
+
+class LongitudinalCalibrationInput(EvidenceCaptureInput):
+    forecast_ids: list[UUID] = Field(min_length=1, max_length=100)
+
+
+def capture_reviewed_measurement(data, kind, actor, repositories):
+    allowed(repositories, actor, 'organization:manage')
+    payload = data.model_dump(mode='json', exclude={'operation_key'})
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).capture_measurement(
+        actor=actor, kind=kind, data=payload, operation_key=data.operation_key))
+
+
+@router.post('/enterprise/measurements/economic-period')
+def enterprise_measure_economic_period(data: EconomicPeriodInput, actor: Principal = Depends(authenticated),
+                                     repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'economic_period', actor, repositories)
+
+
+@router.post('/enterprise/measurements/economic-study')
+def enterprise_register_economic_study(data: EconomicStudyInput, actor: Principal = Depends(authenticated),
+                                      repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'economic_study', actor, repositories)
+
+
+@router.post('/enterprise/measurements/economic-comparison')
+def enterprise_compare_economic_periods(data: EconomicComparisonInput, actor: Principal = Depends(authenticated),
+                                      repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'economic_comparison', actor, repositories)
+
+
+@router.post('/enterprise/measurements/quality-subject')
+def enterprise_record_quality_subject(data: QualitySubjectInput, actor: Principal = Depends(authenticated),
+                                      repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'quality_subject', actor, repositories)
+
+
+@router.post('/enterprise/measurements/quality-study')
+def enterprise_register_quality_study(data: QualityStudyInput, actor: Principal = Depends(authenticated),
+                                     repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'quality_study', actor, repositories)
+
+
+@router.post('/enterprise/measurements/quality-sample')
+def enterprise_record_quality_sample(data: QualitySampleInput, actor: Principal = Depends(authenticated),
+                                    repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'quality_sample', actor, repositories)
+
+
+@router.post('/enterprise/measurements/quality-report')
+def enterprise_measure_quality_study(data: QualityReportInput, actor: Principal = Depends(authenticated),
+                                    repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'quality_report', actor, repositories)
+
+
+@router.post('/enterprise/measurements/metric-outcome')
+def enterprise_record_actual_metric(data: MetricOutcomeInput, actor: Principal = Depends(authenticated),
+                                    repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'metric_outcome', actor, repositories)
+
+
+@router.post('/enterprise/measurements/longitudinal-forecast')
+def enterprise_freeze_series_forecast(data: LongitudinalForecastInput, actor: Principal = Depends(authenticated),
+                                     repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'longitudinal_forecast', actor, repositories)
+
+
+@router.post('/enterprise/measurements/longitudinal-calibration')
+def enterprise_measure_series_accuracy(data: LongitudinalCalibrationInput, actor: Principal = Depends(authenticated),
+                                      repositories: RepositoryScope = Depends(repository_scope)):
+    return capture_reviewed_measurement(data, 'longitudinal_calibration', actor, repositories)
