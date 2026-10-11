@@ -314,9 +314,17 @@ class EnterpriseOperationsStore:
         if row is None:
             raise LookupError("Employee not found")
         tasks = self.connection.execute(
-            """SELECT id,action,status,created_at
-               FROM ago_governed_tasks WHERE tenant_id=%s AND assignee_id=%s
-               ORDER BY created_at DESC,id LIMIT 100""", (tenant, employee),
+            """SELECT t.id,t.action,t.status,t.created_at,s.plan_id,s.depends_on,p.goal_id
+               FROM ago_governed_tasks t
+               LEFT JOIN ago_plan_steps s ON s.tenant_id=t.tenant_id AND s.task_id=t.id
+               LEFT JOIN ago_strategy_plans p ON p.tenant_id=s.tenant_id AND p.id=s.plan_id
+               WHERE t.tenant_id=%s AND t.assignee_id=%s
+               ORDER BY t.created_at DESC,t.id LIMIT 100""", (tenant, employee),
+        ).fetchall()
+        horizon_assignments = self.connection.execute(
+            """SELECT horizon_plan_id,task_id,evidence_ref FROM ago_horizon_task_links
+               WHERE tenant_id=%s AND task_id=ANY(%s::uuid[]) ORDER BY created_at,id LIMIT 100""",
+            (tenant, [str(task["id"]) for task in tasks]),
         ).fetchall()
         active = sum(t["status"] == "running" for t in tasks)
         queued = sum(t["status"] in ("proposed", "waiting_approval", "ready") for t in tasks)
@@ -338,6 +346,8 @@ class EnterpriseOperationsStore:
             "department_id": str(row["department_id"]),
             "manager_id": str(row["manager_id"]) if row["manager_id"] else None,
             "current_tasks": current, "future_tasks": future,
+            "task_assignments": [dict(task) for task in tasks],
+            "horizon_assignments": [dict(link) for link in horizon_assignments],
             "active_count": active, "queued_count": queued,
             "capacity_units": capacity, "confidence": confidence,
             "confidence_calibrated": False,

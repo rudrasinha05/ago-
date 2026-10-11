@@ -217,6 +217,9 @@ def test_planning_rollup_uses_real_linked_qa_and_preserves_plan(case):
     assert result["task_lineage"][0]["task_id"] == task
     assert not result["automatically_approved"] and not result["tasks_executed"]
     assert result["proposal"]["base_revision"] == 1
+    state=client.get(BASE+"/agents/"+worker+"/state",headers=founder).json()
+    assert state["task_assignments"][0]["id"] == task
+    assert state["horizon_assignments"][0]["horizon_plan_id"] == child["id"]
 
 
 def test_local_offline_worker_stops_on_expired_session_and_never_reviews(monkeypatch):
