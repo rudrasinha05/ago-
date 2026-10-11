@@ -156,6 +156,8 @@ def test_twin_held_out_outcomes_and_private_calendar_exclusion(case):
         "operation_key": str(uuid4()), "starts_at": now.isoformat(), "ends_at": (now+timedelta(hours=1)).isoformat()})
     snapshot = post(client, BASE+"/twin/state", founder, {"operation_key": "state-v1"})
     assert snapshot["payload"]["departments"] and snapshot["payload"]["employees"]
+    assert next(x for x in snapshot["payload"]["employees"] if str(x["id"]) == worker)["availability"] == "available"
+    assert snapshot["payload"]["source_limits"]["calendar"] == 1000
     assert not any(str(x["id"]) == event["id"] for x in snapshot["payload"]["calendar"])
     params = {"operation_key": "forecast-v1", "snapshot_id": snapshot["id"], "task_ids": [future],
               "horizon_end": (now+timedelta(days=1)).isoformat()}
@@ -310,7 +312,8 @@ def test_actual_stored_asset_reuse_and_reviewed_sunset_impact(case):
     assert client.get(BASE+"/approval-details/"+request["approval_id"]).status_code == 401
     decide(client,reviewer,request["approval_id"])
     post(client,path+"/publish",founder)
-    saved=client.get(path+"/payload",headers=reviewer).json()
+    assert client.get(path+"/payload",headers=reviewer).status_code == 403
+    saved=client.get(path+"/payload",headers=founder).json()
     assert base64.b64decode(saved["content_base64"]) == content
     reuse=post(client,BASE+"/intents",founder,{"operation":"consume","target_id":asset,
         "parameters":{"department_id":dept,"evidence_ref":"actual:reviewed-use"}})

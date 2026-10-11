@@ -2437,8 +2437,14 @@ class EnterpriseOperationsStore:
                 (actor.tenant_id,),
             ).fetchall()
             employees = self.connection.execute(
-                """SELECT id,name,kind,department_id,manager_id FROM ago_employees
-                   WHERE tenant_id=%s ORDER BY id LIMIT 1000""", (actor.tenant_id,),
+                """SELECT e.id,e.name,e.kind,e.department_id,e.manager_id,
+                          coalesce(w.state,'available') AS availability,
+                          w.expires_at AS restriction_expires_at,w.created_at AS state_observed_at
+                   FROM ago_employees e
+                   LEFT JOIN LATERAL (SELECT state,expires_at,created_at
+                     FROM ago_worker_state_events WHERE tenant_id=e.tenant_id AND employee_id=e.id
+                     ORDER BY sequence DESC LIMIT 1) w ON true
+                   WHERE e.tenant_id=%s ORDER BY e.id LIMIT 1001""", (actor.tenant_id,),
             ).fetchall()
             calendar = self.connection.execute(
                 """SELECT id,task_id,goal_id,starts_at,ends_at,status FROM ago_calendar_events
@@ -2447,14 +2453,17 @@ class EnterpriseOperationsStore:
             ).fetchall()
             payload = {"model_version": "organization_projection_v1",
                        "departments": [dict(r) for r in departments],
-                       "employees": [dict(r) for r in employees], "tasks": observations[:1000],
+                       "employees": [dict(r) for r in employees[:1000]], "tasks": observations[:1000],
                        "horizon_plans": self.plans(tenant_id=actor.tenant_id),
                        "calendar": [dict(r) for r in calendar],
                        "capacity": self.capacity_limits(tenant_id=actor.tenant_id),
                        "queue": self.work_queue(tenant_id=actor.tenant_id),
                        "budgets": self.budgets(tenant_id=actor.tenant_id),
                        "observed_costs": self.costs(tenant_id=actor.tenant_id),
-                       "source_truncation": len(observations) > 1000,
+                       "source_truncation": len(observations) > 1000 or len(employees) > 1000,
+                       "source_limits": {"tasks":1000,"employees":1000,"departments":1000,
+                                         "calendar":1000,"horizon_plans":500,
+                                         "queue":100,"budgets":100,"observed_costs":100},
                        "sync_direction": "operational_to_twin_only",
                        "consistency": "eventually_consistent_read_projection",
                        "private_data": "excluded", "calibrated": False, "applied": False,
