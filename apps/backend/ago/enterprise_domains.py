@@ -184,18 +184,24 @@ def measured_economics(rows: Sequence[dict], qa: Sequence[dict], *, currency: st
         category = row["category"]
         totals[category] = totals.get(category, Decimal(0)) + _amount(str(row["observed_amount"]))
     passed = sum(r["verdict"] == "pass" and r["status"] == "completed" for r in qa)
-    return {"currency": currency, "observed_cost": analysis["observed_cost"],
-            "observed_revenue": analysis["observed_revenue"], "observed_net": analysis["observed_net"],
+    cost_known = any(k != "revenue" for k in totals)
+    revenue_known = "revenue" in totals
+    return {"currency": currency, "observed_cost": analysis["observed_cost"] if cost_known else None,
+            "observed_revenue": analysis["observed_revenue"] if revenue_known else None,
+            "observed_net": analysis["observed_net"] if cost_known and revenue_known else None,
             "category_totals": {k: str(v) for k, v in totals.items()},
             "missing_expense_categories": [k for k in EXPENSE_CATEGORIES if k not in totals],
             "qa_samples": len(qa), "qa_passed": passed,
             "qa_pass_rate": passed/len(qa) if qa else None,
-            "cost_per_qa_output": str(Decimal(analysis["observed_cost"])/passed) if passed else None,
+            "cost_per_qa_output": str(Decimal(analysis["observed_cost"])/passed) if passed and cost_known else None,
             "provider_authenticated": False, "financial_settlement": False,
             "limits": "Reviewed supplied records; absent categories and unreported value remain unknown. QA denominator is the selected cohort."}
 
 
 def compare_measured_economics(baseline: dict, candidate: dict, alternative: dict | None = None) -> dict:
+    if any(r.get(k) is None for r in [baseline, candidate] + ([alternative] if alternative else [])
+           for k in ("observed_cost", "observed_net")):
+        raise ValueError("Explicit measured costs and revenue required; missing records are unknown")
     if baseline["currency"] != candidate["currency"] or (
         alternative and alternative["currency"] != candidate["currency"]
     ):

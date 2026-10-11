@@ -77,6 +77,15 @@ def test_measured_expenses_missing_categories_observed_roi_and_safeguards():
         compare_measured_economics(before, {**after, "currency": "USD"})
 
 
+def test_absent_expenses_or_revenue_are_unknown_not_observed_zero():
+    only_expense = measured_economics([{"currency": "INR", "category": "model", "observed_amount": "100"}], [], currency="INR")
+    only_revenue = measured_economics([{"currency": "INR", "category": "revenue", "observed_amount": "200"}], [], currency="INR")
+    assert only_expense["observed_revenue"] is None and only_expense["observed_net"] is None
+    assert only_revenue["observed_cost"] is None and only_revenue["observed_net"] is None
+    with pytest.raises(ValueError, match="unknown"):
+        compare_measured_economics(only_expense, only_revenue)
+
+
 @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", True, "1e19"])
 def test_nonfinite_or_unbounded_measurement_denied(value):
     with pytest.raises(ValueError, match="Finite"):
@@ -160,10 +169,10 @@ def test_economic_comparison_prospective_actual_change_and_financial_outcomes(ca
     assert result["incremental_roi_pct"] == "87.5" and result["optimization_audit"]["change_id"] == actual["id"]
     assert result["recommendation"].startswith("retain") and not result["automatically_applied"]
     post(client, MEASURE+"economic-comparison", f, {**params, "operation_key": "same", "candidate_period_id": before["id"]}, expected=400)
-    metric = {"operation_key": "actual-cost", "series": {"dimension": "cost", "metric": "spend", "unit": "INR", "entity_ref": "company"},
+    metric = {"operation_key": "actual-cost", "series": {"dimension": "cost", "metric": "total_cost", "unit": "INR", "entity_ref": "company"},
               "period_start": start.isoformat(), "period_end": end.isoformat(), "economic_period_id": after["id"], "source_ref": "reviewed period", "methodology": "Exact reconciled total"}
     outcome = post(client, MEASURE+"metric-outcome", f, metric)
-    assert outcome["payload"]["value"] == "80" and outcome["payload"]["economic_period_digest"] == after["digest"]
+    assert Decimal(outcome["payload"]["value"]) == 80 and outcome["payload"]["economic_period_digest"] == after["digest"]
     post(client, MEASURE+"metric-outcome", f, {**metric, "operation_key": "fake", "value": "999"}, expected=400)
     post(client, MEASURE+"metric-outcome", f, {**metric, "operation_key": "duplicate"}, expected=400)
 

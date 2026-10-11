@@ -3201,6 +3201,8 @@ class EnterpriseOperationsStore:
             ).fetchone()
             if not row or row["currency"] != data["currency"] or row["created_at"] > end:
                 raise PermissionError("Same-currency approved company budget effective before period end required")
+            if analysis["observed_cost"] is None:
+                raise ValueError("Observed expenses required to compare a spending envelope")
             ceiling, spend = row["approved_ceiling"], Decimal(analysis["observed_cost"])
             budget = {"id": str(row["id"]), "approval_id": str(row["approval_id"]), "ceiling": str(ceiling),
                       "variance": str(spend-ceiling), "within_envelope": spend <= ceiling,
@@ -3353,7 +3355,19 @@ class EnterpriseOperationsStore:
             payload = period["payload"]
             if payload["currency"] != series["unit"] or (payload["period_start"], payload["period_end"]) != (start.isoformat(), end.isoformat()) or series["entity_ref"] != "company":
                 raise ValueError("Exact-period same-currency company financial series required")
-            value = payload["observed_cost" if series["dimension"] == "cost" else "observed_revenue"]
+            if series["dimension"] == "revenue":
+                if series["metric"] != "total_revenue":
+                    raise ValueError("Revenue series metric must be total_revenue")
+                value = payload["observed_revenue"]
+            else:
+                if series["metric"] == "total_cost":
+                    value = payload["observed_cost"]
+                elif series["metric"] in ("model", "storage", "execution", "tool", "time", "other"):
+                    value = payload["category_totals"].get(series["metric"])
+                else:
+                    raise ValueError("Cost metric must be total_cost or an exact recorded expense category")
+            if value is None:
+                raise ValueError("Unobserved financial dimension/category cannot become a zero outcome")
             source = {"economic_period_id": str(period["id"]), "economic_period_digest": period["digest"],
                       "economic_period_review": period["approval_id"], "provider_authenticated": False}
         else:

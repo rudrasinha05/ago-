@@ -1060,7 +1060,7 @@ const sourceFields=()=>[{name:"source_file",label:"Exact source file (up to 200K
   {...textField("content","Or paste exact actual source text",180000),required:false}];
 const periodFields=()=>[timeField("period_start","Period starts"),timeField("period_end","Period ends")];
 const seriesFields=()=>[selectField("dimension","Outcome dimension",["cost","revenue","growth","market","risk","headcount"].map(x=>choose(x,x))),
-  textField("metric","Stable metric name, e.g. total spend / customer count",160),{name:"unit",label:"Unit: currency, count, percent or probability",value:"INR",maxLength:160},
+  textField("metric","Stable metric: total_cost, total_revenue, expense category, or customer count",160),{name:"unit",label:"Unit: currency, count, percent or probability",value:"INR",maxLength:160},
   {name:"entity_ref",label:"Organization / measured entity",value:"company",maxLength:160}];
 const seriesValue=v=>({dimension:v.dimension,metric:v.metric,unit:v.unit,entity_ref:v.entity_ref});
 async function measurementForm(command,ctx) {
