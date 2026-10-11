@@ -13,6 +13,8 @@ import pytest
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import interrupt, Command
+from ago.agent_handlers import BUILTIN_HANDLERS
+from ago.workflows import GovernedTask, TaskStatus
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
 from test_m7_http_postgres import case as case, post, decide  # noqa: E402
@@ -22,7 +24,7 @@ from test_section29_constitution import emergency  # noqa: E402
 class State(TypedDict, total=False):
     approved: bool
     status: int
-    result: str
+    result: str | dict | None
 
 
 def graph(node, *, checkpoint=None):
@@ -68,17 +70,24 @@ def test_native_graph_and_actual_ago_boundary_same_local_operation(case, conditi
     else:
         auth = f
     baseline_calls = []
+    same_task = GovernedTask(task["id"], info["tenant"], "internal:brief", worker["id"],
+                             TaskStatus.RUNNING, request["request_id"])
     def direct(_):
         baseline_calls.append("fixed_local_operation")
-        return {"status":200,"result":"fixed_local_output"}
+        return {"status":200,"result":BUILTIN_HANDLERS["internal:brief"](same_task)}
     def governed(_):
         response = client.post(f"/v1/agents/tasks/{task['id']}/run", headers=auth, json={})
-        return {"status":response.status_code}
+        return {"status":response.status_code, "result":response.json().get("result")}
     plain = graph(direct).invoke({})
     mediated = graph(governed).invoke({})
     expected = 200 if condition == "approved" else 403
     assert plain["status"] == 200 and len(baseline_calls) == 1
     assert mediated["status"] == expected
+    assert plain["result"]["task_id"] == task["id"]
+    if condition == "approved":
+        assert mediated["result"] == plain["result"]
+    else:
+        assert mediated["result"] is None
     runs = client.get("/v1/agents/runs",headers=f).json()
     assert len(runs) == (1 if condition == "approved" else 0)
     if condition == "approved":
@@ -87,4 +96,6 @@ def test_native_graph_and_actual_ago_boundary_same_local_operation(case, conditi
     print(json.dumps({"condition":condition,"unmediated_test_app":plain["status"],
                       "graph_through_ago":mediated["status"],"actual_runs":len(runs),
                       "langgraph":version("langgraph"),"model_calls":0,
+                      "same_handler":"ago.agent_handlers.internal_brief",
+                      "matching_output":mediated["result"] == plain["result"] if condition == "approved" else None,
                       "scope":"application_authority_not_framework_superiority"},sort_keys=True))

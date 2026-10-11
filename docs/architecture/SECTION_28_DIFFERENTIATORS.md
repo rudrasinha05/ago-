@@ -48,7 +48,9 @@ python -m pytest -q -s tests_comparative tests/test_section28_comparison.py
 
 The same native LangGraph1.2.13 StateGraph runs a fixed local operation, first as
 an unmediated **test application**, then through the actual AGO signed HTTP task
-boundary. The input, graph topology and local output are controlled. Tested factors:
+boundary. Both arms invoke the same `ago.agent_handlers.internal_brief` function
+with the same immutable task identity; the independently approved arm must produce
+the identical output. The input and graph topology are controlled. Tested factors:
 missing approval, independent approval, constitutional containment, foreign tenant
 and single execution. A separate actual checkpoint/interrupt/resume experiment
 demonstrates LangGraph's own human-feedback capability. No provider/model/API key,
