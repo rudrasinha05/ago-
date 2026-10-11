@@ -2324,6 +2324,16 @@ class EnterpriseOperationsStore:
                  AND task_id=ANY(%s::uuid[]) ORDER BY starts_at,id LIMIT 1000""",
             (actor.tenant_id, sorted(task_ids)),
         ).fetchall()
+        temporal = self.repositories.resolve(CalendarStore).temporal_snapshot(tenant_id=actor.tenant_id)
+        present = {str(x['id']) for x in calendar}
+        for link in temporal['links']:
+            if link.get('task_id') in task_ids and link['event_id'] not in present:
+                event = self.connection.execute("""SELECT id,task_id,goal_id,starts_at,ends_at FROM ago_calendar_events
+                    WHERE tenant_id=%s AND id=%s AND visibility='tenant' AND status='scheduled'""",
+                    (actor.tenant_id, link['event_id'])).fetchone()
+                if event:
+                    calendar.append({**dict(event), 'task_id': link['task_id'], 'goal_id': link.get('goal_id'),
+                                     'calendar_link_source': link['event_id']})
         conflicts = []
         windows = {}
         for link in links:
@@ -2347,7 +2357,7 @@ class EnterpriseOperationsStore:
                    "hierarchy": [index[x] for x in sorted(descendants)],
                    "task_lineage": [dict(link) for link in links], "tasks": tasks,
                    "goal_ids": sorted({str(t["goal_id"]) for t in tasks if t["goal_id"]}),
-                   "calendar": [dict(e) for e in calendar], "temporal_state": self.repositories.resolve(CalendarStore).temporal_snapshot(tenant_id=actor.tenant_id), "conflicts": conflicts,
+                   "calendar": [dict(e) for e in calendar], "temporal_state": temporal, "conflicts": conflicts,
                    "qa_passed": sum(t["status"] == "completed" and t["verdict"] == "pass" for t in tasks),
                    "qa_failed": len(failed), "awaiting_qa": sum(t["verdict"] is None for t in tasks),
                    "replan_reasons": {"failed_task_ids": failed, "dependency_task_ids": blocked,
@@ -2538,12 +2548,19 @@ class EnterpriseOperationsStore:
                    WHERE e.tenant_id=%s AND e.kind='metric_outcome'
                    ORDER BY e.payload->>'series_key',e.created_at DESC,e.id DESC LIMIT 1001""", (actor.tenant_id,),
             ).fetchall()
+            temporal = self.repositories.resolve(CalendarStore).temporal_snapshot(tenant_id=actor.tenant_id)
+            event_links = {x['event_id']: x for x in temporal['links']}
+            projected_calendar = [{**dict(row),
+                **({'task_id': event_links[str(row['id'])].get('task_id'),
+                    'goal_id': event_links[str(row['id'])].get('goal_id'),
+                    'calendar_link_source': str(row['id'])} if str(row['id']) in event_links else {})}
+                for row in calendar[:1000]]
             payload = {"model_version": "organization_projection_v1",
                        "departments": [dict(r) for r in departments[:1000]],
                        "employees": [dict(r) for r in employees[:1000]], "tasks": observations[:1000],
                        "horizon_plans": self.plans(tenant_id=actor.tenant_id),
-                       "calendar": [dict(r) for r in calendar[:1000]],
-                       "temporal_state": self.repositories.resolve(CalendarStore).temporal_snapshot(tenant_id=actor.tenant_id),
+                       "calendar": projected_calendar,
+                       "temporal_state": temporal,
                        "capacity": self.capacity_limits(tenant_id=actor.tenant_id),
                        "queue": self.work_queue(tenant_id=actor.tenant_id),
                        "budgets": self.budgets(tenant_id=actor.tenant_id),

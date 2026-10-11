@@ -99,3 +99,13 @@ production scheduling/distribution and competitive performance claims are not
 silently accepted. Support/emergency coverage reports do not enlarge authority.
 The owner's pasted Windows log independently confirms applied040 and doctor ready;
 041 and the new UI remain owner-local acceptance after the final batch pull.
+
+## Section30 first CI checkpoint (not accepted)
+
+Initialdea020bf CI38135623639/38135623641 was not accepted: the focused suite
+passed68/72, but four admission cases supplied60 seconds below the unchanged
+minimum300-second queue lease. The full backend gate also rejected the unrefreshed
+reviewed module-inventory artifact before tests. Fixtures were corrected to300;
+source-derived inventory was regenerated. No admission rule or test was removed.
+Review also connected newly reviewed event/task links into planning and actual
+Twin deadline projection, with a specific source-lineage assertion.

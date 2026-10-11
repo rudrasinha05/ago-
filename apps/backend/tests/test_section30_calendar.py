@@ -148,7 +148,7 @@ def test_approved_task_and_queue_block_then_reviewed_cancellation_restores_execu
     item,_ = proposal(client,f,'window',window(kind))
     apply(client,f,r,item)
     _enqueue(client,f,task,90)
-    leased = post(client,'/v1/operations/enterprise/work-queue/claim',f,{'lease_seconds':60})
+    leased = post(client,'/v1/operations/enterprise/work-queue/claim',f,{'lease_seconds':300})
     assert leased['queue_id'] is None
     for path in ('/v1/agents/tasks/'+task+'/run','/v1/tasks/'+task+'/start'):
         post(client,path,f,expected=403)
@@ -160,7 +160,7 @@ def test_approved_task_and_queue_block_then_reviewed_cancellation_restores_execu
     assert info['db'].execute('SELECT count(*) AS n FROM ago_agent_runs WHERE tenant_id=%s',(info['tenant'],)).fetchone()['n'] == 0
     cancellation,_ = proposal(client,f,'window_cancel',dict(window_id=item['id']))
     apply(client,f,r,cancellation)
-    assert post(client,'/v1/operations/enterprise/work-queue/claim',f,{'lease_seconds':60})['task_id'] == task
+    assert post(client,'/v1/operations/enterprise/work-queue/claim',f,{'lease_seconds':300})['task_id'] == task
     post(client,'/v1/agents/tasks/'+task+'/run',f)
     post(client,'/v1/agents/tasks/'+task+'/run',f,expected=403)
     kinds = [x['kind'] for x in client.get(BASE+'/governance',headers=f).json()['signals']]
@@ -249,6 +249,9 @@ def test_task_event_deadline_applies_to_direct_start_and_queue(case):
     post(client,'/v1/agents/tasks/'+task+'/run',f,expected=403)
     result = client.get(BASE+'/eligibility',headers=f,params=dict(employee_id=worker,task_id=task,at=now.isoformat(),duration_minutes=30)).json()
     assert result['eligible']
+    twin = post(client,'/v1/operations/enterprise/twin/state',f,{'operation_key':str(uuid4())})
+    projected = next(e for e in twin['payload']['calendar'] if e['id']==identifier)
+    assert projected['task_id'] == task and projected['calendar_link_source'] == identifier
     missed = client.get(BASE+'/eligibility',headers=f,params=dict(employee_id=worker,task_id=task,at=(now+timedelta(hours=2)).isoformat(),duration_minutes=30,search_days=0)).json()
     assert 'deadline_window_missed' in missed['reasons'] and missed['search_status']=='not_found'
 
@@ -316,3 +319,49 @@ def test_rsvp_replacement_invites_and_exact_source_history(case):
     assert invites[0]['response'] == 'invited'
     post(client,BASE+'/'+replacement+'/rsvp',r,dict(response='accepted'))
     assert client.get(BASE+'/'+replacement+'/history',headers=r).json()[-1]['event']=='accepted'
+
+
+def test_trusted_tool_runtime_cannot_bypass_calendar_even_with_exact_approval(case):
+    from ago.tool_runtime import EnterpriseToolRuntime
+    from test_m8_http_postgres import enroll
+    client,h,info = case
+    f,r = h['founder'],h['reviewer']
+    worker = employee(client,f,department(client,f))
+    enroll(client,f,r,'tool:scorecard')
+    task = post(client,'/v1/tasks',f,{'assignee_id':worker,'action':'tool:scorecard'})['id']
+    approval = post(client,'/v1/governance/approvals',f,{'action':'tool:scorecard'})
+    post(client,'/v1/tasks/'+task+'/approval',f,{'approval_id':approval['request_id']})
+    decide(client,r,approval['request_id'])
+    barrier,_ = proposal(client,f,'window',window())
+    apply(client,f,r,barrier)
+    post(client,'/v1/tools/tasks/'+task+'/run',f,expected=403)
+    calls = []
+    def handler(_task):
+        calls.append('executed')
+        return {'bounded_read_only':True}
+    runtime = EnterpriseToolRuntime(info['db'],trusted_handlers={'tool:scorecard':handler})
+    actor = Principal(info['founder_id'],info['tenant'],('founder',))
+    with pytest.raises(PermissionError,match='Calendar'):
+        runtime.run(task_id=task,actor=actor)
+    assert calls == []
+    cancelled,_ = proposal(client,f,'window_cancel',{'window_id':barrier['id']})
+    apply(client,f,r,cancelled)
+    runtime.run(task_id=task,actor=actor)
+    assert calls == ['executed']
+    with pytest.raises(PermissionError):
+        runtime.run(task_id=task,actor=actor)
+
+
+def test_company_department_employee_constraints_combine_instead_of_overriding(case):
+    client,h,info = case
+    f,r = h['founder'],h['reviewer']
+    dept = department(client,f)
+    worker = employee(client,f,dept)
+    now = datetime.now(timezone.utc)
+    for spec in [dict(holidays=[now.date().isoformat()]),
+                 dict(scope_kind='department',scope_id=dept,timezone='Asia/Kolkata'),
+                 dict(scope_kind='employee',scope_id=worker,start='00:00',end='24:00')]:
+        item,_ = proposal(client,f,'policy',spec)
+        apply(client,f,r,item)
+    result = client.get(BASE+'/eligibility',headers=f,params=dict(employee_id=worker,at=now.isoformat(),search_days=0)).json()
+    assert result['policy_count']==3 and 'holiday' in result['reasons'] and not result['eligible']

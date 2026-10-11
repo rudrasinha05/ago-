@@ -26,7 +26,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [auth_guard](../../apps/backend/ago/auth_guard.py) | transport | transport | security |
 | [backend_contracts](../../apps/backend/ago/backend_contracts.py) | platform | foundation | None |
 | [bootstrap](../../apps/backend/ago/bootstrap.py) | entrypoints | composition | identity, organization_store, security_controls |
-| [calendar_store](../../apps/backend/ago/calendar_store.py) | operations | persistence | backend_contracts, security |
+| [calendar_store](../../apps/backend/ago/calendar_store.py) | operations | persistence | backend_contracts, enterprise_domains, governance, security, security_controls |
 | [console_api](../../apps/backend/ago/console_api.py) | transport | transport | api_m2, backend_contracts, repository_ports, security |
 | [console_host](../../apps/backend/ago/console_host.py) | transport | transport | None |
 | [console_service](../../apps/backend/ago/console_service.py) | governance | service | backend_contracts, console_store, governance, security, task_store |
@@ -39,7 +39,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [department_automation_queries](../../apps/backend/ago/department_automation_queries.py) | operations | persistence | backend_contracts |
 | [dna_domain](../../apps/backend/ago/dna_domain.py) | strategy | domain | None |
 | [enterprise_domains](../../apps/backend/ago/enterprise_domains.py) | operations | domain | None |
-| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | architecture_guard, backend_contracts, enterprise_domains, governance_domain, security |
+| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | architecture_guard, backend_contracts, calendar_store, enterprise_domains, governance_domain, security |
 | [event_contracts](../../apps/backend/ago/event_contracts.py) | platform | domain | events |
 | [event_migrations](../../apps/backend/ago/event_migrations.py) | platform | foundation | None |
 | [event_runtime](../../apps/backend/ago/event_runtime.py) | entrypoints | composition | event_migrations, event_worker, events, postgres_event_store |
@@ -106,7 +106,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [sso_provider](../../apps/backend/ago/sso_provider.py) | governance | foundation | security, security_material |
 | [storage_adapters](../../apps/backend/ago/storage_adapters.py) | platform | foundation | None |
 | [storage_ops](../../apps/backend/ago/storage_ops.py) | entrypoints | composition | backend_contracts, database_store, storage_adapters |
-| [task_store](../../apps/backend/ago/task_store.py) | workforce | persistence | backend_contracts, security, security_controls, workflows |
+| [task_store](../../apps/backend/ago/task_store.py) | workforce | persistence | backend_contracts, calendar_store, security, security_controls, workflows |
 | [tool_catalog](../../apps/backend/ago/tool_catalog.py) | operations | service | backend_contracts, scorecard, tool_catalog_queries |
 | [tool_catalog_queries](../../apps/backend/ago/tool_catalog_queries.py) | operations | persistence | backend_contracts |
 | [tool_enrollment](../../apps/backend/ago/tool_enrollment.py) | operations | service | backend_contracts, governance, security, tool_catalog, tool_enrollment_queries |
