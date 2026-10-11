@@ -1585,3 +1585,24 @@ def enterprise_plan_review_intents(
     allowed(repositories, actor, "operations:read")
     return repositories.resolve(EnterpriseOperationsStorePort).pending_plan_revisions(
         tenant_id=actor.tenant_id)
+
+
+@router.get("/enterprise/agents/review-intents")
+def enterprise_agent_review_intents(
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "operations:read")
+    return repositories.resolve(EnterpriseOperationsStorePort).pending_agent_evidence(
+        tenant_id=actor.tenant_id)
+
+
+@router.get("/enterprise/approval-details/{approval_id}")
+def enterprise_approval_details(
+    approval_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "approval:decide")
+    return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).approval_details(
+        tenant_id=actor.tenant_id, approval_id=str(approval_id)))

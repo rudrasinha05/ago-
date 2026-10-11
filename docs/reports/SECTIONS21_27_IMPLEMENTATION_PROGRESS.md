@@ -98,3 +98,8 @@ Signed API: `GET/POST /v1/operations/enterprise/work-queue`, `POST /work-queue/c
 **Still remaining in full frozen scope:** a self-running opt-in local worker service with crash/retry operational acceptance, full guided organizational life-cycle UI, independently source-validated competence and permission-aware scheduling, automatically propagated strategy-to-calendar-to-approved-task versions, production/provider-verified finance and real ROI, policy/prompt changes with independently reviewed execution/rollback, and real empirical Digital Twin forecast calibration. Do not mark any of these complete merely because an API, stored scenario or review proposal exists.
 
 **Migration/operator status:** SQL 036 and prior additions are present **only in the repository and disposable CI**; founder's Windows database has not been touched. No production deployment, provider invoice or local upgrade is claimed.
+
+
+## Consolidated remaining local engineering batch — 2026-10-11
+
+See `SECTIONS21_27_FINAL_BATCH.md` for the current source-linked implementation, review workflows, local worker, QA-backed diagnostics and held-out forecast metrics. Historical remaining-feature lists above are superseded only where that report identifies a delivered workflow. Genuine economics, broad longitudinal calibration, continuous autonomous production synchronization and founder Windows acceptance retain their explicit incomplete status. Final source-head CI evidence is pending.

@@ -106,11 +106,12 @@ async function reviewApproval(ctx, id, initial = "approved") {
   }
   let details = null;
   if(request?.action?.startsWith("enterprise:")) {
-    const paths=["/evidence?kind=intent","/organization/intents","/planning/review-intents"];
-    const results=await Promise.allSettled(paths.map(path=>ctx.api.request("/v1/operations/enterprise"+path)));
-    for(const result of results)if(result.status==="fulfilled" && Array.isArray(result.value)) {
-      const found=result.value.find(x=>x.approval_id===id || x.payload?.approval_id===id);
-      if(found)details=found;
+    details=await ctx.api.request("/v1/operations/enterprise/approval-details/"+id);
+    if(details?.details?.content_base64) {
+      if(["text/plain","text/markdown","application/json"].includes(details.details.content_type)) {
+        details.details.text_content=new TextDecoder().decode(Uint8Array.from(atob(details.details.content_base64),x=>x.charCodeAt(0)));
+      }
+      delete details.details.content_base64;
     }
   }
   openDialog(ctx, {
@@ -764,6 +765,15 @@ async function enterpriseAction(key,id,ctx) {
     confirmation(ctx,"Apply reviewed organization change","The exact saved request will be applied after the server verifies independent approval.",
       async()=>{await post("/organization/apply",{...intent.payload,approval_id:intent.approval_id});return "Organization change applied.";});return;
   }
+  if(key==="enterprise-agent-intent" || key==="enterprise-apply-agent") {
+    const item=(resource(state.data,"enterpriseAgentIntents") || []).find(x=>x.id===uuid(id));
+    if(!item)throw new Error("Saved employee evidence request missing.");
+    if(key==="enterprise-agent-intent") {showEvidence(ctx,"Reported employee evidence",item);return;}
+    confirmation(ctx,"Record reviewed employee evidence","This records the exact reviewed claim. Confidence stays uncalibrated and grants no authority.",async()=>{
+      await post("/agents/"+item.employee_id+"/evidence/"+item.id+"/apply",{approval_id:item.approval_id});
+      return "Reviewed reported evidence recorded.";
+    });return;
+  }
   if(key==="enterprise-apply-revision") {
     const item=(resource(state.data,"enterpriseRevisions") || []).find(x=>x.id===uuid(id));
     if(!item)throw new Error("Revision intent missing.");
@@ -804,6 +814,7 @@ async function enterpriseAction(key,id,ctx) {
       choose("cycle","Capture operating lifecycle"),choose("hr","Hire / promote / retire / department change"),
       choose("mode","Company / department operating mode"),choose("worker","AI availability / pause / sleep / resume"),
       choose("capacity","Execution capacity"),choose("assessment","Assess AI competence from actual QA"),
+      choose("agent-state","Inspect employee state and autonomy boundaries"),choose("agent-evidence","Propose reported skills / confidence / learning evidence"),
       choose("help","Request assistance / refuse unsafe work"),choose("resolve","Resolve reviewed assistance"),
       choose("plan","Create approved planning horizon"),choose("rollup","Capture planning feedback and conflicts"),
       choose("replan","Propose a versioned plan revision"),choose("plan-link","Link an approved task to a horizon"),
@@ -869,6 +880,20 @@ async function enterpriseForm(command,ctx) {
       if(command==="capacity")Object.assign(params,{max_running:Number(v.max_running),rationale:v.reason});
       if(command==="budget")Object.assign(params,{ceiling:v.ceiling,currency:v.currency});
       return intent(command,null,params);
+    };
+  } else if(command==="agent-state") {
+    mustHave(ai,"Create an AI employee first.");
+    openDialog(ctx,{title:"Employee state",description:"Inspect actual assignments, dependencies and permission boundaries.",fields:[entity("employee_id","AI employee",ai)],button:"Inspect",refresh:false,onSubmit:async v=>{
+      const [state,autonomy]=await Promise.all([api.request(base+"/agents/"+v.employee_id+"/state"),api.request(base+"/agents/"+v.employee_id+"/autonomy")]);
+      setTimeout(()=>showEvidence(ctx,"Operational employee state",{state,autonomy}),0);
+      return "Employee state loaded.";
+    }});return;
+  } else if(command==="agent-evidence") {
+    mustHave(ai,"Create an AI employee first.");
+    fields=[entity("employee_id","AI employee",ai),selectField("kind","Evidence category",["skill","knowledge","confidence","risk","learning","permission_awareness"].map(x=>choose(x,x))),{name:"label",label:"Evidence label",maxLength:160},numericField("value_int","Reported confidence (only for confidence)",50,100),textField("evidence_ref","Source reference",1024),textField("note","Reviewed observation",2000)];
+    submit=async v=>{
+      await post("/agents/"+v.employee_id+"/evidence/approval",{kind:v.kind,label:v.label,value_int:v.kind==="confidence"?Number(v.value_int):null,evidence_ref:v.evidence_ref,note:v.note});
+      return "Exact employee evidence saved for independent review. Claims do not grant permissions or establish mastery.";
     };
   } else if(command==="worker" || command==="assessment") {
     mustHave(ai,"Create an AI employee first.");fields=[entity("employee_id","AI employee",ai)];

@@ -2579,3 +2579,61 @@ class EnterpriseOperationsStore:
                WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id LIMIT 100""",
             (str(UUID(tenant_id)),),
         ).fetchall()]
+
+    def pending_agent_evidence(self, *, tenant_id: str) -> list[dict]:
+        return [dict(r) for r in self.connection.execute(
+            """SELECT i.id,i.employee_id,i.actor_id,i.approval_id,i.kind,i.label,
+                      i.value_int,i.evidence_ref,i.note,i.digest,a.status,
+                      e.created_at AS applied_at
+               FROM ago_agent_evidence_intents i
+               JOIN ago_approval_requests a ON a.tenant_id=i.tenant_id AND a.id=i.approval_id
+               LEFT JOIN ago_agent_evidence_events e ON e.tenant_id=i.tenant_id AND e.intent_id=i.id
+               WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id LIMIT 100""",
+            (str(UUID(tenant_id)),),
+        ).fetchall()]
+
+    def approval_details(self, *, tenant_id: str, approval_id: str) -> dict:
+        """Exact request lookup, independent of bounded dashboard pagination."""
+        tenant, approval = str(UUID(tenant_id)), str(UUID(approval_id))
+        request = self.connection.execute(
+            "SELECT id,requester_id,action,status FROM ago_approval_requests WHERE tenant_id=%s AND id=%s",
+            (tenant, approval),
+        ).fetchone()
+        if not request:
+            raise LookupError("Approval request not found")
+        intent = self.connection.execute(
+            "SELECT id,payload,digest FROM ago_enterprise_evidence WHERE tenant_id=%s AND kind='intent' AND operation_key=%s",
+            (tenant, approval),
+        ).fetchone()
+        details = dict(intent) if intent else None
+        evidence = self.connection.execute(
+            """SELECT id,kind,payload,digest,created_at FROM ago_enterprise_evidence
+               WHERE tenant_id=%s AND %s=('enterprise:evidence:' || id::text || ':' || digest)""",
+            (tenant, request["action"]),
+        ).fetchone()
+        if evidence:
+            details = dict(evidence)
+        # Fixed SQL identifiers only; caller cannot select a table or statement.
+        for statement in (
+            "SELECT * FROM ago_organization_review_intents WHERE tenant_id=%s AND approval_id=%s",
+            "SELECT * FROM ago_horizon_replan_intents WHERE tenant_id=%s AND approval_id=%s",
+            "SELECT * FROM ago_agent_evidence_intents WHERE tenant_id=%s AND approval_id=%s",
+        ):
+            row = self.connection.execute(statement, (tenant, approval)).fetchone()
+            if row:
+                details = dict(row)
+        asset = self.connection.execute(
+            """SELECT a.id,a.name,a.version,a.digest,a.license_id,a.manifest,
+                      p.content_type,p.payload FROM ago_marketplace_assets a
+               LEFT JOIN ago_marketplace_payloads p ON p.tenant_id=a.tenant_id AND p.asset_id=a.id
+               WHERE a.tenant_id=%s AND a.approval_id=%s""", (tenant, approval),
+        ).fetchone()
+        if asset:
+            import base64
+            details = dict(asset)
+            raw = details.pop("payload")
+            details["content_base64"] = base64.b64encode(bytes(raw)).decode() if raw is not None else None
+            details["content_available"] = raw is not None
+        return {"request": dict(request), "details": details,
+                "legacy_action_only": details is None,
+                "authority_granted": False}

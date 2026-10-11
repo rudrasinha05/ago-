@@ -101,7 +101,7 @@ def test_exact_intent_survives_reload_and_blocks_substitution_and_self_review(ca
     assert post(client, path, founder)["result"]["max_running"] == 3
     assert post(client, path, founder)["idempotent"]
     post(client, BASE+"/intents", founder, {"operation": "capacity", "parameters": {
-        **params, "authorized": True}}, expected=422)
+        **params, "authorized": True}}, expected=400)
 
 
 def test_evidence_review_immutability_and_tenant_isolation(case):
@@ -110,6 +110,8 @@ def test_evidence_review_immutability_and_tenant_isolation(case):
     snapshot = post(client, BASE+"/cycle", founder, {"operation_key": "cycle-v1"})
     assert not snapshot["payload"]["authority_changed"]
     request = post(client, BASE+"/evidence/"+snapshot["id"]+"/approval", founder)
+    details = client.get(BASE+"/approval-details/"+request["approval_id"], headers=reviewer).json()
+    assert details["details"]["digest"] == snapshot["digest"]
     path = BASE+"/evidence/"+snapshot["id"]+"/review"
     post(client, path, founder, {"approval_id": request["approval_id"]}, expected=403)
     decide(client, reviewer, request["approval_id"])
@@ -138,7 +140,7 @@ def test_competence_and_evolution_read_actual_qa_sources(case):
               "hypothesis": "Compare observed internal QA", "rollback_plan": "Retain original approved workflow"}
     compared = post(client, BASE+"/evolution/experiment", founder, params)["payload"]
     assert compared["pass_rate_delta"] == 0 and not compared["applied"]
-    post(client, BASE+"/evolution/experiment", founder, {**params, "candidate_task_ids": [first]}, expected=422)
+    post(client, BASE+"/evolution/experiment", founder, {**params, "candidate_task_ids": [first]}, expected=400)
     diagnostics = post(client, BASE+"/evolution/diagnostics", founder, {"operation_key": "diagnostic"})["payload"]
     assert diagnostics["grouped_observations"]["prompt_or_handler:internal:brief"]["reviewed"] == 2
 
@@ -187,7 +189,7 @@ def test_finance_analysis_requires_same_tenant_deduplicated_records(case):
     assert result["payload"]["incremental_roi_pct"] == "50"
     assert post(client, BASE+"/finance/assessment", founder, params)["idempotent"]
     post(client, BASE+"/finance/assessment", founder, {**params, "cost_ids": [str(uuid4())]}, expected=404)
-    post(client, BASE+"/finance/assessment", founder, {**params, "currency": "USD"}, expected=422)
+    post(client, BASE+"/finance/assessment", founder, {**params, "currency": "USD"}, expected=400)
 
 
 def test_planning_rollup_uses_real_linked_qa_and_preserves_plan(case):
@@ -195,10 +197,12 @@ def test_planning_rollup_uses_real_linked_qa_and_preserves_plan(case):
     client, headers, _ = case
     founder, reviewer = headers["founder"], headers["reviewer"]
     parent = _create(client, founder, reviewer)
-    child = _create(client, founder, reviewer, parent=parent["id"], horizon="five_year", budget="100")
+    child = _create(client, founder, reviewer, parent=parent["id"], horizon="five_year", budget="100",
+                    start=datetime.now(timezone.utc)-timedelta(days=2),
+                    end=datetime.now(timezone.utc)+timedelta(days=350))
     worker = employee(client, founder, department(client, founder))
     task = _approved_task(client, founder, reviewer, worker)
-    intent = post(client, BASE+"/intents", founder, {"operation":"link", "target_id":child["id"],
+    intent = post(client, BASE+"/intents", founder, {"operation":"link",
         "parameters":{"horizon_plan_id":child["id"],"task_id":task,"evidence_ref":"actual:strategic-link"}})
     decide(client, reviewer, intent["approval_id"])
     post(client, BASE+"/intents/"+intent["id"]+"/apply", founder)
@@ -240,3 +244,82 @@ def test_local_offline_worker_stops_on_expired_session_and_never_reviews(monkeyp
     assert [r[0].rsplit("/",1)[-1] for r in requests] == ["sessions","offline-claim","run","offline-claim"]
     assert requests[0][2].get("Authorization") is None
     assert all(r[2]["Authorization"] == "Bearer memory-only" for r in requests[1:])
+
+
+@pytest.mark.parametrize("operation,parameters,target", [
+    ("mode", {"target":"paused","expires_at":"2026-10-12T00:00:00Z","rationale":"Reviewed restriction"}, False),
+    ("worker", {"state":"available","reason":"Reviewed resume"}, True),
+    ("capacity", {"scope_kind":"company","max_running":2,"rationale":"Reviewed limits"}, False),
+    ("plan", {"horizon":"lifetime","title":"Reviewed strategy","starts_at":"2026-10-10T00:00:00Z","ends_at":"2027-10-10T00:00:00Z","budget_ceiling":"100","evidence_ref":"actual:strategy"}, False),
+    ("budget", {"scope_kind":"company","ceiling":"100","currency":"INR"}, False),
+    ("consume", {"department_id":"11111111-1111-4111-8111-111111111111","evidence_ref":"reviewed:reuse"}, True),
+    ("retire", {"target_state":"deprecated","reason":"Reviewed successor"}, True),
+    ("link", {"horizon_plan_id":"11111111-1111-4111-8111-111111111111","task_id":"22222222-2222-4222-8222-222222222222","evidence_ref":"reviewed:lineage"}, False),
+    ("resolve", {"outcome":"resolved","explanation":"Reviewed actual remediation"}, True),
+])
+def test_typed_saved_intent_whitelist_and_authority_injection(operation,parameters,target):
+    from ago.api_operations import EnterpriseActionIntentInput, validate_action_intent
+    identifier=str(uuid4()) if target else None
+    request=EnterpriseActionIntentInput(operation=operation, parameters=parameters, target_id=identifier)
+    action, normalized=validate_action_intent(request)
+    assert action.startswith("enterprise:") and "approval_id" not in normalized
+    for key in ("authorized", "approval_id", "applied"):
+        forged=request.model_copy(update={"parameters":{**parameters,key:True}})
+        with pytest.raises(ValueError):
+            validate_action_intent(forged)
+
+
+
+def test_pending_employee_evidence_can_be_reviewed_after_reload(case):
+    client, headers, _ = case
+    founder, reviewer=headers["founder"],headers["reviewer"]
+    worker=employee(client,founder,department(client,founder))
+    request=post(client,BASE+"/agents/"+worker+"/evidence/approval",founder,
+        {"kind":"confidence","label":"Reviewed operational confidence","value_int":65,
+         "evidence_ref":"actual:independent-observation","note":"Reported confidence remains uncalibrated"})
+    rows=client.get(BASE+"/agents/review-intents",headers=reviewer).json()
+    assert rows[0]["id"] == request["intent_id"] and rows[0]["value_int"] == 65
+    assert rows[0]["applied_at"] is None
+    decide(client,reviewer,request["approval_id"])
+    post(client,BASE+"/agents/"+worker+"/evidence/"+request["intent_id"]+"/apply",founder,
+         {"approval_id":request["approval_id"]})
+    rows=client.get(BASE+"/agents/review-intents",headers=founder).json()
+    assert rows[0]["applied_at"] and rows[0]["status"] == "approved"
+    state=client.get(BASE+"/agents/"+worker+"/state",headers=founder).json()
+    assert state["confidence"] == 65 and not state["confidence_calibrated"]
+    assert client.get(BASE+"/agents/review-intents").status_code == 401
+
+
+def test_actual_stored_asset_reuse_and_reviewed_sunset_impact(case):
+    import base64
+    from hashlib import sha256
+    client, headers, _ = case
+    founder,reviewer=headers["founder"],headers["reviewer"]
+    dept=department(client,founder)
+    content=b"Independently reviewed reusable local checklist"
+    asset=post(client,BASE+"/marketplace",founder,
+        {"department_id":dept,"name":"Actual reusable checklist","kind":"template",
+         "version":"1.0.0","license_id":"internal-only","sha256_digest":sha256(content).hexdigest(),
+         "manifest":{"dependencies":[]}})["id"]
+    path=BASE+"/marketplace/"+asset
+    post(client,path+"/payload",founder,{"content_type":"text/plain","content_base64":base64.b64encode(content).decode()})
+    request=post(client,path+"/approval",founder)
+    review_content=client.get(BASE+"/approval-details/"+request["approval_id"],headers=reviewer).json()
+    assert base64.b64decode(review_content["details"]["content_base64"]) == content
+    assert review_content["details"]["digest"] == sha256(content).hexdigest()
+    assert client.get(BASE+"/approval-details/"+request["approval_id"]).status_code == 401
+    decide(client,reviewer,request["approval_id"])
+    post(client,path+"/publish",founder)
+    saved=client.get(path+"/payload",headers=reviewer).json()
+    assert base64.b64decode(saved["content_base64"]) == content
+    reuse=post(client,BASE+"/intents",founder,{"operation":"consume","target_id":asset,
+        "parameters":{"department_id":dept,"evidence_ref":"actual:reviewed-use"}})
+    decide(client,reviewer,reuse["approval_id"])
+    post(client,BASE+"/intents/"+reuse["id"]+"/apply",founder)
+    impact=client.get(path+"/impact",headers=founder).json()
+    assert impact["consumer_departments"][0]["uses"] == 1 and not impact["automatic_migration"]
+    sunset=post(client,BASE+"/intents",founder,{"operation":"retire","target_id":asset,
+        "parameters":{"target_state":"deprecated","reason":"Reviewed sunset; successor requires reapproval"}})
+    decide(client,reviewer,sunset["approval_id"])
+    post(client,BASE+"/intents/"+sunset["id"]+"/apply",founder)
+    assert client.get(path+"/impact",headers=reviewer).json()["reuse_blocked"]

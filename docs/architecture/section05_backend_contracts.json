@@ -614,6 +614,14 @@
         "pending_plan_revisions": {
           "arguments": "self, *, tenant_id: str",
           "returns": "list[dict]"
+        },
+        "pending_agent_evidence": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "approval_details": {
+          "arguments": "self, *, tenant_id: str, approval_id: str",
+          "returns": "dict"
         }
       }
     },

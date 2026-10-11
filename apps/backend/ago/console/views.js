@@ -303,6 +303,7 @@ function renderEnterpriseSummary(data, state = {}) {
   const approvals = list(data,"approvals");
   const evidence = list(data,"enterpriseEvidence");
   const revisions = list(data,"enterpriseRevisions");
+  const agentIntents = list(data,"enterpriseAgentIntents");
   const approval = id => approvals.find(x=>x.id===id);
   const intentRowsSaved = evidence.filter(x=>x.kind==="intent").slice(0,20).map(x=>
     '<tr><td>'+maybe(x.payload.operation)+'</td><td>'+badge(approval(x.payload.approval_id)?.status || "unknown")+
@@ -318,6 +319,10 @@ function renderEnterpriseSummary(data, state = {}) {
     (manage && x.status==="approved" && !x.applied_revision && x.actor_id===state.me?.id?
       action("Apply revision","enterprise-apply-revision",x.id):"")+ '</td></tr>');
   const currentMode = resource(data,"enterpriseModes")?.effective;
+  const agentIntentRows=agentIntents.slice(0,20).map(x=>'<tr><td>'+maybe(x.kind)+'</td><td>'+maybe(x.label)+
+    '</td><td>'+badge(x.applied_at?"recorded":x.status)+'</td><td>'+action("Review employee evidence","enterprise-agent-intent",x.id)+
+    (manage && x.status==="approved" && !x.applied_at && x.actor_id===state.me?.id?
+      action("Record reviewed claim","enterprise-apply-agent",x.id):"")+'</td></tr>');
   const capacity = resource(data,"enterpriseCapacity");
   const capacityPolicies = Array.isArray(capacity?.policies) ? capacity.policies : [];
   const queue = list(data,"enterpriseWorkQueue");
@@ -379,6 +384,7 @@ function renderEnterpriseSummary(data, state = {}) {
       action("Run one approved offline task","enterprise-claim")+'</div>':"")+
     panel("Saved operation requests",table(["Workflow","Independent approval","Action"],intentRowsSaved,empty("No saved operation requests")))+
     panel("Versioned plan review requests",table(["Plan","Base revision","Status","Action"],revisionRows,empty("No plan revisions awaiting review")))+
+    panel("Reported employee evidence requests",unavailable(data,"enterpriseAgentIntents",table(["Category","Observation","Status","Action"],agentIntentRows,empty("No employee evidence awaiting review"))))+
     panel("Operational evidence and forecasts",unavailable(data,"enterpriseEvidence",table(["Evidence","Captured","Review","Action"],evidenceRows,empty("Capture an operating cycle, planning rollup or Twin state"))))+
     '<div class="info-strip">'+icon("shield")+
     '<span>Human approvals govern all operational changes. Costs are unverified unless independently reconciled; scenarios never apply changes.</span></div>'+

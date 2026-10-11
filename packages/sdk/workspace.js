@@ -30,6 +30,7 @@ export function readPlan(page, now = new Date()) {
       ['enterpriseTwinComparisons','/v1/operations/enterprise/twin/comparisons'],
       ['enterpriseEvidence','/v1/operations/enterprise/evidence'],
       ['enterpriseRevisions','/v1/operations/enterprise/planning/review-intents'],
+      ['enterpriseAgentIntents','/v1/operations/enterprise/agents/review-intents'],
     ],
     calendar: [['events','/v1/operations/calendar?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end)]],
     twin: [['dna','/v1/meta/dna/active'],['snapshots','/v1/meta/snapshots'],['reflection','/v1/meta/reflection'],['dnarecords','/v1/meta/dna'],['recommendations','/v1/meta/recommendations'],['evaluations','/v1/meta/evaluations']],

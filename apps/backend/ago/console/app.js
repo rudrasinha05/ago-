@@ -120,6 +120,7 @@ function endpoints(page) {
       ['enterpriseTwinComparisons','/v1/operations/enterprise/twin/comparisons'],
       ['enterpriseEvidence','/v1/operations/enterprise/evidence'],
       ['enterpriseRevisions','/v1/operations/enterprise/planning/review-intents'],
+      ['enterpriseAgentIntents','/v1/operations/enterprise/agents/review-intents'],
       ["tasks","/v1/tasks"],
       ["approvals","/v1/governance/approvals"],
     ],
