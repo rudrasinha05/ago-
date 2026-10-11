@@ -47,12 +47,19 @@ jobs:
           python -m pytest -q -s tests_comparative tests/test_section28_comparison.py | tee /tmp/ago-section28-native-results.txt
           test "${PIPESTATUS[0]}" -eq 0
           python -m pip freeze > /tmp/ago-section28-dependencies.txt
+      - name: Section30 actual temporal governance and execution admission
+        working-directory: apps/backend
+        run: |
+          python -m pytest -q tests/test_section30_calendar.py | tee /tmp/ago-section30-calendar-results.txt
+          test "${PIPESTATUS[0]}" -eq 0
       - name: Retain actual reproducible comparison evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ago-section28-native-comparison
-          path: /tmp/ago-section28-*.txt
+          path: |
+            /tmp/ago-section28-*.txt
+            /tmp/ago-section30-calendar-results.txt
           retention-days: 30
           if-no-files-found: error
 

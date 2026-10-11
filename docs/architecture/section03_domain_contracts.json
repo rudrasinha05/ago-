@@ -236,9 +236,24 @@
       "ago_employees"
     ],
     "calendar_store": [
+      "ago_approval_requests",
       "ago_calendar_attendees",
       "ago_calendar_audit",
-      "ago_calendar_events"
+      "ago_calendar_changes",
+      "ago_calendar_events",
+      "ago_calendar_proposals",
+      "ago_calendar_timing_audit",
+      "ago_departments",
+      "ago_employees",
+      "ago_goals",
+      "ago_governed_tasks",
+      "ago_oos_mode_events",
+      "ago_personnel_events",
+      "ago_role_permissions",
+      "ago_tenants",
+      "ago_user_roles",
+      "ago_users",
+      "ago_worker_state_events"
     ],
     "console_api": [],
     "console_host": [],
@@ -534,7 +549,8 @@
       "ago_governed_tasks",
       "ago_plan_steps",
       "ago_strategy_plans",
-      "ago_task_reviews"
+      "ago_task_reviews",
+      "ago_tenants"
     ],
     "tool_catalog": [],
     "tool_catalog_queries": [

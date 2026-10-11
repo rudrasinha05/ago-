@@ -6,6 +6,7 @@ from uuid import UUID
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal
+from ago.calendar_store import CalendarStore
 from ago.security_controls import SecurityControls
 from ago.workflows import GovernedTask, TaskStatus
 
@@ -65,6 +66,7 @@ class TaskStore:
     ) -> GovernedTask:
         tenant_id = principal.tenant_id
         with self.connection.transaction():
+            self.connection.execute('SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE', (tenant_id,))
             task = self.connection.execute(
                 """SELECT id, tenant_id, action, assignee_id, status, approval_id
                    FROM ago_governed_tasks WHERE id=%s AND tenant_id=%s FOR UPDATE""",
@@ -120,12 +122,15 @@ class TaskStore:
             ).fetchone()
             if blocked_dependency:
                 raise PermissionError("Predecessor requires completed task and passing QA")
+            self.repositories.resolve(CalendarStore).require_execution(actor=principal, task_id=task_id)
             self.connection.execute(
                 """UPDATE ago_governed_tasks
                    SET status='running', updated_at=now()
                    WHERE id=%s AND tenant_id=%s AND status='waiting_approval'""",
                 (task_id, tenant_id),
             )
+            self.repositories.resolve(CalendarStore).record_execution(
+                tenant_id=tenant_id, task_id=task_id, status='started')
         return GovernedTask(
             str(task["id"]),
             tenant_id,
@@ -157,3 +162,5 @@ class TaskStore:
             ).fetchone()
             if row is None:
                 raise ValueError("Only running tasks may finish")
+            self.repositories.resolve(CalendarStore).record_execution(
+                tenant_id=tenant_id, task_id=task_id, status='completed' if success else 'failed')

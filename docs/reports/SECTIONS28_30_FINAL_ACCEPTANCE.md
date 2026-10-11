@@ -56,3 +56,46 @@ Final published head, CI jobs/logs and single-master writeback are recorded afte
 verification. The owner's supplied terminal log establishes local migrations040
 and doctor ready:true; the8000 bind conflict does not establish a new UI acceptance.
 One final owner-requested pull/migration will cover this entire batch.
+
+## Section28 verified baseline
+
+Published1239e5085311cc867a77c4799255c202d4081abf, tree
+d994048624a66ec2bea9c89fe80812d6ad4e3be5. Main CI38134003335 and independent
+backend38134003361: all10 jobs succeeded; every decoded log was inspected.
+Native comparison7 passed on actual PostgreSQL/Python3.12; backend603 passed
+separately on3.11/3.12/3.14, no skipped database tests. Coverage87.88%3.11,
+87.86%3.14.19 console,10 SDK,30 browser/device,9 real Next.js,6 compatibility
+Chromium and31 actual storage/recovery tests passed; build/image/restore passed.
+This proves the narrow application-authority experiments and source integrity;
+framework-wide performance, superiority and actual ROI remain untested.
+
+## Section30 implementation and review boundaries
+
+Migration041 adds three immutable temporal history tables with independent exact
+review and monotone revision guards. Existing ordinary event visibility/RSVP and
+append-oriented event integrity remain. CalendarStore/enterprise_domains implement
+policies, all original temporal domains, local-wall recurrence, source review,
+parent/dependency constraints, replacement event history and finite eligibility.
+TaskStore and signed start/run endpoints enforce current eligibility; the durable
+queue skips blocked candidates and incorporates deadlines. Timing and cycle signals
+are durable and idempotent. Planning and Twin include only reviewed/shared temporal
+state. Canonical and generated compatibility Calendar UI expose all package types
+and independent source review. Architecture109 modules/312 imports remains a
+modular monolith; the new REST surface is additive.
+
+Pure59 calendar tests and local contract/Ruff/console/SDK checks passed. Local
+PostgreSQL cases are explicitly skipped because this container has no runnable
+PostgreSQL server; they require actual migrated CI PostgreSQL acceptance before
+Section30 is marked complete. CI now runs these focused database cases in the
+native-lab job as well as each full backend matrix, plus a real two-human Next.js
+calendar review journey. Detailed final head/test evidence belongs in the same
+master checklist after all final CI logs are inspected.
+
+Admission/checkpoint timing is implemented; a handler already executing is not
+forcibly interrupted mid-call. Next-eligible search is bounded14 days at minute
+resolution; recurrence52 slots/3-year horizon; cascading100 explicitly dependent
+shared events. Out-of-scope external calendar sync, automated business decisions,
+production scheduling/distribution and competitive performance claims are not
+silently accepted. Support/emergency coverage reports do not enlarge authority.
+The owner's pasted Windows log independently confirms applied040 and doctor ready;
+041 and the new UI remain owner-local acceptance after the final batch pull.

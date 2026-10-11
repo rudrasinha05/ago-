@@ -680,3 +680,234 @@ def twin_scenario(*, workers: int, failure_pct: int,
         "assumptions": {"failure_pct": failure_pct, "market_shock_pct": market_shock_pct},
         "read_only": True, "applied": False, "observed_revenue": None,
     }
+
+
+# Section30: temporal rules are constraints, never grants of execution authority.
+CALENDAR_DOMAINS = {
+    'business': 'operations', 'working_hours': 'operations', 'holiday': 'operations',
+    'sprint': 'operations', 'weekly': 'operations', 'monthly': 'operations',
+    'quarterly': 'operations', 'annual': 'operations', 'budget': 'economics',
+    'hiring': 'human_leadership', 'promotion': 'human_leadership',
+    'performance_review': 'human_leadership', 'maintenance': 'architecture',
+    'incident': 'security_operations', 'release': 'architecture',
+    'release_freeze': 'architecture', 'simulation': 'meta', 'learning': 'department_meta',
+    'constitutional_review': 'human_leadership', 'approval': 'human_reviewer',
+    'support': 'operations', 'handoff': 'operations', 'milestone': 'operations',
+    'execution': 'operations', 'quiet': 'operations',
+}
+
+
+def calendar_instant(value: str | datetime) -> datetime:
+    from datetime import timezone
+    try:
+        result = value if isinstance(value, datetime) else datetime.fromisoformat(value)
+        if result.tzinfo is None or result.utcoffset() is None:
+            raise ValueError('Offset required')
+        return result.astimezone(timezone.utc)
+    except (TypeError, AttributeError, ValueError) as exc:
+        raise ValueError('Calendar timestamp requires a valid timezone offset') from exc
+
+
+def calendar_scope(spec: dict) -> dict:
+    from uuid import UUID
+    kind = spec.get('scope_kind', 'company')
+    identifier = spec.get('scope_id')
+    if kind not in ('company', 'department', 'employee'):
+        raise ValueError('Unknown calendar scope')
+    if kind == 'company' and identifier is not None:
+        raise ValueError('Company scope has no entity id')
+    if kind != 'company':
+        try:
+            identifier = str(UUID(identifier))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValueError('Scoped calendar needs a valid entity id') from exc
+    return {'scope_kind': kind, 'scope_id': identifier}
+
+
+def calendar_minutes(value: str, *, end: bool = False) -> int:
+    try:
+        hour, minute = map(int, value.split(':'))
+        if f'{hour:02d}:{minute:02d}' != value or not 0 <= minute < 60:
+            raise ValueError('Invalid minutes')
+        if not 0 <= hour <= (24 if end else 23) or hour == 24 and minute:
+            raise ValueError('Invalid hour')
+        return hour*60+minute
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError('Calendar hours use HH:MM, with 24:00 only for an end') from exc
+
+
+def validate_calendar_policy(spec: dict) -> dict:
+    from datetime import date
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    from uuid import UUID
+    keys = {'scope_kind', 'scope_id', 'timezone', 'weekdays', 'start', 'end',
+            'quiet_start', 'quiet_end', 'holidays', 'region', 'reviewer_ids',
+            'emergency_reviewer_ids', 'require_supervisor', 'support_start', 'support_end',
+            'max_continuous_minutes', 'rest_minutes'}
+    if not isinstance(spec, dict) or spec.keys()-keys:
+        raise ValueError('Unknown calendar policy field; authority cannot be supplied')
+    result = calendar_scope(spec)
+    zone = spec.get('timezone', 'UTC')
+    try:
+        ZoneInfo(zone)
+    except (TypeError, ZoneInfoNotFoundError) as exc:
+        raise ValueError('Known IANA timezone required') from exc
+    days = spec.get('weekdays', list(range(7)))
+    if not isinstance(days, list) or not days or any(type(d) is not int or d not in range(7) for d in days) or len(set(days)) != len(days):
+        raise ValueError('Unique weekdays 0 through 6 required')
+    start, end = spec.get('start', '00:00'), spec.get('end', '24:00')
+    if calendar_minutes(start) >= calendar_minutes(end, end=True):
+        raise ValueError('Working hours must end after start; use quiet hours for overnight')
+    quiet_start, quiet_end = spec.get('quiet_start'), spec.get('quiet_end')
+    if (quiet_start is None) != (quiet_end is None):
+        raise ValueError('Both quiet-hour boundaries required')
+    if quiet_start is not None and calendar_minutes(quiet_start) == calendar_minutes(quiet_end):
+        raise ValueError('Quiet boundaries must differ')
+    holidays = spec.get('holidays', [])
+    if not isinstance(holidays, list) or len(holidays) > 366 or any(not isinstance(x, str) for x in holidays) or len(set(holidays)) != len(holidays):
+        raise ValueError('Bounded unique holiday dates required')
+    try:
+        for value in holidays:
+            if date.fromisoformat(value).isoformat() != value:
+                raise ValueError('Canonical date required')
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Holiday dates use YYYY-MM-DD') from exc
+    region = spec.get('region', '')
+    if not isinstance(region, str) or len(region) > 120:
+        raise ValueError('Invalid holiday region')
+    result.update(timezone=zone, weekdays=days, start=start, end=end,
+                  quiet_start=quiet_start, quiet_end=quiet_end, holidays=holidays, region=region)
+    for key in ('reviewer_ids', 'emergency_reviewer_ids'):
+        values = spec.get(key, [])
+        if not isinstance(values, list) or len(values) > 50 or any(not isinstance(x, str) for x in values) or len(set(values)) != len(values):
+            raise ValueError('Bounded unique human reviewers required')
+        try:
+            result[key] = [str(UUID(x)) for x in values]
+        except (TypeError, AttributeError, ValueError) as exc:
+            raise ValueError('Reviewer identifier invalid') from exc
+    required = spec.get('require_supervisor', False)
+    if type(required) is not bool or required and not result['reviewer_ids']:
+        raise ValueError('Supervisor requirement needs explicit human reviewers')
+    result['require_supervisor'] = required
+    support_start, support_end = spec.get('support_start'), spec.get('support_end')
+    if (support_start is None) != (support_end is None) or support_start is not None and calendar_minutes(support_start) >= calendar_minutes(support_end, end=True):
+        raise ValueError('Valid support coverage boundaries required')
+    result.update(support_start=support_start, support_end=support_end)
+    for key, default, maximum in (('max_continuous_minutes', 1440, 1440), ('rest_minutes', 0, 1440)):
+        value = spec.get(key, default)
+        if type(value) is not int or not (1 if key.startswith('max') else 0) <= value <= maximum:
+            raise ValueError('Invalid continuous-work/rest limit')
+        result[key] = value
+    return result
+
+
+def calendar_wall_time(naive: datetime, zone: str, offset_seconds: int | None = None) -> datetime:
+    """Reject DST gaps and require explicit offset selection at ambiguous instants."""
+    from datetime import timezone
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(zone)
+    candidates = {naive.replace(tzinfo=tz, fold=fold).astimezone(timezone.utc)
+                  for fold in (0, 1)
+                  if naive.replace(tzinfo=tz, fold=fold).astimezone(timezone.utc).astimezone(tz).replace(tzinfo=None) == naive}
+    if offset_seconds is not None:
+        candidates = {x for x in candidates if x.astimezone(tz).utcoffset().total_seconds() == offset_seconds}
+    if len(candidates) != 1:
+        raise ValueError('Nonexistent or ambiguous local calendar time; select a valid offset')
+    return next(iter(candidates))
+
+
+def validate_calendar_window(spec: dict) -> dict:
+    from calendar import monthrange
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    from uuid import UUID
+    keys = {'scope_kind', 'scope_id', 'kind', 'title', 'timezone', 'starts_at', 'ends_at',
+            'cadence', 'count', 'sprint_days', 'depends_on', 'parent_id'}
+    if not isinstance(spec, dict) or spec.keys()-keys:
+        raise ValueError('Unknown calendar window field')
+    result = calendar_scope(spec)
+    kind, title = spec.get('kind'), spec.get('title', '')
+    if kind not in CALENDAR_DOMAINS or not isinstance(title, str) or not 1 <= len(title.strip()) <= 250:
+        raise ValueError('Recognized calendar domain and title required')
+    zone = spec.get('timezone', 'UTC')
+    try:
+        tz = ZoneInfo(zone)
+    except (TypeError, ZoneInfoNotFoundError) as exc:
+        raise ValueError('Known IANA timezone required') from exc
+    start, end = calendar_instant(spec.get('starts_at')), calendar_instant(spec.get('ends_at'))
+    for key, instant in (('starts_at', start), ('ends_at', end)):
+        original = datetime.fromisoformat(spec[key])
+        if original.utcoffset() != instant.astimezone(tz).utcoffset():
+            raise ValueError('Timestamp UTC offset must match the selected IANA zone')
+    if not start < end <= start+timedelta(days=366):
+        raise ValueError('Window duration must be positive and at most one year')
+    cadence, count = spec.get('cadence', 'once'), spec.get('count', 1)
+    sprint = spec.get('sprint_days', 14)
+    if cadence not in ('once', 'weekly', 'monthly', 'quarterly', 'annual', 'sprint') or type(count) is not int or not 1 <= count <= 52 or cadence == 'once' and count != 1:
+        raise ValueError('Invalid bounded calendar recurrence')
+    if type(sprint) is not int or not 7 <= sprint <= 28:
+        raise ValueError('Sprint duration must be 7 through 28 days')
+    dependencies = spec.get('depends_on', [])
+    if not isinstance(dependencies, list) or len(dependencies) > 50 or any(not isinstance(x, str) for x in dependencies) or len(set(dependencies)) != len(dependencies):
+        raise ValueError('Bounded unique calendar dependencies required')
+    try:
+        dependencies = [str(UUID(x)) for x in dependencies]
+        parent = str(UUID(spec['parent_id'])) if spec.get('parent_id') else None
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValueError('Invalid calendar relationship id') from exc
+    slots = []
+    for index in range(count):
+        instants = []
+        for instant in (start, end):
+            local = instant.astimezone(tz)
+            naive = local.replace(tzinfo=None)
+            if cadence in ('weekly', 'sprint'):
+                naive += timedelta(days=index*(7 if cadence == 'weekly' else sprint))
+            elif cadence in ('monthly', 'quarterly', 'annual'):
+                months = index*{'monthly': 1, 'quarterly': 3, 'annual': 12}[cadence]
+                total = local.year*12+local.month-1+months
+                year, month = total//12, total % 12+1
+                naive = naive.replace(year=year, month=month, day=min(local.day, monthrange(year, month)[1]))
+            candidate = calendar_wall_time(naive, zone, int(local.utcoffset().total_seconds()) if index == 0 else None)
+            instants.append(candidate)
+        if not instants[0] < instants[1] or instants[1] > start+timedelta(days=1098):
+            raise ValueError('Recurrence exceeds three-year horizon or has invalid local duration')
+        if slots and calendar_instant(slots[-1]['ends_at']) > instants[0]:
+            raise ValueError('Recurring slots overlap')
+        slots.append({'starts_at': instants[0].isoformat(), 'ends_at': instants[1].isoformat()})
+    result.update(kind=kind, title=title.strip(), owner=CALENDAR_DOMAINS[kind], timezone=zone,
+                  cadence=cadence, count=count, sprint_days=sprint, depends_on=dependencies,
+                  parent_id=parent, slots=slots)
+    return result
+
+
+def calendar_policy_reasons(policy: dict, at: datetime, duration_minutes: int) -> list[str]:
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+    at = calendar_instant(at)
+    if type(duration_minutes) is not int or not 1 <= duration_minutes <= 1440:
+        raise ValueError('Execution duration must be 1 through 1440 minutes')
+    tz = ZoneInfo(policy['timezone'])
+    reasons = set()
+    # Minute-level reservations conservatively cover every crossed local day and DST boundary.
+    for step in range(duration_minutes):
+        local = (at+timedelta(minutes=step)).astimezone(tz)
+        minute = local.hour*60+local.minute
+        if local.weekday() not in policy['weekdays']:
+            reasons.add('non_working_day')
+        if local.date().isoformat() in policy['holidays']:
+            reasons.add('holiday')
+        if not calendar_minutes(policy['start']) <= minute < calendar_minutes(policy['end'], end=True):
+            reasons.add('outside_working_hours')
+        if policy['quiet_start'] is not None:
+            qs, qe = calendar_minutes(policy['quiet_start']), calendar_minutes(policy['quiet_end'])
+            if (qs <= minute < qe if qs < qe else minute >= qs or minute < qe):
+                reasons.add('quiet_hours')
+    # Exact final boundary covers sub-minute starts as well.
+    last = (at+timedelta(minutes=duration_minutes, microseconds=-1)).astimezone(tz)
+    end = calendar_minutes(policy['end'], end=True)
+    if end != 1440 and last.hour*60+last.minute >= end:
+        reasons.add('outside_working_hours')
+    if duration_minutes > policy['max_continuous_minutes']:
+        reasons.add('continuous_work_limit')
+    return sorted(reasons)

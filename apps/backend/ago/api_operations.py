@@ -1914,3 +1914,63 @@ def enterprise_freeze_series_forecast(data: LongitudinalForecastInput, actor: Pr
 def enterprise_measure_series_accuracy(data: LongitudinalCalibrationInput, actor: Principal = Depends(authenticated),
                                       repositories: RepositoryScope = Depends(repository_scope)):
     return capture_reviewed_measurement(data, 'longitudinal_calibration', actor, repositories)
+
+
+class CalendarGovernanceInput(StrictInput):
+    command: Literal['policy', 'window', 'window_cancel', 'event_link', 'reschedule']
+    specification: dict
+    rationale: str = Field(min_length=1, max_length=6000)
+    operation_key: str = Field(min_length=1, max_length=160)
+    base_revision: int = Field(ge=0)
+
+
+class CalendarApplyInput(StrictInput):
+    proposal_id: UUID
+
+
+@router.get('/calendar/governance')
+def calendar_governance(actor: Principal = Depends(authenticated),
+                        repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, 'calendar:read')
+    return enterprise_call(lambda: repositories.resolve(CalendarStorePort).governance(actor=actor))
+
+
+@router.get('/calendar/governance/approvals/{approval_id}')
+def calendar_approval_source(approval_id: UUID, actor: Principal = Depends(authenticated),
+                             repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, 'calendar:read')
+    return enterprise_call(lambda: repositories.resolve(CalendarStorePort).approval_source(actor=actor, approval_id=str(approval_id)))
+
+
+@router.post('/calendar/governance/proposals')
+def calendar_propose(data: CalendarGovernanceInput, actor: Principal = Depends(authenticated),
+                     repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, 'calendar:write')
+    return enterprise_call(lambda: repositories.resolve(CalendarStorePort).propose_governance(
+        actor=actor, command=data.command, specification=data.specification, rationale=data.rationale,
+        operation_key=data.operation_key, base_revision=data.base_revision))
+
+
+@router.post('/calendar/governance/apply')
+def calendar_apply(data: CalendarApplyInput, actor: Principal = Depends(authenticated),
+                   repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, 'calendar:write')
+    return enterprise_call(lambda: repositories.resolve(CalendarStorePort).apply_governance(actor=actor, proposal_id=str(data.proposal_id)))
+
+
+@router.get('/calendar/eligibility')
+def calendar_eligibility(employee_id: UUID, at: datetime, duration_minutes: int = 1,
+                         task_id: UUID | None = None, search_days: int = 14,
+                         actor: Principal = Depends(authenticated),
+                         repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, 'calendar:read')
+    return enterprise_call(lambda: repositories.resolve(CalendarStorePort).eligibility(
+        actor=actor, employee_id=str(employee_id), at=at, duration_minutes=duration_minutes,
+        task_id=str(task_id) if task_id else None, search_days=search_days))
+
+
+@router.post('/calendar/tick')
+def calendar_tick(actor: Principal = Depends(authenticated),
+                  repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, 'calendar:write')
+    return enterprise_call(lambda: repositories.resolve(CalendarStorePort).tick(actor=actor))

@@ -21,6 +21,7 @@ from ago.enterprise_domains import (
     transition_mode, transition_worker, twin_scenario, validate_horizon,
 )
 from ago.security import Principal
+from ago.calendar_store import CalendarStore
 from ago.governance_domain import CONSTITUTION_LAWS
 
 
@@ -1593,7 +1594,28 @@ class EnterpriseOperationsStore:
                    GROUP BY t.assignee_id,e.department_id""", (actor.tenant_id,),
             ).fetchall()
             loads = limits["running"] + reserved
+            calendar = self.repositories.resolve(CalendarStore)
+            temporal = calendar.temporal_snapshot(tenant_id=actor.tenant_id)
+            deadline_rows = self.connection.execute(
+                '''SELECT task_id,min(ends_at) AS deadline FROM ago_calendar_events
+                   WHERE tenant_id=%s AND visibility='tenant' AND status='scheduled' AND task_id IS NOT NULL
+                   GROUP BY task_id''', (actor.tenant_id,)).fetchall()
+            deadlines = {str(x['task_id']): x['deadline'] for x in deadline_rows}
+            for link in temporal['links']:
+                if link.get('task_id'):
+                    event = self.connection.execute('''SELECT ends_at FROM ago_calendar_events
+                        WHERE tenant_id=%s AND id=%s AND visibility='tenant' AND status='scheduled' ''',
+                        (actor.tenant_id, link['event_id'])).fetchone()
+                    if event:
+                        deadlines[link['task_id']] = min(deadlines.get(link['task_id'], event['ends_at']), event['ends_at'])
+            available.sort(key=lambda x: deadlines.get(str(x['task_id']), datetime.max.replace(tzinfo=timezone.utc)))
             for candidate in available:
+                now = self.connection.execute('SELECT clock_timestamp() AS at').fetchone()['at']
+                eligibility = calendar.eligibility(actor=actor, employee_id=str(candidate['assignee_id']),
+                    at=now, duration_minutes=max(1, (lease_seconds+59)//60),
+                    task_id=str(candidate['task_id']), search_days=0)
+                if not eligibility['eligible']:
+                    continue
                 department = str(candidate["department_id"])
                 worker = str(candidate["assignee_id"])
                 company_load = sum(int(x["running"]) for x in loads)
@@ -2228,7 +2250,8 @@ class EnterpriseOperationsStore:
                  "blocked" if pending_help else "degraded" if failures else
                  "working" if any(t["status"] == "running" for t in tasks) else
                  "ready" if queue else "idle")
-        payload = {"phase": state, "mode": mode, "capacity": self.capacity_limits(
+        calendar_signals = self.repositories.resolve(CalendarStore).tick(actor=actor)
+        payload = {"temporal_signals": calendar_signals, "phase": state, "mode": mode, "capacity": self.capacity_limits(
             tenant_id=actor.tenant_id), "task_count": len(tasks[:1000]),
             "truncated": len(tasks) > 1000, "pending_help_ids": pending_help,
             "failed_task_ids": failures, "queue": queue,
@@ -2324,7 +2347,7 @@ class EnterpriseOperationsStore:
                    "hierarchy": [index[x] for x in sorted(descendants)],
                    "task_lineage": [dict(link) for link in links], "tasks": tasks,
                    "goal_ids": sorted({str(t["goal_id"]) for t in tasks if t["goal_id"]}),
-                   "calendar": [dict(e) for e in calendar], "conflicts": conflicts,
+                   "calendar": [dict(e) for e in calendar], "temporal_state": self.repositories.resolve(CalendarStore).temporal_snapshot(tenant_id=actor.tenant_id), "conflicts": conflicts,
                    "qa_passed": sum(t["status"] == "completed" and t["verdict"] == "pass" for t in tasks),
                    "qa_failed": len(failed), "awaiting_qa": sum(t["verdict"] is None for t in tasks),
                    "replan_reasons": {"failed_task_ids": failed, "dependency_task_ids": blocked,
@@ -2520,6 +2543,7 @@ class EnterpriseOperationsStore:
                        "employees": [dict(r) for r in employees[:1000]], "tasks": observations[:1000],
                        "horizon_plans": self.plans(tenant_id=actor.tenant_id),
                        "calendar": [dict(r) for r in calendar[:1000]],
+                       "temporal_state": self.repositories.resolve(CalendarStore).temporal_snapshot(tenant_id=actor.tenant_id),
                        "capacity": self.capacity_limits(tenant_id=actor.tenant_id),
                        "queue": self.work_queue(tenant_id=actor.tenant_id),
                        "budgets": self.budgets(tenant_id=actor.tenant_id),

@@ -125,7 +125,7 @@ function endpoints(page) {
       ["tasks","/v1/tasks"],
       ["approvals","/v1/governance/approvals"],
     ],
-    calendar: [["events", dateRange()]],
+    calendar: [["events", dateRange()],["calendarGovernance","/v1/operations/calendar/governance"],["tasks","/v1/tasks"]],
     twin: [
       ["dna","/v1/meta/dna/active"],
       ["snapshots","/v1/meta/snapshots"],

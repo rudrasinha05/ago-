@@ -119,6 +119,10 @@ async function reviewApproval(ctx, id, initial = "approved") {
       delete details.details.content_base64;
     }
   }
+  if(request?.action?.startsWith("calendar:review:")) {
+    details=await ctx.api.request("/v1/operations/calendar/governance/approvals/"+id);
+    if(!details?.digest || !details?.source)throw new Error("Exact calendar source package unavailable; review cancelled.");
+  }
   if(request?.action?.startsWith("constitution:")) {
     const c=await ctx.api.request("/v1/governance/constitution");
     details=(c.proposals || []).find(x=>Object.values(x.reviews || {}).includes(id)) || (c.emergency_reviews || []).find(x=>x.approval_id===id);
@@ -505,6 +509,10 @@ export async function handleAction(key, id, ctx) {
           timeoutMs:20000});
         return "Tool completed; independent QA remains required.";
       },"Execute once");
+    return;
+  }
+  if (key.startsWith("calendar-governed-")) {
+    await calendarGovernedAction(ctx,key,id);
     return;
   }
   if (key === "new-event") {
@@ -1187,3 +1195,127 @@ async function constitutionalAction(key,id,ctx) {
   } else throw new Error("Unknown constitutional action.");
   openDialog(ctx,{title:key==="constitution-emergency"?"Emergency containment":"Constitutional evidence package",description:"Human authority, independent review and immutable audit remain active.",fields,button:key==="constitution-emergency"?"Freeze selected operations":"Submit evidence",danger:key==="constitution-emergency",onSubmit:submit});
 }
+
+async function calendarGovernedAction(ctx,key,id) {
+  const gov=resource(ctx.state.data,"calendarGovernance");
+  if(!gov || !Number.isInteger(gov.revision))throw new Error("Calendar source unavailable; refresh this workspace.");
+  const base="/v1/operations/calendar";
+  if(key==="calendar-governed-inspect") {
+    const proposal=(gov.proposals || []).find(x=>x.id===uuid(id));
+    if(!proposal)throw new Error("Calendar source package unavailable.");
+    openDialog(ctx,{title:"Calendar source package",button:"Close",refresh:false});
+    appendEvidence(document.getElementById("operation-form"),proposal);
+    return;
+  }
+  if(key==="calendar-governed-apply") {
+    const proposal=(gov.proposals || []).find(x=>x.id===uuid(id));
+    if(!proposal || proposal.actor_id!==ctx.state.me?.id || proposal.status!=="approved")throw new Error("Original proposer and independent approved review required.");
+    openDialog(ctx,{title:"Apply reviewed calendar change",description:"Apply this exact reviewed package. Changes to source events or the calendar revision require another review.",button:"Apply reviewed change",onSubmit:async()=>{
+      await ctx.api.request(base+"/governance/apply",{method:"POST",body:{proposal_id:uuid(id)}});
+      return "Reviewed calendar change applied.";
+    }});
+    appendEvidence(document.getElementById("operation-form"),proposal);
+    return;
+  }
+  if(key==="calendar-governed-tick") {
+    confirmation(ctx,"Observe due calendar cycles","Record due planning, budget, review and maintenance signals for human follow-up.",async()=>{
+      await ctx.api.request(base+"/tick",{method:"POST"});
+      return "Due cycle signals recorded; human business decisions remain required.";
+    },"Record due signals");
+    return;
+  }
+  const {departments,people}=await departmentsAndPeople(ctx);
+  const scopeOptions=[choose("company","Company"),...departments.map(x=>choose("department:"+x.id,"Department · "+x.name)),...people.map(x=>choose("employee:"+x.id,"Employee · "+x.name))];
+  const scopes=[{name:"scope",label:"Applies to",type:"select",options:scopeOptions}];
+  const humans=people.filter(x=>x.kind==="human");
+  const scope=v=>v.scope==="company"?{scope_kind:"company",scope_id:null}:{scope_kind:v.scope.split(":")[0],scope_id:uuid(v.scope.split(":")[1])};
+  const rationales=[{name:"rationale",label:"Reason for this calendar change",type:"textarea",maxLength:6000}];
+  const propose=async(command,specification,rationale)=>{
+    await ctx.api.request(base+"/governance/proposals",{method:"POST",body:{command,specification,rationale,base_revision:gov.revision,operation_key:crypto.randomUUID()}});
+    return "Calendar change proposed. Another authorized human must review the exact source in Governance.";
+  };
+  if(key==="calendar-governed-policy") {
+    openDialog(ctx,{title:"Propose availability policy",description:"Company, department and employee policies combine. Quiet hours and holidays constrain task starts; they never grant approval authority.",button:"Submit for independent review",fields:[...scopes,
+      {name:"timezone",label:"IANA time zone",value:"Asia/Kolkata",maxLength:100},
+      {name:"weekdays",label:"Working days",type:"multiselect",options:["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((x,i)=>choose(String(i),x)),value:"0"},
+      {name:"start",label:"Working hours start (HH:MM)",value:"09:00"},
+      {name:"end",label:"Working hours end (HH:MM)",value:"18:00"},
+      {name:"quiet_start",label:"Quiet hours start (optional HH:MM)",required:false},
+      {name:"quiet_end",label:"Quiet hours end (optional HH:MM)",required:false},
+      {name:"region",label:"Holiday region",required:false,maxLength:120},
+      {name:"holidays",label:"Holiday dates, one YYYY-MM-DD per line",type:"textarea",required:false,maxLength:5000},
+      {name:"reviewer_ids",label:"Human supervisor coverage",type:"multiselect",required:false,options:humans.map(x=>choose(x.id,x.name))},
+      {name:"require_supervisor",label:"Require an available human supervisor",type:"select",options:[choose("false","No additional calendar constraint"),choose("true","Require available authorized supervisor")]},
+      {name:"emergency_reviewer_ids",label:"Emergency human review coverage",type:"multiselect",required:false,options:humans.map(x=>choose(x.id,x.name))},
+      {name:"support_start",label:"Support coverage start (optional HH:MM)",required:false},
+      {name:"support_end",label:"Support coverage end (optional HH:MM)",required:false},
+      {name:"max_continuous_minutes",label:"Maximum continuous work in minutes",type:"number",min:1,max:1440,value:480},
+      {name:"rest_minutes",label:"Rest between AI task runs in minutes",type:"number",min:0,max:1440,value:0},...rationales],
+      onSubmit:async v=>propose("policy",{...scope(v),timezone:v.timezone,weekdays:v.weekdays.map(Number),start:v.start,end:v.end,
+        quiet_start:v.quiet_start || null,quiet_end:v.quiet_end || null,region:v.region,
+        holidays:v.holidays.split(/\s+/).filter(Boolean),reviewer_ids:v.reviewer_ids,emergency_reviewer_ids:v.emergency_reviewer_ids,
+        require_supervisor:v.require_supervisor==="true",support_start:v.support_start || null,support_end:v.support_end || null,
+        max_continuous_minutes:Number(v.max_continuous_minutes),rest_minutes:Number(v.rest_minutes)},v.rationale)});
+    return;
+  }
+  const future=new Date(Date.now()+3600_000).toISOString();
+  const later=new Date(Date.now()+7200_000).toISOString();
+  if(key==="calendar-governed-window") {
+    openDialog(ctx,{title:"Propose organizational cycle",description:"Select the responsible calendar domain and exact times with their UTC offset. Recurrence keeps local wall time; a daylight-saving ambiguity requires separate explicit windows.",button:"Submit for independent review",fields:[...scopes,
+      {name:"kind",label:"Calendar domain",type:"select",options:Object.keys(gov.domains).map(x=>choose(x,x.replaceAll("_"," ")))},
+      {name:"title",label:"Cycle or window title",maxLength:250},
+      {name:"timezone",label:"IANA time zone",value:"UTC"},
+      {name:"starts_at",label:"Starts with UTC offset",value:future},
+      {name:"ends_at",label:"Ends with UTC offset",value:later},
+      {name:"cadence",label:"Repeat",type:"select",options:["once","weekly","monthly","quarterly","annual","sprint"].map(x=>choose(x,x))},
+      {name:"count",label:"Number of occurrences",type:"number",min:1,max:52,value:1},
+      {name:"sprint_days",label:"Sprint length in days",type:"number",min:7,max:28,value:14},
+      {name:"depends_on",label:"Must follow these windows",type:"multiselect",required:false,options:gov.windows.map(x=>choose(x.id,x.title))},
+      {name:"parent_id",label:"Parent planning horizon",type:"select",required:false,options:[choose("","No parent"),...gov.windows.map(x=>choose(x.id,x.title))]},...rationales],
+      onSubmit:async v=>propose("window",{...scope(v),kind:v.kind,title:v.title,timezone:v.timezone,starts_at:v.starts_at,ends_at:v.ends_at,
+        cadence:v.cadence,count:Number(v.count),sprint_days:Number(v.sprint_days),depends_on:v.depends_on,parent_id:v.parent_id || null},v.rationale)});
+    return;
+  }
+  const shared=listCalendarEvents(ctx).filter(x=>x.visibility==="tenant" && x.status==="scheduled");
+  const eventFields=[{name:"event_id",label:"Shared event",type:"select",options:shared.map(x=>choose(x.id,x.title))}];
+  if(key==="calendar-governed-cancel-window") {
+    mustHave(gov.windows,"No active governed windows.");
+    openDialog(ctx,{title:"Propose window cancellation",button:"Submit for independent review",fields:[
+      {name:"window_id",label:"Active window",type:"select",options:gov.windows.map(x=>choose(x.id,x.title))},...rationales],
+      onSubmit:async v=>propose("window_cancel",{window_id:uuid(v.window_id)},v.rationale)});
+    return;
+  }
+  if(key==="calendar-governed-link") {
+    mustHave(shared,"Create a shared event before linking deadlines.");
+    const tasks=resource(ctx.state.data,"tasks") || [];
+    openDialog(ctx,{title:"Propose event dependencies",description:"Task starts must fit their linked event. Each handoff follows its prerequisite; private events remain private.",button:"Submit for independent review",fields:[...eventFields,
+      {name:"depends_on",label:"Prerequisite events",type:"multiselect",required:false,options:shared.map(x=>choose(x.id,x.title))},
+      {name:"task_id",label:"Linked task deadline",type:"select",required:false,options:[choose("","No task"),...tasks.map(x=>choose(x.id,x.action+" · "+x.status))]},
+      {name:"goal_id",label:"Optional goal ID",required:false},...rationales],
+      onSubmit:async v=>propose("event_link",{event_id:uuid(v.event_id),depends_on:v.depends_on,task_id:v.task_id || null,goal_id:v.goal_id || null},v.rationale)});
+    return;
+  }
+  if(key==="calendar-governed-reschedule") {
+    mustHave(shared,"Create a shared event before rescheduling.");
+    openDialog(ctx,{title:"Propose coordinated reschedule",description:"The exact change includes dependent events and deadline impacts. Original events remain in history; replacement invitations need fresh responses.",button:"Submit for independent review",fields:[...eventFields,
+      {name:"starts_at",label:"New start with UTC offset",value:future},
+      {name:"ends_at",label:"New end with UTC offset",value:later},...rationales],
+      onSubmit:async v=>propose("reschedule",{event_id:uuid(v.event_id),starts_at:v.starts_at,ends_at:v.ends_at},v.rationale)});
+    return;
+  }
+  if(key==="calendar-governed-eligibility") {
+    mustHave(people,"No employees available.");
+    openDialog(ctx,{title:"Check availability and deadline",button:"Check availability",refresh:false,fields:[
+      {name:"employee_id",label:"Employee",type:"select",options:people.map(x=>choose(x.id,x.name))},
+      {name:"at",label:"Proposed start with UTC offset",value:future},
+      {name:"duration_minutes",label:"Reserved duration in minutes",type:"number",min:1,max:1440,value:30},
+      {name:"task_id",label:"Optional task ID",required:false}],onSubmit:async v=>{
+        const query=new URLSearchParams({employee_id:uuid(v.employee_id),at:v.at,duration_minutes:v.duration_minutes,search_days:"14"});
+        if(v.task_id)query.set("task_id",uuid(v.task_id));
+        const result=await ctx.api.request(base+"/eligibility?"+query);
+        setTimeout(()=>{openDialog(ctx,{title:"Calendar eligibility result",button:"Close",refresh:false});appendEvidence(document.getElementById("operation-form"),result);},0);
+        return result.eligible?"Reserved window is available; task approval remains required.":"Calendar constraints found.";
+      }});
+  }
+}
+function listCalendarEvents(ctx) { const value=resource(ctx.state.data,"events");return Array.isArray(value)?value:[]; }

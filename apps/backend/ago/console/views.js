@@ -503,6 +503,7 @@ function renderTools(data, state) {
 }
 export function renderCalendar(data, state) {
   const events = list(data,"events");
+  const calendar=resource(data,"calendarGovernance");
   const rows = events.map(x => '<div class="list-row"><span class="row-icon">' + icon("calendar") +
     '</span><div class="row-main"><strong>' + maybe(x.title) +
     '</strong><small>' + safe(dateText(x.starts_at)) + ' — ' +
@@ -519,7 +520,7 @@ export function renderCalendar(data, state) {
     "<span>Events are records within AGO. No external email invitation or third-party calendar is sent.</span></div>" +
     section("Upcoming window","Next 30 days") +
     panel("Shared commitments",unavailable(data,"events",rows ||
-      empty("No upcoming events","Schedule the first organizational event."))));
+      empty("No upcoming events","Schedule the first organizational event.")))) + renderCalendarGovernance(calendar,state);
 }
 function renderCulture(data,state) {
   const dna=resource(data,"dna"), reflection=resource(data,"reflection");
@@ -645,4 +646,21 @@ function renderConstitution(record,manage) {
     panel("Amendment review packages",table(["Proposal","Version","Restricted operations","Actions"],rows,empty("No amendments proposed")))+
     panel("Emergency containment",table(["Incident","Restricted operations","Expiry","State","Action"],emergencyRows,empty("No emergency incidents")))+
     panel("Post-incident reviews",table(["Incident","Postmortem","Independent review","Action"],reviews,empty("No recovery reviews")));
+}
+
+function renderCalendarGovernance(calendar,state) {
+  if(!calendar)return panel("Organizational time rules",empty("Calendar governance unavailable","Refresh or check calendar access."));
+  const writable=capability(state,"calendar:write") && state.me?.roles?.includes("founder");
+  const controls=(writable?[action("Availability policy","calendar-governed-policy"),action("Organizational cycle","calendar-governed-window"),action("Window cancellation","calendar-governed-cancel-window"),action("Link dependencies","calendar-governed-link"),action("Coordinated reschedule","calendar-governed-reschedule"),action("Record due signals","calendar-governed-tick")].join(" "):"")+" "+action("Check availability","calendar-governed-eligibility");
+  const policies=(calendar.policies || []).map(x=>'<div class="list-row"><div class="row-main"><strong>'+safe(x.scope_kind)+" · "+safe(x.timezone)+'</strong><small>'+safe(x.start)+"–"+safe(x.end)+" · working days "+safe(x.weekdays.join(", "))+" · holidays "+safe(x.holidays.join(", ") || "none")+'</small><small>Quiet hours '+safe(x.quiet_start?x.quiet_start+"–"+x.quiet_end:"none")+" · continuous limit "+safe(x.max_continuous_minutes)+" min · rest "+safe(x.rest_minutes)+" min · human coverage "+safe(x.require_supervisor?"required":"optional")+" · support "+safe(x.support_start?x.support_start+"–"+x.support_end:"not configured")+'</small></div></div>').join("");
+  const windows=(calendar.windows || []).map(x=>'<div class="list-row"><div class="row-main"><strong>'+safe(x.title)+'</strong><small>'+safe(x.kind)+" · "+safe(x.scope_kind)+" · "+safe(x.owner)+" · "+safe(x.timezone)+" · "+safe(x.cadence)+" × "+safe(x.count)+'</small><small>'+safe(dateText(x.slots[0]?.starts_at))+" — "+safe(dateText(x.slots.at(-1)?.ends_at))+" · prerequisite windows "+safe(x.depends_on.length)+'</small></div></div>').join("");
+  const proposals=(calendar.proposals || []).map(x=>'<div class="list-row"><div class="row-main"><strong>'+safe(x.command.replaceAll("_"," "))+'</strong><small>'+safe(x.rationale)+'</small></div><div class="row-action">'+badge(x.applied_revision?"applied":x.status)+action("Inspect source","calendar-governed-inspect",x.id)+(writable && x.actor_id===state.me?.id && x.status==="approved" && !x.applied_revision?action("Apply reviewed change","calendar-governed-apply",x.id):"")+'</div></div>').join("");
+  const signals=(calendar.signals || []).map(x=>'<div class="list-row"><div class="row-main"><strong>'+safe(x.kind.replaceAll("_"," "))+'</strong><small>'+safe(x.detail.kind || x.detail.command || x.detail.status || (x.detail.reasons || []).join(", "))+" · "+safe(dateText(x.occurred_at))+'</small></div></div>').join("");
+  const links=(calendar.links || []).map(x=>'<div class="list-row"><div class="row-main"><strong>Event '+safe(x.event_id)+'</strong><small>Prerequisites '+safe(x.depends_on.join(", ") || "none")+" · task "+safe(x.task_id || "none")+" · goal "+safe(x.goal_id || "none")+'</small></div></div>').join("");
+  return panel("Governed calendar · revision "+calendar.revision,'<div class="dialog-actions">'+controls+'</div><p>Changes need independent human review in Governance. Calendar availability preserves task approval, QA and constitutional authority.</p>')+
+    panel("Working hours, holidays and coverage",policies || empty("No reviewed availability policy",calendar.baseline))+
+    panel("Planning and organizational cycles",windows || empty("No reviewed organizational cycle"))+
+    panel("Cross-department handoffs and task deadlines",links || empty("No reviewed event dependencies"))+
+    panel("Calendar review packages",proposals || empty("No calendar changes proposed"))+
+    panel("Due cycles and execution timing",signals || empty("No timing observations recorded"));
 }

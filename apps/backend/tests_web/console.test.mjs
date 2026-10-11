@@ -306,3 +306,19 @@ test('constitution shows immutable authority and escapes amendment and incident 
   assert.match(html,/Inspect package/);
   assert.match(html,/Prepare recovery review/);
 });
+
+test('governed calendar exposes exact review and availability while escaping untrusted sources', async () => {
+  const {renderCalendar} = await import('../ago/console/views.js');
+  const source = {revision:1,domains:{maintenance:'architecture'},policies:[{scope_kind:'company',timezone:'<img src=x>',start:'09:00',end:'18:00',weekdays:[0],holidays:['2026-12-25'],quiet_start:'22:00',quiet_end:'07:00',max_continuous_minutes:480,rest_minutes:10,require_supervisor:true}],windows:[],links:[],signals:[],proposals:[{id:'reviewed-id',actor_id:'founder-id',status:'approved',command:'policy',rationale:'<script>evil</script>'}]};
+  const data={events:{status:'ok',data:[]},calendarGovernance:{status:'ok',data:source}};
+  const html=renderCalendar(data,{me:{id:'founder-id',roles:['founder'],permissions:['calendar:read','calendar:write']}});
+  assert.match(html,/Apply reviewed change/);
+  assert.match(html,/Availability policy/);
+  assert.match(html,/2026-12-25/);
+  assert.ok(!html.includes('<script>evil'));
+  assert.ok(!html.includes('<img src=x>'));
+  const readOnly=renderCalendar(data,{me:{id:'reviewer-id',roles:['reviewer'],permissions:['calendar:read']}});
+  assert.ok(!readOnly.includes('data-action="calendar-governed-policy"'));
+  assert.ok(!readOnly.includes('Apply reviewed change'));
+  assert.match(readOnly,/Check availability/);
+});

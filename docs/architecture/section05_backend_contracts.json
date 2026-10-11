@@ -106,6 +106,42 @@
         "history": {
           "arguments": "self, *, actor: Principal, event_id: str",
           "returns": "list[dict]"
+        },
+        "governance": {
+          "arguments": "self, *, actor: Principal",
+          "returns": "dict"
+        },
+        "approval_source": {
+          "arguments": "self, *, actor: Principal, approval_id: str",
+          "returns": "dict"
+        },
+        "propose_governance": {
+          "arguments": "self, *, actor: Principal, command: str, specification: dict, rationale: str, operation_key: str, base_revision: int",
+          "returns": "dict"
+        },
+        "apply_governance": {
+          "arguments": "self, *, actor: Principal, proposal_id: str",
+          "returns": "dict"
+        },
+        "eligibility": {
+          "arguments": "self, *, actor: Principal, employee_id: str, at: datetime, duration_minutes: int=1, task_id: str | None=None, search_days: int=14",
+          "returns": "dict"
+        },
+        "require_execution": {
+          "arguments": "self, *, actor: Principal, task_id: str",
+          "returns": "None"
+        },
+        "record_execution": {
+          "arguments": "self, *, tenant_id: str, task_id: str, status: str",
+          "returns": "None"
+        },
+        "tick": {
+          "arguments": "self, *, actor: Principal",
+          "returns": "dict"
+        },
+        "temporal_snapshot": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "dict"
         }
       }
     },

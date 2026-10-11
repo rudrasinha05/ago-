@@ -26,6 +26,7 @@ from ago.repository_ports import (
     REPOSITORY_BINDINGS,
     ApprovalRepositoryPort,
     ConsoleStorePort,
+    CalendarStorePort,
     IdentityRepositoryPort,
     IdentitySecurityStorePort,
     MemoryStorePort,
@@ -163,6 +164,12 @@ def authenticated(
         if request.method not in ("GET", "HEAD", "OPTIONS") and context:
             if not security.constitution_allowed(principal, context):
                 raise HTTPException(403, "Constitution or emergency containment blocks this operation; review Governance")
+        if request.method == 'POST' and request.path_params.get('task_id') and request.url.path.endswith(('/run', '/start')):
+            try:
+                repositories.resolve(CalendarStorePort).require_execution(
+                    actor=principal, task_id=str(request.path_params['task_id']))
+            except (ValueError, PermissionError) as exc:
+                translate_error(exc)
         return principal
     except (AuthenticationError, ValueError) as exc:
         raise HTTPException(401, "Invalid session", headers={"WWW-Authenticate": "Bearer"}) from exc

@@ -236,7 +236,10 @@
       "layer": "persistence",
       "imports": [
         "backend_contracts",
-        "security"
+        "enterprise_domains",
+        "governance",
+        "security",
+        "security_controls"
       ]
     },
     "console_api": {
@@ -341,6 +344,7 @@
       "imports": [
         "architecture_guard",
         "backend_contracts",
+        "calendar_store",
         "enterprise_domains",
         "governance_domain",
         "security"
@@ -911,6 +915,7 @@
       "layer": "persistence",
       "imports": [
         "backend_contracts",
+        "calendar_store",
         "security",
         "security_controls",
         "workflows"
@@ -1005,6 +1010,15 @@
     ],
     "ago_constitution_emergency_closures": [
       "governance"
+    ],
+    "ago_calendar_proposals": [
+      "calendar_store"
+    ],
+    "ago_calendar_changes": [
+      "calendar_store"
+    ],
+    "ago_calendar_timing_audit": [
+      "calendar_store"
     ]
   },
   "exceptions": []

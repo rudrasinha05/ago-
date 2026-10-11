@@ -32,7 +32,7 @@ export function readPlan(page, now = new Date()) {
       ['enterpriseRevisions','/v1/operations/enterprise/planning/review-intents'],
       ['enterpriseAgentIntents','/v1/operations/enterprise/agents/review-intents'],
     ],
-    calendar: [['events','/v1/operations/calendar?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end)]],
+    calendar: [['events','/v1/operations/calendar?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end)],['calendarGovernance','/v1/operations/calendar/governance'],['tasks','/v1/tasks']],
     twin: [['dna','/v1/meta/dna/active'],['snapshots','/v1/meta/snapshots'],['reflection','/v1/meta/reflection'],['dnarecords','/v1/meta/dna'],['recommendations','/v1/meta/recommendations'],['evaluations','/v1/meta/evaluations']],
   };
   if (!workspaces.includes(page)) throw new Error('Unknown workspace');
