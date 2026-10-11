@@ -86,4 +86,6 @@ Recorded after the exact published head CI is verified in the single master chec
 Local validation does not claim PostgreSQL cases passed without a migrated database.
 Tests include authentic disposable PostgreSQL runtime/HTTP approval and containment behavior,
 immutable direct-DML guards, AI/foreign/revoked identities, expiry history, XSS-safe templates,
-and the shipped Next.js two-human emergency/recovery journey. CI fixtures are software evidence.
+and the shipped Next.js two-human emergency/recovery journey. This journey also found and
+fixed the existing Next.js dialog Cancel/close-button bridge after a denied action; navigation
+and independent recovery now remain available. CI fixtures are software evidence.

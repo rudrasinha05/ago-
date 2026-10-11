@@ -74,7 +74,7 @@ export function Workspace({page}) {
         {data===null?<Loading />:<><div key={revision} className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current)}} />{page==='overview'&&<Dashboard key={me.id} api={api} me={me} data={data}/>}</>}
       </main>
     </div>
-    <dialog id="action-dialog" ref={dialog} aria-labelledby="dialog-title" onClick={e=>{if(e.target===dialog.current)dialog.current.close();}}><div id="dialog-content" className="dialog-content" /></dialog>
+    <dialog id="action-dialog" ref={dialog} aria-labelledby="dialog-title" onClick={e=>{if(e.target===dialog.current || e.target.closest("[data-modal-close]"))dialog.current.close();}}><div id="dialog-content" className="dialog-content" /></dialog>
     <div className="workspace-announcement" aria-live="polite" aria-atomic="true">{toast&&<Notice>{toast}</Notice>}</div>
   </div>;
 }

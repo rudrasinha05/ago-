@@ -367,6 +367,7 @@ def test_next_constitution_emergency_stop_and_independent_recovery(page, browser
             "Constitution or emergency containment"
         )
         page.get_by_role("button", name="Cancel", exact=True).click()
+        expect(page.get_by_role("dialog")).to_be_hidden()
         navigate_next(page, "Governance", "Governance & oversight")
         page.get_by_role("button", name="Prepare recovery review", exact=True).click()
         page.locator("#dlg-postmortem").fill(
