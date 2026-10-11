@@ -360,7 +360,7 @@ def test_next_constitution_emergency_stop_and_independent_recovery(page, browser
         expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
         expect(page.locator("#screen")).to_contain_text("Browser containment test")
         navigate_next(page, "Organization", "People & departments")
-        page.get_by_role("button", name="New department", exact=True).click()
+        page.get_by_role("button", name="Add department", exact=True).click()
         page.locator("#dlg-name").fill("Blocked company change")
         page.locator("#operation-submit").click()
         expect(page.locator("#operation-error")).to_contain_text(
@@ -395,7 +395,7 @@ def test_next_constitution_emergency_stop_and_independent_recovery(page, browser
         page.locator("#operation-submit").click()
         expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
         navigate_next(page, "Organization", "People & departments")
-        page.get_by_role("button", name="New department", exact=True).click()
+        page.get_by_role("button", name="Add department", exact=True).click()
         page.locator("#dlg-name").fill("Recovered constitutional organization")
         page.locator("#operation-submit").click()
         expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)

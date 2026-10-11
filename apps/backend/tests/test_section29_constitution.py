@@ -170,7 +170,7 @@ def test_emergency_covers_every_business_area_and_records_denials(case):
         "/v1/tools/enrollments",
     ]
     # For an actual registered operation the common authentication guard runs before body/handler execution.
-    routes = {route.path for route in client.app.routes}
+    routes = {path for path, methods in client.app.openapi()["paths"].items() if "post" in methods}
     for path in urls:
         if path in routes:
             post(client, path, f, {}, expected=403)
