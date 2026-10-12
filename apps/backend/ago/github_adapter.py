@@ -90,14 +90,20 @@ def execute(project: dict, operation: dict, marker: str) -> dict:
             "private": result["private"],
         }
     current = request("GET", root)
-    if (
-        current["owner"]["login"].lower() != OWNER
-        or not current["private"]
-        or current.get("archived")
-    ):
-        raise PermissionError("Active private CEO-owned repository required")
+    if current["owner"]["login"].lower() != OWNER or current.get("archived"):
+        raise PermissionError("Active CEO-owned repository required")
     if name == "link_repository":
-        return {"repository_id": current["id"], "url": current["html_url"], "private": True}
+        if current["id"] != payload["repository_id"] or current["private"] != payload["private"]:
+            raise PermissionError("Existing repository identity or visibility changed since review")
+        return {
+            "repository_id": current["id"],
+            "url": current["html_url"],
+            "private": current["private"],
+        }
+    if current["id"] != project.get("repository_id") or current["private"] != project.get(
+        "private"
+    ):
+        raise PermissionError("Repository must match the approved remote identity and visibility")
     if name == "create_issue":
         result = request(
             "POST",
@@ -170,7 +176,7 @@ def execute(project: dict, operation: dict, marker: str) -> dict:
 def validate_operation(value: dict) -> None:
     schemas = {
         "create_repository": set(),
-        "link_repository": set(),
+        "link_repository": {"repository_id", "private"},
         "initialize_develop": {"expected_sha"},
         "create_issue": {"title", "body"},
         "update_issue": {"number", "title", "body", "state"},
@@ -180,6 +186,12 @@ def validate_operation(value: dict) -> None:
     op, p = value["operation"], value["payload"]
     if op not in schemas or not isinstance(p, dict) or set(p) != schemas[op]:
         raise ValueError("Exact supported GitHub operation fields required")
+    if op == "link_repository" and (
+        type(p["repository_id"]) is not int
+        or p["repository_id"] <= 0
+        or type(p["private"]) is not bool
+    ):
+        raise ValueError("Reviewed existing repository ID and visibility required")
     if "expected_sha" in p and (
         not isinstance(p["expected_sha"], str)
         or not re.fullmatch("[a-f0-9]{40}", p["expected_sha"])

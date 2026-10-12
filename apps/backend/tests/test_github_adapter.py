@@ -55,7 +55,7 @@ def test_unsafe_github_changes_rejected(operation, payload):
     "operation,payload",
     [
         ("create_repository", {}),
-        ("link_repository", {}),
+        ("link_repository", {"repository_id": 42, "private": True}),
         ("initialize_develop", {"expected_sha": "a" * 40}),
         ("create_issue", {"title": "Fix", "body": "Evidence"}),
         ("update_issue", {"number": 1, "title": "Fix", "body": "Evidence", "state": "closed"}),
@@ -107,7 +107,11 @@ def test_exact_private_owner_provider_requests(monkeypatch, operation, payload):
     monkeypatch.setattr(gh, "request", request)
     spec = {"operation": operation, "payload": payload}
     gh.validate_operation(spec)
-    result = gh.execute({"id": "project-id", "repository": "project"}, spec, "ago-operation:unique")
+    result = gh.execute(
+        {"id": "project-id", "repository": "project", "repository_id": 42, "private": True},
+        spec,
+        "ago-operation:unique",
+    )
     assert result
     assert all(method != "DELETE" for method, _, _ in calls)
     if operation == "create_repository":
@@ -130,7 +134,7 @@ def test_ref_change_stops_commit_before_writes(monkeypatch):
     def request(method, path, body=None):
         calls.append(method)
         return (
-            {"owner": {"login": gh.OWNER}, "private": True}
+            {"owner": {"login": gh.OWNER}, "private": True, "id": 42}
             if "/git/" not in path
             else {"object": {"sha": "b" * 40}}
         )
@@ -138,8 +142,32 @@ def test_ref_change_stops_commit_before_writes(monkeypatch):
     monkeypatch.setattr(gh, "request", request)
     with pytest.raises(PermissionError):
         gh.execute(
-            {"repository": "project"},
+            {"repository": "project", "repository_id": 42, "private": True},
             {"operation": "commit_files", "payload": {"expected_sha": "a" * 40}},
             "marker",
         )
     assert calls == ["GET", "GET"]
+
+
+def test_existing_public_repository_reuse_is_explicit_and_identity_pinned(monkeypatch):
+    def public(method, path, body=None):
+        return {
+            "owner": {"login": gh.OWNER},
+            "private": False,
+            "id": 42,
+            "html_url": "https://github.com/" + gh.OWNER + "/existing",
+        }
+
+    monkeypatch.setattr(gh, "request", public)
+    operation = {"operation": "link_repository", "payload": {"repository_id": 42, "private": False}}
+    gh.validate_operation(operation)
+    assert gh.execute({"repository": "existing"}, operation, "marker")["private"] is False
+    operation["payload"]["private"] = True
+    with pytest.raises(PermissionError):
+        gh.execute({"repository": "existing"}, operation, "marker")
+    with pytest.raises(PermissionError):
+        gh.execute(
+            {"repository": "existing", "repository_id": 43, "private": False},
+            {"operation": "create_issue", "payload": {"title": "x", "body": "y"}},
+            "marker",
+        )

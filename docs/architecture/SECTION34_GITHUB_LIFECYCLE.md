@@ -1,7 +1,10 @@
 # Governed GitHub project lifecycle
 
 Agreed owner: `rudrasinha05`. Each independent AGO project binds to one private
-repository; tasks for an existing project reuse that binding. `develop` is the
+repository; tasks for an existing project reuse that binding. Existing public repos
+(such as AGO itself) can be linked only with an explicitly reviewed repository ID
+and current visibility. Linking never changes visibility; all later operations
+recheck the pinned remote ID and visibility. `develop` is the
 working branch. `main` is reserved for stable owner-approved releases.
 
 The CEO creates a goal and approves the project roadmap, AI PM, developers and an
@@ -9,7 +12,7 @@ independent QA identity in Operations & Tools → GitHub project. The exact pack
 then receives an independent human Governance review. Applying the package records
 the immutable project/repository binding; it does not create a remote repository.
 
-GitHub operation proposes an exact change: create or link a private repository,
+GitHub operation proposes an exact change: create a private repository or explicitly link an existing repository,
 initialize `develop` from an explicitly reviewed default-branch SHA, create/update
 an issue, commit reviewed UTF-8 files to an expected `develop` SHA, or open a draft
 `develop` → `main` PR. Commits cover development, fixes, tests, workflows and docs.
@@ -28,7 +31,8 @@ a stale expected SHA fails rather than overwriting others' commits.
 
 Set `AGO_GITHUB_ENABLED=true`, `AGO_GITHUB_TENANT_ID=<authorized organization UUID>`
 and `AGO_GITHUB_TOKEN` in the backend's secret environment. Never put the credential
-in a proposal, repository file, browser storage or report. The token must be
+in a proposal, repository file, browser storage or report. For linking, the exact
+operation payload is `{ "repository_id": <GitHub numeric ID>, "private": <current boolean> }`. The token must be
 owner-authorized for the specific selected private repos and operations. Creating
 a personal repository additionally needs a credential that supports `POST /user/repos`;
 an installation token restricted to existing repos cannot be assumed to do this.

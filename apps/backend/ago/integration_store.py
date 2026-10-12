@@ -1021,6 +1021,13 @@ class IntegrationStore:
                 raise PermissionError(
                     "Prior delivery may have reached GitHub; inspect the marker before creating a replacement operation"
                 )
+            binding = self._github_binding(actor, project["id"])
+            if operation["operation"] in ("create_repository", "link_repository"):
+                if binding:
+                    raise PermissionError("Project already has a bound repository; reuse it")
+            elif not binding:
+                raise PermissionError("Create or link the approved repository first")
+            execution_project = {**project, **(binding or {})}
             if os.getenv("AGO_GITHUB_ENABLED") != "true" or not os.getenv("AGO_GITHUB_TOKEN"):
                 raise PermissionError(
                     "GitHub owner credential and explicit connector enablement required"
@@ -1032,7 +1039,7 @@ class IntegrationStore:
         # Started is durable before network I/O. Uncertain writes are never automatically repeated.
         marker = "ago-operation:" + operation_id
         try:
-            result = github_adapter.execute(project, operation, marker)
+            result = github_adapter.execute(execution_project, operation, marker)
         except (ValueError, PermissionError, OSError, http.client.HTTPException):
             self.db.execute(
                 "UPDATE ago_github_dispatch SET status='uncertain' WHERE tenant_id=%s AND operation_id=%s",
@@ -1054,9 +1061,16 @@ class IntegrationStore:
             raise PermissionError("GitHub credential is not bound to this organization")
         p = self._github_project(actor, project_id)
         root = "/repos/" + github_adapter.OWNER + "/" + p["repository"]
+        binding = self._github_binding(actor, project_id)
+        if not binding:
+            return {"project_id": project_id, "status": "repository_not_yet_bound", "ci": []}
         repo = github_adapter.request("GET", root)
-        if repo["owner"]["login"].lower() != github_adapter.OWNER or not repo["private"]:
-            raise PermissionError("Private CEO-owned repository required")
+        if (
+            repo["owner"]["login"].lower() != github_adapter.OWNER
+            or repo["id"] != binding["repository_id"]
+            or repo["private"] != binding["private"]
+        ):
+            raise PermissionError("Approved repository identity and visibility required")
         head = github_adapter.request("GET", root + "/git/ref/heads/develop")["object"]["sha"]
         runs = github_adapter.request(
             "GET", root + "/actions/runs?head_sha=" + head + "&per_page=100"
@@ -1148,3 +1162,10 @@ class IntegrationStore:
         if set(arguments) - allowed:
             raise ValueError("Unexpected adapter arguments")
         return method(token=token, **arguments)
+
+    def _github_binding(self, actor, project_id):
+        row = self.db.execute(
+            "SELECT d.result FROM ago_github_dispatch d JOIN ago_integration_settings s ON s.tenant_id=d.tenant_id AND s.proposal_id=d.proposal_id WHERE d.tenant_id=%s AND d.status='succeeded' AND s.payload->>'project_id'=%s AND s.payload->>'operation' IN ('create_repository','link_repository') ORDER BY d.created_at DESC LIMIT 1",
+            (actor.tenant_id, project_id),
+        ).fetchone()
+        return {k: row["result"][k] for k in ("repository_id", "private")} if row else None
