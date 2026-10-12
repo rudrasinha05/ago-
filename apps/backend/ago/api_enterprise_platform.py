@@ -80,6 +80,8 @@ def propose(
 ):
     try:
         return repositories.resolve(DOMAINS[domain]).propose(actor=actor, **data.model_dump())
+    except (TypeError, KeyError, AttributeError) as exc:
+        raise HTTPException(400, "Invalid typed proposal fields") from exc
     except (ValueError, PermissionError, LookupError) as exc:
         translate_error(exc)
 
@@ -359,7 +361,7 @@ async def token(
         translate_error(exc)
 
 
-def integration_token(request):
+def integration_token(request: Request):
     auth = request.headers.get("authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(401, "Integration bearer required")
@@ -436,7 +438,7 @@ class ExternalTaskInput(StrictInput):
     assignee_id: UUID
 
 
-@integration_router.post("/tasks")
+@integration_router.post("/tasks", dependencies=[Depends(integration_token)])
 def external_task(
     request: Request,
     data: ExternalTaskInput,
@@ -582,3 +584,81 @@ class PlatformBodyLimit:
             return await receive()
 
         await self.app(scope, replay, send)
+
+
+@integration_router.post("/github/operations/{operation_id}/execute")
+def github_execute(
+    operation_id: UUID,
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    try:
+        return repositories.resolve(IntegrationStorePort).github_execute(
+            actor=actor, operation_id=str(operation_id)
+        )
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@integration_router.get("/github/projects/{project_id}/status")
+def github_status(
+    project_id: UUID,
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    try:
+        return repositories.resolve(IntegrationStorePort).github_status(
+            actor=actor, project_id=str(project_id)
+        )
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@integration_router.get("/analytics")
+def external_analytics(
+    request: Request,
+    dashboard: str = "executive",
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    try:
+        return repositories.resolve(IntegrationStorePort).analytics(
+            token=integration_token(request), dashboard=dashboard
+        )
+    except (AuthenticationError, ValueError, PermissionError, LookupError, OverflowError) as exc:
+        gateway_error(exc)
+
+
+@router.get("/graph/sources/{kind}/{identifier}")
+def graph_source(
+    kind: str,
+    identifier: UUID,
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    try:
+        return repositories.resolve(EnterpriseGraphPort).source(
+            actor=actor, kind=kind, identifier=str(identifier)
+        )
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+class PluginDispatchInput(StrictInput):
+    manifest: dict
+    operation: Literal["tasks", "events", "propose_task", "analytics"]
+    arguments: dict
+
+
+@integration_router.post("/plugins/{plugin_id}/dispatch", dependencies=[Depends(integration_token)])
+def plugin_dispatch(
+    plugin_id: UUID,
+    data: PluginDispatchInput,
+    request: Request,
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    try:
+        return repositories.resolve(IntegrationStorePort).plugin_dispatch(
+            token=integration_token(request), plugin_id=str(plugin_id), **data.model_dump()
+        )
+    except (AuthenticationError, ValueError, PermissionError, LookupError, OverflowError) as exc:
+        gateway_error(exc)

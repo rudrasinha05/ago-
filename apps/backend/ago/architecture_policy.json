@@ -342,6 +342,7 @@
       "context": "operations",
       "layer": "persistence",
       "imports": [
+        "analytics_store",
         "architecture_guard",
         "backend_contracts",
         "behavior_store",
@@ -1022,7 +1023,9 @@
       "context": "strategy",
       "layer": "persistence",
       "imports": [
+        "architecture_guard",
         "backend_contracts",
+        "graph_store",
         "reviewed_changes",
         "security",
         "security_controls"
@@ -1032,7 +1035,9 @@
       "context": "operations",
       "layer": "persistence",
       "imports": [
+        "analytics_store",
         "backend_contracts",
+        "github_adapter",
         "graph_store",
         "identity_factors",
         "reviewed_changes",
@@ -1052,6 +1057,11 @@
         "reviewed_changes",
         "security"
       ]
+    },
+    "github_adapter": {
+      "context": "operations",
+      "layer": "domain",
+      "imports": []
     }
   },
   "protected_sql_writers": {
@@ -1093,6 +1103,27 @@
     ],
     "ago_calendar_timing_audit": [
       "calendar_store"
+    ],
+    "ago_enterprise_proposals": [
+      "reviewed_changes"
+    ],
+    "ago_enterprise_applied": [
+      "reviewed_changes"
+    ],
+    "ago_graph_versions": [
+      "graph_store"
+    ],
+    "ago_behavior_records": [
+      "behavior_store"
+    ],
+    "ago_analytics_settings": [
+      "analytics_store"
+    ],
+    "ago_integration_settings": [
+      "integration_store"
+    ],
+    "ago_github_dispatch": [
+      "integration_store"
     ]
   },
   "exceptions": []

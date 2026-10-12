@@ -207,7 +207,8 @@
     "behavior_store": "workforce",
     "analytics_store": "strategy",
     "integration_store": "operations",
-    "api_enterprise_platform": "transport"
+    "api_enterprise_platform": "transport",
+    "github_adapter": "operations"
   },
   "sql_access": {
     "__init__": [],
@@ -227,14 +228,20 @@
       "ago_analytics_reports",
       "ago_analytics_settings",
       "ago_analytics_snapshots",
+      "ago_approval_requests",
+      "ago_budget_envelopes",
       "ago_employees",
       "ago_enterprise_evidence",
       "ago_governed_tasks",
       "ago_graph_versions",
+      "ago_meta_recommendations",
       "ago_observed_costs",
+      "ago_policy_experiments",
+      "ago_scoped_memories",
       "ago_security_audit",
       "ago_task_reviews",
-      "ago_tenants"
+      "ago_tenants",
+      "ago_twin_scenarios"
     ],
     "api_agents": [],
     "api_brain": [],
@@ -403,6 +410,7 @@
       "ago_policy_experiments"
     ],
     "feature_flags": [],
+    "github_adapter": [],
     "goals": [
       "ago_goals"
     ],
@@ -457,8 +465,11 @@
     ],
     "integration_store": [
       "ago_api_quotas",
+      "ago_approval_requests",
       "ago_departments",
       "ago_employees",
+      "ago_github_dispatch",
+      "ago_goals",
       "ago_governed_tasks",
       "ago_integration_commands",
       "ago_integration_credentials",

@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[3]
 # These proof-exchange routes deliberately cannot require an existing bearer.
 # The list is exact; every other /v1 operation remains in the anonymous denial gate.
 PUBLIC_AUTH_ROUTES = {
+    '/v1/platform/oauth/token',  # Exchanges its own client/code proof, never a human bearer.
     '/v1/sessions', '/v1/security/mfa/confirm', '/v1/security/tickets/redeem',
     '/v1/security/sso/start', '/v1/security/sso/callback', '/v1/security/sso/session',
 }

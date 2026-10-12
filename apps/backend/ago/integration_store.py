@@ -24,6 +24,8 @@ from ago.reviewed_changes import ReviewedChanges, canonical, digest
 from ago.security import Principal, AuthenticationError
 from ago.security_controls import SecurityControls
 from ago.task_store import TaskStore
+from ago import github_adapter
+from ago.analytics_store import AnalyticsStore
 
 SCOPES = {"events:read", "tasks:read", "tasks:propose", "analytics:read"}
 EVENT_TYPES = {
@@ -150,6 +152,8 @@ class IntegrationStore:
             "scopes": sorted(SCOPES),
             "events": sorted(EVENT_TYPES),
             "api_version": "v1",
+            "github_projects": self._settings(actor.tenant_id, "github_project"),
+            "github_operations": self._settings(actor.tenant_id, "github_operation"),
             "deliveries": [
                 dict(r)
                 for r in self.db.execute(
@@ -160,6 +164,9 @@ class IntegrationStore:
         }
 
     def _validate(self, actor, command, p):
+        if command in ("github_project", "github_operation"):
+            self._validate_github(actor, command, p)
+            return
         schemas = {
             "client": {
                 "id",
@@ -289,7 +296,12 @@ class IntegrationStore:
             if p["state"] != "active":
                 from ago.graph_store import instant
 
-                if instant(p["sunset_at"]) < datetime.now(timezone.utc) + timedelta(days=30):
+                previous = self._settings(actor.tenant_id, "version")
+                old = max(previous, key=lambda r: r["revision"])["payload"] if previous else None
+                if p["state"] == "retired":
+                    if not old or old["state"] != "deprecated" or old["sunset_at"] != p["sunset_at"] or instant(p["sunset_at"]) > datetime.now(timezone.utc):
+                        raise ValueError("Retirement requires the previously announced elapsed sunset")
+                elif instant(p["sunset_at"]) < datetime.now(timezone.utc) + timedelta(days=30):
                     raise ValueError("At least30 days deprecation notice required")
 
     def propose(
@@ -309,7 +321,7 @@ class IntegrationStore:
             domain="integration",
             command=command,
             specification=specification,
-            source={"prior": self._settings(actor.tenant_id, command, specification["id"])},
+            source=self._integration_source(actor, command, specification),
             operation_key=operation_key,
             base_revision=base_revision,
             rationale=rationale,
@@ -323,9 +335,7 @@ class IntegrationStore:
                 return p["applied"]
             spec = p["specification"]
             self._validate(actor, p["command"], spec)
-            if digest(
-                {"prior": self._settings(actor.tenant_id, p["command"], spec["id"])}
-            ) != digest(p["source"]):
+            if digest(self._integration_source(actor, p["command"], spec)) != digest(p["source"]):
                 raise PermissionError("Integration source changed")
             self.db.execute(
                 "INSERT INTO ago_integration_settings(tenant_id,id,revision,kind,payload,proposal_id) VALUES(%s,%s,%s,%s,%s::jsonb,%s)",
@@ -709,7 +719,10 @@ class IntegrationStore:
                 try:
                     client = self._client(actor.tenant_id, sub[0]["payload"]["client_id"])
                 except AuthenticationError:
-                    self.db.execute("UPDATE ago_webhook_deliveries SET status='blocked' WHERE tenant_id=%s AND id=%s", (actor.tenant_id, row["id"]))
+                    self.db.execute(
+                        "UPDATE ago_webhook_deliveries SET status='blocked' WHERE tenant_id=%s AND id=%s",
+                        (actor.tenant_id, row["id"]),
+                    )
                     continue
                 if (
                     client["department_id"]
@@ -864,3 +877,262 @@ class IntegrationStore:
             "tasks": [dict(r) for r in rows],
             "next_cursor": str(rows[-1]["id"]) if rows else after,
         }
+
+    def _integration_source(self, actor, command, specification):
+        source = {"prior": self._settings(actor.tenant_id, command, specification["id"])}
+        if command == "github_operation":
+            source["project"] = self._github_project(actor, specification["project_id"])
+        if command == "github_project":
+            source["goal"] = dict(
+                self.db.execute(
+                    "SELECT * FROM ago_goals WHERE tenant_id=%s AND id=%s",
+                    (actor.tenant_id, specification["goal_id"]),
+                ).fetchone()
+            )
+        return source
+
+    def _validate_github(self, actor, command, p):
+        if command == "github_project":
+            if set(p) != {
+                "id",
+                "goal_id",
+                "repository",
+                "pm_id",
+                "developer_ids",
+                "qa_id",
+                "roadmap_ref",
+                "enabled",
+            }:
+                raise ValueError(
+                    "Exact project ownership, roadmap and separation of duties required"
+                )
+            UUID(p["id"])
+            UUID(p["goal_id"])
+            github_adapter.repository_name(p["repository"])
+            if (
+                type(p["enabled"]) is not bool
+                or not isinstance(p["roadmap_ref"], str)
+                or not 1 <= len(p["roadmap_ref"]) <= 1000
+            ):
+                raise ValueError("Approved roadmap reference and explicit state required")
+            if not self.db.execute(
+                "SELECT 1 FROM ago_goals WHERE tenant_id=%s AND id=%s",
+                (actor.tenant_id, p["goal_id"]),
+            ).fetchone():
+                raise PermissionError("Same-tenant project goal required")
+            if (
+                not isinstance(p["developer_ids"], list)
+                or not 1 <= len(p["developer_ids"]) <= 20
+                or len(set(p["developer_ids"])) != len(p["developer_ids"])
+            ):
+                raise ValueError("Explicit unique developer identities required")
+            if p["qa_id"] in [p["pm_id"], *p["developer_ids"]]:
+                raise PermissionError("QA must be independent from project delivery")
+            for uid in [p["pm_id"], p["qa_id"], *p["developer_ids"]]:
+                UUID(uid)
+                if not self.db.execute(
+                    "SELECT 1 FROM ago_employees WHERE tenant_id=%s AND id=%s",
+                    (actor.tenant_id, uid),
+                ).fetchone():
+                    raise PermissionError("Same-tenant accountable employee required")
+            for old in self._settings(actor.tenant_id, command):
+                prior = old["payload"]
+                if prior["id"] == p["id"] and (
+                    prior["repository"] != p["repository"] or prior["goal_id"] != p["goal_id"]
+                ):
+                    raise PermissionError("Project repository binding is immutable")
+                if prior["id"] != p["id"] and (
+                    prior["repository"].lower() == p["repository"].lower()
+                    or prior["goal_id"] == p["goal_id"]
+                ):
+                    raise PermissionError(
+                        "Reuse existing project binding; independent projects have separate repositories"
+                    )
+        else:
+            if set(p) != {"id", "project_id", "operation", "payload"}:
+                raise ValueError("Exact reviewed GitHub operation required")
+            UUID(p["id"])
+            UUID(p["project_id"])
+            self._github_project(actor, p["project_id"])
+            github_adapter.validate_operation(p)
+            if self._settings(actor.tenant_id, command, p["id"]):
+                raise PermissionError(
+                    "GitHub operation is immutable; create a separately reviewed operation"
+                )
+
+    def _github_project(self, actor, project_id):
+        rows = self._settings(actor.tenant_id, "github_project", project_id)
+        if not rows or not rows[0]["payload"]["enabled"]:
+            raise PermissionError("Active approved project required")
+        return rows[0]["payload"]
+
+    def github_execute(self, *, actor: Principal, operation_id: str) -> dict:
+        self.repositories.resolve(ReviewedChanges).require(actor, "integration")
+        if os.getenv("AGO_GITHUB_TENANT_ID") != actor.tenant_id:
+            raise PermissionError("GitHub credential is not bound to this organization")
+        with self.db.transaction():
+            self.db.execute("SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE", (actor.tenant_id,))
+            rows = self._settings(actor.tenant_id, "github_operation", operation_id)
+            if not rows:
+                raise LookupError("Approved operation required")
+            row = rows[0]
+            proposal = self.repositories.resolve(ReviewedChanges).package(
+                actor=actor, proposal_id=str(row["proposal_id"]), domain="integration"
+            )
+            if not proposal.get("applied"):
+                raise PermissionError("Apply the independently approved operation first")
+            # Recheck active reviewer at dispatch, even after local application.
+            approval = self.db.execute(
+                "SELECT reviewer_id FROM ago_approval_requests WHERE tenant_id=%s AND id=%s AND status='approved'",
+                (actor.tenant_id, proposal["approval_id"]),
+            ).fetchone()
+            reviewer = (
+                Principal(str(approval["reviewer_id"]), actor.tenant_id, ("reviewer",))
+                if approval
+                else None
+            )
+            if not reviewer or not self.repositories.resolve(SecurityControls).permitted(
+                reviewer, "approval:decide", actor.tenant_id
+            ):
+                raise PermissionError("Independent reviewer authority revoked")
+            operation = row["payload"]
+            project = self._github_project(actor, operation["project_id"])
+            if project != proposal["source"]["project"]:
+                raise PermissionError("Project ownership or policy changed; review operation again")
+            old = self.db.execute(
+                "SELECT * FROM ago_github_dispatch WHERE tenant_id=%s AND operation_id=%s",
+                (actor.tenant_id, operation_id),
+            ).fetchone()
+            if old:
+                if old["status"] == "succeeded":
+                    return dict(old)
+                raise PermissionError(
+                    "Prior delivery may have reached GitHub; inspect the marker before creating a replacement operation"
+                )
+            if os.getenv("AGO_GITHUB_ENABLED") != "true" or not os.getenv("AGO_GITHUB_TOKEN"):
+                raise PermissionError(
+                    "GitHub owner credential and explicit connector enablement required"
+                )
+            self.db.execute(
+                "INSERT INTO ago_github_dispatch(tenant_id,operation_id,proposal_id,status) VALUES(%s,%s,%s,'started')",
+                (actor.tenant_id, operation_id, row["proposal_id"]),
+            )
+        # Started is durable before network I/O. Uncertain writes are never automatically repeated.
+        marker = "ago-operation:" + operation_id
+        try:
+            result = github_adapter.execute(project, operation, marker)
+        except (ValueError, PermissionError, OSError, http.client.HTTPException):
+            self.db.execute(
+                "UPDATE ago_github_dispatch SET status='uncertain' WHERE tenant_id=%s AND operation_id=%s",
+                (actor.tenant_id, operation_id),
+            )
+            raise ValueError(
+                "GitHub delivery uncertain; inspect remote marker before any replacement"
+            ) from None
+        return dict(
+            self.db.execute(
+                "UPDATE ago_github_dispatch SET status='succeeded',result=%s::jsonb,completed_at=clock_timestamp() WHERE tenant_id=%s AND operation_id=%s RETURNING *",
+                (canonical(result), actor.tenant_id, operation_id),
+            ).fetchone()
+        )
+
+    def github_status(self, *, actor: Principal, project_id: str) -> dict:
+        self._read(actor)
+        if os.getenv("AGO_GITHUB_TENANT_ID") != actor.tenant_id:
+            raise PermissionError("GitHub credential is not bound to this organization")
+        p = self._github_project(actor, project_id)
+        root = "/repos/" + github_adapter.OWNER + "/" + p["repository"]
+        repo = github_adapter.request("GET", root)
+        if repo["owner"]["login"].lower() != github_adapter.OWNER or not repo["private"]:
+            raise PermissionError("Private CEO-owned repository required")
+        head = github_adapter.request("GET", root + "/git/ref/heads/develop")["object"]["sha"]
+        runs = github_adapter.request(
+            "GET", root + "/actions/runs?head_sha=" + head + "&per_page=100"
+        )
+        return {
+            "project_id": project_id,
+            "repository": repo["full_name"],
+            "develop_sha": head,
+            "ci": [
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "status": r["status"],
+                    "conclusion": r["conclusion"],
+                    "url": r["html_url"],
+                }
+                for r in runs["workflow_runs"]
+            ],
+            "ci_total": runs["total_count"],
+            "ci_truncated": runs["total_count"] > len(runs["workflow_runs"]),
+            "operations": [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT d.* FROM ago_github_dispatch d JOIN ago_integration_settings s ON s.tenant_id=d.tenant_id AND s.proposal_id=d.proposal_id WHERE d.tenant_id=%s AND s.payload->>'project_id'=%s ORDER BY d.created_at DESC LIMIT 100",
+                    (actor.tenant_id, project_id),
+                ).fetchall()
+            ],
+            "release_policy": "Draft PR only; independent human QA and owner release decision required; deletion and transfer unavailable",
+        }
+
+    def analytics(self, *, token: str, dashboard: str = "executive") -> dict:
+        auth = self.authenticate(token=token, scope="analytics:read", endpoint="analytics")
+        actor = auth["actor"]
+        result = self.repositories.resolve(AnalyticsStore).dashboard(
+            actor=actor,
+            dashboard="department" if auth["client"]["department_id"] else dashboard,
+            department_id=auth["client"]["department_id"],
+        )
+        return {
+            k: result[k]
+            for k in (
+                "dashboard",
+                "scope",
+                "observed_at",
+                "definition_version",
+                "metrics",
+                "task_status",
+                "qa_status",
+                "limitations",
+            )
+        }
+
+    def plugin_dispatch(
+        self, *, token: str, plugin_id: str, manifest: dict, operation: str, arguments: dict
+    ) -> dict:
+        scopes = {
+            "tasks": "tasks:read",
+            "events": "events:read",
+            "propose_task": "tasks:propose",
+            "analytics": "analytics:read",
+        }
+        if operation not in scopes:
+            raise ValueError("Supported governed adapter operation required")
+        auth = self.authenticate(token=token, scope=scopes[operation], endpoint="plugin")
+        rows = self._settings(auth["actor"].tenant_id, "plugin", plugin_id)
+        if not rows:
+            raise PermissionError("Registered plugin required")
+        plugin = rows[0]["payload"]
+        expected = {
+            k: plugin[k] for k in ("name", "version", "extension", "permissions", "configuration")
+        }
+        if (
+            plugin["state"] != "enabled"
+            or plugin["client_id"] != auth["client"]["id"]
+            or scopes[operation] not in plugin["permissions"]
+            or manifest != expected
+            or digest(manifest) != plugin["manifest_sha256"]
+        ):
+            raise PermissionError(
+                "Current enabled plugin, pinned manifest and scoped client required"
+            )
+        methods = {
+            "tasks": (self.tasks, {"after", "limit"}),
+            "events": (self.events, {"after", "limit"}),
+            "propose_task": (self.propose_task, {"action", "assignee_id", "operation_key"}),
+            "analytics": (self.analytics, {"dashboard"}),
+        }
+        method, allowed = methods[operation]
+        if set(arguments) - allowed:
+            raise ValueError("Unexpected adapter arguments")
+        return method(token=token, **arguments)

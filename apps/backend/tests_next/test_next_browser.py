@@ -446,3 +446,52 @@ def test_next_calendar_policy_requires_exact_independent_review(page, browser, a
         expect(page.locator('#login-form')).to_be_visible()
     finally:
         context.close()
+
+
+def test_next_enterprise_graph_independent_source_review(page, browser, app_url, tenant):
+    context = browser.new_context(viewport={"width": 1400, "height": 1000})
+    reviewer = context.new_page()
+    try:
+        sign_in_next(page, app_url, tenant)
+        navigate_next(page, "Knowledge", "Institutional knowledge")
+        page.get_by_role("button", name="Propose entity", exact=True).click()
+        page.locator("#dlg-kind").select_option("project")
+        page.locator("#dlg-label").fill("Browser reviewed graph project")
+        page.locator("#dlg-statement").fill("Original source reviewed by two humans")
+        page.locator("#dlg-source_ref").fill("browser:source-document")
+        page.locator("#dlg-rationale").fill("Trace exact independent evidence")
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        sign_in_next(reviewer, app_url, tenant, "reviewer")
+        navigate_next(reviewer, "Knowledge", "Institutional knowledge")
+        expect(reviewer.get_by_role("button", name="Propose entity", exact=True)).to_have_count(0)
+        navigate_next(reviewer, "Governance", "Governance & oversight")
+        row = reviewer.locator("tr").filter(has_text="enterprise:review:graph:")
+        row.get_by_role("button", name="Approve", exact=True).click()
+        expect(reviewer.locator("#action-dialog")).to_contain_text("Browser reviewed graph project")
+        reviewer.locator("#dlg-reason").fill("Verified source, ownership and classification")
+        reviewer.locator("#operation-submit").click()
+        expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        page.get_by_role("button", name="Refresh", exact=True).click()
+        page.get_by_role("button", name="Apply reviewed change", exact=True).click()
+        page.locator("#operation-submit").click()
+        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        expect(page.locator("#screen")).to_contain_text("Browser reviewed graph project")
+        page.reload()
+        expect(page.locator("#screen")).to_contain_text("Browser reviewed graph project")
+    finally:
+        context.close()
+
+
+def test_next_github_and_enterprise_controls_preserve_human_roles(page, app_url, tenant):
+    sign_in_next(page, app_url, tenant)
+    navigate_next(page, "Operations & Tools", "Enterprise operations")
+    page.get_by_role("button", name="GitHub project", exact=True).click()
+    expect(page.locator("#dlg-repository")).to_be_visible()
+    expect(page.locator("#dlg-qa_id")).to_be_visible()
+    page.get_by_role("button", name="Cancel", exact=True).click()
+    page.get_by_role("button", name="Sign out", exact=True).click()
+    sign_in_next(page, app_url, tenant, "reviewer")
+    navigate_next(page, "Operations & Tools", "Enterprise operations")
+    expect(page.get_by_role("button", name="GitHub project", exact=True)).to_have_count(0)
+    expect(page.get_by_role("button", name="Run approved GitHub operation", exact=True)).to_have_count(0)

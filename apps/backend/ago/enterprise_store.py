@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 from typing import Callable
 
 from ago.behavior_store import BehaviorStore
+from ago.analytics_store import AnalyticsStore
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.enterprise_domains import (
     ASSET_TYPES, AssetIdentity, HORIZONS, OperatingMode, WorkCandidate,
@@ -2857,6 +2858,7 @@ class EnterpriseOperationsStore:
                 payload['failed_task_ids'] = observations['payload']['failed_task_ids']
                 payload['route'] = observations['payload']['escalation_route']
             if phase == 'learn':
+                payload['scheduled_reports'] = self.repositories.resolve(AnalyticsStore).tick(actor=actor)
                 payload['diagnostics'] = self.evolution_diagnostics(
                     actor=actor, operation_key='life:'+operation_key)['id']
                 payload['twin_snapshot'] = self.capture_twin_state(

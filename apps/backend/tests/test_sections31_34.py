@@ -465,7 +465,9 @@ def test_oauth_confidential_and_public_pkce_replay(case):
         },
     )
     assert token.status_code == 200, token.text
-    assert token.json()["expires_in"] == 300 and token.headers["cache-control"] == "no-store"
+    assert token.json()["expires_in"] == 300 and "no-store" in token.headers["cache-control"].split(
+        ", "
+    )
     auth = {"Authorization": "Bearer " + token.json()["access_token"]}
     post(
         c,
@@ -575,3 +577,215 @@ def test_webhook_retry_rotation_and_plugin_lifecycle(case, monkeypatch):
         plugin["state"] = state
         item, _ = propose(c, f, "integration", "plugin", plugin)
         apply(c, f, r, "integration", item)
+
+
+def test_source_import_hides_stale_records_and_requires_reapproval(case):
+    c, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    dept = department(c, f)
+    source = c.get(BASE + "/graph/sources/department/" + dept, headers=f)
+    assert source.status_code == 200, source.text
+    node = source.json()
+    assert node["classification"] == "restricted"
+    item, _ = propose(c, f, "graph", "node", node)
+    apply(c, f, r, "graph", item)
+    assert c.get(BASE + "/graph", headers=f).json()["nodes"]
+    assert not c.get(BASE + "/graph", headers=r).json()["nodes"]
+    info["db"].execute(
+        "UPDATE ago_departments SET name=%s WHERE tenant_id=%s AND id=%s",
+        ("Changed source", info["tenant"], dept),
+    )
+    assert not c.get(BASE + "/graph", headers=f).json()["nodes"]
+
+
+def test_raw_projection_cannot_skip_or_modify_independent_review(case):
+    import psycopg
+
+    c, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    spec = integration_client(info["founder_id"])
+    item, _ = propose(c, f, "integration", "client", spec)
+
+    def insert(payload):
+        with info["db"].transaction():
+            info["db"].execute(
+                "INSERT INTO ago_integration_settings(tenant_id,id,revision,kind,payload,proposal_id) VALUES(%s,%s,1,'client',%s::jsonb,%s)",
+                (info["tenant"], spec["id"], json.dumps(payload), item["id"]),
+            )
+
+    with pytest.raises(psycopg.errors.RaiseException):
+        insert(spec)
+    decide(c, r, item["approval_id"])
+    with pytest.raises(psycopg.errors.RaiseException):
+        insert({**spec, "scopes": ["analytics:read"]})
+    post(c, BASE + "/reviews/integration/apply", f, {"proposal_id": item["id"]})
+
+
+def test_github_project_approval_exact_dispatch_idempotency_and_tenant_binding(case, monkeypatch):
+    from ago import github_adapter
+
+    c, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    dept = department(c, f)
+    pm = employee(c, f, dept)
+    dev = employee(c, f, dept)
+    goal = post(
+        c,
+        "/v1/brain/goals",
+        f,
+        {"title": "Private project lifecycle", "description": "Reviewed plan"},
+    )
+    project = {
+        "id": str(uuid4()),
+        "goal_id": goal["id"],
+        "repository": "ago-project-test",
+        "pm_id": pm,
+        "developer_ids": [dev],
+        "qa_id": info["reviewer_id"],
+        "roadmap_ref": "approved:roadmap-v1",
+        "enabled": True,
+    }
+    item, _ = propose(c, f, "integration", "github_project", project)
+    apply(c, f, r, "integration", item)
+    operation = {
+        "id": str(uuid4()),
+        "project_id": project["id"],
+        "operation": "create_repository",
+        "payload": {},
+    }
+    item, _ = propose(c, f, "integration", "github_operation", operation)
+    path = "/v1/platform/github/operations/" + operation["id"] + "/execute"
+    assert c.post(path, headers=f, json={}).status_code == 403
+    apply(c, f, r, "integration", item)
+    monkeypatch.setenv("AGO_GITHUB_TENANT_ID", info["tenant"])
+    monkeypatch.setenv("AGO_GITHUB_ENABLED", "true")
+    monkeypatch.setenv("AGO_GITHUB_TOKEN", "test-only-never-sent")
+    calls = []
+
+    def send(project, spec, marker):
+        calls.append((project, spec, marker))
+        return {"repository_id": 42, "private": True}
+
+    monkeypatch.setattr(github_adapter, "execute", send)
+    assert post(c, path, f)["status"] == "succeeded"
+    assert post(c, path, f)["status"] == "succeeded"
+    assert len(calls) == 1 and calls[0][2] == "ago-operation:" + operation["id"]
+    assert c.post(path, headers=r, json={}).status_code == 403
+    duplicate = {**project, "id": str(uuid4())}
+    rev = c.get(BASE + "/reviews/integration", headers=f).json()["revision"]
+    assert (
+        c.post(
+            BASE + "/reviews/integration/propose",
+            headers=f,
+            json={
+                "command": "github_project",
+                "specification": duplicate,
+                "operation_key": str(uuid4()),
+                "base_revision": rev,
+                "rationale": "Duplicate should reuse",
+            },
+        ).status_code
+        == 403
+    )
+    operation = {
+        **operation,
+        "id": str(uuid4()),
+        "operation": "create_issue",
+        "payload": {"title": "Fix defect", "body": "Observed failure"},
+    }
+    item, _ = propose(c, f, "integration", "github_operation", operation)
+    apply(c, f, r, "integration", item)
+
+    def uncertain(*args):
+        calls.append("uncertain")
+        raise OSError("connection lost after remote commit")
+
+    monkeypatch.setattr(github_adapter, "execute", uncertain)
+    path = "/v1/platform/github/operations/" + operation["id"] + "/execute"
+    assert c.post(path, headers=f, json={}).status_code == 400
+    assert c.post(path, headers=f, json={}).status_code == 403
+    assert calls.count("uncertain") == 1
+
+
+def test_plugin_runtime_checks_manifest_client_scope_and_revocation(case):
+    from ago.reviewed_changes import digest
+
+    c, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    client = integration_client(info["founder_id"], scopes=["tasks:read", "analytics:read"])
+    item, _ = propose(c, f, "integration", "client", client)
+    apply(c, f, r, "integration", item)
+    key = post(c, "/v1/platform/clients/" + client["id"] + "/credentials", f, {"kind": "api_key"})[
+        "credential"
+    ]
+    auth = {"Authorization": "Bearer " + key}
+    manifest = {
+        "name": "Readonly inspector",
+        "version": "1.0.0",
+        "extension": "dashboard",
+        "permissions": ["tasks:read", "analytics:read"],
+        "configuration": {},
+    }
+    plugin = {
+        "id": str(uuid4()),
+        "client_id": client["id"],
+        **manifest,
+        "manifest_sha256": digest(manifest),
+        "state": "installed",
+    }
+    for state in ("installed", "configured", "enabled"):
+        plugin["state"] = state
+        item, _ = propose(c, f, "integration", "plugin", plugin)
+        apply(c, f, r, "integration", item)
+    path = "/v1/platform/plugins/" + plugin["id"] + "/dispatch"
+    body = {"manifest": manifest, "operation": "tasks", "arguments": {}}
+    assert c.post(path, headers=auth, json=body).status_code == 200
+    assert (
+        c.post(
+            path, headers=auth, json={**body, "manifest": {**manifest, "version": "2.0.0"}}
+        ).status_code
+        == 403
+    )
+    assert c.get("/v1/platform/analytics", headers=auth).status_code == 200
+    plugin["state"] = "disabled"
+    item, _ = propose(c, f, "integration", "plugin", plugin)
+    apply(c, f, r, "integration", item)
+    assert c.post(path, headers=auth, json=body).status_code == 403
+
+
+def test_gateway_body_limit_malformed_proposals_and_quota(case):
+    c, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    assert (
+        c.post(BASE + "/reviews/graph/propose", headers=f, content=b"x" * 65537).status_code == 413
+    )
+    client = integration_client(info["founder_id"], requests_per_minute=1)
+    item, _ = propose(c, f, "integration", "client", client)
+    apply(c, f, r, "integration", item)
+    key = post(c, "/v1/platform/clients/" + client["id"] + "/credentials", f, {"kind": "api_key"})[
+        "credential"
+    ]
+    auth = {"Authorization": "Bearer " + key}
+    assert c.get("/v1/platform/events", headers=auth).status_code == 200
+    assert c.get("/v1/platform/events", headers=auth).status_code == 429
+
+
+def test_receiver_recovery_retains_unacknowledged_payload(tmp_path):
+    from ago.integration_store import webhook_signature
+
+    location = Path(__file__).resolve().parents[3] / "packages/sdk/python/ago_client.py"
+    spec = importlib.util.spec_from_file_location("ago_recovery_sdk", location)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    delivery = str(uuid4())
+    body = b'{"task":"durable"}'
+    path = str(tmp_path / "inbox.db")
+    receiver = module.WebhookReceiver(path)
+    receiver.accept(
+        "secret", 1000, delivery, body, webhook_signature("secret", 1000, delivery, body), now=1000
+    )
+    receiver.db.close()
+    restarted = module.WebhookReceiver(path)
+    assert restarted.pending() == [{"delivery_id": delivery, "data": {"task": "durable"}}]
+    restarted.acknowledge(delivery)
+    assert restarted.pending() == []

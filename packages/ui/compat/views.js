@@ -674,7 +674,7 @@ function renderEnterpriseBatch(page,data,state) {
   let body='';
   if(domain==='graph') {
     const graph=resource(data,'graph');
-    body=(founder?[action('Propose entity','batch-graph-node'),action('Propose relationship','batch-graph-edge'),action('Merge duplicates','batch-graph-merge'),action('Retire entity','batch-graph-delete'),action('Synchronize memory','batch-graph-sync')].join(' '):'')+' '+action('Trace relationships','batch-graph-query');
+    body=(founder?[action('Import source record','batch-graph-source'),action('Propose entity','batch-graph-node'),action('Propose relationship','batch-graph-edge'),action('Merge duplicates','batch-graph-merge'),action('Retire entity','batch-graph-delete'),action('Synchronize memory','batch-graph-sync')].join(' '):'')+' '+action('Trace relationships','batch-graph-query');
     body+=table(['Entity','Type','Confidence','Owner'],(graph?.nodes || []).map(n=>'<tr><td>'+safe(n.payload.label)+'</td><td>'+safe(n.payload.kind)+'</td><td>'+safe(n.payload.confidence)+'</td><td>'+safe(shortId(n.payload.owner_id))+'</td></tr>'),empty('No reviewed graph entities','Propose an entity, review it in Governance, then apply the reviewed change.'));
   } else if(domain==='behavior') {
     body=(founder?[action('Define a measure','batch-behavior-definition'),action('Record observation','batch-behavior-observation'),action('Review readiness','batch-behavior-decision'),action('Resolve appeal','batch-behavior-resolve')].join(' '):'')+' '+action('View AI evidence','batch-behavior-profile')+' '+action('Challenge assessment','batch-behavior-appeal');
@@ -686,7 +686,7 @@ function renderEnterpriseBatch(page,data,state) {
     body+='<p>Task complexity, source freshness and evidence limits matter. Counts alone do not establish quality or employee performance.</p>';
   } else {
     const integrations=resource(data,'integrations');
-    body=founder?[action('Register client','batch-integration-client'),action('Register webhook','batch-integration-webhook'),action('Plugin lifecycle','batch-integration-plugin'),action('Issue credential','batch-integration-key'),action('Rotate webhook key','batch-integration-rotate'),action('Publish integration events','batch-integration-publish')].join(' '):'';
+    body=founder?[action('GitHub project','batch-github-project'),action('GitHub operation','batch-github-operation'),action('Run approved GitHub operation','batch-github-execute'),action('GitHub CI status','batch-github-status'),action('Register client','batch-integration-client'),action('Register webhook','batch-integration-webhook'),action('Plugin lifecycle','batch-integration-plugin'),action('Issue credential','batch-integration-key'),action('Rotate webhook key','batch-integration-rotate'),action('Publish integration events','batch-integration-publish')].join(' '):'';
     body+=table(['Client','Type','Scopes','State'],(integrations?.clients || []).map(c=>'<tr><td>'+safe(c.payload.name)+'</td><td>'+safe(c.payload.type)+'</td><td>'+safe(c.payload.scopes.join(', '))+'</td><td>'+badge(c.payload.enabled?'enabled':'disabled')+'</td></tr>'));
     body+='<p>External clients have explicit scopes, expiry and shared quotas. Proposed tasks still require independent approval.</p>';
   }

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections import deque
-from datetime import datetime, timezone
-from uuid import UUID
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid5, NAMESPACE_URL
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.reviewed_changes import ReviewedChanges, canonical, digest
@@ -124,6 +124,13 @@ class EnterpriseGraph:
             return False
         if p["classification"] != "tenant" and actor.subject not in [p["owner_id"], *p["readers"]]:
             return False
+        if p.get("source_digest"):
+            try:
+                _, kind, identifier = p["source_ref"].split(":")
+                if digest(self._record(actor, kind, identifier)) != p["source_digest"]:
+                    return False
+            except (ValueError, LookupError, PermissionError):
+                return False
         for mid in p["memory_ids"]:
             try:
                 self.repositories.resolve(SemanticMemoryStore).get(actor=actor, memory_id=mid)
@@ -138,7 +145,13 @@ class EnterpriseGraph:
             ids += [spec["from_id"], spec["to_id"]]
         if command == "merge":
             ids += [spec["target_id"]]
-        return {"entities": {x: digest(all_rows[x]) if x in all_rows else None for x in ids}}
+        source = {"entities": {x: digest(all_rows[x]) if x in all_rows else None for x in ids}}
+        if command == "node" and spec["source_ref"].startswith("ago:"):
+            parts = spec["source_ref"].split(":")
+            if len(parts) != 3 or parts[1] != spec["kind"]:
+                raise ValueError("Exact typed source reference required")
+            source["record"] = self._record(actor, parts[1], parts[2])
+        return source
 
     def _validate(self, actor, command, spec):
         rows = self._all(actor)
@@ -296,6 +309,8 @@ class EnterpriseGraph:
                             replacement["deleted"] = True
                         changes.append((key, "edge", replacement))
             for identifier, kind, payload in changes:
+                if command == "node" and "record" in p["source"]:
+                    payload = {**payload, "source_digest": digest(p["source"]["record"])}
                 self.db.execute(
                     """INSERT INTO ago_graph_versions(tenant_id,entity_id,entity_kind,revision,payload,proposal_id)
                     VALUES(%s,%s,%s,%s,%s::jsonb,%s)""",
@@ -456,3 +471,46 @@ class EnterpriseGraph:
             )
             done.append(str(r["memory_id"]))
         return {"indexed": done, "unavailable": unavailable}
+
+    def _record(self, actor, kind, identifier):
+        tables = {
+            "employee": ("ago_employees", "id,name,kind,department_id,manager_id"),
+            "department": ("ago_departments", "id,name"),
+            "project": ("ago_goals", "id,title,status,description"),
+            "workflow": ("ago_governed_tasks", "id,action,status,assignee_id"),
+        }
+        if kind not in tables:
+            raise ValueError("Supported source: employee, department, project or workflow")
+        UUID(identifier)
+        table, fields = tables[kind]
+        row = self.db.execute(
+            f"SELECT {fields} FROM {table} WHERE tenant_id=%s AND id=%s",
+            (actor.tenant_id, identifier),
+        ).fetchone()
+        if not row:
+            raise LookupError("Same-tenant source record required")
+        import json
+
+        return json.loads(canonical(dict(row)))
+
+    def source(self, *, actor: Principal, kind: str, identifier: str) -> dict:
+        self.repositories.resolve(ReviewedChanges).require(actor, "graph")
+        record = self._record(actor, kind, identifier)
+        now = datetime.now(timezone.utc)
+        ref = "ago:" + kind + ":" + identifier
+        return {
+            "id": str(uuid5(NAMESPACE_URL, actor.tenant_id + ":" + ref)),
+            "kind": kind,
+            "label": record.get("name", record.get("title", record.get("action", kind))),
+            "statement": canonical(record),
+            "owner_id": actor.subject,
+            "classification": "restricted",
+            "readers": [],
+            "source_ref": ref,
+            "source_at": now.isoformat(),
+            "confidence": 1.0,
+            "effective_at": now.isoformat(),
+            "expires_at": (now + timedelta(days=30)).isoformat(),
+            "memory_ids": [],
+            "legal_hold": False,
+        }

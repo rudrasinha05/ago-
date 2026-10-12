@@ -11,6 +11,7 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.reviewed_changes import ReviewedChanges, canonical, digest
 from ago.security import Principal
 from ago.security_controls import SecurityControls
+from ago.graph_store import EnterpriseGraph
 
 DASHBOARDS = (
     "executive",
@@ -277,7 +278,86 @@ class AnalyticsStore:
             "meta_brain": ["recommendations"],
             "health": ["employees", "departments", "backlog", "qa_pass_rate", "behavior_records"],
         }
+        details = {}
+        if dashboard in ("workflow", "infrastructure", "health"):
+            details["task_age"] = [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT status,count(*) records,avg(extract(epoch FROM (clock_timestamp()-created_at))) mean_age_seconds,max(extract(epoch FROM (clock_timestamp()-created_at))) oldest_age_seconds FROM ago_governed_tasks WHERE tenant_id=%s GROUP BY status",
+                    (actor.tenant_id,),
+                ).fetchall()
+            ]
+            details["workload"] = [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT assignee_id,count(*) open_tasks FROM ago_governed_tasks WHERE tenant_id=%s AND status NOT IN ('completed','failed') GROUP BY assignee_id ORDER BY open_tasks DESC LIMIT 100",
+                    (actor.tenant_id,),
+                ).fetchall()
+            ]
+            details["interpretation"] = (
+                "Age since creation; not execution latency. Workload count is not employee health."
+            )
+        if dashboard == "memory":
+            details["company_memory"] = [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT state,kind,count(*) records FROM ago_scoped_memories WHERE tenant_id=%s AND scope='company' GROUP BY state,kind",
+                    (actor.tenant_id,),
+                ).fetchall()
+            ]
+            details["private_content_returned"] = False
+        if dashboard == "knowledge":
+            details["graph_quality"] = self.repositories.resolve(EnterpriseGraph).quality(
+                actor=actor
+            )
+        if dashboard == "finance":
+            details["budget_envelopes"] = [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT scope_kind,currency,count(*) envelopes,sum(approved_ceiling) ceiling FROM ago_budget_envelopes WHERE tenant_id=%s GROUP BY scope_kind,currency",
+                    (actor.tenant_id,),
+                ).fetchall()
+            ]
+            details["cost_evidence"] = [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT evidence_state,currency,count(*) records,sum(observed_amount) amount FROM ago_observed_costs WHERE tenant_id=%s GROUP BY evidence_state,currency",
+                    (actor.tenant_id,),
+                ).fetchall()
+            ]
+        if dashboard == "digital_twin":
+            details["coverage"] = [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT data_coverage,calibrated,count(*) scenarios FROM ago_twin_scenarios WHERE tenant_id=%s GROUP BY data_coverage,calibrated",
+                    (actor.tenant_id,),
+                ).fetchall()
+            ]
+        if dashboard == "meta_brain":
+            details["recommendations"] = [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT category,status,count(*) records FROM ago_meta_recommendations WHERE tenant_id=%s GROUP BY category,status",
+                    (actor.tenant_id,),
+                ).fetchall()
+            ]
+        if dashboard == "innovation":
+            details["review_states"] = [
+                dict(r)
+                for r in self.db.execute(
+                    "SELECT coalesce(a.status,'unsubmitted') status,count(*) experiments FROM ago_policy_experiments e LEFT JOIN ago_approval_requests a ON a.tenant_id=e.tenant_id AND a.id=e.approval_id WHERE e.tenant_id=%s GROUP BY a.status",
+                    (actor.tenant_id,),
+                ).fetchall()
+            ]
+        if dashboard == "architecture":
+            from ago.architecture_guard import verify
+
+            details["source_architecture"] = verify().as_dict()
+            details["scope"] = (
+                "Packaged Python dependency rules; not runtime infrastructure telemetry"
+            )
         return {
+            "details": details,
             "dashboard": dashboard,
             "scope": {"department_id": department_id, "employee_id": employee_id},
             "observed_at": datetime.now(timezone.utc).isoformat(),

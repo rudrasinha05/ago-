@@ -1,0 +1,17 @@
+# Explicit deployment template. Set AGO_PUBLIC_DOMAIN and AGO_UPSTREAM in the gateway.
+# HTTPS certificate provisioning requires the operator's DNS and reachable ports 80/443.
+{$AGO_PUBLIC_DOMAIN} {
+    request_body {
+        max_size 1MB
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        -Server
+    }
+    reverse_proxy {$AGO_UPSTREAM:backend:8000} {
+        header_up -X-User
+        header_up -X-Tenant
+        header_up -X-Roles
+        flush_interval -1
+    }
+}

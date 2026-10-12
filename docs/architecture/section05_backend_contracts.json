@@ -906,6 +906,10 @@
         "synchronize": {
           "arguments": "self, *, actor: Principal, limit: int=20",
           "returns": "dict"
+        },
+        "source": {
+          "arguments": "self, *, actor: Principal, kind: str, identifier: str",
+          "returns": "dict"
         }
       }
     },
@@ -1065,6 +1069,22 @@
         },
         "tasks": {
           "arguments": "self, *, token: str, after: str | None=None, limit: int=50",
+          "returns": "dict"
+        },
+        "github_execute": {
+          "arguments": "self, *, actor: Principal, operation_id: str",
+          "returns": "dict"
+        },
+        "github_status": {
+          "arguments": "self, *, actor: Principal, project_id: str",
+          "returns": "dict"
+        },
+        "analytics": {
+          "arguments": "self, *, token: str, dashboard: str='executive'",
+          "returns": "dict"
+        },
+        "plugin_dispatch": {
+          "arguments": "self, *, token: str, plugin_id: str, manifest: dict, operation: str, arguments: dict",
           "returns": "dict"
         }
       }

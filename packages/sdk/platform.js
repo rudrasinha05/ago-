@@ -7,6 +7,7 @@ export class CompanyAPI {
   }
   async request(path,{method='GET',body,idempotencyKey,signal}={}) {
     if(!path.startsWith('/v1/platform/') || path.includes('..') || path.includes('://'))throw new Error('Scoped v1 platform path required');
+    const target=new URL(path,this.origin);if(target.origin!==this.origin || !target.pathname.startsWith('/v1/platform/') || /[%\\#\u0000-\u0020]/.test(path.split('?')[0]))throw new Error('Canonical platform path required');
     const headers={Authorization:'Bearer '+this.token,'X-Request-ID':crypto.randomUUID()};
     if(body!==undefined)headers['Content-Type']='application/json';
     if(idempotencyKey)headers['Idempotency-Key']=idempotencyKey;

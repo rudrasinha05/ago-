@@ -1344,7 +1344,10 @@ async function batchAction(key,id,ctx) {
   if(key==='batch-integration-publish'){await post('/v1/platform/publish');await ctx.refreshCurrent();return;}
   const nodes=(resource(state.data,'graph')?.nodes || []).map(n=>({id:n.entity_id,name:n.payload.label}));
   let fields=[],onSubmit;
-  if(key==='batch-graph-node') {
+  if(key==='batch-graph-source') {
+    fields=[select('kind','Source type',['employee','department','project','workflow']),text('id','Source record ID'),text('rationale','Source import purpose','textarea')];
+    onSubmit=async v=>{const source=await api.request('/v1/enterprise/graph/sources/'+v.kind+'/'+uuid(v.id));return submit('graph','node',source,v.rationale);};
+  } else if(key==='batch-graph-node') {
     fields=[text('label','Entity name'),select('kind','Entity type',['person','employee','department','project','workflow','policy','architecture','research','asset','customer','product','incident','skill','model','tool','document','memory','audit','decision','fact']),text('statement','Evidence statement','textarea'),text('source_ref','Source reference'),text('confidence','Evidence confidence0–1','number',{min:0,max:1,value:0.5}),select('classification','Visibility',['tenant','restricted']),text('memory_ids','Company memory IDs (comma separated)','text',{required:false}),text('rationale','Reason for change','textarea')];
     onSubmit=v=>submit('graph','node',{id:crypto.randomUUID(),kind:v.kind,label:v.label,statement:v.statement,owner_id:state.me.id,classification:v.classification,readers:[],source_ref:v.source_ref,source_at:new Date().toISOString(),confidence:Number(v.confidence),effective_at:new Date().toISOString(),expires_at:new Date(Date.now()+90*86400000).toISOString(),memory_ids:v.memory_ids?v.memory_ids.split(',').map(x=>uuid(x.trim())):[],legal_hold:false},v.rationale);
   } else if(key==='batch-graph-edge') {
@@ -1383,6 +1386,15 @@ async function batchAction(key,id,ctx) {
     fields=[select('metric','Metric',['backlog','qa_pass_rate','task_failure_rate','tasks','security_events','memory_records']),text('horizon','Days ahead','number',{min:1,max:90,value:7})];onSubmit=async v=>{const result=await api.request('/v1/enterprise/analytics/history/'+v.metric+'?horizon_days='+v.horizon);setTimeout(()=>display('Forecast, evidence and anomaly',result),0);return 'Analysis loaded.';};
   } else if(key==='batch-analytics-schedule') {
     fields=[select('report','Report',['executive','finance','workflow','qa','security','architecture','infrastructure','knowledge','memory','innovation','digital_twin','meta_brain','health']),select('cadence','Reporting cycle',['weekly','monthly','quarterly','annual']),text('rationale','Reporting purpose','textarea')];onSubmit=v=>submit('analytics','schedule',{id:crypto.randomUUID(),report:v.report,cadence:v.cadence,enabled:true},v.rationale);
+  } else if(key==='batch-github-project') {
+    fields=[text('goal_id','Approved project goal ID'),text('repository','Private repository name'),text('pm_id','Project manager employee ID'),text('developers','Developer IDs, comma separated'),text('qa_id','Independent QA employee ID'),text('roadmap_ref','Approved roadmap reference'),text('rationale','CEO project approval rationale','textarea')];
+    onSubmit=v=>submit('integration','github_project',{id:crypto.randomUUID(),goal_id:uuid(v.goal_id),repository:v.repository,pm_id:uuid(v.pm_id),developer_ids:v.developers.split(',').map(x=>uuid(x.trim())),qa_id:uuid(v.qa_id),roadmap_ref:v.roadmap_ref,enabled:true},v.rationale);
+  } else if(key==='batch-github-operation') {
+    fields=[text('project_id','Approved GitHub project ID'),select('operation','Operation',['create_repository','link_repository','initialize_develop','create_issue','update_issue','commit_files','create_pull_request']),text('payload','Exact change payload (JSON)','textarea',{value:'{}'}),text('rationale','Change and QA rationale','textarea')];
+    onSubmit=v=>submit('integration','github_operation',{id:crypto.randomUUID(),project_id:uuid(v.project_id),operation:v.operation,payload:JSON.parse(v.payload)},v.rationale);
+  } else if(key==='batch-github-execute' || key==='batch-github-status') {
+    fields=[text('id',key.endsWith('execute')?'Approved operation ID':'GitHub project ID')];
+    onSubmit=async v=>{const result=key.endsWith('execute')?await post('/v1/platform/github/operations/'+uuid(v.id)+'/execute'):await api.request('/v1/platform/github/projects/'+uuid(v.id)+'/status');setTimeout(()=>display('GitHub project result',result),0);return 'GitHub operation inspected.';};
   } else if(key==='batch-integration-client') {
     fields=[text('name','Integration name'),select('type','Client type',['confidential','public']),text('subject_id','Authorized principal ID'),text('department_id','Department restriction (optional)','text',{required:false}),text('scopes','Allowed scopes, comma separated','text',{value:'tasks:read,events:read'}),text('redirects','Exact redirect URIs, one per line','textarea',{required:false}),text('rationale','Purpose and security review','textarea')];
     onSubmit=v=>submit('integration','client',{id:crypto.randomUUID(),name:v.name,type:v.type,subject_id:uuid(v.subject_id),department_id:v.department_id?uuid(v.department_id):null,scopes:v.scopes.split(',').map(x=>x.trim()),redirect_uris:v.redirects?v.redirects.split('\n').map(x=>x.trim()).filter(Boolean):[],enabled:true,requests_per_minute:60},v.rationale);

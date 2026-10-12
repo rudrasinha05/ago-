@@ -10,7 +10,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [agent_handlers](../../apps/backend/ago/agent_handlers.py) | workforce | service | workflows |
 | [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, organizational_dna, task_store, enterprise_store |
 | [agent_runtime_queries](../../apps/backend/ago/agent_runtime_queries.py) | workforce | persistence | backend_contracts |
-| [analytics_store](../../apps/backend/ago/analytics_store.py) | strategy | persistence | backend_contracts, reviewed_changes, security, security_controls |
+| [analytics_store](../../apps/backend/ago/analytics_store.py) | strategy | persistence | architecture_guard, backend_contracts, graph_store, reviewed_changes, security, security_controls |
 | [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, model_handlers, repository_ports, security |
 | [api_brain](../../apps/backend/ago/api_brain.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
 | [api_contracts](../../apps/backend/ago/api_contracts.py) | transport | transport | None |
@@ -42,7 +42,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [department_automation_queries](../../apps/backend/ago/department_automation_queries.py) | operations | persistence | backend_contracts |
 | [dna_domain](../../apps/backend/ago/dna_domain.py) | strategy | domain | None |
 | [enterprise_domains](../../apps/backend/ago/enterprise_domains.py) | operations | domain | None |
-| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | architecture_guard, backend_contracts, behavior_store, calendar_store, enterprise_domains, governance_domain, security |
+| [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | analytics_store, architecture_guard, backend_contracts, behavior_store, calendar_store, enterprise_domains, governance_domain, security |
 | [event_contracts](../../apps/backend/ago/event_contracts.py) | platform | domain | events |
 | [event_migrations](../../apps/backend/ago/event_migrations.py) | platform | foundation | None |
 | [event_runtime](../../apps/backend/ago/event_runtime.py) | entrypoints | composition | event_migrations, event_worker, events, postgres_event_store |
@@ -54,6 +54,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [executive_intelligence_queries](../../apps/backend/ago/executive_intelligence_queries.py) | strategy | persistence | backend_contracts |
 | [experiments](../../apps/backend/ago/experiments.py) | strategy | persistence | backend_contracts, governance |
 | [feature_flags](../../apps/backend/ago/feature_flags.py) | platform | foundation | None |
+| [github_adapter](../../apps/backend/ago/github_adapter.py) | operations | domain | None |
 | [goals](../../apps/backend/ago/goals.py) | strategy | persistence | backend_contracts |
 | [governance](../../apps/backend/ago/governance.py) | governance | persistence | approvals, backend_contracts, governance_domain, security |
 | [governance_domain](../../apps/backend/ago/governance_domain.py) | governance | domain | approvals |
@@ -64,7 +65,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [identity](../../apps/backend/ago/identity.py) | governance | persistence | backend_contracts, security |
 | [identity_factors](../../apps/backend/ago/identity_factors.py) | governance | foundation | security |
 | [identity_security_store](../../apps/backend/ago/identity_security_store.py) | governance | persistence | backend_contracts, identity, identity_factors, login_security, security, security_controls, sso_provider |
-| [integration_store](../../apps/backend/ago/integration_store.py) | operations | persistence | backend_contracts, graph_store, identity_factors, reviewed_changes, security, security_controls, task_store |
+| [integration_store](../../apps/backend/ago/integration_store.py) | operations | persistence | analytics_store, backend_contracts, github_adapter, graph_store, identity_factors, reviewed_changes, security, security_controls, task_store |
 | [knowledge_store](../../apps/backend/ago/knowledge_store.py) | knowledge | persistence | backend_contracts, security, security_controls |
 | [local_ops](../../apps/backend/ago/local_ops.py) | entrypoints | composition | bootstrap, provision, release_ops, release_security |
 | [login_security](../../apps/backend/ago/login_security.py) | governance | persistence | backend_contracts |
