@@ -43,6 +43,66 @@ operational evidence; they cannot be established by unit tests or code generatio
 
 ## Verification record
 
-Implementation and verification are in progress. Final acceptance requires focused actual
+Final acceptance requires focused actual
 PostgreSQL tests, browser journeys, source/contracts, unchanged regression/coverage floors,
 build/image/restore checks and inspection of every final CI job log before master writeback.
+
+## Implemented source mapping
+
+| Section | Delivered code and verifiable behavior |
+| --- | --- |
+| 31 | `graph_store.py`: 20 node kinds, 20 relations, typed endpoints, directed bounded traversal, live tenant/audience/memory ACL checks, immutable revisions, reviewed merge/retirement/legal holds. Imports bind employee/department/project/workflow source digests; changed sources become unavailable until reviewed again. Linked memory revisions are checked on every read; graph changes queue actual vector reindexing, forgetting removes graph visibility. |
+| 32 | `behavior_store.py`: 13 AI-only working-behavior dimensions, versioned reviewed rubrics, actual task/QA source binding, context/complexity/risk strata, sparse unknowns, intervals, drift and expiry. Independent appeal resolution gates personnel changes and task execution. Advisory readiness never changes permissions or autonomy. |
+| 33 | `analytics_store.py`: 15 selectable dashboards with scoped task/QA metrics, recorded currency-separated costs and evidence states, approved envelopes, work age/load, graph quality, company-memory state, experiment/recommendation/Twin coverage and actual source architecture checks. Immutable snapshots, formula lineage, bounded trend intervals, robust anomaly indicators and reviewed recurring internal reports; OOS learning cycles generate due reports. |
+| 34 | `integration_store.py` and `api_enterprise_platform.py`: scoped credentials, PKCE/public and confidential OAuth, tenant/principal/client/department/endpoint quotas, request bounds, safe task proposals, immutable durable event DTOs, reauthorized SSE, opt-in HTTPS HMAC delivery queues/rotation/replay, active manifest-checked plugin dispatch, version sunset controls, Python/TypeScript SDKs and developer portal. |
+| GitHub | `github_adapter.py`: CEO-owned private project bindings, AI PM and separate QA accountability; independently reviewed repo creation/linking, develop initialization, issues, exact-parent non-force commits and draft release PRs. Tenant-bound secret configuration, durable uncertain-write receipts, current-head CI reports. See `SECTION34_GITHUB_LIFECYCLE.md`. |
+
+Migrations042–047 install the shared immutable review ledger, domain projections,
+API credentials/events/delivery queues, private project dispatch receipts and
+SQL publication guards. The original approval, QA and Constitution remain intact.
+UI actions are available in Knowledge, Organization, Overview and Operations & Tools.
+
+## Verification evidence and interpretation
+
+At `fe64f3b49a8146178952e7c76a832fd13e45970a`, primary workflow38256822789 and
+independent38256822749 established758 passing backend tests on each of3.11,3.14
+and independent3.12,81 focused enterprise/GitHub tests,74 calendar tests and7 native
+comparative tests. Source guards and unchanged coverage gates passed:86.93%/86.91%
+overall. Storage/model recovery, populated backup/restore, three frontend builds,
+nonroot image and Chromium pilot passed. The new Next browser flow initially
+assumed a reload preserved a memory-only login; it is corrected to reauthenticate
+and verify persisted graph data through a fresh session.
+
+Subsequent acceptance includes the added company/private-memory synchronization
+and forgetting tests, dispatch reviewer revalidation, AI-PM validation, appeal
+execution gate and two new Next.js browser journeys. **The master checklist records
+the final accepted commit and all-job CI results after these changes.** The local
+runtime cannot start PostgreSQL under its process permissions; real DB evidence
+comes from disposable PostgreSQL16 CI, not skipped local tests. Local full-suite
+readiness also requires packaged frontend assets; the CI builds/packages them.
+
+## Operational limits retained explicitly
+
+- This is personal/local software delivery. No cloud rollout, public TLS deployment,
+  production traffic benchmark or external security certification was performed.
+  The optional Caddy template is a deployable configuration, not deployment proof.
+- Provider bills, real finance/ROI, host telemetry and future prediction outcomes
+  cannot be manufactured. Dashboards expose missing data; counts do not establish
+  causality, employee performance or calibrated business forecasts.
+- AI behavior privacy and source controls are tested. Population accuracy/fairness
+  is unvalidated until authentic, representative prospective observations exist;
+  no human personality diagnosis or automatic promotion is implemented.
+- GitHub provider contracts and DB governance use test transport. A live AGO
+  credential has not been installed or used to create a new private project repo.
+  Configure the tenant-bound owner credential locally; never paste it into chat.
+  Final release review/merge, repo deletion and transfer remain CEO-owned actions.
+- External webhooks are disabled by default and need an operator-configured HTTPS
+  receiver and encryption secret. The SDK persists a recoverable inbox before
+  acknowledging delivery; downstream consumers must process idempotently.
+- Graph queries are bounded to5000 current entities,500 returned nodes/edges and
+  depth6. Private memory may be linked only under restricted graph ACLs that remain
+  subordinate to the memory's live ACL. Retirement preserves immutable audit history.
+- Scheduled reports require operating cycles or explicit ticking; arbitrary custom
+  SQL, invented telemetry, unreviewed connector code and automatic authority changes
+  are not introduced. Department/employee dashboards require explicit scopes;
+  recurring tenant reports do not silently substitute a different report type.

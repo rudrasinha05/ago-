@@ -350,6 +350,10 @@ def test_behavior_review_source_privacy_expiry_appeal_and_hr_gate(case):
     from ago.behavior_store import BehaviorStore
     from ago.security import Principal
 
+    pending_task = _approved_task(c, f, r, worker)
+    assert (
+        c.post("/v1/agents/tasks/" + pending_task + "/run", headers=f, json={}).status_code == 403
+    )
     with pytest.raises(PermissionError):
         BehaviorStore(info["db"]).require_clear(
             actor=Principal(info["founder_id"], info["tenant"], ("founder",)), employee_id=worker
@@ -789,3 +793,80 @@ def test_receiver_recovery_retains_unacknowledged_payload(tmp_path):
     assert restarted.pending() == [{"delivery_id": delivery, "data": {"task": "durable"}}]
     restarted.acknowledge(delivery)
     assert restarted.pending() == []
+
+
+def test_graph_company_memory_reindex_and_live_forgetting(case):
+    from ago.repository_ports import SemanticMemoryStorePort
+    from ago.semantic_memory_store import SemanticMemoryStore
+    from test_section07_postgres import UnitEncoder
+
+    c, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    c.app.state.repository_overrides = {
+        SemanticMemoryStorePort: lambda db, repositories: SemanticMemoryStore(
+            db, repositories=repositories, encoder=UnitEncoder()
+        )
+    }
+    memory = post(
+        c,
+        "/v1/knowledge/memory",
+        f,
+        {
+            "scope": "company",
+            "scope_id": info["tenant"],
+            "kind": "episodic",
+            "content": "Reviewed graph provenance",
+            "source_ref": "internal:graph-test",
+        },
+    )
+    node = graph_node(info["founder_id"], memory_ids=[memory["id"]])
+    item, _ = propose(c, f, "graph", "node", node)
+    apply(c, f, r, "graph", item)
+    assert c.get(BASE + "/graph", headers=r).json()["nodes"]
+    result = post(c, BASE + "/graph/synchronize", f)
+    assert result["indexed"] == [memory["id"]]
+    post(
+        c, "/v1/knowledge/memory/" + memory["id"] + "/forget", f, {"reason": "Owner removed source"}
+    )
+    assert not c.get(BASE + "/graph", headers=r).json()["nodes"]
+
+
+def test_graph_private_memory_cannot_be_promoted_to_tenant_or_foreign_reader(case):
+    c, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    memory = post(
+        c,
+        "/v1/knowledge/memory",
+        f,
+        {
+            "scope": "employee",
+            "scope_id": info["founder_id"],
+            "kind": "episodic",
+            "content": "Owner-only recollection",
+            "source_ref": "private:owner-source",
+        },
+    )
+    node = graph_node(info["founder_id"], memory_ids=[memory["id"]])
+    revision = c.get(BASE + "/reviews/graph", headers=f).json()["revision"]
+
+    def propose_node(spec):
+        return c.post(
+            BASE + "/reviews/graph/propose",
+            headers=f,
+            json={
+                "command": "node",
+                "specification": spec,
+                "operation_key": str(uuid4()),
+                "base_revision": revision,
+                "rationale": "Private graph metadata",
+            },
+        )
+
+    assert propose_node(node).status_code == 403
+    node["classification"] = "restricted"
+    assert propose_node({**node, "readers": [info["reviewer_id"]]}).status_code in (403, 404)
+    item = propose_node(node)
+    assert item.status_code == 200, item.text
+    apply(c, f, r, "graph", item.json())
+    assert c.get(BASE + "/graph", headers=f).json()["nodes"]
+    assert not c.get(BASE + "/graph", headers=r).json()["nodes"]

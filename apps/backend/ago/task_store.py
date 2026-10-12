@@ -6,6 +6,7 @@ from uuid import UUID
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal
+from ago.behavior_store import BehaviorStore
 from ago.calendar_store import CalendarStore
 from ago.security_controls import SecurityControls
 from ago.workflows import GovernedTask, TaskStatus
@@ -74,6 +75,9 @@ class TaskStore:
             ).fetchone()
             if task is None or task["status"] != "waiting_approval" or not task["approval_id"]:
                 raise PermissionError("Task awaiting valid approval required")
+            self.repositories.resolve(BehaviorStore).require_clear(
+                actor=principal, employee_id=str(task["assignee_id"])
+            )
             if not self.repositories.resolve(SecurityControls).permitted(
                 principal, "task:execute", tenant_id
             ):

@@ -133,7 +133,14 @@ class EnterpriseGraph:
                 return False
         for mid in p["memory_ids"]:
             try:
-                self.repositories.resolve(SemanticMemoryStore).get(actor=actor, memory_id=mid)
+                memory = self.repositories.resolve(SemanticMemoryStore).get(
+                    actor=actor, memory_id=mid
+                )
+                if (
+                    p.get("memory_sources", {}).get(mid)
+                    and digest(memory) != p["memory_sources"][mid]
+                ):
+                    return False
             except (PermissionError, LookupError, ValueError):
                 return False
         return True
@@ -146,6 +153,13 @@ class EnterpriseGraph:
         if command == "merge":
             ids += [spec["target_id"]]
         source = {"entities": {x: digest(all_rows[x]) if x in all_rows else None for x in ids}}
+        if command == "node":
+            source["memory_sources"] = {
+                mid: digest(
+                    self.repositories.resolve(SemanticMemoryStore).get(actor=actor, memory_id=mid)
+                )
+                for mid in spec["memory_ids"]
+            }
         if command == "node" and spec["source_ref"].startswith("ago:"):
             parts = spec["source_ref"].split(":")
             if len(parts) != 3 or parts[1] != spec["kind"]:
@@ -166,9 +180,11 @@ class EnterpriseGraph:
                     raise PermissionError("Same-tenant active graph owner/readers required")
             for mid in spec["memory_ids"]:
                 m = self.repositories.resolve(SemanticMemoryStore).get(actor=actor, memory_id=mid)
-                if m["scope"] != "company" or spec["classification"] != "tenant":
-                    raise PermissionError(
-                        "Graph synchronization accepts company memory only; private memories stay private"
+                if m["scope"] != "company" and spec["classification"] != "restricted":
+                    raise PermissionError("Scoped memory requires a restricted graph audience")
+                for uid in [spec["owner_id"], *spec["readers"]]:
+                    self.repositories.resolve(SemanticMemoryStore).get(
+                        actor=Principal(uid, actor.tenant_id, ()), memory_id=mid
                     )
             if spec["id"] in rows and rows[spec["id"]]["entity_kind"] != "node":
                 raise ValueError("Entity type immutable")
@@ -309,6 +325,8 @@ class EnterpriseGraph:
                             replacement["deleted"] = True
                         changes.append((key, "edge", replacement))
             for identifier, kind, payload in changes:
+                if command == "node":
+                    payload = {**payload, "memory_sources": p["source"].get("memory_sources", {})}
                 if command == "node" and "record" in p["source"]:
                     payload = {**payload, "source_digest": digest(p["source"]["record"])}
                 self.db.execute(

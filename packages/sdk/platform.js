@@ -2,7 +2,7 @@
 export class CompanyAPI {
   constructor(origin, token, {fetcher=fetch,retries=2}={}) {
     const url=new URL(origin);
-    if(url.username || url.password || url.search || url.hash || (url.protocol!=='https:' && !(url.protocol==='http:' && ['127.0.0.1','[::1]'].includes(url.hostname))))throw new Error('HTTPS or loopback origin required');
+    if(!['','/'].includes(url.pathname) || url.username || url.password || url.search || url.hash || (url.protocol!=='https:' && !(url.protocol==='http:' && ['127.0.0.1','[::1]'].includes(url.hostname))))throw new Error('HTTPS or loopback origin required');
     this.origin=url.origin;this.token=token;this.fetcher=fetcher;this.retries=Math.max(0,Math.min(3,retries));
   }
   async request(path,{method='GET',body,idempotencyKey,signal}={}) {

@@ -923,6 +923,7 @@
       "layer": "persistence",
       "imports": [
         "backend_contracts",
+        "behavior_store",
         "calendar_store",
         "security",
         "security_controls",

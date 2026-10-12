@@ -299,8 +299,15 @@ class IntegrationStore:
                 previous = self._settings(actor.tenant_id, "version")
                 old = max(previous, key=lambda r: r["revision"])["payload"] if previous else None
                 if p["state"] == "retired":
-                    if not old or old["state"] != "deprecated" or old["sunset_at"] != p["sunset_at"] or instant(p["sunset_at"]) > datetime.now(timezone.utc):
-                        raise ValueError("Retirement requires the previously announced elapsed sunset")
+                    if (
+                        not old
+                        or old["state"] != "deprecated"
+                        or old["sunset_at"] != p["sunset_at"]
+                        or instant(p["sunset_at"]) > datetime.now(timezone.utc)
+                    ):
+                        raise ValueError(
+                            "Retirement requires the previously announced elapsed sunset"
+                        )
                 elif instant(p["sunset_at"]) < datetime.now(timezone.utc) + timedelta(days=30):
                     raise ValueError("At least30 days deprecation notice required")
 
@@ -928,6 +935,11 @@ class IntegrationStore:
                 raise ValueError("Explicit unique developer identities required")
             if p["qa_id"] in [p["pm_id"], *p["developer_ids"]]:
                 raise PermissionError("QA must be independent from project delivery")
+            if not self.db.execute(
+                "SELECT 1 FROM ago_employees WHERE tenant_id=%s AND id=%s AND kind='ai'",
+                (actor.tenant_id, p["pm_id"]),
+            ).fetchone():
+                raise PermissionError("An accountable AI project manager is required")
             for uid in [p["pm_id"], p["qa_id"], *p["developer_ids"]]:
                 UUID(uid)
                 if not self.db.execute(
@@ -983,7 +995,7 @@ class IntegrationStore:
                 raise PermissionError("Apply the independently approved operation first")
             # Recheck active reviewer at dispatch, even after local application.
             approval = self.db.execute(
-                "SELECT reviewer_id FROM ago_approval_requests WHERE tenant_id=%s AND id=%s AND status='approved'",
+                "SELECT a.reviewer_id FROM ago_approval_requests a JOIN ago_employees e ON e.tenant_id=a.tenant_id AND e.id=a.reviewer_id JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id WHERE a.tenant_id=%s AND a.id=%s AND a.status='approved' AND e.kind='human' AND u.active",
                 (actor.tenant_id, proposal["approval_id"]),
             ).fetchone()
             reviewer = (

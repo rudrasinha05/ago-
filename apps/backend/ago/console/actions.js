@@ -1393,7 +1393,7 @@ async function batchAction(key,id,ctx) {
     fields=[text('project_id','Approved GitHub project ID'),select('operation','Operation',['create_repository','link_repository','initialize_develop','create_issue','update_issue','commit_files','create_pull_request']),text('payload','Exact change payload (JSON)','textarea',{value:'{}'}),text('rationale','Change and QA rationale','textarea')];
     onSubmit=v=>submit('integration','github_operation',{id:crypto.randomUUID(),project_id:uuid(v.project_id),operation:v.operation,payload:JSON.parse(v.payload)},v.rationale);
   } else if(key==='batch-github-execute' || key==='batch-github-status') {
-    fields=[text('id',key.endsWith('execute')?'Approved operation ID':'GitHub project ID')];
+    fields=[text('id',key.endsWith('execute')?'Approved operation ID':'GitHub project ID','text',{value:id || ''})];
     onSubmit=async v=>{const result=key.endsWith('execute')?await post('/v1/platform/github/operations/'+uuid(v.id)+'/execute'):await api.request('/v1/platform/github/projects/'+uuid(v.id)+'/status');setTimeout(()=>display('GitHub project result',result),0);return 'GitHub operation inspected.';};
   } else if(key==='batch-integration-client') {
     fields=[text('name','Integration name'),select('type','Client type',['confidential','public']),text('subject_id','Authorized principal ID'),text('department_id','Department restriction (optional)','text',{required:false}),text('scopes','Allowed scopes, comma separated','text',{value:'tasks:read,events:read'}),text('redirects','Exact redirect URIs, one per line','textarea',{required:false}),text('rationale','Purpose and security review','textarea')];

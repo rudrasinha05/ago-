@@ -113,7 +113,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [sso_provider](../../apps/backend/ago/sso_provider.py) | governance | foundation | security, security_material |
 | [storage_adapters](../../apps/backend/ago/storage_adapters.py) | platform | foundation | None |
 | [storage_ops](../../apps/backend/ago/storage_ops.py) | entrypoints | composition | backend_contracts, database_store, storage_adapters |
-| [task_store](../../apps/backend/ago/task_store.py) | workforce | persistence | backend_contracts, calendar_store, security, security_controls, workflows |
+| [task_store](../../apps/backend/ago/task_store.py) | workforce | persistence | backend_contracts, behavior_store, calendar_store, security, security_controls, workflows |
 | [tool_catalog](../../apps/backend/ago/tool_catalog.py) | operations | service | backend_contracts, scorecard, tool_catalog_queries |
 | [tool_catalog_queries](../../apps/backend/ago/tool_catalog_queries.py) | operations | persistence | backend_contracts |
 | [tool_enrollment](../../apps/backend/ago/tool_enrollment.py) | operations | service | backend_contracts, governance, security, tool_catalog, tool_enrollment_queries |

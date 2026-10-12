@@ -478,6 +478,10 @@ def test_next_enterprise_graph_independent_source_review(page, browser, app_url,
         expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
         expect(page.locator("#screen")).to_contain_text("Browser reviewed graph project")
         page.reload()
+        # Tokens are intentionally memory-only. Verify durable graph data after a new login.
+        expect(page.locator("#login-form")).to_be_visible()
+        sign_in_next(page, app_url, tenant)
+        navigate_next(page, "Knowledge", "Institutional knowledge")
         expect(page.locator("#screen")).to_contain_text("Browser reviewed graph project")
     finally:
         context.close()

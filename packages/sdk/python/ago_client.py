@@ -30,7 +30,8 @@ class CompanyAPI:
     def __init__(self, origin: str, token: str, retries: int = 2):
         p = urlsplit(origin)
         if (
-            p.username
+            not p.hostname
+            or p.username
             or p.password
             or p.query
             or p.fragment
@@ -49,7 +50,13 @@ class CompanyAPI:
     def request(
         self, path: str, *, body: dict | None = None, idempotency_key: str | None = None
     ) -> dict:
-        if not path.startswith("/v1/platform/") or ".." in path or "://" in path:
+        if (
+            not path.startswith("/v1/platform/")
+            or ".." in path
+            or "://" in path
+            or any(c in path.split("?")[0] for c in ("%", "\\", "#"))
+            or any(ord(c) <= 32 for c in path)
+        ):
             raise ValueError("Scoped v1 platform path required")
         headers = {
             "Authorization": "Bearer " + self.token,
@@ -143,16 +150,24 @@ class WebhookReceiver:
         self.db.execute(
             "CREATE TABLE IF NOT EXISTS received(delivery_id TEXT PRIMARY KEY,received_at INTEGER NOT NULL)"
         )
-        self.db.execute("CREATE TABLE IF NOT EXISTS inbox(delivery_id TEXT PRIMARY KEY, body TEXT NOT NULL, processed INTEGER NOT NULL DEFAULT 0)")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS inbox(delivery_id TEXT PRIMARY KEY, body TEXT NOT NULL, processed INTEGER NOT NULL DEFAULT 0)"
+        )
         self.db.commit()
 
     def pending(self) -> list[dict]:
-        return [{"delivery_id": row[0], "data": json.loads(row[1])} for row in self.db.execute(
-            "SELECT delivery_id,body FROM inbox WHERE processed=0 ORDER BY rowid")]
+        return [
+            {"delivery_id": row[0], "data": json.loads(row[1])}
+            for row in self.db.execute(
+                "SELECT delivery_id,body FROM inbox WHERE processed=0 ORDER BY rowid"
+            )
+        ]
 
     def acknowledge(self, delivery_id: str) -> None:
         with self.db:
-            self.db.execute("UPDATE inbox SET processed=1 WHERE delivery_id=?", (delivery_id,))
+            self.db.execute(
+                "UPDATE inbox SET processed=1 WHERE delivery_id=?", (delivery_id,)
+            )
 
     def accept(
         self,
@@ -185,7 +200,10 @@ class WebhookReceiver:
                 self.db.execute(
                     "INSERT INTO received VALUES(?,?)", (delivery_id, current)
                 )
-                self.db.execute("INSERT INTO inbox(delivery_id,body) VALUES(?,?)", (delivery_id, json.dumps(value)))
+                self.db.execute(
+                    "INSERT INTO inbox(delivery_id,body) VALUES(?,?)",
+                    (delivery_id, json.dumps(value)),
+                )
             except sqlite3.IntegrityError as exc:
                 raise ValueError("Webhook replay rejected") from exc
         return value
