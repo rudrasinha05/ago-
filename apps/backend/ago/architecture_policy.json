@@ -344,6 +344,7 @@
       "imports": [
         "architecture_guard",
         "backend_contracts",
+        "behavior_store",
         "calendar_store",
         "enterprise_domains",
         "governance_domain",
@@ -559,6 +560,7 @@
         "api_agents",
         "api_brain",
         "api_council",
+        "api_enterprise_platform",
         "api_insights",
         "api_knowledge",
         "api_m2",
@@ -769,8 +771,10 @@
         "access",
         "agent_runtime",
         "agent_runtime_queries",
+        "analytics_store",
         "approvals",
         "backend_contracts",
+        "behavior_store",
         "calendar_store",
         "console_service",
         "console_store",
@@ -785,9 +789,11 @@
         "experiments",
         "goals",
         "governance",
+        "graph_store",
         "handoffs",
         "identity",
         "identity_security_store",
+        "integration_store",
         "knowledge_store",
         "login_security",
         "memory",
@@ -802,6 +808,7 @@
         "plan_store",
         "quality",
         "quality_store",
+        "reviewed_changes",
         "scorecard",
         "scorecard_queries",
         "security",
@@ -978,6 +985,73 @@
       "context": "workforce",
       "layer": "domain",
       "imports": []
+    },
+    "reviewed_changes": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "governance",
+        "security",
+        "security_controls"
+      ]
+    },
+    "graph_store": {
+      "context": "knowledge",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "reviewed_changes",
+        "security",
+        "security_controls",
+        "semantic_memory_store"
+      ]
+    },
+    "behavior_store": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "graph_store",
+        "reviewed_changes",
+        "security",
+        "security_controls"
+      ]
+    },
+    "analytics_store": {
+      "context": "strategy",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "reviewed_changes",
+        "security",
+        "security_controls"
+      ]
+    },
+    "integration_store": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "graph_store",
+        "identity_factors",
+        "reviewed_changes",
+        "security",
+        "security_controls",
+        "task_store"
+      ]
+    },
+    "api_enterprise_platform": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_contracts",
+        "api_m2",
+        "backend_contracts",
+        "repository_ports",
+        "reviewed_changes",
+        "security"
+      ]
     }
   },
   "protected_sql_writers": {

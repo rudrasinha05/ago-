@@ -14,6 +14,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 from typing import Callable
 
+from ago.behavior_store import BehaviorStore
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.enterprise_domains import (
     ASSET_TYPES, AssetIdentity, HORIZONS, OperatingMode, WorkCandidate,
@@ -1870,6 +1871,8 @@ class EnterpriseOperationsStore:
                     raise PermissionError("Cannot replay altered organizational approval")
                 return {"id": str(earlier["id"]), "target_id": target,
                         "change_kind": change_kind, "idempotent": True}
+            if change_kind in ("promoted", "terminated"):
+                self.repositories.resolve(BehaviorStore).require_clear(actor=actor, employee_id=target)
             if change_kind == "created":
                 if not name or not 1 <= len(name.strip()) <= 200:
                     raise ValueError("Department name required")

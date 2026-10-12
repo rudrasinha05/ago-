@@ -5,12 +5,13 @@ export function readPlan(page, now = new Date()) {
   const start = new Date(now.getTime()-86400000).toISOString();
   const end = new Date(now.getTime()+30*86400000).toISOString();
   const plans = {
-    overview: [['score','/v1/insights/scorecard'],['tasks','/v1/tasks'],['approvals','/v1/governance/approvals'],['brief','/v1/meta/brief']],
+    overview: [['analytics','/v1/enterprise/analytics/dashboard'],['analyticsReviews','/v1/enterprise/reviews/analytics'],['analyticsReports','/v1/enterprise/analytics/reports'],['score','/v1/insights/scorecard'],['tasks','/v1/tasks'],['approvals','/v1/governance/approvals'],['brief','/v1/meta/brief']],
     strategy: [['goals','/v1/brain/goals'],['plans','/v1/brain/plans'],['approvals','/v1/governance/approvals']],
     governance: [['constitution','/v1/governance/constitution'],['approvals','/v1/governance/approvals'],['tasks','/v1/tasks'],['motions','/v1/council/motions'],['reviews','/v1/console/task-reviews'],['qaqueue','/v1/console/qa-queue']],
-    organization: [['departments','/v1/organization/departments']],
-    knowledge: [['verified','/v1/knowledge/nodes'],['pending','/v1/knowledge/pending']],
+    organization: [['departments','/v1/organization/departments'],['behaviorReviews','/v1/enterprise/reviews/behavior']],
+    knowledge: [['graph','/v1/enterprise/graph'],['graphQuality','/v1/enterprise/graph/quality'],['graphReviews','/v1/enterprise/reviews/graph'],['verified','/v1/knowledge/nodes'],['pending','/v1/knowledge/pending']],
     tools: [
+      ['integrations','/v1/platform/catalog'],['integrationReviews','/v1/enterprise/reviews/integration'],
       ['enrollments','/v1/tools/enrollments'],['rules','/v1/tools/automation/rules'],
       ['runs','/v1/tools/runs'],['tasks','/v1/tasks'],
       ['approvals','/v1/governance/approvals'],

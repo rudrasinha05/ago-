@@ -9,7 +9,11 @@
       "default": "./index.js"
     },
     "./session": "./session.js",
-    "./workspace": "./workspace.js"
+    "./workspace": "./workspace.js",
+    "./platform": {
+      "types": "./platform.d.ts",
+      "default": "./platform.js"
+    }
   },
   "dependencies": {
     "@ago/shared": "0.1.0"

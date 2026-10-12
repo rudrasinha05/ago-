@@ -52,6 +52,11 @@ jobs:
         run: |
           python -m pytest -q tests/test_section30_calendar.py | tee /tmp/ago-section30-calendar-results.txt
           test "${PIPESTATUS[0]}" -eq 0
+      - name: Sections31–34 actual database authority and integration tests
+        working-directory: apps/backend
+        run: |
+          python -m pytest -q tests/test_sections31_34.py | tee /tmp/ago-sections31-34-results.txt
+          test "${PIPESTATUS[0]}" -eq 0
       - name: Retain actual reproducible comparison evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -60,6 +65,7 @@ jobs:
           path: |
             /tmp/ago-section28-*.txt
             /tmp/ago-section30-calendar-results.txt
+            /tmp/ago-sections31-34-results.txt
           retention-days: 30
           if-no-files-found: error
 

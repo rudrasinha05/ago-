@@ -14,7 +14,7 @@ INVENTORY = ROOT / "docs/architecture/SECTION_01_MODULE_INVENTORY.md"
 ROUTERS = {
     "m2_router", "brain_router", "agents_router", "insights_router",
     "operations_router", "knowledge_router", "council_router", "meta_router",
-    "tools_router", "console_router",
+    "tools_router", "console_router", "enterprise_router", "integration_router",
 }
 CONTEXTS = {
     "entrypoints", "transport", "governance", "strategy", "workforce",

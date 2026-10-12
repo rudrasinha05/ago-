@@ -201,7 +201,13 @@
     "tool_enrollment_queries": "operations",
     "tool_runtime": "operations",
     "tool_runtime_queries": "operations",
-    "workflows": "workforce"
+    "workflows": "workforce",
+    "reviewed_changes": "governance",
+    "graph_store": "knowledge",
+    "behavior_store": "workforce",
+    "analytics_store": "strategy",
+    "integration_store": "operations",
+    "api_enterprise_platform": "transport"
   },
   "sql_access": {
     "__init__": [],
@@ -217,10 +223,24 @@
       "ago_employees",
       "ago_governed_tasks"
     ],
+    "analytics_store": [
+      "ago_analytics_reports",
+      "ago_analytics_settings",
+      "ago_analytics_snapshots",
+      "ago_employees",
+      "ago_enterprise_evidence",
+      "ago_governed_tasks",
+      "ago_graph_versions",
+      "ago_observed_costs",
+      "ago_security_audit",
+      "ago_task_reviews",
+      "ago_tenants"
+    ],
     "api_agents": [],
     "api_brain": [],
     "api_contracts": [],
     "api_council": [],
+    "api_enterprise_platform": [],
     "api_insights": [],
     "api_knowledge": [],
     "api_m2": [],
@@ -232,6 +252,13 @@
     "auth_api": [],
     "auth_guard": [],
     "backend_contracts": [],
+    "behavior_store": [
+      "ago_behavior_appeals",
+      "ago_behavior_records",
+      "ago_employees",
+      "ago_governed_tasks",
+      "ago_task_reviews"
+    ],
     "bootstrap": [
       "ago_employees"
     ],
@@ -396,6 +423,12 @@
     ],
     "governance_domain": [],
     "governed_execution": [],
+    "graph_store": [
+      "ago_graph_reindex",
+      "ago_graph_versions",
+      "ago_memory_vectors",
+      "ago_users"
+    ],
     "handoffs": [
       "ago_employees",
       "ago_handoff_events",
@@ -421,6 +454,23 @@
       "ago_tenants",
       "ago_user_roles",
       "ago_users"
+    ],
+    "integration_store": [
+      "ago_api_quotas",
+      "ago_departments",
+      "ago_employees",
+      "ago_governed_tasks",
+      "ago_integration_commands",
+      "ago_integration_credentials",
+      "ago_integration_events",
+      "ago_integration_settings",
+      "ago_oauth_codes",
+      "ago_oauth_throttle",
+      "ago_tenants",
+      "ago_users",
+      "ago_webhook_attempts",
+      "ago_webhook_deliveries",
+      "ago_webhook_keys"
     ],
     "knowledge_store": [
       "ago_employees",
@@ -510,6 +560,15 @@
       "ago_schema_migrations"
     ],
     "repository_ports": [],
+    "reviewed_changes": [
+      "ago_approval_requests",
+      "ago_employees",
+      "ago_enterprise_applied",
+      "ago_enterprise_proposals",
+      "ago_tenants",
+      "ago_user_roles",
+      "ago_users"
+    ],
     "scheduler": [],
     "scorecard": [],
     "scorecard_queries": [

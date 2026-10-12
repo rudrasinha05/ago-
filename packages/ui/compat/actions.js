@@ -110,7 +110,10 @@ async function reviewApproval(ctx, id, initial = "approved") {
     throw new Error("The requester cannot review their own approval.");
   }
   let details = null;
-  if(request?.action?.startsWith("enterprise:")) {
+  if(request?.action?.startsWith("enterprise:review:")) {
+    details=await ctx.api.request("/v1/enterprise/reviews/source/"+id);
+    if(!details?.digest)throw new Error("Exact source unavailable; review cancelled.");
+  } else if(request?.action?.startsWith("enterprise:")) {
     details=await ctx.api.request("/v1/operations/enterprise/approval-details/"+id);
     if(details?.details?.content_base64) {
       if(["text/plain","text/markdown","application/json"].includes(details.details.content_type)) {
@@ -179,6 +182,7 @@ async function planSteps(ctx, id) {
   }
 }
 export async function handleAction(key, id, ctx) {
+  if(key.startsWith("batch-"))return batchAction(key,id,ctx);
   if(key.startsWith("constitution-"))return constitutionalAction(key,id,ctx);
   const { api, state, can } = ctx;
   if (key.startsWith("enterprise-")) { await enterpriseAction(key,id,ctx); return; }
@@ -1319,3 +1323,76 @@ async function calendarGovernedAction(ctx,key,id) {
   }
 }
 function listCalendarEvents(ctx) { const value=resource(ctx.state.data,"events");return Array.isArray(value)?value:[]; }
+
+async function batchAction(key,id,ctx) {
+  const {api,state}=ctx;
+  const post=(path,body={})=>api.request(path,{method:'POST',body});
+  const choicesOf=items=>items.map(x=>choose(x,x.replaceAll('_',' ')));
+  const text=(name,label,type='text',extra={})=>({name,label,type,...extra});
+  const select=(name,label,items)=>text(name,label,'select',{options:choicesOf(items)});
+  const display=(title,value)=>{openDialog(ctx,{title,description:'Source-linked result. Review evidence and limitations before acting.',button:'Close',refresh:false});const pre=document.createElement('pre');pre.textContent=JSON.stringify(value,null,2);document.getElementById('operation-form').prepend(pre);};
+  const submit=async(domain,command,spec,rationale)=>{const revision=await api.request('/v1/enterprise/reviews/'+domain);await post('/v1/enterprise/reviews/'+domain+'/propose',{command,specification:spec,operation_key:crypto.randomUUID(),base_revision:revision.revision,rationale});return 'Saved for independent review in Governance.';};
+  if(key==='batch-inspect' || key==='batch-apply') {
+    const [domain,identifier]=id.split(':');if(!['graph','behavior','analytics','integration'].includes(domain))throw new Error('Unknown review domain.');
+    const review=await api.request('/v1/enterprise/reviews/'+domain);const item=review.proposals.find(x=>x.id===uuid(identifier));if(!item)throw new Error('Source package not available.');
+    if(key==='batch-inspect')return display('Exact reviewed source',item);
+    return confirmation(ctx,'Apply reviewed change','Applies only the exact independently approved package.',async()=>{await post('/v1/enterprise/reviews/'+domain+'/apply',{proposal_id:identifier});return 'Reviewed change applied.';});
+  }
+  if(key==='batch-graph-sync'){await post('/v1/enterprise/graph/synchronize');await ctx.refreshCurrent();return;}
+  if(key==='batch-analytics-capture'){await post('/v1/enterprise/analytics/snapshots',{operation_key:crypto.randomUUID()});await ctx.refreshCurrent();return;}
+  if(key==='batch-analytics-tick'){await post('/v1/enterprise/analytics/tick');await ctx.refreshCurrent();return;}
+  if(key==='batch-integration-publish'){await post('/v1/platform/publish');await ctx.refreshCurrent();return;}
+  const nodes=(resource(state.data,'graph')?.nodes || []).map(n=>({id:n.entity_id,name:n.payload.label}));
+  let fields=[],onSubmit;
+  if(key==='batch-graph-node') {
+    fields=[text('label','Entity name'),select('kind','Entity type',['person','employee','department','project','workflow','policy','architecture','research','asset','customer','product','incident','skill','model','tool','document','memory','audit','decision','fact']),text('statement','Evidence statement','textarea'),text('source_ref','Source reference'),text('confidence','Evidence confidence0–1','number',{min:0,max:1,value:0.5}),select('classification','Visibility',['tenant','restricted']),text('memory_ids','Company memory IDs (comma separated)','text',{required:false}),text('rationale','Reason for change','textarea')];
+    onSubmit=v=>submit('graph','node',{id:crypto.randomUUID(),kind:v.kind,label:v.label,statement:v.statement,owner_id:state.me.id,classification:v.classification,readers:[],source_ref:v.source_ref,source_at:new Date().toISOString(),confidence:Number(v.confidence),effective_at:new Date().toISOString(),expires_at:new Date(Date.now()+90*86400000).toISOString(),memory_ids:v.memory_ids?v.memory_ids.split(',').map(x=>uuid(x.trim())):[],legal_hold:false},v.rationale);
+  } else if(key==='batch-graph-edge') {
+    mustHave(nodes,'Apply two reviewed graph entities first.');
+    fields=[text('from_id','From entity','select',{options:choices(nodes)}),text('to_id','To entity','select',{options:choices(nodes)}),select('relation','Relationship',['owns','manages','member_of','depends_on','governed_by','produced_by','approved_by','references','affects','requires_skill','has_skill','uses_tool','uses_model','caused_by','mitigated_by','learned_from','version_of','simulates','supports','contradicts']),select('inferred','Evidence state',['inferred','verified']),text('source_ref','Relationship evidence'),text('confidence','Confidence0–1','number',{min:0,max:1,value:0.5}),text('rationale','Reason','textarea')];
+    onSubmit=v=>submit('graph','edge',{id:crypto.randomUUID(),from_id:uuid(v.from_id),to_id:uuid(v.to_id),relation:v.relation,inferred:v.inferred==='inferred',source_ref:v.source_ref,confidence:Number(v.confidence),expires_at:new Date(Date.now()+90*86400000).toISOString()},v.rationale);
+  } else if(['batch-graph-delete','batch-graph-merge'].includes(key)) {
+    mustHave(nodes,'Apply graph entities first.');fields=[text('id','Entity','select',{options:choices(nodes)}),text('reason','Reason','textarea')];
+    if(key.endsWith('merge'))fields.push(text('target_id','Keep this duplicate','select',{options:choices(nodes)}));
+    onSubmit=v=>submit('graph',key.endsWith('merge')?'merge':'delete',v,v.reason);
+  } else if(key==='batch-graph-query') {
+    fields=[text('root_id','Start entity (optional UUID)','text',{required:false}),select('direction','Direction',['both','out','in']),text('depth','Maximum hops','number',{min:0,max:6,value:2})];
+    onSubmit=async v=>{const query=new URLSearchParams({direction:v.direction,depth:v.depth});if(v.root_id)query.set('root_id',uuid(v.root_id));state.batchResult=await api.request('/v1/enterprise/graph?'+query);setTimeout(()=>display('Authorized graph paths',state.batchResult),0);return 'Graph paths loaded.';};
+  } else if(key.startsWith('batch-behavior-')) {
+    const {people}=await departmentsAndPeople(ctx);const ai=people.filter(x=>x.kind==='ai');
+    const dims=['trust','reliability','leadership','collaboration','communication','decision_bias','learning_velocity','creativity','risk_behavior','mentoring','conflict_resolution','adaptability','promotion_readiness'];
+    if(key.endsWith('definition')) {
+      fields=[select('dimension','Working behavior',dims),text('name','Measure name'),text('rubric','Scoring rubric and examples','textarea'),text('limitations','Known limitations','textarea')];
+      onSubmit=v=>submit('behavior','definition',{...v,id:crypto.randomUUID(),minimum_samples:5,version:1},v.rubric);
+    } else {
+      mustHave(ai,'Create an AI employee first.');fields=[text('employee_id','AI employee','select',{options:choices(ai)})];
+      if(key.endsWith('profile'))onSubmit=async v=>{const result=await api.request('/v1/enterprise/behavior/'+uuid(v.employee_id));setTimeout(()=>display('Evidence and uncertainty',result),0);return 'Profile loaded.';};
+      else if(key.endsWith('appeal')){fields.push(text('reason','What should be reconsidered?','textarea'));onSubmit=v=>post('/v1/enterprise/behavior/'+uuid(v.employee_id)+'/appeals',{reason:v.reason});}
+      else if(key.endsWith('observation')) {
+        fields.push(text('definition_id','Reviewed metric definition ID'),text('task_id','Completed task with QA'),select('dimension','Dimension',dims),text('scope','Work domain'),select('complexity','Task complexity',['routine','complex','novel']),select('risk','Risk',['low','medium','high']),text('score','Rubric score0–1','number',{min:0,max:1}),text('rationale','Source-backed rationale','textarea'));
+        onSubmit=v=>submit('behavior','observation',{...v,id:crypto.randomUUID(),score:Number(v.score),expires_at:new Date(Date.now()+60*86400000).toISOString()},v.rationale);
+      } else if(key.endsWith('decision')) {
+        fields.push(text('scope','Target work domain'),select('action','Readiness review',['assignment','promotion','autonomy','learning','hiring_gap']),text('rationale','Evidence and independent judgment','textarea'));
+        onSubmit=v=>submit('behavior','decision',{...v,id:crypto.randomUUID(),expires_at:new Date(Date.now()+30*86400000).toISOString()},v.rationale);
+      } else {fields.push(text('appeal_id','Appeal ID'),select('resolution','Outcome',['upheld','corrected']),text('excluded','Observation IDs to exclude (comma separated)','text',{required:false}),text('rationale','Resolution rationale','textarea'));onSubmit=v=>submit('behavior','resolve_appeal',{id:crypto.randomUUID(),employee_id:v.employee_id,appeal_id:v.appeal_id,resolution:v.resolution,excluded_observation_ids:v.excluded?v.excluded.split(',').map(x=>uuid(x.trim())):[],rationale:v.rationale},v.rationale);}
+    }
+  } else if(key==='batch-analytics-dashboard') {
+    fields=[select('dashboard','Dashboard',['executive','department','employee','finance','workflow','qa','security','architecture','infrastructure','knowledge','memory','innovation','digital_twin','meta_brain','health']),text('department_id','Department ID when scoped','text',{required:false}),text('employee_id','Employee ID when scoped','text',{required:false})];
+    onSubmit=async v=>{const query=new URLSearchParams(Object.fromEntries(Object.entries(v).filter(([,x])=>x)));const result=await api.request('/v1/enterprise/analytics/dashboard?'+query);setTimeout(()=>display('Observed metrics and lineage',result),0);return 'Dashboard loaded.';};
+  } else if(key==='batch-analytics-forecast') {
+    fields=[select('metric','Metric',['backlog','qa_pass_rate','task_failure_rate','tasks','security_events','memory_records']),text('horizon','Days ahead','number',{min:1,max:90,value:7})];onSubmit=async v=>{const result=await api.request('/v1/enterprise/analytics/history/'+v.metric+'?horizon_days='+v.horizon);setTimeout(()=>display('Forecast, evidence and anomaly',result),0);return 'Analysis loaded.';};
+  } else if(key==='batch-analytics-schedule') {
+    fields=[select('report','Report',['executive','finance','workflow','qa','security','architecture','infrastructure','knowledge','memory','innovation','digital_twin','meta_brain','health']),select('cadence','Reporting cycle',['weekly','monthly','quarterly','annual']),text('rationale','Reporting purpose','textarea')];onSubmit=v=>submit('analytics','schedule',{id:crypto.randomUUID(),report:v.report,cadence:v.cadence,enabled:true},v.rationale);
+  } else if(key==='batch-integration-client') {
+    fields=[text('name','Integration name'),select('type','Client type',['confidential','public']),text('subject_id','Authorized principal ID'),text('department_id','Department restriction (optional)','text',{required:false}),text('scopes','Allowed scopes, comma separated','text',{value:'tasks:read,events:read'}),text('redirects','Exact redirect URIs, one per line','textarea',{required:false}),text('rationale','Purpose and security review','textarea')];
+    onSubmit=v=>submit('integration','client',{id:crypto.randomUUID(),name:v.name,type:v.type,subject_id:uuid(v.subject_id),department_id:v.department_id?uuid(v.department_id):null,scopes:v.scopes.split(',').map(x=>x.trim()),redirect_uris:v.redirects?v.redirects.split('\n').map(x=>x.trim()).filter(Boolean):[],enabled:true,requests_per_minute:60},v.rationale);
+  } else if(key==='batch-integration-webhook') {
+    fields=[text('client_id','Reviewed client ID'),text('url','HTTPS notification endpoint'),text('rationale','Event sharing purpose','textarea')];onSubmit=v=>submit('integration','webhook',{id:crypto.randomUUID(),client_id:uuid(v.client_id),url:v.url,event_types:['task.changed.v1'],enabled:true},v.rationale);
+  } else if(key==='batch-integration-key' || key==='batch-integration-rotate') {
+    fields=[text('id',key.endsWith('key')?'Confidential client ID':'Webhook subscription ID')];if(key.endsWith('key'))fields.push(select('kind','Credential type',['api_key','client_secret']));
+    onSubmit=async v=>{const result=key.endsWith('key')?await post('/v1/platform/clients/'+uuid(v.id)+'/credentials',{kind:v.kind}):await post('/v1/platform/webhooks/'+uuid(v.id)+'/rotate');setTimeout(()=>display('Copy credential now; shown once',result),0);return 'Credential issued.';};
+  } else if(key==='batch-integration-plugin') {
+    fields=[text('id','Plugin ID (blank for new)','text',{required:false}),text('client_id','Reviewed client ID'),text('name','Plugin name'),text('version','Version','text',{value:'1.0.0'}),select('extension','Extension',['connector','dashboard','workflow','tool','memory','evaluation','reporting']),select('state','Lifecycle state',['installed','configured','enabled','disabled','deprecated','removed']),text('manifest_sha256','Reviewed manifest SHA256'),text('permissions','Scopes, comma separated','text',{value:'tasks:read'}),text('rationale','Review and configuration rationale','textarea')];onSubmit=v=>submit('integration','plugin',{id:v.id?uuid(v.id):crypto.randomUUID(),client_id:uuid(v.client_id),name:v.name,version:v.version,extension:v.extension,state:v.state,manifest_sha256:v.manifest_sha256,permissions:v.permissions.split(',').map(x=>x.trim()),configuration:{}},v.rationale);
+  } else throw new Error('Unknown enterprise action.');
+  openDialog(ctx,{title:'Enterprise '+key.split('-').slice(1).join(' '),description:'Changes are bound to exact evidence and require independent review before application.',fields,button:'Continue',onSubmit});
+}

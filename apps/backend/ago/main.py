@@ -7,6 +7,7 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from ago.api_enterprise_platform import router as enterprise_router, integration_router, PlatformBodyLimit
 from ago.api_agents import router as agents_router
 from ago.api_brain import router as brain_router
 from ago.api_council import router as council_router
@@ -48,12 +49,15 @@ def create_app() -> FastAPI:
         redoc_url=None if policy.production else "/redoc",
         openapi_url=None if policy.production else "/openapi.json",
     )
+    app.add_middleware(PlatformBodyLimit)
     app.state.container = build_container(settings)
     checks = ReadinessChecks()
     checks.register("postgres", postgres_available)
     if policy.production:
         checks.register("migrations", lambda: schema_integrity(os.environ["AGO_POSTGRES_DSN"]))
     app.state.readiness_checks = checks
+    app.include_router(enterprise_router)
+    app.include_router(integration_router)
     app.include_router(m2_router)
     app.include_router(brain_router)
     app.include_router(agents_router)

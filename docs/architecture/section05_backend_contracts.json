@@ -80,6 +80,68 @@
         }
       }
     },
+    "AnalyticsStore": {
+      "module": "analytics_store",
+      "methods": {
+        "catalog": {
+          "arguments": "self, *, actor: Principal",
+          "returns": "dict"
+        },
+        "dashboard": {
+          "arguments": "self, *, actor: Principal, dashboard: str='executive', department_id: str | None=None, employee_id: str | None=None",
+          "returns": "dict"
+        },
+        "capture": {
+          "arguments": "self, *, actor: Principal, operation_key: str",
+          "returns": "dict"
+        },
+        "history": {
+          "arguments": "self, *, actor: Principal, metric: str, horizon_days: int=7",
+          "returns": "dict"
+        },
+        "propose": {
+          "arguments": "self, *, actor: Principal, command: str, specification: dict, operation_key: str, base_revision: int, rationale: str",
+          "returns": "dict"
+        },
+        "apply": {
+          "arguments": "self, *, actor: Principal, proposal_id: str",
+          "returns": "dict"
+        },
+        "reports": {
+          "arguments": "self, *, actor: Principal",
+          "returns": "list[dict]"
+        },
+        "tick": {
+          "arguments": "self, *, actor: Principal",
+          "returns": "dict"
+        }
+      }
+    },
+    "BehaviorStore": {
+      "module": "behavior_store",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, actor: Principal, command: str, specification: dict, operation_key: str, base_revision: int, rationale: str",
+          "returns": "dict"
+        },
+        "apply": {
+          "arguments": "self, *, actor: Principal, proposal_id: str",
+          "returns": "dict"
+        },
+        "profile": {
+          "arguments": "self, *, actor: Principal, employee_id: str",
+          "returns": "dict"
+        },
+        "appeal": {
+          "arguments": "self, *, actor: Principal, employee_id: str, reason: str",
+          "returns": "dict"
+        },
+        "require_clear": {
+          "arguments": "self, *, actor: Principal, employee_id: str",
+          "returns": "None"
+        }
+      }
+    },
     "CalendarStore": {
       "module": "calendar_store",
       "methods": {
@@ -822,6 +884,31 @@
         }
       }
     },
+    "EnterpriseGraph": {
+      "module": "graph_store",
+      "methods": {
+        "propose": {
+          "arguments": "self, *, actor: Principal, command: str, specification: dict, operation_key: str, base_revision: int, rationale: str",
+          "returns": "dict"
+        },
+        "apply": {
+          "arguments": "self, *, actor: Principal, proposal_id: str",
+          "returns": "dict"
+        },
+        "query": {
+          "arguments": "self, *, actor: Principal, root_id: str | None=None, relation: str | None=None, kind: str | None=None, direction: str='both', depth: int=2, limit: int=100",
+          "returns": "dict"
+        },
+        "quality": {
+          "arguments": "self, *, actor: Principal",
+          "returns": "dict"
+        },
+        "synchronize": {
+          "arguments": "self, *, actor: Principal, limit: int=20",
+          "returns": "dict"
+        }
+      }
+    },
     "HandoffStore": {
       "module": "handoffs",
       "methods": {
@@ -918,6 +1005,67 @@
         "redeem_handoff": {
           "arguments": "self, *, token: str, browser_binding: str",
           "returns": "Principal"
+        }
+      }
+    },
+    "IntegrationStore": {
+      "module": "integration_store",
+      "methods": {
+        "catalog": {
+          "arguments": "self, *, actor: Principal",
+          "returns": "dict"
+        },
+        "propose": {
+          "arguments": "self, *, actor: Principal, command: str, specification: dict, operation_key: str, base_revision: int, rationale: str",
+          "returns": "dict"
+        },
+        "apply": {
+          "arguments": "self, *, actor: Principal, proposal_id: str",
+          "returns": "dict"
+        },
+        "issue": {
+          "arguments": "self, *, actor: Principal, client_id: str, kind: str",
+          "returns": "dict"
+        },
+        "authorize": {
+          "arguments": "self, *, actor: Principal, client_id: str, redirect: str, challenge: str, scopes: list[str], state: str",
+          "returns": "dict"
+        },
+        "token": {
+          "arguments": "self, *, grant_type: str, client_id: str, client_secret: str='', code: str='', redirect: str='', verifier: str='', scopes: list[str] | None=None, peer: str='local'",
+          "returns": "dict"
+        },
+        "authenticate": {
+          "arguments": "self, *, token: str, scope: str, endpoint: str",
+          "returns": "dict"
+        },
+        "publish": {
+          "arguments": "self, *, actor: Principal",
+          "returns": "dict"
+        },
+        "events": {
+          "arguments": "self, *, token: str, after: int=0, limit: int=100",
+          "returns": "dict"
+        },
+        "rotate_webhook": {
+          "arguments": "self, *, actor: Principal, subscription_id: str",
+          "returns": "dict"
+        },
+        "deliver": {
+          "arguments": "self, *, actor: Principal, limit: int=10",
+          "returns": "dict"
+        },
+        "replay": {
+          "arguments": "self, *, actor: Principal, delivery_id: str, reason: str",
+          "returns": "dict"
+        },
+        "propose_task": {
+          "arguments": "self, *, token: str, action: str, assignee_id: str, operation_key: str",
+          "returns": "dict"
+        },
+        "tasks": {
+          "arguments": "self, *, token: str, after: str | None=None, limit: int=50",
+          "returns": "dict"
         }
       }
     },
@@ -1222,6 +1370,39 @@
         "require_pass": {
           "arguments": "self, *, task_id: str, tenant_id: str",
           "returns": "None"
+        }
+      }
+    },
+    "ReviewedChanges": {
+      "module": "reviewed_changes",
+      "methods": {
+        "require": {
+          "arguments": "self, actor: Principal, domain: str",
+          "returns": "None"
+        },
+        "revision": {
+          "arguments": "self, *, tenant_id: str, domain: str",
+          "returns": "int"
+        },
+        "propose": {
+          "arguments": "self, *, actor: Principal, domain: str, command: str, specification: dict, source: dict, operation_key: str, base_revision: int, rationale: str",
+          "returns": "dict"
+        },
+        "pending": {
+          "arguments": "self, *, actor: Principal, domain: str",
+          "returns": "list[dict]"
+        },
+        "package": {
+          "arguments": "self, *, actor: Principal, proposal_id: str, domain: str",
+          "returns": "dict"
+        },
+        "finish": {
+          "arguments": "self, *, actor: Principal, package: dict, result: dict",
+          "returns": "dict"
+        },
+        "inspect": {
+          "arguments": "self, *, actor: Principal, approval_id: str",
+          "returns": "dict"
         }
       }
     },

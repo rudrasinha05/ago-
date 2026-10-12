@@ -629,7 +629,7 @@ export function renderPage(page,data,state) {
     tools:renderTools,calendar:renderCalendar,twin:renderTwin,
   }[page];
   if (!fn) return '<div class="error-card">Unknown workspace</div>';
-  return fn(data,state);
+  return fn(data,state)+renderEnterpriseBatch(page,data,state);
 }
 
 
@@ -663,4 +663,32 @@ function renderCalendarGovernance(calendar,state) {
     panel("Cross-department handoffs and task deadlines",links || empty("No reviewed event dependencies"))+
     panel("Calendar review packages",proposals || empty("No calendar changes proposed"))+
     panel("Due cycles and execution timing",signals || empty("No timing observations recorded"));
+}
+
+function renderEnterpriseBatch(page,data,state) {
+  const founder=state.me?.roles?.includes('founder');
+  const domain={knowledge:'graph',organization:'behavior',overview:'analytics',tools:'integration'}[page];
+  if(!domain)return '';
+  const reviews=resource(data,domain+'Reviews');
+  const proposals=(reviews?.proposals || []).map(p=>'<tr><td>'+safe(p.command)+'</td><td>'+safe(p.rationale)+'</td><td>'+badge(p.status)+'</td><td>'+action('Inspect','batch-inspect',domain+':'+p.id)+(founder && p.status==='approved'?action('Apply reviewed change','batch-apply',domain+':'+p.id):'')+'</td></tr>');
+  let body='';
+  if(domain==='graph') {
+    const graph=resource(data,'graph');
+    body=(founder?[action('Propose entity','batch-graph-node'),action('Propose relationship','batch-graph-edge'),action('Merge duplicates','batch-graph-merge'),action('Retire entity','batch-graph-delete'),action('Synchronize memory','batch-graph-sync')].join(' '):'')+' '+action('Trace relationships','batch-graph-query');
+    body+=table(['Entity','Type','Confidence','Owner'],(graph?.nodes || []).map(n=>'<tr><td>'+safe(n.payload.label)+'</td><td>'+safe(n.payload.kind)+'</td><td>'+safe(n.payload.confidence)+'</td><td>'+safe(shortId(n.payload.owner_id))+'</td></tr>'),empty('No reviewed graph entities','Propose an entity, review it in Governance, then apply the reviewed change.'));
+  } else if(domain==='behavior') {
+    body=(founder?[action('Define a measure','batch-behavior-definition'),action('Record observation','batch-behavior-observation'),action('Review readiness','batch-behavior-decision'),action('Resolve appeal','batch-behavior-resolve')].join(' '):'')+' '+action('View AI evidence','batch-behavior-profile')+' '+action('Challenge assessment','batch-behavior-appeal');
+    body+='<p>AI working-behavior signals use reviewed task evidence and context. Sparse samples stay unknown; assessments do not grant authority.</p>';
+  } else if(domain==='analytics') {
+    const record=resource(data,'analytics');
+    body=action('Explore dashboards','batch-analytics-dashboard')+' '+action('Forecast and anomalies','batch-analytics-forecast')+(founder?' '+action('Capture observation','batch-analytics-capture')+' '+action('Schedule report','batch-analytics-schedule')+' '+action('Generate due reports','batch-analytics-tick'):'');
+    body+=table(['Metric','Observed value','Source'],Object.entries(record?.metrics || {}).map(([k,v])=>'<tr><td>'+safe(k.replaceAll('_',' '))+'</td><td>'+safe(v.value??'Unknown')+'</td><td>'+safe(v.source)+'</td></tr>'));
+    body+='<p>Task complexity, source freshness and evidence limits matter. Counts alone do not establish quality or employee performance.</p>';
+  } else {
+    const integrations=resource(data,'integrations');
+    body=founder?[action('Register client','batch-integration-client'),action('Register webhook','batch-integration-webhook'),action('Plugin lifecycle','batch-integration-plugin'),action('Issue credential','batch-integration-key'),action('Rotate webhook key','batch-integration-rotate'),action('Publish integration events','batch-integration-publish')].join(' '):'';
+    body+=table(['Client','Type','Scopes','State'],(integrations?.clients || []).map(c=>'<tr><td>'+safe(c.payload.name)+'</td><td>'+safe(c.payload.type)+'</td><td>'+safe(c.payload.scopes.join(', '))+'</td><td>'+badge(c.payload.enabled?'enabled':'disabled')+'</td></tr>'));
+    body+='<p>External clients have explicit scopes, expiry and shared quotas. Proposed tasks still require independent approval.</p>';
+  }
+  return section({graph:'Enterprise Knowledge Graph',behavior:'AI behavioral evidence',analytics:'Enterprise analytics',integration:'Company API platform'}[domain])+panel('Reviewed operations',body)+panel('Independent change packages',table(['Change','Rationale','Review','Actions'],proposals));
 }
