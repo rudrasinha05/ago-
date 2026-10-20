@@ -1803,6 +1803,10 @@
         "project_details": {
           "arguments": "self, tenant_id: str, project_id: str",
           "returns": "dict"
+        },
+        "approved_signal_project": {
+          "arguments": "self, actor, signal_id: str",
+          "returns": "dict"
         }
       }
     }
