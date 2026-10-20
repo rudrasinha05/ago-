@@ -195,3 +195,14 @@ def scan_opportunities(actor=Depends(authenticated), repositories=Depends(reposi
     if 'founder' not in actor.roles:
         translate_error(PermissionError('Only founder can initiate this manual company scan'))
     return repositories.resolve(CompanyChatPort).scan_opportunities(actor.tenant_id)
+
+@router.get('/market-intelligence')
+def market_intelligence(limit: int = Query(default=100,ge=1,le=200),
+                        actor=Depends(authenticated),
+                        repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'brain:read')
+    try:
+        return repositories.resolve(CompanyChatPort).market_intelligence(actor.tenant_id,limit)
+    except (ValueError,PermissionError) as exc:
+        translate_error(exc)
