@@ -365,3 +365,67 @@ def test_founder_project_history_shows_actual_suggested_staff_not_fictional_ceo(
     # Project intake is not a dispatched execution or AI CEO command.
     assert not info['db'].execute('SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s',
                                   (info['tenant'],)).fetchone()
+
+
+def test_management_owns_delivery_and_every_governed_task_has_manager(case):
+    client,headers,info=case
+    founder=headers['founder']
+    dep=department(client,founder)
+    chief=post(client,'/v1/organization/employees',founder,{
+        'department_id':dep,'name':'CEO','kind':'ai'})['id']
+    analyst=post(client,'/v1/organization/employees',founder,{
+        'department_id':dep,'name':'Research Analyst','kind':'ai','manager_id':chief})['id']
+    project=post(client,BASE+'/projects/start',founder,{
+        'brief':'Build a paid admission followup service with privacy, independent testing and a validated customer offer',
+        'operation_key':str(uuid4()),
+    })
+    assert project['accountable_manager_id']==chief
+    assert project['accountable_manager_name']=='CEO'
+    assert project['assignment_source']=='executive_manager'
+    assert project['verified_revenue_inr'] is None
+    assert project['commercial_stage']=='offer_needed'
+    assert project['stages'][0]['suggested_assignee_id']==analyst
+    assert project['stages'][0]['suggested_assignee_id']!=chief
+    assert any(str(r['id'])==project['id'] and
+               str(r['accountable_manager_id'])==chief
+               for r in client.get(BASE+'/projects',headers=founder).json())
+    task=post(client,'/v1/tasks',founder,{'assignee_id':analyst,'action':'internal:brief'})
+    row=info['db'].execute("""
+      SELECT assignee_id,accountable_manager_id
+      FROM ago_governed_tasks WHERE tenant_id=%s AND id=%s
+    """,(info['tenant'],task['id'])).fetchone()
+    assert str(row['assignee_id'])==analyst
+    assert str(row['accountable_manager_id'])==chief
+    report=client.get(BASE+'/management/workload',headers=founder)
+    assert report.status_code==200,report.text
+    result=report.json()
+    assert result['unassigned_work_generated'] is False
+    employee_record=next(e for e in result['employees'] if str(e['id'])==analyst)
+    assert employee_record['queued']>=1 and employee_record['running']==0
+    boss_record=next(e for e in result['employees'] if str(e['id'])==chief)
+    assert boss_record['projects_accountable']==1
+    assert any(str(e['accountable_manager_id'])==chief for e in result['leaders'])
+    assert client.get(BASE+'/management/workload').status_code==401
+    assert client.get(BASE+'/management/workload',headers=headers['reviewer']).status_code==403
+
+
+def test_management_escalates_to_real_founder_if_no_supervisor(case):
+    client,headers,info=case
+    founder=headers['founder']
+    project=post(client,BASE+'/projects/start',founder,{
+        'brief':'Create an evidence-driven customer success portal with independent review and a paid pilot offer',
+        'operation_key':str(uuid4()),
+    })
+    assert project['accountable_manager_id']==info['founder_id']
+    assert project['assignment_source']=='founder_escalation'
+    assert project['leadership_staffing_gap'] is True
+    assert project['verified_revenue_inr'] is None
+    dep=department(client,founder)
+    worker=employee(client,founder,dep)
+    task=post(client,'/v1/tasks',founder,{'assignee_id':worker,'action':'internal:brief'})
+    row=info['db'].execute("""
+      SELECT accountable_manager_id FROM ago_governed_tasks
+      WHERE tenant_id=%s AND id=%s
+    """,(info['tenant'],task['id'])).fetchone()
+    assert str(row['accountable_manager_id'])==info['founder_id']
+    assert client.get(BASE+'/projects',headers=founder).json()[0]['commercial_stage']=='offer_needed'
