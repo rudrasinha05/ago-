@@ -308,8 +308,12 @@
       "ago_founder_project_lead",
       "ago_goals",
       "ago_governed_tasks",
+      "ago_growth_scan_runs",
+      "ago_market_signals",
+      "ago_marketing_drafts",
       "ago_plan_steps",
       "ago_strategy_plans",
+      "ago_task_reviews",
       "ago_tenants",
       "ago_user_roles",
       "ago_users"
