@@ -112,8 +112,8 @@ try{
  await page.locator('.approval-inbox').getByText('1 pending requests company-wide').waitFor({timeout:15000});
  await page.locator('.approval-inbox').getByRole('button',{name:'View approval details'}).click();
  await page.getByRole('dialog',{name:'Approval details'}).getByText('Founder',{exact:false}).first().waitFor();
- assert.match(await page.getByRole('dialog',{name:'Approval details'}).innerText(),/independent human reviewer/i);
- assert.equal(await page.getByRole('dialog',{name:'Approval details'}).getByRole('button',{name:'Approve',exact:true}).count(),0);
+ assert.match(await page.getByRole('dialog',{name:'Approval details'}).innerText(),/Founder only/i);
+ assert.equal(await page.getByRole('dialog',{name:'Approval details'}).getByRole('button',{name:'Approve',exact:true}).count(),1);
  await page.getByRole('button',{name:'Close approval details'}).click();
  await page.getByLabel('Appoint Technology Oversight').selectOption(cto);
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'Approve seat'}).click();
