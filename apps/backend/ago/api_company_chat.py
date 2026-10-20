@@ -48,6 +48,13 @@ def activity(actor=Depends(authenticated), repositories=Depends(repository_scope
     allowed(repositories, actor, 'task:read')
     return repositories.resolve(CompanyChatPort).activity(actor.tenant_id)
 
+    
+@router.get('/notifications')
+def notifications(actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'organization:read')
+    allowed(repositories, actor, 'task:read')
+    return repositories.resolve(CompanyChatPort).notifications(actor.tenant_id)
+
 
 class StaffingInput(StrictInput):
     department_id: UUID
