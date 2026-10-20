@@ -107,7 +107,7 @@ class ApprovalRepository:
                      AND r.role='founder' LIMIT 1""",
                 (tenant_id,),
             ).fetchone()
-            if active_founder_exists and founder is None:
+            if founder is None:
                 raise PermissionError("Only the active human founder may approve or deny")
             # Legacy standalone test tenants have no founder role; preserve
             # their independently reviewed historical flows without granting
