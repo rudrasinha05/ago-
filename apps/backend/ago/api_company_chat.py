@@ -218,3 +218,17 @@ def market_intelligence(limit: int = Query(default=100,ge=1,le=200),
         return repositories.resolve(CompanyChatPort).market_intelligence(actor.tenant_id,limit)
     except (ValueError,PermissionError) as exc:
         translate_error(exc)
+
+
+@router.post('/market-intelligence/{signal_id}/project')
+def create_approved_market_project(signal_id: UUID,actor=Depends(authenticated),
+                                   repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:manage')
+    allowed(repositories,actor,'brain:manage')
+    if 'founder' not in actor.roles:
+        translate_error(PermissionError('Only founder may promote a research signal'))
+    try:
+        return repositories.resolve(CompanyChatPort).approved_signal_project(
+            actor,str(signal_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
