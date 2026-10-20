@@ -19,7 +19,7 @@ def message(**extra):
 
 def test_map_routes_require_authentication():
     with TestClient(create_app()) as client:
-        for path in ('/chat', '/activity'):
+        for path in ('/chat', '/activity', '/notifications'):
             assert client.get(BASE+path).status_code == 401
         assert client.post(BASE+'/chat', json=message()).status_code == 401
 
@@ -89,11 +89,16 @@ def test_task_status_is_saved_without_browser_polling(case):
     timeline = client.get(BASE+'/chat', headers=f).json()['items']
     assert any(m['task_id']==task['id'] and m['kind']=='status' for m in timeline)
     assert client.get(BASE+'/activity', headers=f).json()[0]['status']=='proposed'
+    notifications = client.get(BASE+'/notifications', headers=f).json()
+    assert notifications['by_employee'][worker] >= 1
+    assert any(event['task_id'] == task['id'] for event in notifications['recent'])
+    assert notifications['event_type'] == 'committed_task_status'
     # A different tenant's record is neither readable nor replyable.
     from ago.bootstrap import bootstrap
     tenant, _ = bootstrap(info['db'], organization='Other company', email='other@example.test',
                           password='other-test-password-123')
     other = info['login']('other@example.test','other-test-password-123',tenant)
     assert client.get(BASE+'/chat',headers=other).json()['items']==[]
+    assert client.get(BASE+'/notifications',headers=other).json()['recent']==[]
     post(client,BASE+'/chat',other,message(reply_to=timeline[0]['id']),expected=400)
     assert client.get(BASE+'/chat?channel=department:'+dep,headers=other).status_code==400
