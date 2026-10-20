@@ -26,7 +26,7 @@ export function OpportunityRadar({api,me,onChanged}) {
   finally{setWorking(false);}
  }
  if(!canRead)return null;
- return <section className="opportunity-radar" aria-label="Company opportunity radar">
+ return <section id="ago-opportunities" className="opportunity-radar" aria-label="Company opportunity radar">
   <header><div><h3>Company Opportunity Radar</h3>
     <p>Proactive business ideas, accountable management and founder-only approvals. No verified market demand or revenue is implied.</p></div>
     {canScan&&<button type="button" onClick={scan} disabled={working}>{working?'Checking…':'Scan business opportunities'}</button>}

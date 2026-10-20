@@ -15,7 +15,7 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
   return()=>{active=false;clearInterval(interval);};
  },[api,me.permissions,refreshSignal]);
  if(!me.permissions?.includes('task:read'))return null;
- return <section className="management-workload" aria-label="Management and employee work accountability">
+ return <section id="ago-workforce" className="management-workload" aria-label="Management and employee work accountability">
   <h3>Management ownership and workforce utilization</h3>
   <p>Leadership is accountable for useful delivery and commercial outcomes. An idle record is a workload alert, not permission to create pointless tasks or bypass reviews.</p>
   {report===null?<p>Verified workforce status unavailable.</p>:<>

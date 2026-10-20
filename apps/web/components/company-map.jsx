@@ -146,14 +146,21 @@ export function CompanyMap({api,me,data,onRefresh}) {
     const signature=JSON.stringify(values);if(staffKey.current?.signature!==signature)staffKey.current={signature,key:crypto.randomUUID()};
     setSending(true);try{await api.request(BASE+'/staffing',{method:'POST',body:{...values,operation_key:staffKey.current.key}});staffKey.current=null;setStaffing(false);await onRefresh();}
     catch(e){setError(e.message);}finally{setSending(false);}}
-  return <section className="company-command" aria-label="Company map and conversations">
+  return <section id="ago-unified-cockpit" className="company-command" aria-label="Company map and conversations">
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><button className="btn" disabled={!me.permissions.includes('organization:manage')} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></header>
+    <nav className="company-cockpit-nav" aria-label="Company control center sections">
+      <a href="#ago-unified-cockpit">Company Brain</a>
+      <a href="#company-approval-inbox">Founder Approvals</a>
+      <a href="#ago-opportunities">Business Opportunities</a>
+      <a href="#ago-workforce">Workforce</a>
+      <a href="#ago-company-org-map">Organization & Chat</a>
+    </nav>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
     <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
     <FounderProjectIntake api={api} me={me} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
     <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
-    <div className={"company-shell"+(fullscreen?" company-fullscreen":"")} aria-label="Organization map workspace">
+    <div id="ago-company-org-map" className={"company-shell"+(fullscreen?" company-fullscreen":"")} aria-label="Organization map workspace">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>
         {departments.map(d=>{const members=employees.filter(e=>e.department_id===d.id);if(query&&!d.name.toLowerCase().includes(query.toLowerCase())&&!members.some(e=>e.name.toLowerCase().includes(query.toLowerCase())))return null;
