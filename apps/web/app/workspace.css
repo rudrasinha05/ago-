@@ -205,3 +205,22 @@
 .company-cockpit-nav a{font-size:12px;line-height:1.25;padding:8px 11px;border:1px solid #3a608b;border-radius:8px;background:#183354;color:#def3ff;text-decoration:none}
 .company-cockpit-nav a:hover,.company-cockpit-nav a:focus-visible{background:#286193;outline-offset:2px}
 #company-approval-inbox,#ago-opportunities,#ago-workforce,#ago-company-org-map{scroll-margin-top:75px}
+
+/* Evidence-first research desk, clickable portfolio, and factual social copy. */
+.market-signal-list{display:grid;gap:10px;margin:14px 0}
+.market-signal{border:1px solid #355f87;border-radius:12px;padding:13px;background:#0a2034;overflow-wrap:anywhere}
+.market-signal strong,.market-signal small{display:block}
+.market-signal strong{font-size:14px}.market-signal small{font-size:11px;color:#a9c9e4;margin-top:5px}
+.market-signal a,.project-portfolio-details a{color:#91d3ff}
+.market-signal-filters{display:flex;gap:6px;flex-wrap:wrap}
+.market-signal-filters button[aria-pressed=true]{border-color:#7eccf8;background:#204d75}
+.project-portfolio-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
+.project-portfolio-card{border:1px solid #395b85;border-radius:12px;background:#081f35;padding:12px;min-width:0}
+.project-portfolio-open{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;min-height:115px;background:#0f3049;border:1px solid #46779b;color:#eef8ff;border-radius:9px;padding:12px;cursor:pointer;overflow-wrap:anywhere}
+.project-portfolio-open:hover,.project-portfolio-open:focus-visible{outline:2px solid #87d2ff}
+.project-portfolio-open[aria-expanded=true]{border-color:#e65c61}
+.project-portfolio-open small{font-size:11px;color:#acc8e1}
+.project-portfolio-details{padding:12px;overflow-wrap:anywhere;border-top:1px solid #395b85}
+.project-portfolio-details p{font-size:12px}
+#ago-project-portfolio{scroll-margin-top:75px}
+@media(max-width:580px){.market-signal-filters button{min-height:36px}.project-portfolio-grid{grid-template-columns:1fr}}
