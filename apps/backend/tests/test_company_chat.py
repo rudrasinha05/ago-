@@ -102,3 +102,25 @@ def test_task_status_is_saved_without_browser_polling(case):
     assert client.get(BASE+'/notifications',headers=other).json()['recent']==[]
     post(client,BASE+'/chat',other,message(reply_to=timeline[0]['id']),expected=400)
     assert client.get(BASE+'/chat?channel=department:'+dep,headers=other).status_code==400
+
+
+def test_notification_counters_are_persistent_and_tenant_scoped(case):
+    client, headers, info = case
+    founder = headers['founder']
+    dep = department(client, founder)
+    worker = employee(client, founder, dep)
+    initial = client.get(BASE+'/notifications', headers=founder).json()
+    assert initial['by_employee'][worker] == 0
+    # Simulate two transactionally committed task-status audit entries.
+    task = post(client, '/v1/tasks', founder, {'assignee_id': worker, 'action': 'internal:brief'})
+    after_task = client.get(BASE+'/notifications', headers=founder).json()
+    assert after_task['by_employee'][worker] == 1
+    with info['db'].transaction():
+        info['db'].execute("""
+            INSERT INTO ago_company_chat
+              (tenant_id, channel, author_name, body, kind, employee_id, task_id)
+            VALUES (%s, %s, %s, %s, 'status', %s, %s)
+        """, (info['tenant'], 'employee:'+worker, 'Work audit', 'Module checkpoint recorded', worker, task['id']))
+    after_report = client.get(BASE+'/notifications', headers=founder).json()
+    assert after_report['by_employee'][worker] == 2
+    assert after_report['recent'][0]['body'] == 'Module checkpoint recorded'
