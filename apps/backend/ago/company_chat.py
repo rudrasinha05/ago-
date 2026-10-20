@@ -616,7 +616,14 @@ class CompanyChat:
                    o.target_customer AS opportunity_customer,
                    o.proposed_offer AS opportunity_offer,
                    o.revenue_path AS opportunity_revenue,
-                   o.validation_next_step AS opportunity_validation
+                   o.validation_next_step AS opportunity_validation,
+                   signal.id AS market_signal_id,signal.title AS market_signal_title,
+                   signal.source_url AS market_signal_url,
+                   signal.source_name AS market_signal_source,
+                   signal.source_kind AS market_signal_kind,
+                   signal.potential_customer AS market_signal_customer,
+                   signal.score_basis AS market_signal_score_basis,
+                   signal.opportunity_score AS market_signal_score
             FROM ago_approval_requests a
             LEFT JOIN ago_employees requester
               ON requester.tenant_id=a.tenant_id AND requester.id=a.requester_id
@@ -638,6 +645,9 @@ class CompanyChat:
             LEFT JOIN ago_company_opportunities o
               ON o.tenant_id=a.tenant_id AND o.approval_id=a.id
              AND a.action=('company:opportunity:' || o.id::text)
+            LEFT JOIN ago_market_signals signal
+              ON signal.tenant_id=a.tenant_id AND signal.approval_id=a.id
+             AND a.action=('company:market-signal:' || signal.id::text)
             LEFT JOIN ago_employees assignee
               ON assignee.tenant_id=t.tenant_id AND assignee.id=t.assignee_id
             LEFT JOIN ago_departments td
@@ -650,6 +660,7 @@ class CompanyChat:
         for row in rows:
             item = dict(row)
             item["approval_type"] = (
+                "market_signal_review" if item["market_signal_id"] else
                 "opportunity_review" if item["opportunity_id"] else
                 "plan_review" if item["plan_id"] else
                 "task_execution" if item["task_id"] else "governance_action"
@@ -659,7 +670,7 @@ class CompanyChat:
             )
             item["next_action"] = (
                 "Founder approval permits market validation and a governed project plan. No autonomous sales, email campaigns, ad spend or release is authorized."
-                if item["opportunity_id"] else
+                if item["opportunity_id"] or item["market_signal_id"] else
                 "An approved plan requires separate activation and per-task approvals."
                 if item["plan_id"] else
                 "An approved task still requires explicit governed execution and QA."
