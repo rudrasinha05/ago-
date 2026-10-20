@@ -8,7 +8,7 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 migrate
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test")]
+    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -61,8 +61,37 @@ try {
         & python -m pytest -q --basetemp="C:\ago-pytest-temp"
         exit $LASTEXITCODE
     }
+    if ($Action -eq "market-watch") {
+        if (-not $env:AGO_MARKET_TENANT_ID) {
+            throw "Set AGO_MARKET_TENANT_ID to your actual company UUID before launching market research."
+        }
+        & python ../../scripts/company_market_watch.py --tenant-id $env:AGO_MARKET_TENANT_ID --interval-seconds 3600
+        exit $LASTEXITCODE
+    }
     if ($Action -eq "serve") {
-        & python -m ago.local_ops serve --port $Port
+        $RadarJob = $null
+        if ($env:AGO_MARKET_TENANT_ID) {
+            # Local process only; the separate job does not keep running if this
+            # PowerShell host exits. Errors cannot stop the application server.
+            $RadarJob = Start-Job -ArgumentList $BackendPath,$env:AGO_MARKET_TENANT_ID -ScriptBlock {
+                param($WorkingDirectory,$TenantId)
+                Set-Location $WorkingDirectory
+                while ($true) {
+                    & python ../../scripts/company_market_watch.py --tenant-id $TenantId --interval-seconds 3600
+                    Start-Sleep -Seconds 60
+                }
+            }
+            Write-Host "Continuous local market research launched. Tenant source feed status is visible in AGO."
+        }
+        try {
+            & python -m ago.local_ops serve --port $Port
+        }
+        finally {
+            if ($RadarJob) {
+                Stop-Job -Job $RadarJob -ErrorAction SilentlyContinue
+                Remove-Job -Job $RadarJob -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
     else {
         & python -m ago.local_ops $Action
