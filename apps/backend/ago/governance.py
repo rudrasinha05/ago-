@@ -99,14 +99,6 @@ class ApprovalRepository:
                      AND e.kind='human' AND r.role='founder'""",
                 (reviewer_id, tenant_id),
             ).fetchone()
-            active_founder_exists = self.connection.execute(
-                """SELECT 1 FROM ago_users u
-                     JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
-                     JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
-                   WHERE u.tenant_id=%s AND u.active AND e.kind='human'
-                     AND r.role='founder' LIMIT 1""",
-                (tenant_id,),
-            ).fetchone()
             if founder is None:
                 raise PermissionError("Only the active human founder may approve or deny")
             # Legacy standalone test tenants have no founder role; preserve
