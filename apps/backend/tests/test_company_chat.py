@@ -92,7 +92,7 @@ def test_task_status_is_saved_without_browser_polling(case):
     notifications = client.get(BASE+'/notifications', headers=f).json()
     assert notifications['by_employee'][worker] >= 1
     assert any(event['task_id'] == task['id'] for event in notifications['recent'])
-    assert notifications['event_type'] == 'committed_task_status'
+    assert notifications['event_type'] == 'committed_work_event'
     # A different tenant's record is neither readable nor replyable.
     from ago.bootstrap import bootstrap
     tenant, _ = bootstrap(info['db'], organization='Other company', email='other@example.test',
