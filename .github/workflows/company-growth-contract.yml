@@ -1,0 +1,72 @@
+name: AGO company growth acceptance (focused)
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - "apps/backend/ago/company_chat.py"
+      - "apps/backend/ago/api_company_chat.py"
+      - "apps/backend/tests/test_company_market_watch.py"
+      - "apps/backend/tests/test_market_growth_postgres.py"
+      - "apps/backend/tests/test_company_readiness_audit.py"
+      - "apps/web/components/company-management.jsx"
+      - "apps/web/components/company-opportunities.jsx"
+      - "apps/web/components/founder-project-intake.jsx"
+      - "deploy/sql/055_continuous_market_intelligence.sql"
+      - "deploy/sql/056_approved_market_project_lineage.sql"
+      - ".github/workflows/company-growth-contract.yml"
+jobs:
+  growth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ago_test
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: ago_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ago_test -d ago_test"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      AGO_ENVIRONMENT: development
+      AGO_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_TEST_POSTGRES_DSN: postgresql://ago_test:ci_only_password@localhost:5432/ago_test
+      AGO_SESSION_SECRET: ci_only_signing_key_change_outside_ci_123456789
+      AGO_ENABLE_PAID_MODELS: "false"
+      AGO_M8_EXTERNAL_ENABLED: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install isolated backend
+        run: python -m pip install -e './apps/backend[dev,postgres]'
+      - name: Apply ALL migrations to disposable CI database, including 055 and 056
+        working-directory: apps/backend
+        run: python -m ago.event_runtime migrate
+      - name: Check scoped architecture and exact API fingerprint
+        run: |
+          python scripts/check_system_architecture.py
+          python scripts/check_domain_contexts.py
+          python scripts/check_backend_architecture.py
+          python scripts/check_engineering_quality.py
+      - name: Offline research, real PostgreSQL workflows and readiness invariants
+        run: |
+          python -m pytest -q             apps/backend/tests/test_company_market_watch.py             apps/backend/tests/test_market_growth_postgres.py             apps/backend/tests/test_company_readiness_audit.py
+      - name: Enforce focused Python lint
+        run: |
+          python -m ruff check             apps/backend/ago/company_chat.py             apps/backend/ago/api_company_chat.py             apps/backend/tests/test_company_market_watch.py             apps/backend/tests/test_market_growth_postgres.py             apps/backend/tests/test_company_readiness_audit.py
+      - name: Build founder company web cockpit
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build --workspace @ago/web
