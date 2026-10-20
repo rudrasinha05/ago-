@@ -477,6 +477,9 @@ class CompanyChat:
             raise ValueError('Invalid project history limit')
         return [dict(row) for row in self.db.execute("""
             SELECT i.id,i.title,i.goal_id,i.plan_id,i.created_at,p.status AS plan_status,
+              l.accountable_manager_id,e.name AS accountable_manager_name,
+              e.role_title AS accountable_manager_role,l.assignment_source,
+              l.commercial_objective,l.commercial_stage,l.verified_revenue_inr,
               (SELECT COUNT(*) FROM ago_founder_intake_stages s
                WHERE s.tenant_id=i.tenant_id AND s.intake_id=i.id
                  AND s.suggested_assignee_id IS NULL) AS staffing_gaps,
