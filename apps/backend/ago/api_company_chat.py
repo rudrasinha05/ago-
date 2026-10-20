@@ -1,5 +1,6 @@
 """Authenticated company map and shared conversation endpoints."""
 from uuid import UUID
+from typing import Literal
 from fastapi import APIRouter, Depends, Query
 from pydantic import Field
 from ago.api_contracts import StrictInput
@@ -75,3 +76,69 @@ def staff(data: StaffingInput, actor=Depends(authenticated), repositories=Depend
             data.name, data.requirement, str(data.operation_key))
     except (ValueError, PermissionError) as exc:
         translate_error(exc)
+
+class RoleProfileInput(StrictInput):
+    role_title: str = Field(min_length=1, max_length=150)
+    core_responsibilities: str = Field(min_length=1, max_length=3000)
+    extra_responsibilities: str = Field(default='', max_length=3000)
+
+
+@router.get('/governance')
+def governance(actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'organization:read')
+    return repositories.resolve(CompanyChatPort).governance(actor.tenant_id)
+
+
+@router.put('/employees/{employee_id}/role')
+def employee_role(employee_id: UUID, data: RoleProfileInput,
+                  actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'organization:manage')
+    try:
+        return repositories.resolve(CompanyChatPort).profile(
+            actor, str(employee_id), data.role_title,
+            data.core_responsibilities, data.extra_responsibilities)
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+class BoardAppointmentInput(StrictInput):
+    seat: Literal['Strategy & Vision','Technology Oversight','Finance & Budget',
+                  'Risk & Compliance','Quality & Release']
+    employee_id: UUID
+
+
+@router.post('/board/appoint')
+def board_appoint(data: BoardAppointmentInput, actor=Depends(authenticated),
+                  repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'organization:manage')
+    try:
+        return repositories.resolve(CompanyChatPort).appoint(
+            actor, data.seat, str(data.employee_id))
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+class ReportInput(StrictInput):
+    kind: Literal['doubt','blocker','module_complete','phase_complete']
+    body: str = Field(min_length=1, max_length=6000)
+    task_id: UUID | None = None
+    operation_key: UUID
+
+
+@router.post('/reports')
+def submit_report(data: ReportInput, actor=Depends(authenticated),
+                  repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'messages:write')
+    try:
+        return repositories.resolve(CompanyChatPort).report(
+            actor, data.kind, data.body, str(data.operation_key),
+            str(data.task_id) if data.task_id else None)
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@router.get('/reports')
+def list_reports(limit: int = Query(default=100,ge=1,le=100),
+                 actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'messages:read')
+    return repositories.resolve(CompanyChatPort).reports(actor,limit)
