@@ -27,7 +27,7 @@ def test_signal_parsing_validates_sources_and_deduplicates():
     assert len(result) == 1
     row = result[0]
     assert row["source_url"] == "https://example.org/article/1"
-    assert row["source_name"] == "trusted-news"
+    assert row["source_name"] == "nist-news"
     assert row["published_at"] is not None
     assert row["opportunity_score"] >= 55
     assert "privacy" in row["score_basis"]
