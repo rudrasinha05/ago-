@@ -601,10 +601,23 @@ class CompanyChat:
             WHERE t.tenant_id=%s
             GROUP BY t.accountable_manager_id,e.name ORDER BY e.name
         """,(tenant_id,)).fetchall()
+        vacancies = self.db.execute("""
+            SELECT i.title AS project_title,s.stage,s.deliverable,
+                   l.accountable_manager_id,owner.name AS responsible_manager_name
+            FROM ago_founder_intake_stages s
+            JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id AND i.id=s.intake_id
+            JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id
+                 AND l.intake_id=i.id
+            JOIN ago_employees owner ON owner.tenant_id=l.tenant_id
+                 AND owner.id=l.accountable_manager_id
+            WHERE s.tenant_id=%s AND s.suggested_assignee_id IS NULL
+            ORDER BY i.created_at,s.position LIMIT 50
+        """,(tenant_id,)).fetchall()
         counts = [dict(e) for e in employees]
         return {
             'employees':counts,
             'leaders':[dict(leader_row) for leader_row in leaders],
+            'unassigned_project_stages':[dict(vacancy) for vacancy in vacancies],
             'idle_employees':sum(e['running']==0 and e['queued']==0 for e in counts),
             'pending_employee_work':sum(int(e['queued']) for e in counts),
             'unmanaged_task_alerts':sum(int(e['leadership_gaps']) for e in counts),

@@ -402,6 +402,9 @@ def test_management_owns_delivery_and_every_governed_task_has_manager(case):
     result=report.json()
     assert result['unassigned_work_generated'] is False
     assert result['unmanaged_task_alerts']==0
+    assert result['unassigned_project_stages']
+    assert all(str(stage['accountable_manager_id'])==chief
+               for stage in result['unassigned_project_stages'])
     employee_record=next(e for e in result['employees'] if str(e['id'])==analyst)
     assert employee_record['queued']>=1 and employee_record['running']==0
     boss_record=next(e for e in result['employees'] if str(e['id'])==chief)

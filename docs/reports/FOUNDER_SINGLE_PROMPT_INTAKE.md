@@ -83,3 +83,7 @@ tenants: their executor remains the accountable identity with
 these pending leadership assignments. Newly created founder projects still
 require a real founder employee and a named executive owner or founder
 escalation. This is not universal enforcement across every enterprise tool.
+
+Unstaffed project deliverables now also appear in the management workload
+queue with the *real accountable leadership owner*. They are not synthetic
+tasks and do not automatically authorize work or guarantee employee occupancy.

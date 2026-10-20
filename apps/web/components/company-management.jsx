@@ -23,6 +23,14 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
     <span><strong>{report.idle_employees}</strong>No governed work queued/running</span>
     <span><strong>{report.pending_employee_work}</strong>Governed tasks awaiting action</span>
     <span><strong>{report.unmanaged_task_alerts??0}</strong>Tasks needing management escalation</span></div>
+   {(report.unassigned_project_stages||[]).length>0&&<div className="management-backlog">
+      <h4>Management work queue — unstaffed project stages</h4>
+      <p>These are documented delivery responsibilities, not dispatched or approved execution tasks. Responsible leaders must arrange capable staff.</p>
+      <ol>{report.unassigned_project_stages.slice(0,12).map((s,i)=><li key={s.project_title+'-'+s.stage+'-'+i}>
+       <strong>{s.project_title} — {s.stage}</strong> · {s.responsible_manager_name} accountable
+       <small>{s.deliverable}</small>
+      </li>)}</ol>
+    </div>}
    <button type="button" onClick={()=>setExpanded(x=>!x)}>{expanded?'Hide':'Inspect'} employee workload</button>
    {expanded&&<div className="management-people">{report.employees.map(e=><article key={e.id}>
     <b>{e.name}</b><small>{e.role_title||e.kind} · {e.running} running · {e.queued} queued · {e.failed} failed · {e.projects_accountable} managed projects</small>
