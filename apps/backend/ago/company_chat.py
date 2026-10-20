@@ -320,7 +320,9 @@ class CompanyChat:
                 """, (actor.tenant_id,)).fetchall()
                 reviewers = {str(r['id']) for r in reviewer_rows}
                 available_ai = [e for e in employees if e['kind']=='ai']
-                discovery = available_ai[0] if available_ai else None
+                discovery = next((e for e in available_ai
+                                  if any(term in (e['name']+' '+(e['role_title'] or '')).lower()
+                                         for term in ('research','analyst','product'))),None)
                 goal_id, plan_id, intake_id = str(uuid4()), str(uuid4()), str(uuid4())
                 self.db.execute("""
                     INSERT INTO ago_goals(id,tenant_id,created_by,title,description)
@@ -384,8 +386,10 @@ class CompanyChat:
                 reused = False
 
             row = self.db.execute("""
-                SELECT id,title,goal_id,plan_id,created_at FROM ago_founder_intakes
-                WHERE tenant_id=%s AND id=%s
+                SELECT i.id,i.title,i.goal_id,i.plan_id,i.created_at,p.status AS plan_status
+                FROM ago_founder_intakes i JOIN ago_strategy_plans p
+                  ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                WHERE i.tenant_id=%s AND i.id=%s
             """, (actor.tenant_id,intake_id)).fetchone()
             steps = self.db.execute("""
                 SELECT s.position,s.stage,s.deliverable,s.suggested_assignee_id,
@@ -399,7 +403,7 @@ class CompanyChat:
             'id': str(row['id']), 'title':row['title'],
             'goal_id':str(row['goal_id']), 'plan_id':str(row['plan_id']),
             'created_at':row['created_at'], 'reused':reused,
-            'plan_status':'draft', 'automatic_execution':False,
+            'plan_status':row['plan_status'], 'automatic_execution':False,
             'approval_required':True,
             'stages':[{
                 'position':s['position'],'stage':s['stage'],'deliverable':s['deliverable'],
