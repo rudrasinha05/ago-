@@ -27,3 +27,15 @@ independent QA, GitHub rights and a real end-to-end test.
 Acceptance: `apps/backend/tests/test_company_chat.py`, current HEAD
 CI (Python 3.11/3.14, PostgreSQL, Next.js build and browser) and migration
 `051_founder_project_intake.sql`.
+
+## Explicit approved scope-packet execution
+When a staffed discovery step receives **two separate gates** (independent
+approval of its M3 plan, followed by M2 approval of the materialized task),
+the existing allowlisted `internal:brief` agent can execute. The M4 runtime
+now reads the original intake **only through the exact tenant-scoped plan
+step/task ID join** and supplies it as bounded non-executable context.
+The deterministic handler returns a founder-specific scope review packet,
+flags unverified engineering and GitHub claims as false, persists a real run
+record and triggers ordinary employee manager reporting. It does not use
+a paid model, generate application code or perform any network operations.
+Unrelated `internal:brief` tasks retain their original generic result.

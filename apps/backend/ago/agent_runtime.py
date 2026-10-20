@@ -46,7 +46,15 @@ class AgentRuntime:
             )
             dna = self.repositories.resolve(GenomeStore).effective(
                 tenant_id=actor.tenant_id, employee_id=str(row["assignee_id"]))
-            task = replace(task, dna_context=dna, experiment_context=experiment)
+            context_row = (self.repositories.resolve(AgentRuntimeQueries)
+                           .select_ago_founder_project_12((task_id, actor.tenant_id))
+                           .fetchone())
+            project_context = ({
+                "title": context_row["title"], "brief": context_row["brief"],
+                "intake_id": str(context_row["id"]),
+            } if context_row else None)
+            task = replace(task, dna_context=dna, experiment_context=experiment,
+                           project_context=project_context)
             run_id = str(uuid4())
             self.repositories.resolve(AgentRuntimeQueries).insert_ago_agent_runs_03(
                 (run_id, actor.tenant_id, task_id, row["assignee_id"], actor.subject,

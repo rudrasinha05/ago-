@@ -118,6 +118,8 @@ class AgentRuntimeQueriesPort(Protocol):
 
     def insert_ago_agent_messages_11(self, parameters: Any = None) -> Cursor: ...
 
+    def select_ago_founder_project_12(self, parameters: Any = None) -> Cursor: ...
+
 
 @runtime_checkable
 class ApprovalRepositoryPort(Protocol):

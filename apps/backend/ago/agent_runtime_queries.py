@@ -77,3 +77,16 @@ class AgentRuntimeQueries:
             "INSERT INTO ago_agent_messages\n                       (id,tenant_id,run_id,kind,content)\n                       VALUES (%s,%s,%s,'evidence',%s)",
             parameters,
         )
+
+    def select_ago_founder_project_12(self, parameters: Any = None) -> Cursor:
+        """Read an intake only when this exact approved task is its discovery step."""
+        return self.connection.execute("""
+            SELECT i.id,i.title,i.brief FROM ago_founder_intakes i
+            JOIN ago_founder_intake_stages s
+              ON s.tenant_id=i.tenant_id AND s.intake_id=i.id
+             AND s.stage='discovery'
+            JOIN ago_plan_steps ps
+              ON ps.tenant_id=i.tenant_id AND ps.plan_id=i.plan_id
+             AND ps.id=s.plan_step_id
+            WHERE ps.task_id=%s AND i.tenant_id=%s LIMIT 1
+        """, parameters)

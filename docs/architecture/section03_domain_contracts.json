@@ -224,7 +224,10 @@
       "ago_agent_messages",
       "ago_agent_runs",
       "ago_employees",
-      "ago_governed_tasks"
+      "ago_founder_intake_stages",
+      "ago_founder_intakes",
+      "ago_governed_tasks",
+      "ago_plan_steps"
     ],
     "analytics_store": [
       "ago_analytics_reports",

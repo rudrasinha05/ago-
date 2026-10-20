@@ -24,6 +24,7 @@ class GovernedTask:
     approval_id: str | None = None
     dna_context: dict | None = None
     experiment_context: dict | None = None
+    project_context: dict | None = None
 
     @classmethod
     def propose(cls, tenant_id: str, action: str, assignee_id: str) -> "GovernedTask":

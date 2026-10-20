@@ -77,6 +77,10 @@
         "insert_ago_agent_messages_11": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
+        },
+        "select_ago_founder_project_12": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
         }
       }
     },

@@ -277,3 +277,24 @@ def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(ca
     replay=post(client,BASE+'/projects/start',founder,intake_payload)
     assert replay['reused'] is True
     assert replay['plan_status']=='pending_approval'
+    approved=post(client,
+       '/v1/governance/approvals/'+review['approval_id']+'/decision',
+       headers['reviewer'],{'approve':True,'reason':'Approved bounded scope review'})
+    assert approved['status']=='approved'
+    post(client,'/v1/brain/plans/'+project['plan_id']+'/activate',founder)
+    created=post(client,'/v1/brain/plans/'+project['plan_id']+'/materialize',founder)
+    task_id=created['task_ids'][0]
+    task_approval=post(client,'/v1/governance/approvals',founder,{'action':'internal:brief'})
+    post(client,'/v1/tasks/'+task_id+'/approval',founder,
+         {'approval_id':task_approval['request_id']})
+    post(client,'/v1/governance/approvals/'+task_approval['request_id']+'/decision',
+         headers['reviewer'],{'approve':True,'reason':'Independent task approval'})
+    agent_run=post(client,'/v1/agents/tasks/'+task_id+'/run',founder)
+    packet=agent_run['result']
+    assert packet['kind']=='founder_scope_packet'
+    assert packet['title']==project['title']
+    assert intake_payload['brief'][:80] in packet['founder_brief_excerpt']
+    assert packet['code_written'] is False
+    assert packet['github_pushed'] is False
+    assert packet['requires_human_qa'] is True
+
