@@ -57,6 +57,10 @@ export function FounderProjectIntake({api,me,onChanged}) {
    {projects===null?<small>Project history unavailable</small>:!projects.length?<small>No founder projects yet</small>:
    <ol>{projects.slice(0,5).map(p=><li key={p.id}>
      <strong>{p.title}</strong> · <small>{p.plan_status} · {p.staffing_gaps} staffing gaps</small>
+     <details className="founder-routing"><summary>Who received this project? View actual draft routing</summary>
+      <p>The founder brief is stored in Company Brain. No AI CEO, CTO or manager automatically receives it. Only a qualified discovery AI with an actual plan step can be assigned an approved internal brief run. Every remaining employee shown is a suggestion, not an executed handoff.</p>
+      <ol>{(p.stages||[]).map(s=><li key={s.stage}><strong>{s.stage}</strong> — {s.suggested_assignee_name||'No qualified employee'} {s.suggested_role?'('+s.suggested_role+')':''} · {s.plan_step_id?'Draft plan step (approval and materialization required)':'Suggestion only; no task assigned'}</li>)}</ol>
+     </details>
    </li>)}</ol>}</div>
  </section>;
 }

@@ -340,3 +340,28 @@ def test_company_approval_inbox_truthful_authority_and_cross_tenant(case):
     other_auth=info['login']('other-approvals@example.test','test-strong-password-123',other)
     assert not any(str(a['id'])==approval['approval_id']
                    for a in client.get(BASE+'/approvals',headers=other_auth).json())
+
+
+def test_founder_project_history_shows_actual_suggested_staff_not_fictional_ceo(case):
+    client,headers,info=case
+    f=headers['founder']
+    department_id=department(client,f)
+    worker=employee(client,f,department_id)
+    created=post(client,BASE+'/projects/start',f,{
+        'brief':'Build a secure onboarding system with role based audits and an accessible dashboard',
+        'operation_key':str(uuid4()),
+    })
+    history=client.get(BASE+'/projects',headers=f).json()
+    record=next(p for p in history if str(p['id'])==created['id'])
+    stages=record['stages']
+    assert len(stages)==5
+    discovery=stages[0]
+    assert discovery['stage']=='discovery'
+    assert discovery['suggested_assignee_name']=='Research Agent'
+    assert discovery['plan_step_id'] is not None
+    assert len([s for s in stages if s['plan_step_id']])==1
+    assert all(s['suggested_assignee_name'] is None for s in stages[1:] if s['stage']!='quality')
+    assert str(record['plan_id'])==created['plan_id']
+    # Project intake is not a dispatched execution or AI CEO command.
+    assert not info['db'].execute('SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s',
+                                  (info['tenant'],)).fetchone()

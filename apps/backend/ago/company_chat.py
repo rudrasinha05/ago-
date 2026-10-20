@@ -423,7 +423,16 @@ class CompanyChat:
             SELECT i.id,i.title,i.goal_id,i.plan_id,i.created_at,p.status AS plan_status,
               (SELECT COUNT(*) FROM ago_founder_intake_stages s
                WHERE s.tenant_id=i.tenant_id AND s.intake_id=i.id
-                 AND s.suggested_assignee_id IS NULL) AS staffing_gaps
+                 AND s.suggested_assignee_id IS NULL) AS staffing_gaps,
+              (SELECT COALESCE(json_agg(json_build_object(
+                  'stage',s.stage,'deliverable',s.deliverable,
+                  'suggested_assignee_name',e.name,
+                  'suggested_role',e.role_title,'plan_step_id',s.plan_step_id
+               ) ORDER BY s.position),'[]'::json)
+               FROM ago_founder_intake_stages s
+               LEFT JOIN ago_employees e
+                 ON e.tenant_id=s.tenant_id AND e.id=s.suggested_assignee_id
+               WHERE s.tenant_id=i.tenant_id AND s.intake_id=i.id) AS stages
             FROM ago_founder_intakes i JOIN ago_strategy_plans p
                  ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
             WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id DESC LIMIT %s
