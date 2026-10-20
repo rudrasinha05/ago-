@@ -474,3 +474,60 @@ def test_employee_status_question_gets_real_reply_without_inventing_ai_work(case
         'SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s',
         (info['tenant'],new_task['id']),
     ).fetchone()
+
+
+def test_idle_company_opportunities_are_tenant_scoped_audited_and_idempotent(case):
+    client,headers,info=case
+    founder=headers['founder']
+    tenant=info['tenant']
+    dep=department(client,founder)
+    chief=post(client,'/v1/organization/employees',founder,
+               {'department_id':dep,'name':'CEO','kind':'ai'})['id']
+    created=post(client,BASE+'/opportunities/scan',founder,{})
+    assert created['created']==3,created
+    ideas=client.get(BASE+'/opportunities',headers=founder)
+    assert ideas.status_code==200,ideas.text
+    rows=ideas.json()
+    assert len(rows)==3
+    assert all(str(row['accountable_manager_id'])==chief for row in rows)
+    assert all(row['approval_status']=='pending' for row in rows)
+    assert all(row['discovery_type']=='catalog_hypothesis' for row in rows)
+    assert all(row['assignment_source']=='executive_manager' for row in rows)
+    assert all(row['validation_next_step'] for row in rows)
+    approval=client.get(BASE+'/approvals',headers=founder).json()
+    assert len([a for a in approval if a['action'].startswith('company:opportunity:')])==3
+    assert post(client,BASE+'/opportunities/scan',founder,{})['created']==0
+    assert len(client.get(BASE+'/opportunities',headers=founder).json())==3
+    assert client.get(BASE+'/opportunities').status_code==401
+    assert client.post(BASE+'/opportunities/scan').status_code==401
+    assert client.post(BASE+'/opportunities/scan',headers=headers['reviewer']).status_code==403
+    assert client.get(BASE+'/opportunities',headers=headers['reviewer']).status_code==403
+    assert info['db'].execute(
+        'SELECT COUNT(*) FROM ago_approval_audit WHERE tenant_id=%s AND event=%s',
+        (tenant,'proposed')).fetchone()[0]>=3
+    from ago.bootstrap import bootstrap
+    other,_=bootstrap(info['db'],organization='Unrelated idea tenant',
+                      email='unrelated-ideas@example.test',
+                      password='a-local-strong-password-123')
+    other_auth=info['login']('unrelated-ideas@example.test','a-local-strong-password-123',other)
+    assert client.get(BASE+'/opportunities',headers=other_auth).json()==[]
+
+
+def test_opportunities_do_not_interrupt_running_delivery_and_founder_escalates(case):
+    client,headers,info=case
+    founder=headers['founder']
+    first=post(client,BASE+'/opportunities/scan',founder,{})
+    assert first['created']==3
+    ideas=client.get(BASE+'/opportunities',headers=founder).json()
+    assert all(row['assignment_source']=='founder_escalation' for row in ideas)
+    assert all(str(row['accountable_manager_id'])==info['founder_id'] for row in ideas)
+    # A running governed task is real work and blocks new idle scan recommendations.
+    dep=department(client,founder)
+    worker=employee(client,founder,dep)
+    task=post(client,'/v1/tasks',founder,
+              {'assignee_id':worker,'action':'internal:brief'})
+    info['db'].execute(
+        'UPDATE ago_governed_tasks SET status=%s WHERE tenant_id=%s AND id=%s',
+        ('running',info['tenant'],task['id']))
+    scanned=post(client,BASE+'/opportunities/scan',founder,{})
+    assert scanned['created']==0 and scanned['reason']=='delivery_running'
