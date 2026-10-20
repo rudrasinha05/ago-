@@ -181,3 +181,36 @@ def test_reports_go_only_to_immediate_superior_and_increment_event_badge(case):
         ReportInput(**{**payload,"recipient_id":str(uuid4())})
     # Founder cannot report to self; root user must have an actual superior.
     post(client,BASE+"/reports",founder,{**payload,"operation_key":str(uuid4())},expected=403)
+
+
+def test_completed_ai_run_reports_to_actual_manager_and_creates_popup(case):
+    client, headers, info = case
+    f = headers["founder"]
+    dep = department(client,f)
+    manager = employee(client,f,dep)
+    agent = post(client,"/v1/organization/employees",f,
+                 {"department_id":dep,"name":"Report Agent","kind":"ai",
+                  "manager_id":manager})["id"]
+    task = post(client,"/v1/tasks",f,{"assignee_id":agent,"action":"internal:brief"})
+    run_id = str(uuid4())
+    with info["db"].transaction():
+        info["db"].execute("""
+            INSERT INTO ago_agent_runs(id,tenant_id,task_id,agent_id,executor_id,status)
+            VALUES(%s,%s,%s,%s,%s,'running')
+        """,(run_id,info["tenant"],task["id"],agent,info["founder_id"]))
+        info["db"].execute("""
+            UPDATE ago_agent_runs SET status='completed',finished_at=now()
+            WHERE tenant_id=%s AND id=%s
+        """,(info["tenant"],run_id))
+    event=info["db"].execute("""
+        SELECT author_id,recipient_id,kind,operation_key FROM ago_company_reports
+        WHERE tenant_id=%s AND task_id=%s
+    """,(info["tenant"],task["id"])).fetchone()
+    assert str(event["author_id"])==agent
+    assert str(event["recipient_id"])==manager
+    assert event["kind"]=="module_complete"
+    assert str(event["operation_key"])==run_id
+    feed=client.get(BASE+"/notifications",headers=f).json()
+    assert feed["by_employee"][agent]>=2
+    assert any(row["kind"]=="report" and row["employee_id"]==agent
+               for row in feed["recent"])
