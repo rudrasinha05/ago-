@@ -339,11 +339,15 @@ class CompanyChat:
                     if title.startswith(('head of ','head -','vp ','vice president')):
                         return 4
                     return None
+                supervisors = {str(e['manager_id']) for e in employees if e['manager_id']}
                 management = sorted(
-                    (e for e in employees if executive_rank(e) is not None
-                     and str(e['id']) != actor.subject),
-                    key=lambda e: (executive_rank(e),e['manager_id'] is not None,
-                                   str(e['id'])),
+                    (e for e in employees
+                     if str(e['id']) != actor.subject and
+                     (executive_rank(e) is not None or str(e['id']) in supervisors)),
+                    key=lambda e: (
+                        executive_rank(e) if executive_rank(e) is not None else 5,
+                        e['manager_id'] is not None, str(e['id'])
+                    ),
                 )
                 leader = management[0] if management else next(
                     (e for e in employees if str(e['id']) == actor.subject),None
@@ -568,11 +572,11 @@ class CompanyChat:
         UUID(tenant_id)
         employees = self.db.execute("""
             SELECT e.id,e.name,e.kind,e.role_title,e.manager_id,
-                COUNT(t.id) FILTER (WHERE t.status='running') AS running,
-                COUNT(t.id) FILTER (WHERE t.status IN
+                COUNT(DISTINCT t.id) FILTER (WHERE t.status='running') AS running,
+                COUNT(DISTINCT t.id) FILTER (WHERE t.status IN
                     ('proposed','waiting_approval','ready')) AS queued,
-                COUNT(t.id) FILTER (WHERE t.status='failed') AS failed,
-                COUNT(t.id) FILTER (WHERE t.status='completed') AS completed,
+                COUNT(DISTINCT t.id) FILTER (WHERE t.status='failed') AS failed,
+                COUNT(DISTINCT t.id) FILTER (WHERE t.status='completed') AS completed,
                 COUNT(DISTINCT p.intake_id) AS projects_accountable
             FROM ago_employees e
             LEFT JOIN ago_governed_tasks t ON t.tenant_id=e.tenant_id
