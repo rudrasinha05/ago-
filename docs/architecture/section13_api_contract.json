@@ -285,7 +285,8 @@
     "POST /v1/organization/company/reports": "2e91492f2b5d04fd350c01b7f68330a6a34b43ff93c5c78b347142925276e796",
     "GET /v1/organization/company/projects": "866bbae327d369e7fa9889c74d237faedb31cd9d378cce5531d6947b09d52caf",
     "POST /v1/organization/company/projects/start": "ad1b413afc6cdd12f13e868c8cba0ac02fb2d747e77233f959616b42413a4160",
-    "GET /v1/organization/company/approvals": "d2d1addab6d686585a16257bbeb678c04128ecf9b03ed41ad50553216ace0503"
+    "GET /v1/organization/company/approvals": "d2d1addab6d686585a16257bbeb678c04128ecf9b03ed41ad50553216ace0503",
+    "GET /v1/organization/company/management/workload": "a20603d1139369e306b131ea60b077e682d195e1a72436e6475ec9201f0d97dd"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",
