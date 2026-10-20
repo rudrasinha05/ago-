@@ -14,6 +14,7 @@
 - Supply an optional task ID only for a task actually assigned to the author. A retry operation key cannot change an existing report.
 - Read own sent reports and reports received. Founder can inspect company-wide. Other employees cannot view private report body through a tenant-visible chat feed.
 - Reports are append-only. The tenant-visible work-event feed contains only a notification that a report was submitted, not its body.
+- An AI employee's actually completed or failed agent run also produces an automatic generic upward report to the recorded manager (or active founder for a root AI employee). The report has the originating run ID as its idempotency key and never copies model output/secrets. This does not grant an agent independent GitHub or deployment authority.
 
 ## Counted events
 Persistent per-employee counts include recorded task status changes, staffing records, upward reports, independent QA outcomes and only **successful** reviewed GitHub operation receipts. Documentation receipts are classified separately when approved commits include `docs/` files. Each event is associated with an employee identity and a tenant; the browser polls to surface new durable events as popups. Missed short-lived popup animations do not erase database events. Counts are cumulative, not unread counts.
