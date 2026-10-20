@@ -3,8 +3,8 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 
 const BASE='/v1/organization/company';
 const fmt=date=>date?new Date(date).toLocaleString():'Not recorded';
-const typeLabel={plan_review:'Strategy plan review',task_execution:'Governed task authorization',opportunity_review:'Business opportunity proposal',governance_action:'Other governed action'};
-const subject=a=>a.opportunity_title||a.plan_title||a.task_action||a.action;
+const typeLabel={plan_review:'Strategy plan review',task_execution:'Governed task authorization',opportunity_review:'Business opportunity proposal',market_signal_review:'Internet market signal for founder review',governance_action:'Other governed action'};
+const subject=a=>a.market_signal_title||a.opportunity_title||a.plan_title||a.task_action||a.action;
 const isMine=(a,me)=>a.requester_id===me.id;
 const canDecide=(a,me)=>a.status==='pending'&&me.roles?.includes('founder')&&me.permissions?.includes('approval:decide');
 // Presentation only: backend verifies active human founder, tenant, permission and immutable audit.
@@ -106,6 +106,14 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
        <dt>Revenue pathway</dt><dd>{selected.opportunity_revenue}</dd>
        <dt>Validation prerequisite</dt><dd>{selected.opportunity_validation}</dd>
        <dt>Provenance</dt><dd>Automatically catalog-generated hypothesis; the manager is accountable, but has not personally researched this opportunity.</dd></>}
+     {selected.market_signal_title&&<><dt>Internet-research nomination</dt><dd>{selected.market_signal_title}</dd>
+       <dt>Real original source</dt><dd>{selected.market_signal_source} · {selected.market_signal_kind}</dd>
+       <dt>Potential customers</dt><dd>{selected.market_signal_customer}</dd>
+       <dt>Relevance heuristic</dt><dd>{selected.market_signal_score}/100 · {selected.market_signal_score_basis}</dd>
+       <dt>Market evidence status</dt><dd>Unvalidated research/news signal; this does not establish demand, user consent or revenue.</dd>
+       <dt>Suggested next step</dt><dd>Approve bounded customer validation and governed planning only. No automatically authorized ads, contracts or spending.</dd>
+       {selected.market_signal_url?.startsWith('https://')&&<><dt>Evidence URL</dt><dd><a href={selected.market_signal_url} target="_blank" rel="noopener noreferrer">Read original source ↗</a></dd></>}
+      </>}
      {selected.plan_title&&<><dt>Plan</dt><dd>{selected.plan_title}</dd></>}
      {selected.plan_id&&<><dt>Plan ID</dt><dd><code>{selected.plan_id}</code></dd></>}
      {selected.task_id&&<><dt>Task / assignee</dt><dd>{selected.task_action} · {selected.task_assignee_name||'Unassigned'}</dd></>}
