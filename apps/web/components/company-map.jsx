@@ -6,6 +6,7 @@ import {CommandBrain} from './command-brain';
 import {RoleEditor,UpwardReports} from './company-governance';
 import {FounderProjectIntake} from './founder-project-intake';
 import {CompanyApprovals} from './company-approvals';
+import {ManagementWorkload} from './company-management';
 const BASE='/v1/organization/company';
 const time=value=>new Date(value).toLocaleString();
 export function CompanyMap({api,me,data,onRefresh}) {
@@ -117,6 +118,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
     <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
     <FounderProjectIntake api={api} me={me} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
+    <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
     <div className="company-shell">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>

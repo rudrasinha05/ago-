@@ -1783,6 +1783,10 @@
         "approval_inbox": {
           "arguments": "self, tenant_id: str, limit: int=100",
           "returns": "list[dict]"
+        },
+        "management_workload": {
+          "arguments": "self, tenant_id: str",
+          "returns": "dict"
         }
       }
     }

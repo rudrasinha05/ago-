@@ -50,3 +50,26 @@ Founders cannot self-review their own project approval. User-visible
 request updates are polled only while the authenticated page is open, not
 system notifications when the browser or laptop is closed. The founder brief
 remains addressed to Company Brain, not automatically forwarded to CEO/CTO.
+
+## Manager accountability / commercial objective milestone (52)
+A new project has a mandatory, same-tenant, recorded executive responsible
+for delivery and commercial validation. Recognized actual CEO, COO, CTO,
+director, or management role is preferred. If the company has none, the
+authenticated human founder is the recorded *escalation owner*, explicitly
+showing a leadership staffing gap. Workers may be assigned discovery or
+engineering steps but do not own overall delivery.
+
+Every existing and newly inserted M2 governed task has a same-tenant
+`accountable_manager_id`: its assignee's actual manager or, for an
+unmanaged/root worker, the active human founder. A database trigger enforces
+this independently of API writers and backfills old tasks, without changing
+their authorizations. Existing founder projects are conservatively backfilled
+to founder escalation rather than retroactively inventing an AI CEO.
+
+A project commercial goal says "find paying customers", but actual revenue
+is deliberately NULL until verifiable evidence exists. This milestone does
+not create sales, customers, budgets or cashflow. The manager workload page
+counts only real governed tasks; no artificial assignments or round-the-clock
+activity is generated. A full dynamic CEO→CTO→PM execution orchestrator,
+commercial sales funnel, verified invoice/transaction ingestion and broader
+action ledger across all other subsystems remain backlog items.

@@ -152,3 +152,10 @@
 .approval-top-button span{margin-left:7px;border-radius:20px;background:#c1494c;color:white;padding:2px 7px;font-weight:700}
 .approval-top-notice{position:absolute;right:0;top:calc(100% + 10px);z-index:90;background:#102b4b;box-shadow:0 15px 40px #0007;border:1px solid #548bc1;color:#f4fbff;border-radius:10px;width:min(355px,85vw);padding:16px}
 .approval-top-notice p{font-size:12px;overflow-wrap:anywhere}.approval-top-notice button{margin-right:8px;border-radius:7px;border:1px solid #4c8dc4;background:#183a68;color:#edf8ff;padding:7px 9px}
+
+.management-workload{background:#0c1932;border:1px solid #396080;border-radius:12px;margin:16px 0;padding:18px;color:#eaf5ff}
+.management-workload h3{margin:0 0 8px;font-size:18px}.management-workload p{font-size:12px;color:#b9cce0}
+.management-metrics{display:flex;flex-wrap:wrap;gap:16px;margin:12px 0}.management-metrics span{border:1px solid #345575;border-radius:8px;padding:11px;font-size:12px;display:grid;gap:3px}
+.management-metrics strong{font-size:24px}.management-workload button{border:1px solid #5798d0;border-radius:8px;background:#173b67;color:white;padding:8px 12px}
+.management-people{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin:10px 0;max-height:440px;overflow:auto}
+.management-people article{padding:10px;border:1px solid #34587f;border-radius:8px}.management-people small{display:block;font-size:11px;margin-top:5px;color:#b4cce6}

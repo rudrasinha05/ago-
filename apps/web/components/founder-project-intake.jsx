@@ -32,7 +32,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
  }
   return <section className="founder-project-intake" aria-label="Start founder project">
   <div><h3>Start a governed project</h3>
-    <p>Founder → Company Brain (draft goal and stages) → qualified discovery AI suggested; no automatic AI CEO/CTO or manager delegation. Approved actions require an independent human reviewer. Execution and publication remain approval-gated.</p></div>
+    <p>Founder → Company Brain → accountable executive (CEO/COO/CTO/manager if actually configured; otherwise founder escalation) → suggested team. Higher management owns delivery, workers own execution. Approved actions require independent human review.</p></div>
   <form onSubmit={start}>
     <label>Founder project brief<textarea value={brief} onChange={e=>setBrief(e.target.value)}
       minLength={20} maxLength={12000} required
@@ -41,6 +41,8 @@ export function FounderProjectIntake({api,me,onChanged}) {
   </form>
   {error&&<p role="alert">{error}</p>}
   {created&&<div aria-live="polite"><strong>{created.title}</strong>
+    <p><b>Accountable delivery owner:</b> {created.accountable_manager_name} ({created.accountable_manager_role||'Founder authority'}) · {created.assignment_source==='founder_escalation'?'Management staffing escalation':'Recorded executive management responsibility'}</p>
+    <p><b>Commercial goal:</b> {created.commercial_objective} · {created.commercial_stage} · No verified revenue evidence yet</p>
     <p>Draft saved · Independent plan approval needed · No unapproved code or external GitHub action started.</p>
     <ol className="intake-stage-list">{created.stages.map(s=><li key={s.stage}>
       <strong>{s.position}. {s.stage}</strong><small>{s.deliverable}</small>
@@ -56,9 +58,11 @@ export function FounderProjectIntake({api,me,onChanged}) {
   <div><h3>Recent founder projects</h3>
    {projects===null?<small>Project history unavailable</small>:!projects.length?<small>No founder projects yet</small>:
    <ol>{projects.slice(0,5).map(p=><li key={p.id}>
-     <strong>{p.title}</strong> · <small>{p.plan_status} · {p.staffing_gaps} staffing gaps</small>
+     <strong>{p.title}</strong> · <small>{p.plan_status} · {p.staffing_gaps} execution staffing gaps</small>
+     <p><b>Delivery responsible:</b> {p.accountable_manager_name||'Unavailable'} ({p.accountable_manager_role||'Founder'}) · {p.assignment_source==='founder_escalation'?'Executive leader needed':'Executive leadership recorded'}</p>
+     <p><b>Commercial objective:</b> {p.commercial_objective} · {p.commercial_stage} · Verified revenue: {p.verified_revenue_inr===null?'No evidence recorded':'₹'+p.verified_revenue_inr}</p>
      <details className="founder-routing"><summary>Who received this project? View actual draft routing</summary>
-      <p>The founder brief is stored in Company Brain. No AI CEO, CTO or manager automatically receives it. Only a qualified discovery AI with an actual plan step can be assigned an approved internal brief run. Every remaining employee shown is a suggestion, not an executed handoff.</p>
+      <p>Company Brain has recorded a named higher-management delivery owner. This is a durable accountability assignment, not autonomous delegation or a completed project. Employee suggestions do not become executable tasks without authorization.</p>
       <ol>{(p.stages||[]).map(s=><li key={s.stage}><strong>{s.stage}</strong> — {s.suggested_assignee_name||'No qualified employee'} {s.suggested_role?'('+s.suggested_role+')':''} · {s.plan_step_id?'Draft plan step (approval and materialization required)':'Suggestion only; no task assigned'}</li>)}</ol>
      </details>
    </li>)}</ol>}</div>

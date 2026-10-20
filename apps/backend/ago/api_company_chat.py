@@ -173,3 +173,9 @@ def approval_inbox(limit: int = Query(default=100,ge=1,le=100),
                    actor=Depends(authenticated), repositories=Depends(repository_scope)):
     allowed(repositories, actor, 'approval:read')
     return repositories.resolve(CompanyChatPort).approval_inbox(actor.tenant_id,limit)
+
+@router.get('/management/workload')
+def management_workload(actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'task:read')
+    return repositories.resolve(CompanyChatPort).management_workload(actor.tenant_id)

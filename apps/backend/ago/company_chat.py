@@ -308,7 +308,7 @@ class CompanyChat:
                 reused = True
             else:
                 employees = self.db.execute("""
-                    SELECT id,name,kind,role_title,department_id FROM ago_employees
+                    SELECT id,name,kind,role_title,department_id,manager_id FROM ago_employees
                     WHERE tenant_id=%s ORDER BY name,id
                 """, (actor.tenant_id,)).fetchall()
                 reviewer_rows = self.db.execute("""
@@ -323,6 +323,34 @@ class CompanyChat:
                 discovery = next((e for e in available_ai
                                   if any(term in (e['name']+' '+(e['role_title'] or '')).lower()
                                          for term in ('research','analyst','product'))),None)
+                # Project delivery belongs to actual top management, not a task worker.
+                # A missing executive is an explicit founder escalation, never a fake CEO.
+                def executive_rank(e):
+                    title = (e['role_title'] or '').strip().lower()
+                    name = e['name'].strip().lower()
+                    if title in {'ceo','chief executive officer'} or name == 'ceo':
+                        return 0
+                    if title in {'coo','chief operating officer'} or name == 'coo':
+                        return 1
+                    if title in {'cto','chief technology officer'} or name == 'cto':
+                        return 2
+                    if title in {'director','managing director','general manager','project manager'}:
+                        return 3
+                    if title.startswith(('head of ','head -','vp ','vice president')):
+                        return 4
+                    return None
+                management = sorted(
+                    (e for e in employees if executive_rank(e) is not None
+                     and str(e['id']) != actor.subject),
+                    key=lambda e: (executive_rank(e),e['manager_id'] is not None,
+                                   str(e['id'])),
+                )
+                leader = management[0] if management else next(
+                    (e for e in employees if str(e['id']) == actor.subject),None
+                )
+                if leader is None:
+                    raise PermissionError('Founder must exist as an employee to own delivery')
+                owner_source = 'executive_manager' if management else 'founder_escalation'
                 goal_id, plan_id, intake_id = str(uuid4()), str(uuid4()), str(uuid4())
                 self.db.execute("""
                     INSERT INTO ago_goals(id,tenant_id,created_by,title,description)
@@ -338,6 +366,11 @@ class CompanyChat:
                     VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (intake_id,actor.tenant_id,actor.subject,operation_key,
                       digest,text,title,goal_id,plan_id))
+                self.db.execute("""
+                    INSERT INTO ago_founder_project_lead
+                      (tenant_id,intake_id,accountable_manager_id,assigned_by,assignment_source)
+                    VALUES (%s,%s,%s,%s,%s)
+                """,(actor.tenant_id,intake_id,leader['id'],actor.subject,owner_source))
                 # Only an allowlisted, bounded internal brief is seeded as an actual
                 # M3 step. All later engineering stages stay explicit proposals.
                 first_step = str(uuid4()) if discovery else None
@@ -376,19 +409,30 @@ class CompanyChat:
                     """, (actor.tenant_id,intake_id,plan_id,index,stage,deliverable,
                           assignee['id'] if assignee else None,
                           first_step if stage=='discovery' else None))
-                # Notify founder without pretending the staff started work.
+                # Notify accountable management; this is a recorded assignment, not an AI run.
                 self.db.execute("""
                     INSERT INTO ago_company_chat
                     (tenant_id,channel,author_id,author_name,body,kind,employee_id)
-                    VALUES (%s,'global',%s,'Founder','Project intake saved: ' || %s,
+                    VALUES (%s,'global',%s,'Company Brain',
+                            'Leadership accountable for delivery; founder project saved: ' || %s,
                             'project',%s)
-                """, (actor.tenant_id,actor.subject,title,actor.subject))
+                """, (actor.tenant_id,actor.subject,title,leader['id']))
                 reused = False
 
             row = self.db.execute("""
-                SELECT i.id,i.title,i.goal_id,i.plan_id,i.created_at,p.status AS plan_status
+                SELECT i.id,i.title,i.goal_id,i.plan_id,i.created_at,p.status AS plan_status,
+              l.accountable_manager_id,e.name AS accountable_manager_name,
+              e.role_title AS accountable_manager_role,
+              l.assignment_source,l.commercial_objective,l.commercial_stage,
+              l.verified_revenue_inr,
+                    l.accountable_manager_id,l.assignment_source,
+                    e.name AS accountable_manager_name,e.role_title AS accountable_manager_role,
+                    l.commercial_objective,l.commercial_stage,l.verified_revenue_inr
                 FROM ago_founder_intakes i JOIN ago_strategy_plans p
                   ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
+                JOIN ago_employees e ON e.tenant_id=l.tenant_id
+                  AND e.id=l.accountable_manager_id
                 WHERE i.tenant_id=%s AND i.id=%s
             """, (actor.tenant_id,intake_id)).fetchone()
             steps = self.db.execute("""
@@ -404,6 +448,14 @@ class CompanyChat:
             'goal_id':str(row['goal_id']), 'plan_id':str(row['plan_id']),
             'created_at':row['created_at'], 'reused':reused,
             'plan_status':row['plan_status'], 'automatic_execution':False,
+            'accountable_manager_id':str(row['accountable_manager_id']),
+            'accountable_manager_name':row['accountable_manager_name'],
+            'accountable_manager_role':row['accountable_manager_role'],
+            'assignment_source':row['assignment_source'],
+            'leadership_staffing_gap':row['assignment_source']=='founder_escalation',
+            'commercial_objective':row['commercial_objective'],
+            'commercial_stage':row['commercial_stage'],
+            'verified_revenue_inr':row['verified_revenue_inr'],
             'approval_required':True,
             'stages':[{
                 'position':s['position'],'stage':s['stage'],'deliverable':s['deliverable'],
@@ -435,6 +487,10 @@ class CompanyChat:
                WHERE s.tenant_id=i.tenant_id AND s.intake_id=i.id) AS stages
             FROM ago_founder_intakes i JOIN ago_strategy_plans p
                  ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+            JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id
+                 AND l.intake_id=i.id
+            JOIN ago_employees e ON e.tenant_id=l.tenant_id
+                 AND e.id=l.accountable_manager_id
             WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id DESC LIMIT %s
         """, (tenant_id,limit)).fetchall()]
 
@@ -506,3 +562,42 @@ class CompanyChat:
             )
             result.append(item)
         return result
+
+    def management_workload(self, tenant_id: str) -> dict:
+        """Read actual assigned work and management accountability; never invent tasks."""
+        UUID(tenant_id)
+        employees = self.db.execute("""
+            SELECT e.id,e.name,e.kind,e.role_title,e.manager_id,
+                COUNT(t.id) FILTER (WHERE t.status='running') AS running,
+                COUNT(t.id) FILTER (WHERE t.status IN
+                    ('proposed','waiting_approval','ready')) AS queued,
+                COUNT(t.id) FILTER (WHERE t.status='failed') AS failed,
+                COUNT(t.id) FILTER (WHERE t.status='completed') AS completed,
+                COUNT(DISTINCT p.intake_id) AS projects_accountable
+            FROM ago_employees e
+            LEFT JOIN ago_governed_tasks t ON t.tenant_id=e.tenant_id
+                AND t.assignee_id=e.id
+            LEFT JOIN ago_founder_project_lead p ON p.tenant_id=e.tenant_id
+                AND p.accountable_manager_id=e.id
+            WHERE e.tenant_id=%s
+            GROUP BY e.id,e.name,e.kind,e.role_title,e.manager_id
+            ORDER BY e.name,e.id
+        """, (tenant_id,)).fetchall()
+        leaders = self.db.execute("""
+            SELECT t.accountable_manager_id,e.name AS manager_name,
+                COUNT(*) AS governed_actions,
+                COUNT(*) FILTER (WHERE t.status IN ('proposed','waiting_approval','ready')) AS awaiting_work
+            FROM ago_governed_tasks t JOIN ago_employees e
+                ON e.tenant_id=t.tenant_id AND e.id=t.accountable_manager_id
+            WHERE t.tenant_id=%s
+            GROUP BY t.accountable_manager_id,e.name ORDER BY e.name
+        """,(tenant_id,)).fetchall()
+        counts = [dict(e) for e in employees]
+        return {
+            'employees':counts,
+            'leaders':[dict(l) for l in leaders],
+            'idle_employees':sum(e['running']==0 and e['queued']==0 for e in counts),
+            'pending_employee_work':sum(int(e['queued']) for e in counts),
+            'unassigned_work_generated':False,
+            'note':'Idle means no recorded running or queued governed task, not employee inactivity. Only authorized, useful work should be assigned.',
+        }
