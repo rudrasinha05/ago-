@@ -449,6 +449,7 @@ class CompanyChat:
                    left(g.description,3000) AS goal_brief_excerpt,
                    i.id AS founder_intake_id,
                    t.id AS task_id,t.action AS task_action,t.status AS task_status,
+                   t.assignee_id AS task_assignee_id,
                    assignee.name AS task_assignee_name,
                    COALESCE(d.name,td.name) AS department_name
             FROM ago_approval_requests a
