@@ -26,6 +26,46 @@ export function FounderProjectIntake({api,me,onChanged}) {
   try{const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(project.id));setProjectDetail(result);}
   catch(e){setProjectError(e.message||'Project details are unavailable.');}
  }
+ function exportProjectReport(){
+  if(!projectDetail)return;
+  const p=projectDetail;
+  const lines=[
+    '# Project evidence report: '+p.title,
+    '',
+    'Generated from the founder-authorized AGO project record. Nothing below proves public release.',
+    '',
+    'Project ID: '+p.id,
+    'Plan: '+p.plan_status,
+    'Recorded status: '+p.status_label,
+    'Delivery health: '+p.project_health,
+    'Stage QA coverage: '+p.qa_passed_stages+'/'+p.stage_count,
+    'Responsible manager: '+p.accountable_manager_name,
+    'Commercial stage: '+p.commercial_stage,
+    'Verified recorded revenue: '+(p.verified_revenue_inr===null?'Not verified':'INR '+p.verified_revenue_inr),
+    '',
+    '## Founder requirement','',p.brief,'',
+    '## Governed stage and QA evidence','',
+    ...(p.stages||[]).flatMap(x=>[
+      '### '+x.position+'. '+x.stage,
+      x.deliverable,
+      'Suggested employee: '+(x.suggested_assignee_name||'Not assigned'),
+      'Executing employee: '+(x.executing_employee||'None'),
+      'Task: '+(x.task_id||'Not materialized')+' | Status: '+(x.task_status||'Not started'),
+      'Agent run: '+(x.agent_run_status||'No run')+' | Failure code: '+(x.agent_failure_code||'None'),
+      'Independent QA: '+(x.qa_verdict||'Not reviewed'),
+      'QA evidence: '+(x.qa_evidence||'Not attached'),
+      ''
+    ]),
+    '## Acceptance gates','',
+    'Independent QA must pass for actual implementation deliverables.',
+    'Release and financial evidence must be verified separately.',
+  ];
+  const blob=new Blob([lines.join('\\n')],{type:'text/markdown;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;link.download='ago-project-'+p.id+'.md';
+  document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
  if(!isFounder)return null;
  async function start(e){e.preventDefault();if(busy||brief.trim().length<20)return;
   setBusy(true);setError('');
@@ -84,7 +124,9 @@ export function FounderProjectIntake({api,me,onChanged}) {
        <div className="project-portfolio-details">
         {!projectDetail?<p>Loading live project details…</p>:<>
          <h4>{projectDetail.title}</h4>
-         <p><b>Status:</b> {projectDetail.status_label} · <b>Strategy:</b> {projectDetail.plan_status}</p>
+         <p><b>Status:</b> {projectDetail.status_label} · <b>Strategy:</b> {projectDetail.plan_status} · <b>Delivery health:</b> {projectDetail.project_health}</p>
+         <p><b>Evidence-backed QA completion:</b> {projectDetail.qa_passed_stages}/{projectDetail.stage_count} stages · {projectDetail.completion_percent}% · {projectDetail.running_stages} running · {projectDetail.failed_stages} failed · {projectDetail.unassigned_stages} staffing gaps.</p>
+         <button type="button" onClick={exportProjectReport}>Export current evidence report (.md)</button>
          <p><b>Founder requirement:</b> {projectDetail.brief}</p>
          <p><b>Accountable manager:</b> {projectDetail.accountable_manager_name}</p>
          <p><b>Revenue plan:</b> {projectDetail.commercial_objective} · {projectDetail.commercial_stage}</p>
@@ -94,6 +136,8 @@ export function FounderProjectIntake({api,me,onChanged}) {
           <small>{st.deliverable}</small>
           <small>Suggested: {st.suggested_assignee_name||'Employee needed'} · Executing: {st.executing_employee||'No governed task started'}</small>
           <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no independent verdict'}</small>
+          <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
+          {st.qa_evidence&&<details><summary>Independent QA evidence</summary><p>{st.qa_evidence}</p></details>}
          </li>)}</ol>
          <p>No external publication is claimed without a linked verified release. <a href="#ago-opportunities">Promotion desk ↑</a></p>
         </>}
