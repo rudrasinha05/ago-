@@ -428,3 +428,68 @@ class CompanyChat:
                  ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
             WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id DESC LIMIT %s
         """, (tenant_id,limit)).fetchall()]
+
+    def approval_inbox(self, tenant_id: str, limit: int = 100) -> list[dict]:
+        """Evidence-backed approvals, without inventing a designated reviewer.
+
+        Actual approval:decide authority and independent-human checks are
+        enforced by GovernanceGate at the existing decision endpoint.
+        """
+        UUID(tenant_id)
+        if not 1 <= limit <= 100:
+            raise ValueError("Invalid approval inbox limit")
+        rows = self.db.execute("""
+            SELECT a.id,a.action,a.status,a.requester_id,a.reviewer_id,
+                   a.reason,a.created_at,a.decided_at,
+                   COALESCE(requester.name,'Unknown requester') AS requester_name,
+                   requester.role_title AS requester_role,
+                   COALESCE(reviewer.name,'Not yet decided') AS reviewer_name,
+                   p.id AS plan_id,p.title AS plan_title,
+                   left(g.description,3000) AS goal_brief_excerpt,
+                   i.id AS founder_intake_id,
+                   t.id AS task_id,t.action AS task_action,t.status AS task_status,
+                   assignee.name AS task_assignee_name,
+                   COALESCE(d.name,td.name) AS department_name
+            FROM ago_approval_requests a
+            LEFT JOIN ago_employees requester
+              ON requester.tenant_id=a.tenant_id AND requester.id=a.requester_id
+            LEFT JOIN ago_departments d
+              ON d.tenant_id=requester.tenant_id AND d.id=requester.department_id
+            LEFT JOIN ago_employees reviewer
+              ON reviewer.tenant_id=a.tenant_id AND reviewer.id=a.reviewer_id
+            LEFT JOIN ago_strategy_plans p
+              ON p.tenant_id=a.tenant_id AND p.approval_id=a.id
+             AND a.action=('brain:activate:' || p.id::text)
+            LEFT JOIN ago_goals g ON g.tenant_id=p.tenant_id AND g.id=p.goal_id
+            LEFT JOIN ago_founder_intakes i ON i.tenant_id=p.tenant_id
+             AND i.plan_id=p.id
+            LEFT JOIN ago_governed_tasks t
+              ON t.tenant_id=a.tenant_id AND t.approval_id=a.id
+             AND t.action=a.action
+            LEFT JOIN ago_employees assignee
+              ON assignee.tenant_id=t.tenant_id AND assignee.id=t.assignee_id
+            LEFT JOIN ago_departments td
+              ON td.tenant_id=assignee.tenant_id AND td.id=assignee.department_id
+            WHERE a.tenant_id=%s
+            ORDER BY (a.status='pending') DESC,a.created_at DESC,a.id DESC
+            LIMIT %s
+        """, (tenant_id,limit)).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["approval_type"] = (
+                "plan_review" if item["plan_id"] else
+                "task_execution" if item["task_id"] else "governance_action"
+            )
+            item["review_routing"] = (
+                "Independent authorized human reviewer; not automatically assigned"
+            )
+            item["next_action"] = (
+                "An approved plan requires separate activation and per-task approvals."
+                if item["plan_id"] else
+                "An approved task still requires explicit governed execution and QA."
+                if item["task_id"] else
+                "Only the exact approved action may be reconciled through its governed workflow."
+            )
+            result.append(item)
+        return result

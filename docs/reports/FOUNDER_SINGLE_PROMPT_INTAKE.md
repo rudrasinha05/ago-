@@ -39,3 +39,14 @@ flags unverified engineering and GitHub claims as false, persists a real run
 record and triggers ordinary employee manager reporting. It does not use
 a paid model, generate application code or perform any network operations.
 Unrelated `internal:brief` tasks retain their original generic result.
+
+## Approval Inbox UX — real authorization retained
+The Company Map shows a tenant-scoped approvals inbox. It reads actual stored
+requester, plan/task IDs, immutable action and status, actual reviewer decision,
+and optionally a bounded stored founder brief. It never assigns a fictional
+approver or treats a board title as a role grant. Approve/Deny, with a mandatory
+reason, goes through the original /v1/governance/approvals/{id}/decision.
+Founders cannot self-review their own project approval. User-visible
+request updates are polled only while the authenticated page is open, not
+system notifications when the browser or laptop is closed. The founder brief
+remains addressed to Company Brain, not automatically forwarded to CEO/CTO.

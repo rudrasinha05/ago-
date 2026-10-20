@@ -167,3 +167,9 @@ def founder_projects(limit: int = Query(default=30,ge=1,le=50),
     allowed(repositories,actor,'organization:read')
     allowed(repositories,actor,'brain:read')
     return repositories.resolve(CompanyChatPort).projects(actor.tenant_id,limit)
+
+@router.get('/approvals')
+def approval_inbox(limit: int = Query(default=100,ge=1,le=100),
+                   actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'approval:read')
+    return repositories.resolve(CompanyChatPort).approval_inbox(actor.tenant_id,limit)

@@ -1779,6 +1779,10 @@
         "projects": {
           "arguments": "self, tenant_id: str, limit: int=30",
           "returns": "list[dict]"
+        },
+        "approval_inbox": {
+          "arguments": "self, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
         }
       }
     }

@@ -32,7 +32,7 @@ export function FounderProjectIntake({api,me}) {
  }
   return <section className="founder-project-intake" aria-label="Start founder project">
   <div><h3>Start a governed project</h3>
-    <p>Give AGO one brief. It creates a saved goal, draft plan, accountable stage proposals and staffing-gap report. Execution and publication remain approval-gated.</p></div>
+    <p>Founder → Company Brain (draft goal and stages) → qualified discovery AI suggested; no automatic AI CEO/CTO or manager delegation. Approved actions require an independent human reviewer. Execution and publication remain approval-gated.</p></div>
   <form onSubmit={start}>
     <label>Founder project brief<textarea value={brief} onChange={e=>setBrief(e.target.value)}
       minLength={20} maxLength={12000} required
@@ -47,7 +47,7 @@ export function FounderProjectIntake({api,me}) {
       <span>{s.suggested_assignee_name||'Staffing required'}</span>
       <small>{s.plan_step_id?'Allowlisted internal review step drafted':'Proposal only; tooling and approval required'}</small>
     </li>)}</ol>
-    <p>Plan ID: <code>{created.plan_id}</code> · Status: {created.plan_status} · Independent reviewer approval is required before materialization.</p>
+    <p>Plan ID: <code>{created.plan_id}</code> · Status: {created.plan_status} · Independent reviewer approval is required before materialization. <a href="#company-approval-inbox">View approval inbox ↑</a></p>
     {created.plan_status==='draft'&&created.stages.some(s=>s.plan_step_id)&&
       <button type="button" disabled={reviewBusy} onClick={submitForReview}>{reviewBusy?'Submitting…':'Request independent plan review'}</button>}
     {created.plan_status==='draft'&&!created.stages.some(s=>s.plan_step_id)&&

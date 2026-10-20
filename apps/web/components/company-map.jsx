@@ -5,6 +5,7 @@ import {employeeStatus,companyLayout,activeRouteKeys,employeeProjects} from '@ag
 import {CommandBrain} from './command-brain';
 import {RoleEditor,UpwardReports} from './company-governance';
 import {FounderProjectIntake} from './founder-project-intake';
+import {CompanyApprovals} from './company-approvals';
 const BASE='/v1/organization/company';
 const time=value=>new Date(value).toLocaleString();
 export function CompanyMap({api,me,data,onRefresh}) {
@@ -111,6 +112,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   return <section className="company-command" aria-label="Company map and conversations">
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><button className="btn" disabled={!me.permissions.includes('organization:manage')} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></header>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    <CompanyApprovals api={api} me={me} employees={employees} onReviewed={refreshEvents}/>
     <FounderProjectIntake api={api} me={me}/>
     <div className="company-shell">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
@@ -124,7 +126,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
         <div className="map-controls"><button aria-label="Zoom in" onClick={()=>setZoom(z=>Math.min(1.7,z+.1))}>+</button><button aria-label="Zoom out" onClick={()=>setZoom(z=>Math.max(.08,z-.1))}>−</button><button onClick={center}>Founder</button><button onClick={()=>{setZoom(Math.min((viewport.current?.clientWidth||600)/layout.size,(viewport.current?.clientHeight||700)/layout.size)*.9);setPan({x:0,y:0});}}>Fit all</button><span>{Math.round(zoom*100)}%</span></div>
         <div className="company-world" style={{width:layout.size,height:layout.size,transform:`translate(calc(-50% + ${pan.x}px),calc(-50% + ${pan.y}px)) scale(${zoom})`}}>
           <svg width={layout.size} height={layout.size} aria-label="Reporting network; red lines show assigned work" role="img">{layout.edges.map((edge,i)=>{const a=points.get(edge.from),b=points.get(edge.to);return a&&b?<line key={i} className={routing.routes.has(edge.from+'>'+edge.to)?'edge-live':''} x1={a.x} y1={a.y} x2={b.x} y2={b.y}/>:null;})}</svg>
-          <form className="map-founder" style={{left:layout.center,top:layout.center,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><strong>♛ Founder / CEO</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
+          <form className="map-founder" style={{left:layout.center,top:layout.center,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><strong>♛ Founder · Human authority</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
           {layout.nodes.map(n=>{const state=employeeStatus(n.id,tasks);
              const project=displayProjects(n.id);const eventCount=eventData?.by_employee?.[n.id]??0;
              const recordedRole=governanceData?.employees?.find(e=>e.id===n.id)?.role_title;
@@ -153,6 +155,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
            <dt>Core responsibility</dt><dd>Deliver assigned work and verifiable evidence within approved scope.</dd>
            <dt>Additional responsibilities</dt><dd>Maintain code, tests and documentation; report blockers, quality outcomes and completion to immediate superior. Support publishable release checks.</dd></dl>
            <RoleEditor key={selected} employee={selectedEmployee} profile={governanceData?.employees?.find(e=>e.id===selected)} api={api} canManage={me.roles.includes('founder')} onSaved={refreshGovernance}/>
+           <h4>Approvals</h4><p>Open the Approvals inbox above for pending requests and full decision evidence. Only independent authorized human reviewers can decide.</p>
            <h4>Assigned tasks ({status.tasks.length})</h4>{status.tasks.length?status.tasks.slice(0,12).map(t=><div key={t.id}><strong>{t.action}</strong><p>{t.status} · {t.project_name||'No linked project plan'}</p></div>):<p>{tasks===null?'Activity could not be verified.':'No assigned tasks.'}</p>}
            <h4>Latest work events</h4>{(eventData?.recent||[]).filter(e=>e.employee_id===selected).slice(0,5).map(e=><div key={e.id}><small>#{e.id} · {time(e.created_at)}</small><p>{e.body}</p></div>)}
            <p><a href="/tools/">GitHub projects, reviewed operations and delivery evidence →</a></p>

@@ -298,3 +298,45 @@ def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(ca
     assert packet['github_pushed'] is False
     assert packet['requires_human_qa'] is True
 
+
+
+
+def test_company_approval_inbox_truthful_authority_and_cross_tenant(case):
+    client,headers,info=case
+    founder,reviewer=headers['founder'],headers['reviewer']
+    original='Build a secure and accessible admissions portal with documented test coverage and an approval checkpoint'
+    company=post(client,BASE+'/projects/start',founder,{'brief':original,'operation_key':str(uuid4())})
+    # A registered research employee gives this plan an allowlisted draft step.
+    dep=department(client,founder)
+    analyst=employee(client,founder,dep)
+    post(client,'/v1/brain/plans/'+company['plan_id']+'/steps',founder,
+         {'action':'internal:brief','assignee_id':analyst})
+    approval=post(client,'/v1/brain/plans/'+company['plan_id']+'/submit',founder)
+    assert client.get(BASE+'/approvals').status_code==401
+    response=client.get(BASE+'/approvals',headers=reviewer)
+    assert response.status_code==200,response.text
+    entry=next(x for x in response.json() if str(x['id'])==approval['approval_id'])
+    assert entry['approval_type']=='plan_review'
+    assert entry['plan_title']==company['title']
+    assert entry['requester_name']=='Founder'
+    assert str(entry['requester_id'])==info['founder_id']
+    assert entry['reviewer_id'] is None
+    assert entry['status']=='pending'
+    assert entry['goal_brief_excerpt']==original
+    assert 'Independent' in entry['review_routing']
+    assert entry['task_id'] is None
+    # No self-approval even when founder has granted decision permission.
+    post(client,'/v1/governance/approvals/'+approval['approval_id']+'/decision',
+         founder,{'approve':True,'reason':'Trying self-approval'},expected=403)
+    post(client,'/v1/governance/approvals/'+approval['approval_id']+'/decision',
+         reviewer,{'approve':False,'reason':'Acceptance criteria need revision'})
+    updated=client.get(BASE+'/approvals',headers=founder).json()
+    entry=next(x for x in updated if str(x['id'])==approval['approval_id'])
+    assert entry['status']=='rejected' and entry['reason']=='Acceptance criteria need revision'
+    assert str(entry['reviewer_id'])==info['reviewer_id']
+    from ago.bootstrap import bootstrap
+    other,_=bootstrap(info['db'],organization='Isolated approvals',
+                      email='other-approvals@example.test',password='test-strong-password-123')
+    other_auth=info['login']('other-approvals@example.test','test-strong-password-123',other)
+    assert not any(str(a['id'])==approval['approval_id']
+                   for a in client.get(BASE+'/approvals',headers=other_auth).json())
