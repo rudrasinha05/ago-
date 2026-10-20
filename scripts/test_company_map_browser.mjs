@@ -89,6 +89,13 @@ try{
  await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
  assert.match(await page.locator('.employee-inspector').innerText(),/Busy/);
  await page.locator('.map-node.employee.working').filter({hasText:'Developer'}).waitFor();
+ assert.equal(await page.locator('.map-node.employee').filter({hasText:'CTO'}).locator('.map-count').count(),0);
+ assert.equal(await page.locator('.company-channels .chat-event-count').filter({hasText:'0'}).count(),0);
+ await page.getByRole('button',{name:'Full screen map'}).click();
+ await page.locator('.company-shell.company-fullscreen').waitFor();
+ assert.ok(await page.evaluate(()=>document.querySelector('.company-shell.company-fullscreen').getBoundingClientRect().height>=window.innerHeight-2));
+ await page.keyboard.press('Escape');
+ await page.locator('.company-shell.company-fullscreen').waitFor({state:'detached'});
  assert.ok(await page.locator('.company-world .edge-live').count()>=2,'Entire assigned hierarchy glows red');
  assert.match(await page.locator('.map-node.employee').filter({hasText:'Developer'}).innerText(),/Orchestration research/);
  assert.match(await page.locator('.employee-inspector').innerText(),/Additional responsibilities/);
@@ -131,7 +138,13 @@ try{
  await page.locator('.chat-message').getByText('Please show the sources',{exact:true}).waitFor();
  await page.locator('.chat-message').getByRole('button',{name:'Reply',exact:true}).click();
  await page.getByLabel('Message Developer',{exact:true}).fill('Include experimental evidence');await page.getByRole('button',{name:'Send',exact:true}).click();
- await page.locator('.chat-message').getByText('Include experimental evidence',{exact:true}).waitFor();assert.equal(messages[1].reply_to,1);
+ await page.locator('.chat-thread-reply').getByText('Include experimental evidence',{exact:true}).waitFor();
+ assert.equal(messages[1].reply_to,1);
+ assert.equal(await page.locator('.chat-message').filter({hasText:'Please show the sources'}).first().locator('.chat-thread-children .chat-message').count(),1);
+ await page.getByRole('button',{name:'Hide profile'}).click();
+ await page.locator('.employee-inspector').waitFor({state:'detached'});
+ await page.getByRole('button',{name:'Show profile'}).click();
+ await page.locator('.employee-inspector').waitFor();
  await page.getByRole('button',{name:'Zoom in',exact:true}).click();await page.getByRole('button',{name:'Founder',exact:true}).click();
  await page.getByLabel('Talk to your company',{exact:true}).fill('Founder project brief');await page.getByRole('button',{name:'Send to global chat',exact:true}).click();
  await page.locator('.chat-message').getByText('Founder project brief',{exact:true}).waitFor();assert.equal(messages[2].channel,'global');
