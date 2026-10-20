@@ -530,6 +530,7 @@ class CompanyChat:
                  AND s.suggested_assignee_id IS NULL) AS staffing_gaps,
               (SELECT COALESCE(json_agg(json_build_object(
                   'stage',s.stage,'deliverable',s.deliverable,
+                  'suggested_assignee_id',s.suggested_assignee_id,
                   'suggested_assignee_name',e.name,
                   'suggested_role',e.role_title,'plan_step_id',s.plan_step_id
                ) ORDER BY s.position),'[]'::json)
