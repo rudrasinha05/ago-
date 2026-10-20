@@ -1743,6 +1743,10 @@
         "staff": {
           "arguments": "self, actor, department_id, manager_id, name, requirement, operation_key",
           "returns": "Any"
+        },
+        "notifications": {
+          "arguments": "self, tenant_id: str",
+          "returns": "dict"
         }
       }
     }
