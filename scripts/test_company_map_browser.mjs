@@ -43,7 +43,7 @@ try{
  async function login(){await page.getByLabel('Organization ID').fill(tenant);await page.getByLabel('Work email').fill('founder@example.test');await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByRole('heading',{name:'Company map',exact:true}).waitFor();}
  await page.goto(base+'/workspace/organization/');await login();
  await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
- await page.getByText('Orchestration research',{exact:false}).waitFor();
+ await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
  assert.match(await page.locator('.employee-inspector').innerText(),/Busy/);
  await page.locator('.map-node.employee.working').filter({hasText:'Developer'}).waitFor();
  assert.ok(await page.locator('.company-world .edge-live').count()>=2,'Entire assigned hierarchy glows red');
