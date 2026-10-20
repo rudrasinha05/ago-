@@ -29,8 +29,15 @@ The source set intentionally starts small, from fixed feed endpoints:
 
 1. arXiv Computer Science AI RSS — published preprints, **not peer-reviewed
    or validated commercial demand**.
-2. Hacker News official RSS — technology-community news.
-3. The Guardian technology RSS — reporting/articles.
+2. NIST official news and cybersecurity RSS — government-source developments.
+3. NIST Manufacturing Innovation blog RSS — articles and industrial context.
+4. OpenAlex works metadata API — CC0 research metadata (not full texts).
+5. Crossref works REST API — open bibliographic metadata (no abstracts or full texts).
+
+Publisher feeds that restrict commercial use, including The Guardian RSS,
+are **not** enabled by default. Hacker News has commercial-use conditions and
+is likewise excluded pending applicable authorization. Feed content is never
+resold, mirrored or used to train a model.
 
 Only title, summary, time and source link are ingested; linked sites are **not**
 crawled and remote text is never executed as an instruction. Network redirects
