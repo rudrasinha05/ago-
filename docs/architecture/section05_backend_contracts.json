@@ -1795,6 +1795,10 @@
         "scan_opportunities": {
           "arguments": "self, tenant_id: str",
           "returns": "dict"
+        },
+        "market_intelligence": {
+          "arguments": "self, tenant_id: str, limit: int=100",
+          "returns": "dict"
         }
       }
     }
