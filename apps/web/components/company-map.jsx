@@ -19,6 +19,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const receiveApprovalData=useCallback(items=>setApprovalList(items),[]);
   const [channel,setChannel]=useState('global'),[messages,setMessages]=useState([]),[before,setBefore]=useState(null);
   const [tasks,setTasks]=useState(null),[selected,setSelected]=useState(null),[reply,setReply]=useState(null);
+  const [portfolioMap,setPortfolioMap]=useState([]);
   const [centerDraft,setCenterDraft]=useState('');
   const [draft,setDraft]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState(''),[sending,setSending]=useState(false);
   const [zoom,setZoom]=useState(.42),[pan,setPan]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
@@ -32,7 +33,12 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const selectedEmployee=employees.find(e=>e.id===selected);
   const status=employeeStatus(selected,tasks);
   const assignedRepos=id=>(githubState||[]).filter(p=>p.pm_id===id||p.qa_id===id||p.developer_ids.includes(id)).map(p=>p.repository);
-  const displayProjects=id=>[...new Set([...employeeProjects(id,tasks),...assignedRepos(id)])];
+  const displayProjects=id=>[...new Set([
+    ...employeeProjects(id,tasks),...assignedRepos(id),
+    ...portfolioMap.filter(p=>p.accountable_manager_id===id).map(p=>p.title+' (delivery owner)'),
+    ...portfolioMap.flatMap(p=>(p.stages||[]).filter(stage=>stage.suggested_assignee_id===id)
+      .map(stage=>p.title+' ('+stage.stage+' proposed)')),
+  ])];
   const routing=useMemo(()=>activeRouteKeys(layout,employees,tasks),[layout,employees,tasks]);
   const liveTaskCount=Array.isArray(tasks)?tasks.filter(t=>t.status==='running').length:0;
   // Keep each reply directly below its recorded parent when that parent is visible.
@@ -59,6 +65,26 @@ export function CompanyMap({api,me,data,onRefresh}) {
     }catch{if(alive.current){setTasks(null);setUpdated(null);}}
   },[api]);
   useEffect(()=>{alive.current=true;refreshActivity();const timer=setInterval(refreshActivity,7000);return()=>{alive.current=false;clearInterval(timer);};},[refreshActivity]);
+  useEffect(()=>{
+    if(!me.permissions.includes('organization:read')||!me.permissions.includes('brain:read'))return;
+    let live=true;
+    async function loadPortfolio(){
+      try{
+        const all=[];
+        for(let offset=0;offset<300;offset+=100){
+          const page=await api.request(BASE+'/projects?limit=100&offset='+offset);
+          if(!Array.isArray(page))break;
+          all.push(...page);
+          if(page.length<100)break;
+        }
+        if(live)setPortfolioMap(all);
+      }catch{if(live)setPortfolioMap([]);}
+    }
+    loadPortfolio();
+    const timer=setInterval(loadPortfolio,60000);
+    return()=>{live=false;clearInterval(timer);};
+  },[api,me.permissions]);
+
   useEffect(()=>{
     let live=true;const version=++sequence.current;setMessages([]);setBefore(null);setReply(null);setError('');setLoading(true);
     async function fetchMessages(initial=false){try{
