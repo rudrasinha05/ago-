@@ -252,6 +252,7 @@
     "POST /v1/operations/handoffs/{handoff_id}/transition": "95308e8febad0410964feca4236eb7f8237caf95802fba4f78018e8dd0577202",
     "POST /v1/organization/company/board/appoint": "079fc490c1903918de9939f0ec2cbdc2b349c6d7a09cc4f1c935dcbc55b75c61",
     "POST /v1/organization/company/chat": "c9d4308a6c7733e2712ee46f62699db0e662ee1f34d64a730130e16242ab6249",
+    "POST /v1/organization/company/market-intelligence/{signal_id}/project": "7d20581509947ba979925b3e957f3f21c944f64c534721509dcbbc493f11dbb6",
     "POST /v1/organization/company/opportunities/scan": "6dcd073b53697b03b5c7fd7a79f5b4c0b7e3210f128dc7a40f744aa8e241b711",
     "POST /v1/organization/company/projects/start": "ad1b413afc6cdd12f13e868c8cba0ac02fb2d747e77233f959616b42413a4160",
     "POST /v1/organization/company/reports": "2e91492f2b5d04fd350c01b7f68330a6a34b43ff93c5c78b347142925276e796",
