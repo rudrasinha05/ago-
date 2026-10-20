@@ -126,3 +126,149 @@ class CompanyChat:
             "recent": [dict(row) for row in recent],
             "event_type": "committed_task_status",
         }
+
+    def governance(self, tenant_id: str) -> dict:
+        """Read explicit appointments and employee accountability, not inferred job titles."""
+        employees = self.db.execute("""
+            SELECT e.id,e.name,e.kind,e.department_id,e.manager_id,
+                   e.role_title,e.core_responsibilities,e.extra_responsibilities
+            FROM ago_employees e WHERE e.tenant_id=%s ORDER BY e.name
+        """, (tenant_id,)).fetchall()
+        seats = self.db.execute("""
+            SELECT b.seat,b.employee_id,b.appointed_by,b.appointed_at
+            FROM ago_company_board_appointments b WHERE b.tenant_id=%s
+            ORDER BY b.seat
+        """, (tenant_id,)).fetchall()
+        return {"employees": [dict(e) for e in employees],
+                "board": [dict(s) for s in seats],
+                "board_grants_authority": False}
+
+    def profile(self, actor, employee_id: str, title: str, core: str, extra: str) -> dict:
+        if "founder" not in actor.roles:
+            raise PermissionError("Founder approval required to edit employee accountability")
+        UUID(employee_id)
+        if not 1 <= len(title.strip()) <= 150 or not 1 <= len(core.strip()) <= 3000:
+            raise ValueError("Role title and core responsibilities required")
+        if len(extra) > 3000:
+            raise ValueError("Additional responsibilities exceed size limit")
+        with self.db.transaction():
+            row = self.db.execute("""
+                UPDATE ago_employees SET role_title=%s,core_responsibilities=%s,
+                  extra_responsibilities=%s
+                WHERE tenant_id=%s AND id=%s RETURNING id,role_title,
+                  core_responsibilities,extra_responsibilities
+            """, (title.strip(),core.strip(),extra.strip(),actor.tenant_id,employee_id)).fetchone()
+            if row is None:
+                raise LookupError("Employee not found")
+            return dict(row)
+
+    def appoint(self, actor, seat: str, employee_id: str) -> dict:
+        if "founder" not in actor.roles:
+            raise PermissionError("Only the founder can record explicit board appointments")
+        allowed_seats = {"Strategy & Vision","Technology Oversight","Finance & Budget",
+                         "Risk & Compliance","Quality & Release"}
+        if seat not in allowed_seats:
+            raise ValueError("Unknown board responsibility")
+        UUID(employee_id)
+        with self.db.transaction():
+            # Avoid a race between distinct appointments for the same tenant.
+            self.db.execute("SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE",
+                            (actor.tenant_id,)).fetchone()
+            member = self.db.execute(
+                "SELECT id FROM ago_employees WHERE tenant_id=%s AND id=%s",
+                (actor.tenant_id, employee_id)).fetchone()
+            if not member:
+                raise LookupError("Employee is not in this company")
+            current = self.db.execute("""
+                SELECT employee_id FROM ago_company_board_appointments
+                WHERE tenant_id=%s AND seat=%s
+            """, (actor.tenant_id,seat)).fetchone()
+            if current and str(current["employee_id"]) == employee_id:
+                return {"seat":seat,"employee_id":employee_id,"unchanged":True,
+                        "authority_granted":False}
+            self.db.execute("""
+                DELETE FROM ago_company_board_appointments
+                WHERE tenant_id=%s AND seat=%s
+            """, (actor.tenant_id,seat))
+            self.db.execute("""
+                INSERT INTO ago_company_board_appointments
+                (tenant_id,seat,employee_id,appointed_by)
+                VALUES (%s,%s,%s,%s)
+            """, (actor.tenant_id,seat,employee_id,actor.subject))
+        return {"seat":seat,"employee_id":employee_id,"authority_granted":False}
+
+    def report(self, actor, kind: str, body: str, operation_key: str,
+               task_id: str | None = None) -> dict:
+        UUID(operation_key)
+        if task_id is not None:
+            UUID(task_id)
+        if kind not in {"doubt","blocker","module_complete","phase_complete"}:
+            raise ValueError("Unknown report type")
+        if not 1 <= len(body.strip()) <= 6000:
+            raise ValueError("Report must contain substantive content")
+        with self.db.transaction():
+            author = self.db.execute("""
+                SELECT id,name,kind,manager_id FROM ago_employees
+                WHERE tenant_id=%s AND id=%s
+            """, (actor.tenant_id,actor.subject)).fetchone()
+            if author is None or author["kind"] != "human":
+                raise PermissionError("Only an authenticated human employee can submit this report")
+            prior = self.db.execute("""
+                SELECT * FROM ago_company_reports
+                WHERE tenant_id=%s AND author_id=%s AND operation_key=%s
+            """, (actor.tenant_id,actor.subject,operation_key)).fetchone()
+            if prior:
+                if (prior["kind"],prior["body"],str(prior["task_id"]) if prior["task_id"] else None) != (
+                    kind,body.strip(),task_id):
+                    raise ValueError("Idempotency key already used for a different report")
+                return dict(prior)
+            recipient_id = author["manager_id"]
+            if not recipient_id:
+                founder = self.db.execute("""
+                    SELECT e.id FROM ago_employees e
+                    JOIN ago_user_roles r ON r.tenant_id=e.tenant_id AND r.user_id=e.id
+                    JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id
+                    WHERE e.tenant_id=%s AND r.role='founder' AND e.kind='human' AND u.active
+                    ORDER BY e.id LIMIT 1
+                """, (actor.tenant_id,)).fetchone()
+                recipient_id = founder["id"] if founder else None
+            if recipient_id is None or str(recipient_id) == actor.subject:
+                raise PermissionError("No immediate higher authority available")
+            if task_id:
+                assignment = self.db.execute("""
+                    SELECT id FROM ago_governed_tasks
+                    WHERE tenant_id=%s AND id=%s AND assignee_id=%s
+                """, (actor.tenant_id,task_id,actor.subject)).fetchone()
+                if not assignment:
+                    raise PermissionError("Only assigned task owner can attach a report")
+            row = self.db.execute("""
+                INSERT INTO ago_company_reports
+                (tenant_id,author_id,recipient_id,kind,body,task_id,operation_key)
+                VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *
+            """, (actor.tenant_id,actor.subject,str(recipient_id),kind,
+                  body.strip(),task_id,operation_key)).fetchone()
+            # The shared timeline intentionally excludes the report body.
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                (tenant_id,channel,author_id,author_name,body,kind,employee_id,task_id)
+                VALUES (%s,%s,%s,%s,%s,'report',%s,%s)
+            """, (actor.tenant_id,"employee:"+actor.subject,actor.subject,author["name"],
+                  "Submitted "+kind.replace("_"," ")+" report to immediate superior",
+                  actor.subject,task_id))
+        return dict(row)
+
+    def reports(self, actor, limit: int = 100) -> list[dict]:
+        if not 1 <= limit <= 100:
+            raise ValueError("Invalid report history limit")
+        if "founder" in actor.roles:
+            rows = self.db.execute("""
+                SELECT * FROM ago_company_reports WHERE tenant_id=%s
+                ORDER BY id DESC LIMIT %s
+            """, (actor.tenant_id,limit)).fetchall()
+        else:
+            rows = self.db.execute("""
+                SELECT * FROM ago_company_reports
+                WHERE tenant_id=%s AND (author_id=%s OR recipient_id=%s)
+                ORDER BY id DESC LIMIT %s
+            """, (actor.tenant_id,actor.subject,actor.subject,limit)).fetchall()
+        return [dict(row) for row in rows]
