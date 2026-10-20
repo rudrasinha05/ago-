@@ -21,6 +21,7 @@ CREATE TABLE ago_founder_intakes (
 CREATE TABLE ago_founder_intake_stages (
  tenant_id uuid NOT NULL,
  intake_id uuid NOT NULL,
+ plan_id uuid NOT NULL,
  position integer NOT NULL CHECK(position BETWEEN 1 AND 5),
  stage text NOT NULL CHECK(stage IN ('discovery','architecture','implementation','quality','release')),
  deliverable text NOT NULL CHECK(length(trim(deliverable)) BETWEEN 10 AND 500),
@@ -29,8 +30,9 @@ CREATE TABLE ago_founder_intake_stages (
  PRIMARY KEY(tenant_id,intake_id,position),
  UNIQUE(tenant_id,intake_id,stage),
  FOREIGN KEY(tenant_id,intake_id) REFERENCES ago_founder_intakes(tenant_id,id),
+ FOREIGN KEY(tenant_id,plan_id) REFERENCES ago_strategy_plans(tenant_id,id),
  FOREIGN KEY(tenant_id,suggested_assignee_id) REFERENCES ago_employees(tenant_id,id),
- FOREIGN KEY(tenant_id,plan_step_id) REFERENCES ago_plan_steps(tenant_id,id)
+ FOREIGN KEY(tenant_id,plan_id,plan_step_id) REFERENCES ago_plan_steps(tenant_id,plan_id,id)
 );
 ALTER TABLE ago_company_chat DROP CONSTRAINT ago_company_chat_kind_check;
 ALTER TABLE ago_company_chat ADD CONSTRAINT ago_company_chat_kind_check

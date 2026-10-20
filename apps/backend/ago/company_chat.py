@@ -369,9 +369,9 @@ class CompanyChat:
                                                 for keyword in keywords)),None)
                     self.db.execute("""
                         INSERT INTO ago_founder_intake_stages
-                        (tenant_id,intake_id,position,stage,deliverable,suggested_assignee_id,plan_step_id)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s)
-                    """, (actor.tenant_id,intake_id,index,stage,deliverable,
+                        (tenant_id,intake_id,plan_id,position,stage,deliverable,suggested_assignee_id,plan_step_id)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                    """, (actor.tenant_id,intake_id,plan_id,index,stage,deliverable,
                           assignee['id'] if assignee else None,
                           first_step if stage=='discovery' else None))
                 # Notify founder without pretending the staff started work.
