@@ -28,7 +28,7 @@ def test_source_ingestion_ceo_ownership_founder_gate_and_tenant_isolation(case, 
     })["id"]
     monkeypatch.setattr(market, "retrieve_feed", lambda url: FEED)
     uri = market.FEEDS[1][2]
-    first = market.ingest(info["db"], info["tenant"], "hacker-news", "news", uri)
+    first = market.ingest(info["db"], info["tenant"], "nist-news", "news", uri)
     repeated = market.ingest(info["db"], info["tenant"], "hacker-news", "news", uri)
     assert first["new_evidence"] == 1 and first["status"] == "ok"
     assert repeated["new_evidence"] == 0
@@ -50,7 +50,7 @@ def test_source_ingestion_ceo_ownership_founder_gate_and_tenant_isolation(case, 
     inbox = client.get("/v1/organization/company/approvals", headers=founder).json()
     nominated = next(a for a in inbox if str(a["market_signal_id"]) == str(item["id"]))
     assert nominated["approval_type"] == "market_signal_review"
-    assert nominated["market_signal_source"] == "hacker-news"
+    assert nominated["market_signal_source"] == "nist-news"
     assert nominated["market_signal_score"] >= 55
     assert str(nominated["requester_id"]) == ceo
     post(client, "/v1/governance/approvals/"+str(item["approval_id"])+"/decision",
