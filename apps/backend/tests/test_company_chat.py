@@ -257,10 +257,11 @@ def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(ca
     founder=headers['founder']
     dep=department(client,founder)
     worker=employee(client,founder,dep)
-    project=post(client,BASE+'/projects/start',founder,{
+    intake_payload={
         'brief':'Design a production-ready resource scheduling platform with source control, tests and documented user journeys.',
         'operation_key':str(uuid4()),
-    })
+    }
+    project=post(client,BASE+'/projects/start',founder,intake_payload)
     discovery=project['stages'][0]
     assert discovery['suggested_assignee_id']==worker
     assert discovery['plan_step_id'] is not None
@@ -271,3 +272,8 @@ def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(ca
     assert not info['db'].execute("""
         SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s
     """,(info['tenant'],)).fetchone()
+    review=post(client,'/v1/brain/plans/'+project['plan_id']+'/submit',founder)
+    assert review['status']=='pending_approval'
+    replay=post(client,BASE+'/projects/start',founder,intake_payload)
+    assert replay['reused'] is True
+    assert replay['plan_status']=='pending_approval'
