@@ -516,10 +516,10 @@ class CompanyChat:
             } for s in steps],
         }
 
-    def projects(self, tenant_id: str, limit: int = 30) -> list[dict]:
+    def projects(self, tenant_id: str, limit: int = 30, offset: int = 0) -> list[dict]:
         UUID(tenant_id)
-        if not 1 <= limit <= 50:
-            raise ValueError('Invalid project history limit')
+        if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
+            raise ValueError('Invalid project history pagination')
         return [dict(row) for row in self.db.execute("""
             SELECT i.id,i.title,i.goal_id,i.plan_id,i.created_at,p.status AS plan_status,
               l.accountable_manager_id,e.name AS accountable_manager_name,
@@ -543,8 +543,51 @@ class CompanyChat:
                  AND l.intake_id=i.id
             JOIN ago_employees e ON e.tenant_id=l.tenant_id
                  AND e.id=l.accountable_manager_id
-            WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id DESC LIMIT %s
-        """, (tenant_id,limit)).fetchall()]
+            WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id DESC LIMIT %s OFFSET %s
+        """, (tenant_id,limit,offset)).fetchall()]
+
+    def project_details(self, tenant_id: str, project_id: str) -> dict:
+        """Actual project plan, employee assignments, task lifecycle and QA; no invented release."""
+        UUID(tenant_id)
+        UUID(project_id)
+        row = self.db.execute("""
+            SELECT i.id,i.title,i.brief,i.created_at,i.plan_id,p.status AS plan_status,
+                   l.accountable_manager_id,e.name AS accountable_manager_name,
+                   l.assignment_source,l.commercial_objective,l.commercial_stage,
+                   l.verified_revenue_inr
+            FROM ago_founder_intakes i
+            JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+            JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
+            JOIN ago_employees e ON e.tenant_id=l.tenant_id
+              AND e.id=l.accountable_manager_id
+            WHERE i.tenant_id=%s AND i.id=%s
+        """,(tenant_id,project_id)).fetchone()
+        if row is None:
+            raise LookupError('Project not found')
+        stages = self.db.execute("""
+            SELECT s.position,s.stage,s.deliverable,
+                   s.suggested_assignee_id,e.name AS suggested_assignee_name,
+                   s.plan_step_id,t.id AS task_id,t.status AS task_status,
+                   t.action AS task_action,executor.name AS executing_employee,
+                   q.verdict AS qa_verdict
+            FROM ago_founder_intake_stages s
+            LEFT JOIN ago_employees e ON e.tenant_id=s.tenant_id
+              AND e.id=s.suggested_assignee_id
+            LEFT JOIN ago_plan_steps step ON step.tenant_id=s.tenant_id
+              AND step.id=s.plan_step_id AND step.plan_id=s.plan_id
+            LEFT JOIN ago_governed_tasks t ON t.tenant_id=step.tenant_id AND t.id=step.task_id
+            LEFT JOIN ago_employees executor ON executor.tenant_id=t.tenant_id AND executor.id=t.assignee_id
+            LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id AND q.task_id=t.id
+            WHERE s.tenant_id=%s AND s.intake_id=%s ORDER BY s.position
+        """,(tenant_id,project_id)).fetchall()
+        result = dict(row)
+        result['stages'] = [dict(stage) for stage in stages]
+        result['status_label'] = ('under_process' if row['plan_status'] != 'completed'
+                                  else 'completed_plan_unverified_release')
+        result['verified_market_release'] = False
+        result['revenue_record_status'] = (
+            'no_verified_evidence' if row['verified_revenue_inr'] is None else 'recorded_amount')
+        return result
 
     def approval_inbox(self, tenant_id: str, limit: int = 100) -> list[dict]:
         """Evidence-backed approvals; founder alone issues final decisions.
