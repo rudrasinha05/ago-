@@ -200,6 +200,15 @@ def nominate_for_founder_review(db, tenant_id: str) -> int:
     """
     with db.transaction():
         db.execute("SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE", (tenant_id,))
+        founder = db.execute("""
+            SELECT u.id FROM ago_users u
+            JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
+            JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
+            WHERE u.tenant_id=%s AND u.active=true AND e.kind='human'
+              AND r.role='founder' LIMIT 1
+        """, (tenant_id,)).fetchone()
+        if founder is None:
+            return 0
         owner = db.execute("""
             SELECT id FROM ago_employees WHERE tenant_id=%s AND kind='ai' AND
               (lower(trim(coalesce(role_title,''))) IN ('ceo','chief executive officer')
