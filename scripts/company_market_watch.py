@@ -33,8 +33,11 @@ from ago.local_ops import local_database
 # PREPRINT research, not peer-reviewed by default. Never treat it as validation.
 FEEDS = (
     ("arxiv-cs-ai", "research", "https://rss.arxiv.org/rss/cs.AI"),
-    ("hacker-news", "news", "https://news.ycombinator.com/rss"),
-    ("guardian-tech", "article", "https://www.theguardian.com/technology/rss"),
+    ("nist-news", "news", "https://www.nist.gov/news-events/news/rss.xml"),
+    ("nist-cyber", "news", "https://www.nist.gov/news-events/cybersecurity/rss.xml"),
+    ("nist-manufacturing", "article", "https://www.nist.gov/blogs/manufacturing-innovation-blog/rss.xml"),
+    ("openalex-metadata", "research", "https://api.openalex.org/works?per-page=25&sort=publication_date:desc"),
+    ("crossref-metadata", "research", "https://api.crossref.org/works?rows=25&sort=published&order=desc"),
 )
 MAX_BYTES = 1_000_000
 MAX_ITEMS_PER_FEED = 70
@@ -147,11 +150,60 @@ def parse_feed(xml_data: bytes, source_name: str, source_kind: str) -> list[dict
     return records
 
 
+
+def parse_metadata(payload: bytes, source_name: str, source_kind: str) -> list[dict]:
+    """Use only CC0/open bibliographic metadata, never copyrighted abstracts/full texts."""
+    if len(payload) > MAX_BYTES:
+        raise ValueError("Oversized public metadata response")
+    document = json.loads(payload)
+    if source_name == "openalex-metadata":
+        entries = document.get("results", [])
+    elif source_name == "crossref-metadata":
+        entries = document.get("message", {}).get("items", [])
+    else:
+        raise ValueError("Unapproved scholarly metadata provider")
+    if not isinstance(entries, list):
+        raise ValueError("Invalid metadata collection")
+    rows, seen = [], set()
+    for item in entries[:MAX_ITEMS_PER_FEED]:
+        if not isinstance(item, dict):
+            continue
+        title_value = item.get("display_name") if source_name == "openalex-metadata" else item.get("title")
+        if isinstance(title_value, list):
+            title_value = title_value[0] if title_value else ""
+        title = clean_text(str(title_value or ""), 350)
+        if source_name == "openalex-metadata":
+            link = item.get("doi") or item.get("id")
+            date = published_date(item.get("publication_date") or "")
+        else:
+            doi = str(item.get("DOI") or "").strip()
+            link = "https://doi.org/" + doi if doi else item.get("URL")
+            date = None
+            parts = (item.get("published") or {}).get("date-parts") or []
+            if parts and isinstance(parts[0], list):
+                digits = parts[0]
+                if digits and len(digits) <= 3:
+                    date = published_date("%04d-%02d-%02d" % (
+                        digits[0], digits[1] if len(digits)>1 else 1,
+                        digits[2] if len(digits)>2 else 1))
+        link = normalized_url(link) if isinstance(link,str) else None
+        if len(title) < 8 or not link or link in seen:
+            continue
+        seen.add(link)
+        score, basis, customer = score_signal(title, "", source_kind)
+        rows.append(dict(source_name=source_name,source_kind=source_kind,
+                         source_url=link,url_digest=sha256(link.encode()).hexdigest(),
+                         title=title,excerpt="",published_at=date,
+                         opportunity_score=score,score_basis=basis,
+                         potential_customer=customer))
+    return rows
+
+
 def retrieve_feed(url: str) -> bytes:
     if url not in {feed_url for _, _, feed_url in FEEDS}:
         raise ValueError("Source URL not allowlisted")
     req = Request(url, headers={"User-Agent": "AGO-Research-Radar/1.0 (RSS-only)",
-                                "Accept": "application/rss+xml, application/atom+xml, application/xml"})
+                                "Accept": "application/rss+xml, application/atom+xml, application/xml, application/json"})
     with build_opener(NoRedirect()).open(req, timeout=12) as response:
         if response.status != 200:
             raise ValueError("Source HTTP status not successful")
@@ -163,7 +215,9 @@ def retrieve_feed(url: str) -> bytes:
 
 def ingest(db, tenant_id: str, source: str, kind: str, url: str) -> dict:
     try:
-        data = parse_feed(retrieve_feed(url), source, kind)
+        payload = retrieve_feed(url)
+        data = (parse_metadata(payload,source,kind)
+                if source.endswith('-metadata') else parse_feed(payload,source,kind))
         with db.transaction():
             count = 0
             for item in data:
@@ -183,7 +237,7 @@ def ingest(db, tenant_id: str, source: str, kind: str, url: str) -> dict:
                 (tenant_id,source_name,outcome,ingested_count)
                 VALUES (%s,%s,'ok',%s)""", (tenant_id, source, count))
         return {"source": source, "status": "ok", "new_evidence": count}
-    except (ET.ParseError, ValueError, OSError, TimeoutError, psycopg.Error) as exc:
+    except (ET.ParseError, ValueError, TypeError, KeyError, OSError, TimeoutError, psycopg.Error, json.JSONDecodeError) as exc:
         # No exception message: HTTP errors, credentials or feed contents are not audit data.
         with db.transaction():
             db.execute("""INSERT INTO ago_growth_scan_runs
