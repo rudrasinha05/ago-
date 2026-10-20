@@ -1761,11 +1761,11 @@
           "returns": "dict"
         },
         "report": {
-          "arguments": "self, actor, kind: str, body: str, operation_key: str, task_id: str | None = None",
+          "arguments": "self, actor, kind: str, body: str, operation_key: str, task_id: str | None=None",
           "returns": "dict"
         },
         "reports": {
-          "arguments": "self, actor, limit: int = 100",
+          "arguments": "self, actor, limit: int=100",
           "returns": "list[dict]"
         }
       }
