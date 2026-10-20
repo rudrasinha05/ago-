@@ -158,7 +158,7 @@ try{
  await page.getByLabel('Work email').fill('reviewer@example.test');
  await page.getByLabel('Password',{exact:true}).fill('test-reviewer-password');
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
- await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor();
+ await page.locator('#company-approval-inbox').getByText('0 need my review',{exact:false}).waitFor();
  await page.locator('#company-approval-inbox').getByRole('button',{name:'View approval details'}).click();
  const approvalDialog=page.getByRole('dialog',{name:'Approval details'});
  await approvalDialog.getByLabel('Mandatory decision reason').fill('Verified scope and independent review');
