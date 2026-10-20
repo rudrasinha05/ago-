@@ -608,6 +608,62 @@ class CompanyChat:
             'no_verified_evidence' if row['verified_revenue_inr'] is None else 'recorded_amount')
         return result
 
+    def approved_signal_project(self, actor, signal_id: str) -> dict:
+        """Convert exactly one founder-approved research signal to a draft project.
+
+        CEO remains opportunity owner, while the founder authorizes promotion;
+        no code execution, automatic hiring, releases or unapproved outreach.
+        """
+        from uuid import uuid5
+        UUID(actor.tenant_id)
+        UUID(signal_id)
+        if 'founder' not in actor.roles:
+            raise PermissionError('Active founder required for researched project intake')
+        with self.db.transaction():
+            self.db.execute("SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE",
+                            (actor.tenant_id,)).fetchone()
+            row = self.db.execute("""
+                SELECT s.id,s.title,s.source_url,s.source_name,s.source_kind,
+                       s.potential_customer,s.score_basis,s.opportunity_score,s.review_status,
+                       s.approval_id,s.executive_owner_id,a.status AS approval_status,
+                       a.action,a.requester_id,a.reviewer_id
+                FROM ago_market_signals s JOIN ago_approval_requests a
+                  ON a.tenant_id=s.tenant_id AND a.id=s.approval_id
+                WHERE s.tenant_id=%s AND s.id=%s FOR UPDATE OF s
+            """,(actor.tenant_id,signal_id)).fetchone()
+            if row is None:
+                raise LookupError('Market signal not found or not nominated')
+            if (row['review_status']!='shortlisted' or row['approval_status']!='approved'
+                    or row['action']!='company:market-signal:'+signal_id
+                    or str(row['requester_id'])!=str(row['executive_owner_id'])
+                    or str(row['reviewer_id'])!=actor.subject):
+                raise PermissionError('Exact founder-approved market signal required')
+            # Idempotency key binds a single research observation to a single draft.
+            stable_key=str(uuid5(UUID(actor.tenant_id),signal_id))
+            brief=(
+                'Validate opportunity: '+row['title'][:170]+'\n'
+                'Research source: '+row['source_name']+' ('+row['source_kind']+')\n'
+                'Source URL: '+row['source_url']+'\n'
+                'Potential customer hypothesis: '+row['potential_customer']+'\n'
+                'Scoring evidence: '+row['score_basis']+'\n'
+                'Required first milestone: interview consented potential customers, '
+                'check originality and actual demand before authorizing development.\n'
+                'No claims of confirmed buyers, budget, product, publication or payment. '
+                'Founder approval for this draft does not authorize external activity.'
+            )[:12000]
+            project=self.start_project(actor,brief,stable_key)
+            self.db.execute("""
+                INSERT INTO ago_market_signal_project_links
+                  (tenant_id,signal_id,intake_id,linked_by,approval_id)
+                VALUES (%s,%s,%s,%s,%s)
+                ON CONFLICT (tenant_id,signal_id) DO NOTHING
+            """,(actor.tenant_id,signal_id,project['id'],actor.subject,row['approval_id']))
+            project['source_signal_id']=signal_id
+            project['source_url']=row['source_url']
+            project['commercial_proof']='customer_validation_pending'
+            project['promotion_authorized']=False
+            return project
+
     def approval_inbox(self, tenant_id: str, limit: int = 100) -> list[dict]:
         """Evidence-backed approvals; founder alone issues final decisions.
 
