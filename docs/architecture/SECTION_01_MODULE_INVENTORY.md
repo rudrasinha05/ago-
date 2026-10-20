@@ -31,7 +31,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [behavior_store](../../apps/backend/ago/behavior_store.py) | workforce | persistence | backend_contracts, graph_store, reviewed_changes, security, security_controls |
 | [bootstrap](../../apps/backend/ago/bootstrap.py) | entrypoints | composition | identity, organization_store, security_controls |
 | [calendar_store](../../apps/backend/ago/calendar_store.py) | operations | persistence | backend_contracts, enterprise_domains, governance, security, security_controls |
-| [company_chat](../../apps/backend/ago/company_chat.py) | workforce | persistence | backend_contracts, organization_store |
+| [company_chat](../../apps/backend/ago/company_chat.py) | workforce | persistence | backend_contracts, governance, organization_store |
 | [console_api](../../apps/backend/ago/console_api.py) | transport | transport | api_m2, backend_contracts, repository_ports, security |
 | [console_host](../../apps/backend/ago/console_host.py) | transport | transport | None |
 | [console_service](../../apps/backend/ago/console_service.py) | governance | service | backend_contracts, console_store, governance, security, task_store |
