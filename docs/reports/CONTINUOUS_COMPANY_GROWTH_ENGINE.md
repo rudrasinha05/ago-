@@ -108,3 +108,55 @@ green, migration 055 applied against a disposable test DB, parser/tenant
 isolation tests, browser accessibility and signed-session smoke, all final
 SHA full CI jobs green, and a local live feed run. GitHub commits alone do not
 prove production or customer revenue.
+
+
+## Latest bounded yellow-status engineering improvements
+- `deploy/sql/056_approved_market_project_lineage.sql` creates an immutable
+  source-signal → project join guarded **inside PostgreSQL**. The source must
+  be shortlisted and approved by the same active human founder. The requester
+  must be its real recorded executive owner. A forged URL or merely high score
+  cannot create a project.
+- After approving a CEO-nominated research signal, the founder may select
+  **Create governed project draft** in the market intelligence view. This
+  calls `POST /v1/organization/company/market-intelligence/{id}/project`,
+  creates one idempotent five-stage *draft* and links the original source.
+  It does not assign executable work or enable outreach, payments, ads or a
+  release. Department creation and autonomous CEO execution require their
+  own governed delegation policy.
+- The project inspector shows the actual governed task, AI run status,
+  independent QA verdict, QA evidence, real-stage QA completion ratio and
+  evidence-backed project health. **Export evidence report (.md)** generates
+  a client-side Markdown snapshot of this authorized data; no fake code
+  diffs, external GitHub PR or publication are asserted.
+- The Management Workload desk measures completed, failed and unreviewed
+  tasks, actual independent QA and workload-weighted suggestions for
+  existing employees matching open stages. It never hires, grants access,
+  changes assignments or fabricates employee performance.
+- `scripts/company_readiness_audit.py` (PowerShell action `company-pulse`)
+  checks migration integrity, researcher scan recency, failed tasks,
+  unreviewed completions, stalled in-flight tasks and stale agent runs.
+  It prints **only nonsecret structured observations** and operator actions.
+  No destructive restart or repeat of non-idempotent external effects.
+- `scripts/ago.ps1 serve` now launches the watcher as a separate inherited-
+  environment child process. The previous Start-Job approach did not
+  reliably inherit the PostgreSQL configuration. This fix is local only.
+
+### Quick local health check
+After backing up the correct database, applying reviewed migrations 055-056,
+verifying the authenticated founder tenant and starting AGO:
+
+```powershell
+$env:AGO_MARKET_TENANT_ID = "<actual existing tenant UUID>"
+.\scripts\ago.ps1 company-pulse
+```
+
+The pulse's `observed_ok` means its limited health conditions were observed;
+it does **not** mean accepted marketing/publishing/revenue or production security.
+Fresh source checks can individually report degraded even when worker is alive.
+
+### Acceptance still required
+- Restore exact final-SHA architecture CI and the independent-review/founder
+  approval regression matrix; never downgrade a 403 just to pass old tests.
+- Verify test database migrations 055-056, signed-session UI navigation,
+  one CEO-sourced approval → one draft lineage, no side effects, test backup
+  and actual local server run. Release is not certified by repo commits.
