@@ -60,7 +60,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
     'Independent QA must pass for actual implementation deliverables.',
     'Release and financial evidence must be verified separately.',
   ];
-  const blob=new Blob([lines.join('\\n')],{type:'text/markdown;charset=utf-8'});
+  const blob=new Blob([lines.join('\n')],{type:'text/markdown;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const link=document.createElement('a');link.href=url;link.download='ago-project-'+p.id+'.md';
   document.body.appendChild(link);link.click();link.remove();
