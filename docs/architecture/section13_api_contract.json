@@ -286,7 +286,9 @@
     "GET /v1/organization/company/projects": "866bbae327d369e7fa9889c74d237faedb31cd9d378cce5531d6947b09d52caf",
     "POST /v1/organization/company/projects/start": "ad1b413afc6cdd12f13e868c8cba0ac02fb2d747e77233f959616b42413a4160",
     "GET /v1/organization/company/approvals": "d2d1addab6d686585a16257bbeb678c04128ecf9b03ed41ad50553216ace0503",
-    "GET /v1/organization/company/management/workload": "a20603d1139369e306b131ea60b077e682d195e1a72436e6475ec9201f0d97dd"
+    "GET /v1/organization/company/management/workload": "a20603d1139369e306b131ea60b077e682d195e1a72436e6475ec9201f0d97dd",
+    "GET /v1/organization/company/opportunities": "ac8b39c81c3f85e3549ffe80980bf1c3c6d78497cb91281c76615f5de6ecb67b",
+    "POST /v1/organization/company/opportunities/scan": "6dcd073b53697b03b5c7fd7a79f5b4c0b7e3210f128dc7a40f744aa8e241b711"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",
