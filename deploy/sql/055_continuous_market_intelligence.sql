@@ -15,6 +15,7 @@ CREATE TABLE ago_market_signals (
  evidence_level text NOT NULL DEFAULT 'unvalidated_signal'
    CHECK(evidence_level IN ('unvalidated_signal','customer_validated')),
  executive_owner_id uuid,
+ approval_id uuid,
  review_status text NOT NULL DEFAULT 'discovered'
    CHECK(review_status IN ('discovered','shortlisted','discarded')),
  discovery_method text NOT NULL DEFAULT 'feed_heuristic'
@@ -22,8 +23,11 @@ CREATE TABLE ago_market_signals (
  discovered_at timestamptz NOT NULL DEFAULT now(),
  published_at timestamptz,
  UNIQUE(tenant_id,url_digest),
- FOREIGN KEY(tenant_id,executive_owner_id) REFERENCES ago_employees(tenant_id,id)
+ FOREIGN KEY(tenant_id,executive_owner_id) REFERENCES ago_employees(tenant_id,id),
+ FOREIGN KEY(approval_id) REFERENCES ago_approval_requests(id),
+ CHECK(review_status<>'shortlisted' OR approval_id IS NOT NULL)
 );
+CREATE UNIQUE INDEX ago_market_signal_approval ON ago_market_signals(tenant_id,approval_id) WHERE approval_id IS NOT NULL;
 CREATE INDEX ago_market_signals_queue ON ago_market_signals
  (tenant_id,review_status,opportunity_score DESC,discovered_at DESC);
 CREATE TABLE ago_growth_scan_runs (
