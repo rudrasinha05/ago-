@@ -391,15 +391,17 @@ def test_management_owns_delivery_and_every_governed_task_has_manager(case):
                for r in client.get(BASE+'/projects',headers=founder).json())
     task=post(client,'/v1/tasks',founder,{'assignee_id':analyst,'action':'internal:brief'})
     row=info['db'].execute("""
-      SELECT assignee_id,accountable_manager_id
+      SELECT assignee_id,accountable_manager_id,management_escalation_required
       FROM ago_governed_tasks WHERE tenant_id=%s AND id=%s
     """,(info['tenant'],task['id'])).fetchone()
     assert str(row['assignee_id'])==analyst
     assert str(row['accountable_manager_id'])==chief
+    assert row['management_escalation_required'] is False
     report=client.get(BASE+'/management/workload',headers=founder)
     assert report.status_code==200,report.text
     result=report.json()
     assert result['unassigned_work_generated'] is False
+    assert result['unmanaged_task_alerts']==0
     employee_record=next(e for e in result['employees'] if str(e['id'])==analyst)
     assert employee_record['queued']>=1 and employee_record['running']==0
     boss_record=next(e for e in result['employees'] if str(e['id'])==chief)

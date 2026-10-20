@@ -580,6 +580,8 @@ class CompanyChat:
                     ('proposed','waiting_approval','ready')) AS queued,
                 COUNT(DISTINCT t.id) FILTER (WHERE t.status='failed') AS failed,
                 COUNT(DISTINCT t.id) FILTER (WHERE t.status='completed') AS completed,
+                COUNT(DISTINCT t.id) FILTER (
+                     WHERE t.management_escalation_required) AS leadership_gaps,
                 COUNT(DISTINCT p.intake_id) AS projects_accountable
             FROM ago_employees e
             LEFT JOIN ago_governed_tasks t ON t.tenant_id=e.tenant_id
@@ -605,6 +607,7 @@ class CompanyChat:
             'leaders':[dict(leader_row) for leader_row in leaders],
             'idle_employees':sum(e['running']==0 and e['queued']==0 for e in counts),
             'pending_employee_work':sum(int(e['queued']) for e in counts),
+            'unmanaged_task_alerts':sum(int(e['leadership_gaps']) for e in counts),
             'unassigned_work_generated':False,
             'note':'Idle means no recorded running or queued governed task, not employee inactivity. Only authorized, useful work should be assigned.',
         }

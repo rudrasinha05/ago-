@@ -73,3 +73,13 @@ counts only real governed tasks; no artificial assignments or round-the-clock
 activity is generated. A full dynamic CEO→CTO→PM execution orchestrator,
 commercial sales funnel, verified invoice/transaction ingestion and broader
 action ledger across all other subsystems remain backlog items.
+
+### Compatibility exception with visible escalation
+Some historical and integration-test tenants never had a real management
+hierarchy or an active human founder. The 052 migration deliberately does
+not fabricate a supervisor or break all existing governed tasks in those
+tenants: their executor remains the accountable identity with
+`management_escalation_required=true`. The management dashboard displays
+these pending leadership assignments. Newly created founder projects still
+require a real founder employee and a named executive owner or founder
+escalation. This is not universal enforcement across every enterprise tool.

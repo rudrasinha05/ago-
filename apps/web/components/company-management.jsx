@@ -21,11 +21,13 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
   {report===null?<p>Verified workforce status unavailable.</p>:<>
    <div className="management-metrics"><span><strong>{report.employees.length}</strong>Employees tracked</span>
     <span><strong>{report.idle_employees}</strong>No governed work queued/running</span>
-    <span><strong>{report.pending_employee_work}</strong>Governed tasks awaiting action</span></div>
+    <span><strong>{report.pending_employee_work}</strong>Governed tasks awaiting action</span>
+    <span><strong>{report.unmanaged_task_alerts??0}</strong>Tasks needing management escalation</span></div>
    <button type="button" onClick={()=>setExpanded(x=>!x)}>{expanded?'Hide':'Inspect'} employee workload</button>
    {expanded&&<div className="management-people">{report.employees.map(e=><article key={e.id}>
     <b>{e.name}</b><small>{e.role_title||e.kind} · {e.running} running · {e.queued} queued · {e.failed} failed · {e.projects_accountable} managed projects</small>
     <small>{e.running||e.queued?'Governed work recorded':'Idle in recorded governed queue; management needs to assess useful next assignment'}</small>
+    {(e.leadership_gaps??0)>0&&<small>Management escalation required on {e.leadership_gaps} standalone task(s)</small>}
    </article>)}</div>}
   </>}
  </section>;
