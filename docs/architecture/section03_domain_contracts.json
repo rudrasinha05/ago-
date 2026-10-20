@@ -293,12 +293,16 @@
       "ago_worker_state_events"
     ],
     "company_chat": [
+      "ago_company_board_appointments",
       "ago_company_chat",
+      "ago_company_reports",
       "ago_departments",
       "ago_employees",
       "ago_governed_tasks",
       "ago_plan_steps",
       "ago_strategy_plans",
+      "ago_tenants",
+      "ago_user_roles",
       "ago_users"
     ],
     "console_api": [],
