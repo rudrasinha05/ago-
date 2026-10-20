@@ -102,29 +102,29 @@ class CompanyChat:
             return asdict(employee)
 
     def notifications(self, tenant_id: str) -> dict:
-        """Persistent per-employee counts of committed task transitions.
+        """Persistent work-event counts, excluding ordinary chat messages.
 
-        This counts work-status events, not unread messages or model presence.
+        Includes task transitions and authenticated upward reports.
         The latest event ID is safe for incremental browser polling.
         """
         rows = self.db.execute("""
             SELECT e.id AS employee_id, COUNT(c.id) AS event_count
             FROM ago_employees e
             LEFT JOIN ago_company_chat c ON c.tenant_id=e.tenant_id
-              AND c.employee_id=e.id AND c.kind='status'
+              AND c.employee_id=e.id AND c.kind IN ('status','report','staffing','github','qa','docs')
             WHERE e.tenant_id=%s
             GROUP BY e.id ORDER BY e.id
         """, (tenant_id,)).fetchall()
         recent = self.db.execute("""
-            SELECT id, employee_id, task_id, body, created_at
+            SELECT id, employee_id, task_id, body, kind, created_at
             FROM ago_company_chat
-            WHERE tenant_id=%s AND kind='status'
+            WHERE tenant_id=%s AND kind IN ('status','report','staffing','github','qa','docs')
             ORDER BY id DESC LIMIT 100
         """, (tenant_id,)).fetchall()
         return {
             "by_employee": {str(row["employee_id"]): int(row["event_count"]) for row in rows},
             "recent": [dict(row) for row in recent],
-            "event_type": "committed_task_status",
+            "event_type": "committed_work_event",
         }
 
     def governance(self, tenant_id: str) -> dict:
