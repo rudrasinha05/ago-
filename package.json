@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "test": "node --test packages/sdk/tests/*.test.mjs",
+    "test": "node --test packages/sdk/tests/client.test.mjs packages/sdk/tests/company-model.test.mjs packages/sdk/tests/platform.test.mjs packages/sdk/tests/security.test.mjs packages/sdk/tests/workspace.test.mjs",
     "check:boundaries": "python scripts/check_monorepo.py",
     "dev:web": "npm run dev --workspace @ago/web",
     "dev:admin": "npm run dev --workspace @ago/admin",
