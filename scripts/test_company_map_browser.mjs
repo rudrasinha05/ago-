@@ -2,7 +2,7 @@
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 const root=resolve('apps/web/out');
 const server=createServer(async(req,res)=>{try{
@@ -66,12 +66,13 @@ try{
  await page.getByRole('status').filter({hasText:'Developer'}).waitFor({timeout:15000});
  await page.locator('.map-node.employee.working').filter({hasText:'Developer'}).waitFor({state:'detached',timeout:15000});
  await page.locator('.company-channels .chat-event-count').filter({hasText:'2'}).waitFor();
- await page.screenshot({path:'/tmp/ago-company-desktop.png',fullPage:true});
+ await mkdir('tests/frontend/artifacts',{recursive:true});
+ await page.screenshot({path:'tests/frontend/artifacts/ago-company-command-desktop.png',fullPage:true});
  await page.addScriptTag({path:'node_modules/axe-core/axe.min.js'});
  const accessibility=await page.evaluate(async()=> (await axe.run(document.querySelector('.company-command'),{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations.map(x=>({id:x.id,nodes:x.nodes.map(n=>n.target)})));
  assert.deepEqual(accessibility,[],'Company map accessibility');
  await page.setViewportSize({width:390,height:844});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Mobile must not overflow horizontally');
- await page.screenshot({path:'/tmp/ago-company-mobile.png',fullPage:true});
+ await page.screenshot({path:'tests/frontend/artifacts/ago-company-command-mobile.png',fullPage:true});
  assert.deepEqual(errors,[]);console.log('PASS: map, assignment/status, chat, replies, centre composer, staffing, popup, mobile width; mocked API');
 }finally{await browser.close();server.close();}
