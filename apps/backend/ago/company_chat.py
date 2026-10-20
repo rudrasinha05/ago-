@@ -97,6 +97,10 @@ class CompanyChat:
             employee = self.repositories.resolve(OrganizationStore).hire(
                 tenant_id=actor.tenant_id, department_id=str(department_id), name=name,
                 kind='ai', manager_id=str(manager_id) if manager_id else None)
+            db.execute("""
+                UPDATE ago_employees SET role_title=%s,core_responsibilities=%s
+                WHERE tenant_id=%s AND id=%s
+            """,(name.strip(),requirement.strip(),actor.tenant_id,employee.id))
             row = self.send(actor, channel, body, None, str(operation_key))
             db.execute("UPDATE ago_company_chat SET kind='staffing',employee_id=%s WHERE tenant_id=%s AND id=%s",
                        (employee.id, actor.tenant_id, row['id']))
