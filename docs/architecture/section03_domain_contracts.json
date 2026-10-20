@@ -296,7 +296,6 @@
       "ago_worker_state_events"
     ],
     "company_chat": [
-      "ago_approval_audit",
       "ago_approval_requests",
       "ago_company_board_appointments",
       "ago_company_chat",
