@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {resource} from '@ago/sdk/session';
 import {employeeStatus,companyLayout,activeRouteKeys,employeeProjects} from '@ago/sdk/company';
 import {CommandBrain} from './command-brain';
+import {RoleEditor,UpwardReports} from './company-governance';
 const BASE='/v1/organization/company';
 const time=value=>new Date(value).toLocaleString();
 export function CompanyMap({api,me,data,onRefresh}) {
@@ -15,7 +16,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [draft,setDraft]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState(''),[sending,setSending]=useState(false);
   const [zoom,setZoom]=useState(.42),[pan,setPan]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
   const [updated,setUpdated]=useState(null),[popup,setPopup]=useState(null),[loading,setLoading]=useState(false);
-  const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null);const lastEvent=useRef(null);
+  const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null),[governanceData,setGovernanceData]=useState(null);const lastEvent=useRef(null);
   const viewport=useRef(null),drag=useRef(null),previous=useRef(null),sequence=useRef(0),alive=useRef(false),retry=useRef(null),feed=useRef(null),staffKey=useRef(null);
   const layout=useMemo(()=>companyLayout(departments,employees,me.id),[departments,employees,me.id]);
   const points=new Map([['founder',{x:layout.center,y:layout.center}],...layout.nodes.map(n=>[n.key,n])]);
@@ -58,6 +59,16 @@ export function CompanyMap({api,me,data,onRefresh}) {
     }catch{if(alive.current)setEventData(null);}
   },[api]);
   useEffect(()=>{refreshEvents();const timer=setInterval(refreshEvents,7000);return()=>clearInterval(timer);},[refreshEvents]);
+  const refreshGovernance=useCallback(async()=>{
+    try {const result=await api.request(BASE+'/governance');if(alive.current)setGovernanceData(result);}
+    catch {if(alive.current)setGovernanceData(null);}
+  },[api]);
+  useEffect(()=>{refreshGovernance();},[refreshGovernance]);
+  async function appointBoard(seat,employeeId){
+    setError('');
+    try {await api.request(BASE+'/board/appoint',{method:'POST',body:{seat,employee_id:employeeId}});await refreshGovernance();}
+    catch(e){setError(e.message);}
+  }
   const refreshGitHub=useCallback(async()=>{
     try{
       const catalog=await api.request('/v1/platform/catalog');
@@ -98,7 +109,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     catch(e){setError(e.message);}finally{setSending(false);}}
   return <section className="company-command" aria-label="Company map and conversations">
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><button className="btn" disabled={!me.permissions.includes('organization:manage')} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></header>
-    <CommandBrain tasks={tasks} notifications={eventData} employees={employees} onSelect={id=>choose('employee:'+id)}/>
+    <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
     <div className="company-shell">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>
@@ -137,6 +148,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
            <dt>Recorded updates</dt><dd>{eventData?.by_employee?.[selected]??'Unavailable'}</dd>
            <dt>Core responsibility</dt><dd>Deliver assigned work and verifiable evidence within approved scope.</dd>
            <dt>Additional responsibilities</dt><dd>Maintain code, tests and documentation; report blockers, quality outcomes and completion to immediate superior. Support publishable release checks.</dd></dl>
+           <RoleEditor key={selected} employee={selectedEmployee} profile={governanceData?.employees?.find(e=>e.id===selected)} api={api} canManage={me.roles.includes('founder')} onSaved={refreshGovernance}/>
            <h4>Assigned tasks ({status.tasks.length})</h4>{status.tasks.length?status.tasks.slice(0,12).map(t=><div key={t.id}><strong>{t.action}</strong><p>{t.status} · {t.project_name||'No linked project plan'}</p></div>):<p>{tasks===null?'Activity could not be verified.':'No assigned tasks.'}</p>}
            <h4>Latest work events</h4>{(eventData?.recent||[]).filter(e=>e.employee_id===selected).slice(0,5).map(e=><div key={e.id}><small>#{e.id} · {time(e.created_at)}</small><p>{e.body}</p></div>)}
            <p><a href="/tools/">GitHub projects, reviewed operations and delivery evidence →</a></p>
@@ -145,6 +157,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
         <form className="company-compose" onSubmit={send}>{reply&&<div>Reply to {reply.author_name}: {reply.body.slice(0,65)} <button type="button" onClick={()=>setReply(null)}>Cancel</button></div>}<label htmlFor="company-message">Message {title}</label><textarea id="company-message" placeholder="Write your idea, question or project brief…" value={draft} maxLength={20000} rows={3} onChange={e=>setDraft(e.target.value)} required/><div><small>Unlimited conversation history · 20,000 characters/message</small><button className="btn primary" disabled={sending||!draft.trim()}>{sending?'Saving…':'Send'}</button></div><small>Sending saves a message. AI replies and task execution require a connected runtime.</small></form>
       </section>
     </div>
+    <UpwardReports api={api} me={me} employees={employees} onRecorded={refreshEvents}/>
     <div className="command-delivery"><section><h3>Delivery accountability</h3><p>All employees own tested, documented, market-ready deliverables. No 'published' status without evidence, independent QA and required approval.</p></section><section><h3>Reporting & founder control</h3><p>Staff raise questions and module reports to their immediate manager. Founder starts projects, approves consequential steps and can interrupt or revise the scope.</p></section><section><h3>GitHub project workspace</h3>
       {githubState===null?<p>Project status unavailable or access denied. Configure approved GitHub access under Operations & Tools.</p>:!githubState.length?<p>No approved GitHub project currently linked. Connect a reviewed project before claiming code is synced.</p>:
         <ul className="github-live-list">{githubState.map(p=><li key={p.id}><strong>{p.repository}</strong><small>{p.status?(p.status.status||p.status.state||'Status checked'):'Live status unavailable'}</small></li>)}</ul>}
