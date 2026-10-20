@@ -61,8 +61,8 @@ export function employeeProjects(id,tasks){
   if(!Array.isArray(tasks))return [];
   return [...new Set(tasks.filter(t=>t.assignee_id===id&&t.project_name).map(t=>t.project_name))];
 }
-export function boardFunctionSeats(employees){
-  // A governance responsibility is NOT evidence that someone was appointed to a board.
+export function boardFunctionSeats(employees, approvedAppointments=[]){
+  // Membership requires an authoritative, approved record; names/job titles confer no authority.
   const duties=[
     ['Strategy & Vision','Corporate direction, long-term goals, major project review'],
     ['Technology Oversight','Architecture, security, technical risk'],
@@ -70,6 +70,9 @@ export function boardFunctionSeats(employees){
     ['Risk & Compliance','Policy, audit independence, incident escalation'],
     ['Quality & Release','Milestone evidence, publishability and release governance']
   ];
-  const board=employees.filter(e=>/\b(board|director|chairperson|chairman|trustee)\b/i.test(e.name));
-  return duties.map(([title,responsibility],i)=>({title,responsibility,member:board[i]||null}));
+  const byId=new Map(employees.map(e=>[e.id,e]));
+  return duties.map(([title,responsibility])=>{
+    const appointment=approvedAppointments.find(a=>a.seat===title&&a.approved===true);
+    return {title,responsibility,member:appointment?byId.get(appointment.member_id)||null:null};
+  });
 }
