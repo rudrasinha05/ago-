@@ -32,7 +32,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
  }
   return <section className="founder-project-intake" aria-label="Start founder project">
   <div><h3>Start a governed project</h3>
-    <p>Founder → Company Brain → accountable executive (CEO/COO/CTO/manager if actually configured; otherwise founder escalation) → suggested team. Higher management owns delivery, workers own execution. Approved actions require independent human review.</p></div>
+    <p>Founder → Company Brain → accountable executive (CEO/COO/CTO/manager if actually configured; otherwise founder escalation) → suggested team. Higher management owns delivery, workers own execution. Approve/Deny is reserved for the founder; independent QA remains a separate check.</p></div>
   <form onSubmit={start}>
     <label>Founder project brief<textarea value={brief} onChange={e=>setBrief(e.target.value)}
       minLength={20} maxLength={12000} required
@@ -43,15 +43,15 @@ export function FounderProjectIntake({api,me,onChanged}) {
   {created&&<div aria-live="polite"><strong>{created.title}</strong>
     <p><b>Accountable delivery owner:</b> {created.accountable_manager_name} ({created.accountable_manager_role||'Founder authority'}) · {created.assignment_source==='founder_escalation'?'Management staffing escalation':'Recorded executive management responsibility'}</p>
     <p><b>Commercial goal:</b> {created.commercial_objective} · {created.commercial_stage} · No verified revenue evidence yet</p>
-    <p>Draft saved · Independent plan approval needed · No unapproved code or external GitHub action started.</p>
+    <p>Draft saved · Founder approval needed · No unapproved code or external GitHub action started.</p>
     <ol className="intake-stage-list">{created.stages.map(s=><li key={s.stage}>
       <strong>{s.position}. {s.stage}</strong><small>{s.deliverable}</small>
       <span>{s.suggested_assignee_name||'Staffing required'}</span>
       <small>{s.plan_step_id?'Allowlisted internal review step drafted':'Proposal only; tooling and approval required'}</small>
     </li>)}</ol>
-    <p>Plan ID: <code>{created.plan_id}</code> · Status: {created.plan_status} · Independent reviewer approval is required before materialization. <a href="#company-approval-inbox">View approval inbox ↑</a></p>
+    <p>Plan ID: <code>{created.plan_id}</code> · Status: {created.plan_status} · Founder approval is required before materialization. <a href="#company-approval-inbox">View approval inbox ↑</a></p>
     {created.plan_status==='draft'&&created.stages.some(s=>s.plan_step_id)&&
-      <button type="button" disabled={reviewBusy} onClick={submitForReview}>{reviewBusy?'Submitting…':'Request independent plan review'}</button>}
+      <button type="button" disabled={reviewBusy} onClick={submitForReview}>{reviewBusy?'Submitting…':'Submit plan for founder approval'}</button>}
     {created.plan_status==='draft'&&!created.stages.some(s=>s.plan_step_id)&&
       <p>Assign a qualified discovery AI employee before submitting this draft for approval.</p>}
   </div>}
