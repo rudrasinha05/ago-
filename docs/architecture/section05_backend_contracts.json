@@ -1777,7 +1777,7 @@
           "returns": "dict"
         },
         "projects": {
-          "arguments": "self, tenant_id: str, limit: int=30",
+          "arguments": "self, tenant_id: str, limit: int=30, offset: int=0",
           "returns": "list[dict]"
         },
         "approval_inbox": {
@@ -1798,6 +1798,10 @@
         },
         "market_intelligence": {
           "arguments": "self, tenant_id: str, limit: int=100",
+          "returns": "dict"
+        },
+        "project_details": {
+          "arguments": "self, tenant_id: str, project_id: str",
           "returns": "dict"
         }
       }
