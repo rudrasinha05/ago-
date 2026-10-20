@@ -90,3 +90,34 @@ def test_pageable_project_details_and_other_tenant_restriction(case):
                       headers=founder).json() == []
     assert client.get("/v1/organization/company/projects/"+str(uuid4()),
                       headers=founder).status_code == 404
+
+
+def test_project_delivery_health_and_recommendations_never_forge_work(case):
+    client, headers, _ = case
+    founder = headers["founder"]
+    created = post(client, "/v1/organization/company/projects/start", founder, {
+        "brief": "Build a secure enrollment CRM with a modular accessible user dashboard",
+        "operation_key": str(uuid4()),
+    })
+    detail = client.get("/v1/organization/company/projects/"+created["id"],
+                        headers=founder)
+    assert detail.status_code == 200, detail.text
+    project = detail.json()
+    assert project["qa_passed_stages"] == 0
+    assert project["completion_percent"] == 0
+    assert project["stage_count"] == 5
+    assert project["running_stages"] == 0
+    assert project["failed_stages"] == 0
+    assert project["status_label"] == "under_process"
+    assert all(stage["agent_run_status"] is None for stage in project["stages"])
+    report = client.get("/v1/organization/company/management/workload",
+                        headers=founder)
+    assert report.status_code == 200, report.text
+    state = report.json()
+    assert state["qa_passed_count"] == 0
+    assert state["qa_failed_count"] == 0
+    assert state["staffing_decisions_executed"] == 0
+    assert all(st["recommendation"] in
+               ("qualified_existing_worker", "review_staffing_gap")
+               for st in state["unassigned_project_stages"])
+    assert all(st["project_id"] for st in state["unassigned_project_stages"])
