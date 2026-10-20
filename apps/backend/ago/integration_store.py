@@ -1048,12 +1048,28 @@ class IntegrationStore:
             raise ValueError(
                 "GitHub delivery uncertain; inspect remote marker before any replacement"
             ) from None
-        return dict(
-            self.db.execute(
+        with self.db.transaction():
+            receipt = self.db.execute(
                 "UPDATE ago_github_dispatch SET status='succeeded',result=%s::jsonb,completed_at=clock_timestamp() WHERE tenant_id=%s AND operation_id=%s RETURNING *",
                 (canonical(result), actor.tenant_id, operation_id),
             ).fetchone()
-        )
+            # Real GitHub receipts, not speculative tasks, increment project team badges.
+            members = {project["pm_id"], project["qa_id"], *project["developer_ids"]}
+            operation_kind = operation["operation"]
+            files = operation.get("payload", {}).get("files", [])
+            category = ("docs" if operation_kind == "commit_files"
+                        and any(item["path"].startswith("docs/") for item in files)
+                        else "github")
+            for employee_id in members:
+                self.db.execute("""
+                    INSERT INTO ago_company_chat
+                    (tenant_id,channel,author_name,body,kind,employee_id)
+                    SELECT %s,'employee:' || e.id,'Verified GitHub dispatch',
+                      %s,%s,e.id FROM ago_employees e
+                    WHERE e.tenant_id=%s AND e.id=%s
+                """, (actor.tenant_id, "GitHub "+operation_kind+" succeeded for "+
+                       project["repository"], category, actor.tenant_id, employee_id))
+        return dict(receipt)
 
     def github_status(self, *, actor: Principal, project_id: str) -> dict:
         self._read(actor)
