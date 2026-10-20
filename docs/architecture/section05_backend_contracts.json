@@ -1747,6 +1747,26 @@
         "notifications": {
           "arguments": "self, tenant_id: str",
           "returns": "dict"
+        },
+        "governance": {
+          "arguments": "self, tenant_id: str",
+          "returns": "dict"
+        },
+        "profile": {
+          "arguments": "self, actor, employee_id: str, title: str, core: str, extra: str",
+          "returns": "dict"
+        },
+        "appoint": {
+          "arguments": "self, actor, seat: str, employee_id: str",
+          "returns": "dict"
+        },
+        "report": {
+          "arguments": "self, actor, kind: str, body: str, operation_key: str, task_id: str | None = None",
+          "returns": "dict"
+        },
+        "reports": {
+          "arguments": "self, actor, limit: int = 100",
+          "returns": "list[dict]"
         }
       }
     }
