@@ -599,7 +599,7 @@ class CompanyChat:
         counts = [dict(e) for e in employees]
         return {
             'employees':counts,
-            'leaders':[dict(l) for l in leaders],
+            'leaders':[dict(leader_row) for leader_row in leaders],
             'idle_employees':sum(e['running']==0 and e['queued']==0 for e in counts),
             'pending_employee_work':sum(int(e['queued']) for e in counts),
             'unassigned_work_generated':False,
