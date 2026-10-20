@@ -1,4 +1,5 @@
 """Tenant-visible company conversations. Channels are filters, never private DMs."""
+from __future__ import annotations
 from uuid import UUID
 from dataclasses import asdict
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
