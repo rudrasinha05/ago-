@@ -23,6 +23,15 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
     <span><strong>{report.idle_employees}</strong>No governed work queued/running</span>
     <span><strong>{report.pending_employee_work}</strong>Governed tasks awaiting action</span>
     <span><strong>{report.unmanaged_task_alerts??0}</strong>Tasks needing management escalation</span></div>
+   {report.employees.length>0&&report.idle_employees===report.employees.length&&
+    <div className="management-backlog" role="status">
+     <h4>Company delivery idle — management attention required</h4>
+     <p>No tracked employee has a running or queued governed task. This is a recorded
+      workload gap, not proof that external commercial work is absent. Review
+      <a href="#ago-opportunities"> Company Opportunity Radar</a>, then
+      <a href="#company-approval-inbox"> founder approvals</a>. Do not manufacture
+      tasks or start unapproved customer outreach.</p>
+    </div>}
    {(report.unassigned_project_stages||[]).length>0&&<div className="management-backlog">
       <h4>Management work queue — unstaffed project stages</h4>
       <p>These are documented delivery responsibilities, not dispatched or approved execution tasks. Responsible leaders must arrange capable staff.</p>
