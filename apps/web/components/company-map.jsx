@@ -15,7 +15,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [draft,setDraft]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState(''),[sending,setSending]=useState(false);
   const [zoom,setZoom]=useState(.42),[pan,setPan]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
   const [updated,setUpdated]=useState(null),[popup,setPopup]=useState(null),[loading,setLoading]=useState(false);
-  const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const lastEvent=useRef(null);
+  const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null);const lastEvent=useRef(null);
   const viewport=useRef(null),drag=useRef(null),previous=useRef(null),sequence=useRef(0),alive=useRef(false),retry=useRef(null),feed=useRef(null),staffKey=useRef(null);
   const layout=useMemo(()=>companyLayout(departments,employees,me.id),[departments,employees,me.id]);
   const points=new Map([['founder',{x:layout.center,y:layout.center}],...layout.nodes.map(n=>[n.key,n])]);
@@ -56,6 +56,21 @@ export function CompanyMap({api,me,data,onRefresh}) {
     }catch{if(alive.current)setEventData(null);}
   },[api]);
   useEffect(()=>{refreshEvents();const timer=setInterval(refreshEvents,7000);return()=>clearInterval(timer);},[refreshEvents]);
+  const refreshGitHub=useCallback(async()=>{
+    try{
+      const catalog=await api.request('/v1/platform/catalog');
+      if(!alive.current)return;
+      const projects=(catalog.github_projects||[]).slice(0,12);
+      const checked=await Promise.all(projects.map(async p=>{
+        const item=p.payload||p;let status=null;
+        try{status=await api.request('/v1/platform/github/projects/'+encodeURIComponent(item.id)+'/status');}
+        catch{status=null;}
+        return {id:item.id,repository:item.repository,status};
+      }));
+      if(alive.current)setGithubState(checked);
+    }catch{if(alive.current)setGithubState(null);}
+  },[api]);
+  useEffect(()=>{refreshGitHub();const timer=setInterval(refreshGitHub,45000);return()=>clearInterval(timer);},[refreshGitHub]);
   useEffect(()=>{if(!popup&&eventQueue.length){setPopup(eventQueue[0]);setEventQueue(old=>old.slice(1));}},[popup,eventQueue]);
   useEffect(()=>{if(!popup)return;const timer=setTimeout(()=>setPopup(null),6500);return()=>clearTimeout(timer);},[popup]);
   function choose(key){setChannel(key);if(key.startsWith('employee:'))setSelected(key.slice(9));const node=layout.nodes.find(n=>n.key===key);if(node){setZoom(.85);setPan({x:(layout.center-node.x)*.85,y:(layout.center-node.y)*.85});}}
@@ -128,7 +143,10 @@ export function CompanyMap({api,me,data,onRefresh}) {
         <form className="company-compose" onSubmit={send}>{reply&&<div>Reply to {reply.author_name}: {reply.body.slice(0,65)} <button type="button" onClick={()=>setReply(null)}>Cancel</button></div>}<label htmlFor="company-message">Message {title}</label><textarea id="company-message" placeholder="Write your idea, question or project brief…" value={draft} maxLength={20000} rows={3} onChange={e=>setDraft(e.target.value)} required/><div><small>Unlimited conversation history · 20,000 characters/message</small><button className="btn primary" disabled={sending||!draft.trim()}>{sending?'Saving…':'Send'}</button></div><small>Sending saves a message. AI replies and task execution require a connected runtime.</small></form>
       </section>
     </div>
-    <div className="command-delivery"><section><h3>Delivery accountability</h3><p>All employees own tested, documented, market-ready deliverables. No 'published' status without evidence, independent QA and required approval.</p></section><section><h3>Reporting & founder control</h3><p>Staff raise questions and module reports to their immediate manager. Founder starts projects, approves consequential steps and can interrupt or revise the scope.</p></section><section><h3>GitHub project workspace</h3><p>Use the reviewed GitHub lifecycle for commits, pull requests, documentation and CI. Live repository state must be verified per project, not assumed.</p><a href="/tools/">Open Operations & Tools →</a></section></div>
+    <div className="command-delivery"><section><h3>Delivery accountability</h3><p>All employees own tested, documented, market-ready deliverables. No 'published' status without evidence, independent QA and required approval.</p></section><section><h3>Reporting & founder control</h3><p>Staff raise questions and module reports to their immediate manager. Founder starts projects, approves consequential steps and can interrupt or revise the scope.</p></section><section><h3>GitHub project workspace</h3>
+      {githubState===null?<p>Project status unavailable or access denied. Configure approved GitHub access under Operations & Tools.</p>:!githubState.length?<p>No approved GitHub project currently linked. Connect a reviewed project before claiming code is synced.</p>:
+        <ul className="github-live-list">{githubState.map(p=><li key={p.id}><strong>{p.repository}</strong><small>{p.status?(p.status.status||p.status.state||'Status checked'):'Live status unavailable'}</small></li>)}</ul>}
+      <p>Commits, PRs, documentation and CI still require evidence and approval. Repository changes are never inferred from dashboard animations.</p><a href="/tools/">View GitHub operations and CI →</a></section></div>
     {error&&<p role="alert" className="company-error">{error}</p>}
     {staffing&&<div className="staffing-backdrop"><section onKeyDown={e=>{if(e.key==='Escape')setStaffing(false);if(e.key==='Tab'){const controls=[...e.currentTarget.querySelectorAll('input,select,textarea,button')].filter(x=>!x.disabled);const first=controls[0],last=controls.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}} role="dialog" aria-modal="true" aria-labelledby="staff-title" className="staffing-dialog"><h2 id="staff-title">Add a role your project needs</h2>{error&&<p role="alert">{error}</p>}<form onSubmit={hire}><label>Role name<input name="name" required maxLength={150} autoFocus placeholder="e.g. Research Scientist"/></label><label htmlFor="staff-department">Department</label><select id="staff-department" value={department} onChange={e=>setDepartment(e.target.value)} required><option value="">Choose department</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><label htmlFor="staff-manager">Reports to</label><select id="staff-manager" name="manager" key={department}><option value="">Department root · connected to founder</option>{employees.filter(e=>e.department_id===department).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><label>Why is this role needed?<textarea name="requirement" minLength={10} maxLength={3000} required placeholder="Describe the project requirement and expected work."/></label><p>This creates an AI profile and records the requirement. Model access and execution permissions are configured separately.</p><button className="btn" disabled={sending||!department}>Create role</button><button type="button" className="btn" onClick={()=>setStaffing(false)}>Cancel</button></form></section></div>}
   </section>;
