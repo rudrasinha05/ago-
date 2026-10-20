@@ -569,7 +569,10 @@ class CompanyChat:
                    s.suggested_assignee_id,e.name AS suggested_assignee_name,
                    s.plan_step_id,t.id AS task_id,t.status AS task_status,
                    t.action AS task_action,executor.name AS executing_employee,
-                   q.verdict AS qa_verdict
+                   q.verdict AS qa_verdict,q.evidence AS qa_evidence,
+                   q.created_at AS qa_reviewed_at,ar.status AS agent_run_status,
+                   ar.failure_code AS agent_failure_code,ar.started_at AS agent_started_at,
+                   ar.finished_at AS agent_finished_at
             FROM ago_founder_intake_stages s
             LEFT JOIN ago_employees e ON e.tenant_id=s.tenant_id
               AND e.id=s.suggested_assignee_id
@@ -578,12 +581,28 @@ class CompanyChat:
             LEFT JOIN ago_governed_tasks t ON t.tenant_id=step.tenant_id AND t.id=step.task_id
             LEFT JOIN ago_employees executor ON executor.tenant_id=t.tenant_id AND executor.id=t.assignee_id
             LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id AND q.task_id=t.id
+            LEFT JOIN ago_agent_runs ar ON ar.tenant_id=t.tenant_id AND ar.task_id=t.id
             WHERE s.tenant_id=%s AND s.intake_id=%s ORDER BY s.position
         """,(tenant_id,project_id)).fetchall()
         result = dict(row)
         result['stages'] = [dict(stage) for stage in stages]
-        result['status_label'] = ('under_process' if row['plan_status'] != 'completed'
-                                  else 'completed_plan_unverified_release')
+        completed = sum(s['qa_verdict']=='pass' for s in stages)
+        result['qa_passed_stages'] = completed
+        result['stage_count'] = len(stages)
+        result['completion_percent'] = round(100*completed/max(len(stages),1))
+        result['unassigned_stages'] = sum(s['suggested_assignee_id'] is None for s in stages)
+        result['running_stages'] = sum(s['task_status']=='running' for s in stages)
+        result['failed_stages'] = sum(s['task_status']=='failed' or s['qa_verdict']=='fail'
+                                      for s in stages)
+        result['project_health'] = (
+            'blocked' if result['failed_stages'] else
+            'staffing_required' if result['unassigned_stages'] else
+            'delivery_running' if result['running_stages'] else
+            'waiting_for_qa' if any(s['task_status']=='completed' and not s['qa_verdict'] for s in stages) else
+            'awaiting_governed_work'
+        )
+        # We do not infer a published app from the plan or a passing internal brief.
+        result['status_label'] = 'under_process'
         result['verified_market_release'] = False
         result['revenue_record_status'] = (
             'no_verified_evidence' if row['verified_revenue_inr'] is None else 'recorded_amount')
@@ -690,6 +709,9 @@ class CompanyChat:
                     ('proposed','waiting_approval','ready')) AS queued,
                 COUNT(DISTINCT t.id) FILTER (WHERE t.status='failed') AS failed,
                 COUNT(DISTINCT t.id) FILTER (WHERE t.status='completed') AS completed,
+                COUNT(DISTINCT q.task_id) FILTER (WHERE q.verdict='pass') AS qa_passed,
+                COUNT(DISTINCT q.task_id) FILTER (WHERE q.verdict='fail') AS qa_failed,
+                COUNT(DISTINCT t.id) FILTER (WHERE t.status='completed' AND q.id IS NULL) AS unreviewed,
                 COUNT(DISTINCT t.id) FILTER (
                      WHERE t.management_escalation_required) AS leadership_gaps,
                 COUNT(DISTINCT p.intake_id) AS projects_accountable
@@ -698,6 +720,8 @@ class CompanyChat:
                 AND t.assignee_id=e.id
             LEFT JOIN ago_founder_project_lead p ON p.tenant_id=e.tenant_id
                 AND p.accountable_manager_id=e.id
+            LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id
+                AND q.task_id=t.id
             WHERE e.tenant_id=%s
             GROUP BY e.id,e.name,e.kind,e.role_title,e.manager_id
             ORDER BY e.name,e.id
@@ -712,7 +736,7 @@ class CompanyChat:
             GROUP BY t.accountable_manager_id,e.name ORDER BY e.name
         """,(tenant_id,)).fetchall()
         vacancies = self.db.execute("""
-            SELECT i.title AS project_title,s.stage,s.deliverable,
+            SELECT i.id AS project_id,i.title AS project_title,s.stage,s.deliverable,
                    l.accountable_manager_id,owner.name AS responsible_manager_name
             FROM ago_founder_intake_stages s
             JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id AND i.id=s.intake_id
@@ -724,10 +748,55 @@ class CompanyChat:
             ORDER BY i.created_at,s.position LIMIT 50
         """,(tenant_id,)).fetchall()
         counts = [dict(e) for e in employees]
+        # Skill-based staffing recommendations are READ-ONLY. No fictitious hire,
+        # reassignment, approval or agent execution is manufactured.
+        skill_map = {
+            'discovery':('research','analyst','product'),
+            'architecture':('architect','technical lead','cto'),
+            'implementation':('developer','engineer','programmer'),
+            'quality':('reviewer','quality','qa','tester'),
+            'release':('devops','release','operations','delivery'),
+        }
+        candidate_rows = self.db.execute("""
+            SELECT e.id,e.name,e.kind,e.role_title,
+                   EXISTS(SELECT 1 FROM ago_user_roles r JOIN ago_users u
+                     ON u.tenant_id=r.tenant_id AND u.id=r.user_id AND u.active
+                     WHERE r.tenant_id=e.tenant_id AND r.user_id=e.id
+                       AND r.role='reviewer') AS active_reviewer
+            FROM ago_employees e WHERE e.tenant_id=%s
+        """,(tenant_id,)).fetchall()
+        work_index={str(e['id']):e for e in counts}
+        proposed = []
+        for v in vacancies:
+            target=dict(v)
+            terms=skill_map.get(v['stage'],())
+            matches=[
+                e for e in candidate_rows
+                if ((e['kind']=='human' and e['active_reviewer']) if v['stage']=='quality'
+                    else e['kind']=='ai') and
+                (v['stage']=='quality' or any(term in
+                 (e['name']+' '+(e['role_title'] or '')).lower() for term in terms))
+            ]
+            matches.sort(key=lambda e:(
+                int(work_index[str(e['id'])]['running'])+int(work_index[str(e['id'])]['queued']),
+                str(e['id'])))
+            top=matches[0] if matches else None
+            target['candidate_id']=str(top['id']) if top else None
+            target['candidate_name']=top['name'] if top else None
+            target['candidate_workload']=(
+                int(work_index[str(top['id'])]['running'])+int(work_index[str(top['id'])]['queued'])
+                if top else None)
+            target['recommendation']='qualified_existing_worker' if top else 'review_staffing_gap'
+            proposed.append(target)
         return {
             'employees':counts,
             'leaders':[dict(leader_row) for leader_row in leaders],
-            'unassigned_project_stages':[dict(vacancy) for vacancy in vacancies],
+            'unassigned_project_stages':proposed,
+            'qa_passed_count':sum(int(e['qa_passed']) for e in counts),
+            'qa_failed_count':sum(int(e['qa_failed']) for e in counts),
+            'awaiting_qa_count':sum(int(e['unreviewed']) for e in counts),
+            'recommended_placements':sum(v['candidate_id'] is not None for v in proposed),
+            'staffing_decisions_executed':0,
             'idle_employees':sum(e['running']==0 and e['queued']==0 for e in counts),
             'pending_employee_work':sum(int(e['queued']) for e in counts),
             'unmanaged_task_alerts':sum(int(e['leadership_gaps']) for e in counts),
