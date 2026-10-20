@@ -1,14 +1,17 @@
 "use client";
+import {useState} from 'react';
 import {boardFunctionSeats} from '@ago/sdk/company';
 
 const brief=(text,max=110)=>text?.length>max?text.slice(0,max)+'…':text;
-export function CommandBrain({tasks,notifications,employees,onSelect}) {
+export function CommandBrain({tasks,notifications,employees,onSelect,governance,onAppoint,canGovern}) {
+ const [choices,setChoices]=useState({});
  const known=Array.isArray(tasks);
  const active=known?tasks.filter(t=>t.status==='running'):[];
  const queued=known?tasks.filter(t=>['proposed','ready','waiting_approval'].includes(t.status)):[];
  const finished=known?tasks.filter(t=>['completed','passed'].includes(t.status)):[];
  const events=notifications?.recent||[];
- const seats=boardFunctionSeats(employees);
+ const approved=(governance?.board||[]).map(s=>({...s,member_id:s.employee_id,approved:true}));
+ const seats=boardFunctionSeats(employees,approved);
  return <div className="command-overview">
    <div className="command-head"><div><small className="command-eyebrow">AGO · LIVE WORKFORCE OBSERVATORY</small><h2>AI Company Command Center</h2><p>Task assignment, governed activity and delivery evidence — not a simulated AI workforce.</p></div>
      <div className="command-metrics"><span><b>{known?tasks.length:'—'}</b>Tasks</span><span><b>{known?active.length:'—'}</b>Working</span><span><b>{known?queued.length:'—'}</b>Awaiting</span><span><b>{known?finished.length:'—'}</b>Finished</span></div>
@@ -54,7 +57,17 @@ export function CommandBrain({tasks,notifications,employees,onSelect}) {
    </div>
    <section className="board-command" aria-label="Board governance functions">
     <div><h3>Board of Directors</h3><small>Strategic governance · seats are unassigned until explicitly appointed</small></div>
-    <div className="board-seats">{seats.map(s=><button key={s.title} className="board-seat" disabled={!s.member} title={s.responsibility} onClick={()=>s.member&&onSelect(s.member.id)}><strong>{s.title}</strong><small>{s.member?s.member.name:'Not appointed'}</small><span>{s.responsibility}</span></button>)}</div>
+    <div className="board-seats">{seats.map(s=><div key={s.title} className="board-seat">
+        <strong>{s.title}</strong><small>{s.member?s.member.name:'Not appointed'}</small>
+        <span>{s.responsibility}</span>
+        {s.member&&<button type="button" className="board-detail" onClick={()=>onSelect(s.member.id)}>View member ↗</button>}
+        {canGovern&&<div className="board-appoint">
+          <select aria-label={'Appoint '+s.title} value={choices[s.title]||s.member?.id||''} onChange={e=>setChoices(old=>({...old,[s.title]:e.target.value}))}>
+             <option value="">Select employee</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+          <button type="button" disabled={!(choices[s.title]||s.member?.id)} onClick={()=>onAppoint(s.title,choices[s.title]||s.member?.id)}>Approve seat</button>
+        </div>}
+       </div>)}</div>
    </section>
  </div>;
 }
