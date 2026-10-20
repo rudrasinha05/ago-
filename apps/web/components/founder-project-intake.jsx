@@ -5,7 +5,7 @@ export function FounderProjectIntake({api,me}) {
  const [brief,setBrief]=useState('');
  const [projects,setProjects]=useState(null);
  const [created,setCreated]=useState(null);
- const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [busy,setBusy]=useState(false),[reviewBusy,setReviewBusy]=useState(false),[error,setError]=useState('');
  const retry=useRef(null);
  const isFounder=me.roles?.includes('founder')&&me.permissions?.includes('brain:manage');
  const refresh=useCallback(async()=>{
@@ -22,7 +22,15 @@ export function FounderProjectIntake({api,me}) {
     setCreated(response);setBrief('');retry.current=null;await refresh();
   } catch(err){setError(err.message);}finally{setBusy(false);}
  }
- return <section className="founder-project-intake" aria-label="Start founder project">
+ async function submitForReview(){
+  if(!created||reviewBusy||created.plan_status!=='draft')return;
+  setReviewBusy(true);setError('');
+  try{const response=await api.request('/v1/brain/plans/'+encodeURIComponent(created.plan_id)+'/submit',{method:'POST'});
+    setCreated(old=>({...old,plan_status:response.status,approval_id:response.approval_id}));
+    await refresh();
+  }catch(e){setError(e.message);}finally{setReviewBusy(false);}
+ }
+  return <section className="founder-project-intake" aria-label="Start founder project">
   <div><h3>Start a governed project</h3>
     <p>Give AGO one brief. It creates a saved goal, draft plan, accountable stage proposals and staffing-gap report. Execution and publication remain approval-gated.</p></div>
   <form onSubmit={start}>
@@ -39,7 +47,11 @@ export function FounderProjectIntake({api,me}) {
       <span>{s.suggested_assignee_name||'Staffing required'}</span>
       <small>{s.plan_step_id?'Allowlisted internal review step drafted':'Proposal only; tooling and approval required'}</small>
     </li>)}</ol>
-    <p>Plan ID: <code>{created.plan_id}</code> · Use Company Brain to review, submit and approve before materialization.</p>
+    <p>Plan ID: <code>{created.plan_id}</code> · Status: {created.plan_status} · Independent reviewer approval is required before materialization.</p>
+    {created.plan_status==='draft'&&created.stages.some(s=>s.plan_step_id)&&
+      <button type="button" disabled={reviewBusy} onClick={submitForReview}>{reviewBusy?'Submitting…':'Request independent plan review'}</button>}
+    {created.plan_status==='draft'&&!created.stages.some(s=>s.plan_step_id)&&
+      <p>Assign a qualified discovery AI employee before submitting this draft for approval.</p>}
   </div>}
   <div><h3>Recent founder projects</h3>
    {projects===null?<small>Project history unavailable</small>:!projects.length?<small>No founder projects yet</small>:
