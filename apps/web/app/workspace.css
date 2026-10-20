@@ -147,3 +147,8 @@
 .approval-review label{display:block;margin-bottom:8px}.approval-review textarea{width:100%;min-height:75px;background:#081a31;color:#fff;border:1px solid #607a9a;border-radius:8px;padding:11px}
 .approval-actions{display:flex;gap:10px;margin-top:9px}.approval-actions button:last-child{background:#562539;border-color:#ad5272}
 @media(max-width:600px){.approval-entry{align-items:stretch;flex-direction:column}.approval-dialog dl{grid-template-columns:1fr;gap:4px}.approval-dialog dt:not(:first-child){margin-top:8px}.approval-inbox{padding:14px}.approval-dialog{padding:18px}}
+
+.approval-top-alerts{position:relative}.approval-top-button{border:1px solid #5a92cb;background:#142848;color:#e6f4ff;border-radius:9px;padding:9px 12px;cursor:pointer}
+.approval-top-button span{margin-left:7px;border-radius:20px;background:#c1494c;color:white;padding:2px 7px;font-weight:700}
+.approval-top-notice{position:absolute;right:0;top:calc(100% + 10px);z-index:90;background:#102b4b;box-shadow:0 15px 40px #0007;border:1px solid #548bc1;color:#f4fbff;border-radius:10px;width:min(355px,85vw);padding:16px}
+.approval-top-notice p{font-size:12px;overflow-wrap:anywhere}.approval-top-notice button{margin-right:8px;border-radius:7px;border:1px solid #4c8dc4;background:#183a68;color:#edf8ff;padding:7px 9px}

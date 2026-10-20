@@ -121,3 +121,39 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onReviewed
   </div>}
  </section>;
 }
+
+export function ApprovalTopAlerts({api,me,onView,enabled=true}) {
+ const [pending,setPending]=useState(0),[notice,setNotice]=useState(null);
+ const prior=useRef(null);
+ const readable=me.permissions?.includes('approval:read');
+ useEffect(()=>{
+  if(!enabled||!readable)return;
+  let live=true;
+  async function check(){
+   try {
+    const data=await api.request(BASE+'/approvals');
+    if(!live||!Array.isArray(data))return;
+    const needs=data.filter(a=>canDecide(a,me));
+    const known=new Set(data.map(a=>a.id));
+    const arrived=needs.find(a=>prior.current===null||!prior.current.has(a.id));
+    setPending(needs.length);
+    if(arrived)setNotice({id:arrived.id,requester:arrived.requester_name,title:subject(arrived)});
+    prior.current=known;
+   }catch{if(live)setPending(0);}
+  }
+  check();const timer=setInterval(check,8000);
+  return()=>{live=false;clearInterval(timer);};
+ },[api,me.id,me.permissions,me.roles,enabled,readable]);
+ if(!readable||!enabled)return null;
+ return <div className="approval-top-alerts">
+  <button type="button" className="approval-top-button" onClick={onView}>
+   Approvals {pending>0&&<span aria-label={pending+' approvals need your review'}>{pending}</span>}
+  </button>
+  {notice&&<div className="approval-top-notice" role="status">
+   <strong>New approval for review</strong>
+   <p>{notice.requester||'Employee'} requests: {notice.title}</p>
+   <button type="button" onClick={()=>{setNotice(null);onView?.();}}>View details</button>
+   <button type="button" onClick={()=>setNotice(null)} aria-label="Dismiss approval popup">×</button>
+  </div>}
+ </div>;
+}
