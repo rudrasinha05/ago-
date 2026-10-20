@@ -4,14 +4,28 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 export function FounderProjectIntake({api,me,onChanged}) {
  const [brief,setBrief]=useState('');
  const [projects,setProjects]=useState(null);
+ const [projectDetail,setProjectDetail]=useState(null),[selectedProject,setSelectedProject]=useState(null);
+ const [moreBusy,setMoreBusy]=useState(false),[hasMore,setHasMore]=useState(false),[projectError,setProjectError]=useState('');
  const [created,setCreated]=useState(null);
  const [busy,setBusy]=useState(false),[reviewBusy,setReviewBusy]=useState(false),[error,setError]=useState('');
  const retry=useRef(null);
  const isFounder=me.roles?.includes('founder')&&me.permissions?.includes('brain:manage');
  const refresh=useCallback(async()=>{
-   try {setProjects(await api.request('/v1/organization/company/projects'));} catch {setProjects(null);}
+   try {const batch=await api.request('/v1/organization/company/projects?limit=50&offset=0');setProjects(batch);setHasMore(batch.length===50);} catch {setProjects(null);setHasMore(false);}
  },[api]);
  useEffect(()=>{if(isFounder)refresh();},[refresh,isFounder]);
+ async function loadMore(){
+  if(moreBusy||!hasMore||!projects)return;setMoreBusy(true);setProjectError('');
+  try{const batch=await api.request('/v1/organization/company/projects?limit=50&offset='+projects.length);
+    setProjects(old=>[...(old||[]),...batch]);setHasMore(batch.length===50);
+  }catch(e){setProjectError(e.message||'Could not fetch project page.');}finally{setMoreBusy(false);}
+ }
+ async function inspectProject(project){
+  if(selectedProject===project.id){setSelectedProject(null);setProjectDetail(null);return;}
+  setSelectedProject(project.id);setProjectDetail(null);setProjectError('');
+  try{const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(project.id));setProjectDetail(result);}
+  catch(e){setProjectError(e.message||'Project details are unavailable.');}
+ }
  if(!isFounder)return null;
  async function start(e){e.preventDefault();if(busy||brief.trim().length<20)return;
   setBusy(true);setError('');
@@ -55,16 +69,38 @@ export function FounderProjectIntake({api,me,onChanged}) {
     {created.plan_status==='draft'&&!created.stages.some(s=>s.plan_step_id)&&
       <p>Assign a qualified discovery AI employee before submitting this draft for approval.</p>}
   </div>}
-  <div><h3>Recent founder projects</h3>
-   {projects===null?<small>Project history unavailable</small>:!projects.length?<small>No founder projects yet</small>:
-   <ol>{projects.slice(0,5).map(p=><li key={p.id}>
-     <strong>{p.title}</strong> · <small>{p.plan_status} · {p.staffing_gaps} execution staffing gaps</small>
-     <p><b>Delivery responsible:</b> {p.accountable_manager_name||'Unavailable'} ({p.accountable_manager_role||'Founder'}) · {p.assignment_source==='founder_escalation'?'Executive leader needed':'Executive leadership recorded'}</p>
-     <p><b>Commercial objective:</b> {p.commercial_objective} · {p.commercial_stage} · Verified revenue: {p.verified_revenue_inr===null?'No evidence recorded':'₹'+p.verified_revenue_inr}</p>
-     <details className="founder-routing"><summary>Who received this project? View actual draft routing</summary>
-      <p>Company Brain has recorded a named higher-management delivery owner. This is a durable accountability assignment, not autonomous delegation or a completed project. Employee suggestions do not become executable tasks without authorization.</p>
-      <ol>{(p.stages||[]).map(s=><li key={s.stage}><strong>{s.stage}</strong> — {s.suggested_assignee_name||'No qualified employee'} {s.suggested_role?'('+s.suggested_role+')':''} · {s.plan_step_id?'Draft plan step (approval and materialization required)':'Suggestion only; no task assigned'}</li>)}</ol>
-     </details>
-   </li>)}</ol>}</div>
+  <div id="ago-project-portfolio" className="founder-project-portfolio">
+   <h3>All company projects · Recent founder projects</h3>
+   <p>Click any project to inspect full brief, current plan, assigned specialists, task state, independent QA and commercial evidence. A project with no verified release is under process, not automatically complete.</p>
+   {projects===null?<small>Project history unavailable</small>:!projects.length?<small>No approved or draft founder projects recorded yet.</small>:
+    <div className="project-portfolio-grid">{projects.map(p=><article key={p.id} className="project-portfolio-card">
+      <button type="button" className="project-portfolio-open" aria-expanded={selectedProject===p.id} onClick={()=>inspectProject(p)}>
+       <strong>{p.title}</strong><small>Plan: {p.plan_status} · {p.staffing_gaps} staffing gaps</small>
+       <small>Executive: {p.accountable_manager_name||'Unassigned'} · {p.assignment_source==='founder_escalation'?'Escalated':'Accountable manager'}</small>
+       <small>Commercial: {p.commercial_stage} · Revenue: {p.verified_revenue_inr===null?'Not verified':'₹'+p.verified_revenue_inr}</small>
+       <span>{selectedProject===p.id?'Collapse details ↑':'Inspect full project →'}</span>
+      </button>
+      {selectedProject===p.id&&
+       <div className="project-portfolio-details">
+        {!projectDetail?<p>Loading live project details…</p>:<>
+         <h4>{projectDetail.title}</h4>
+         <p><b>Status:</b> {projectDetail.status_label} · <b>Strategy:</b> {projectDetail.plan_status}</p>
+         <p><b>Founder requirement:</b> {projectDetail.brief}</p>
+         <p><b>Accountable manager:</b> {projectDetail.accountable_manager_name}</p>
+         <p><b>Revenue plan:</b> {projectDetail.commercial_objective} · {projectDetail.commercial_stage}</p>
+         <p><b>Actual income evidence:</b> {projectDetail.revenue_record_status==='no_verified_evidence'?'Not recorded':'₹'+projectDetail.verified_revenue_inr}</p>
+         <ol className="intake-stage-list">{(projectDetail.stages||[]).map(st=><li key={st.stage}>
+          <strong>{st.position}. {st.stage}</strong>
+          <small>{st.deliverable}</small>
+          <small>Suggested: {st.suggested_assignee_name||'Employee needed'} · Executing: {st.executing_employee||'No governed task started'}</small>
+          <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no independent verdict'}</small>
+         </li>)}</ol>
+         <p>No external publication is claimed without a linked verified release. <a href="#ago-opportunities">Promotion desk ↑</a></p>
+        </>}
+       </div>}
+     </article>)}</div>}
+   {hasMore&&<button type="button" disabled={moreBusy} onClick={loadMore}>{moreBusy?'Loading…':'Load more projects'}</button>}
+   {projectError&&<p role="alert">{projectError}</p>}
+  </div>
  </section>;
 }
