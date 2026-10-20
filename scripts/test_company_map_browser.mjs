@@ -20,7 +20,7 @@ const employees=[{id:cto,name:'CTO',department_id:department,kind:'ai',manager_i
 const departments=[{id:department,name:'Engineering'}];
 let tasks=[{id:id(6),action:'research:brief',assignee_id:developer,status:'running',project_name:'Orchestration research'}];
 let messages=[], calls=[];
-let appointments=[],roles={},reports=[],founderProjects=[],approvalRecords=[];
+let appointments=[],roles={},reports=[],founderProjects=[],approvalRecords=[],asReviewer=false;
 let workEvents=[{id:1,employee_id:developer,task_id:id(6),body:'research:brief → running',created_at:new Date().toISOString()}];
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try{
@@ -30,7 +30,7 @@ try{
   const req=route.request(),url=new URL(req.url()),path=url.pathname,body=req.postDataJSON();let result=[];
   calls.push({path,method:req.method(),body});
   if(path==='/v1/sessions')result={access_token:'fixture-session'};
-  else if(path==='/v1/console/me')result={id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read','brain:manage','approval:read','approval:decide']};
+  else if(path==='/v1/console/me')result=asReviewer?{id:id(31),tenant_id:tenant,display_name:'Reviewer',roles:['reviewer'],permissions:['approval:read','approval:decide']}:{id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read','brain:manage','approval:read','approval:decide']};
   else if(path==='/v1/organization/departments')result=departments;
   else if(path==='/v1/organization/employees')result=employees;
   else if(path.endsWith('/company/activity'))result=tasks;
@@ -49,6 +49,12 @@ try{
   }
   else if(path.endsWith('/company/projects'))result=founderProjects;
   else if(path.endsWith('/company/approvals'))result=approvalRecords;
+  else if(path.startsWith('/v1/governance/approvals/')&&path.endsWith('/decision')){
+   const record=approvalRecords.find(a=>path.includes(a.id));assert.ok(record);
+   record.status=body.approve?'approved':'rejected';record.reason=body.reason;
+   record.reviewer_id=id(31);record.reviewer_name='Independent Reviewer';
+   record.decided_at=new Date().toISOString();result={request_id:record.id,status:record.status};
+  }
   else if(path.includes('/v1/brain/plans/')&&path.endsWith('/submit')){
     result={approval_id:id(24),status:'pending_approval'};
     approvalRecords.push({id:id(24),requester_id:founder,requester_name:'Founder',
@@ -131,5 +137,23 @@ try{
  await page.setViewportSize({width:390,height:844});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Mobile must not overflow horizontally');
  await page.screenshot({path:'tests/frontend/artifacts/ago-company-command-mobile.png',fullPage:true});
- assert.deepEqual(errors,[]);console.log('PASS: map, assignment/status, chat, replies, centre composer, staffing, popup, mobile width; mocked API');
+ assert.deepEqual(errors,[]);
+ // An independent reviewer can reach the inbox without organization:read.
+ asReviewer=true;
+ await page.goto(base+'/workspace/governance/');
+ await page.getByLabel('Organization ID').fill(tenant);
+ await page.getByLabel('Work email').fill('reviewer@example.test');
+ await page.getByLabel('Password',{exact:true}).fill('test-reviewer-password');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor();
+ await page.locator('#company-approval-inbox').getByRole('button',{name:'View approval details'}).click();
+ const approvalDialog=page.getByRole('dialog',{name:'Approval details'});
+ await approvalDialog.getByLabel('Mandatory decision reason').fill('Verified scope and independent review');
+ await approvalDialog.getByRole('button',{name:'Approve',exact:true}).click();
+ await approvalDialog.waitFor({state:'detached'});
+ assert.equal(approvalRecords[0].status,'approved');
+ assert.equal(approvalRecords[0].reviewer_id,id(31));
+ assert.ok(calls.some(c=>c.path.includes('/governance/approvals/')&&c.path.endsWith('/decision')&&c.body.approve===true));
+ assert.deepEqual(errors,[]);
+ console.log('PASS: company map, founder self-review denied, real reviewer approval modal, notification, mobile and WCAG; mocked API');
 }finally{await browser.close();server.close();}
