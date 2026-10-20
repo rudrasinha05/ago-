@@ -47,3 +47,17 @@ ALTER TABLE ago_company_chat ADD CONSTRAINT ago_company_chat_kind_check
 -- Disallow modifying historical reporting evidence, including deletion.
 CREATE TRIGGER ago_company_reports_append_only BEFORE UPDATE OR DELETE ON ago_company_reports
  FOR EACH ROW EXECUTE FUNCTION ago_protect_append_only();
+
+-- Independent QA decisions generate durable notifications for both reviewer and author.
+CREATE FUNCTION ago_company_qa_event() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ INSERT INTO ago_company_chat
+  (tenant_id,channel,author_name,body,kind,employee_id,task_id)
+ SELECT NEW.tenant_id,'employee:' || e.id,e.name,
+  'Independent QA ' || NEW.verdict || ' recorded on assigned task','qa',e.id,NEW.task_id
+ FROM ago_employees e
+ WHERE e.tenant_id=NEW.tenant_id AND e.id IN (NEW.author_id,NEW.reviewer_id);
+ RETURN NEW;
+END $$;
+CREATE TRIGGER ago_company_qa_event AFTER INSERT ON ago_task_reviews
+ FOR EACH ROW EXECUTE FUNCTION ago_company_qa_event();
