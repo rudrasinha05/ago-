@@ -437,3 +437,40 @@ def test_management_escalates_to_real_founder_if_no_supervisor(case):
     """,(info['tenant'],task['id'])).fetchone()
     assert str(row['accountable_manager_id'])==info['founder_id']
     assert client.get(BASE+'/projects',headers=founder).json()[0]['commercial_stage']=='offer_needed'
+
+
+def test_employee_status_question_gets_real_reply_without_inventing_ai_work(case):
+    client,headers,info=case
+    founder=headers['founder']
+    dep=department(client,founder)
+    worker=employee(client,founder,dep)
+    target='employee:'+worker
+    incoming=message(channel=target,body='what are you working on?')
+    user_message=post(client,BASE+'/chat',founder,incoming)
+    first=client.get(BASE+'/chat?channel='+target,headers=founder).json()['items']
+    answers=[m for m in first if m['reply_to']==user_message['id']]
+    assert len(answers)==1
+    assert 'no assigned governed tasks' in answers[0]['body']
+    assert 'not an AI-generated response' in answers[0]['body']
+    assert answers[0]['author_id'] is None
+    assert answers[0]['author_name'].startswith('AGO work status')
+    assert answers[0]['reply_body']=='what are you working on?'
+    assert post(client,BASE+'/chat',founder,incoming)['id']==user_message['id']
+    assert sum(m['reply_to']==user_message['id'] for m in
+               client.get(BASE+'/chat?channel='+target,headers=founder).json()['items'])==1
+    post(client,BASE+'/chat',founder,
+         message(channel=target,body='Can you generate UI code for my app?'))
+    assert len([m for m in client.get(BASE+'/chat?channel='+target,
+               headers=founder).json()['items'] if m['author_name'].startswith('AGO work status')])==1
+    new_task=post(client,'/v1/tasks',founder,{'assignee_id':worker,'action':'internal:brief'})
+    second=post(client,BASE+'/chat',founder,
+                message(channel=target,body='Current task status please'))
+    latest=client.get(BASE+'/chat?channel='+target,headers=founder).json()['items']
+    status=next(m for m in latest if m['reply_to']==second['id'])
+    assert 'internal:brief — proposed' in status['body']
+    assert str(status['employee_id'])==worker
+    assert status['id']>second['id']
+    assert not info['db'].execute(
+        'SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s',
+        (info['tenant'],new_task['id']),
+    ).fetchone()

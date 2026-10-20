@@ -35,3 +35,14 @@ Persistent per-employee counts include recorded task status changes, staffing re
 - Complete market-ready output without verified QA, security and owner release gates.
 
 A startup project is **not marked publishable merely by a green dashboard**. External credentials, operational uptime, authorized model tooling, independent review, and a real end-to-end project release demonstration remain required.
+
+## Data-grounded replies in employee conversations
+When a human asks an employee "what are you working on?" or another
+narrowly recognized task-status question, AGO stores a transaction-bound
+threaded reply from actual tenant-scoped governed task rows. Reply author
+is explicitly labelled **AGO work status**, never impersonates the AI
+employee, and never claims model execution, external GitHub work or a
+completed task without evidence. Duplicate retry keys never duplicate replies.
+Open-ended prompts remain messages only until a governed conversational
+model/runtime is configured, authorized and budgeted; this milestone
+does not falsely claim general AI employee chat.

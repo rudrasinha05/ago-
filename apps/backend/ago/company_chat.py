@@ -63,7 +63,51 @@ class CompanyChat:
                   (actor.tenant_id, actor.subject, operation_key)).fetchone()
                 if (row['channel'], row['body'], row['reply_to']) != (channel, body, reply_to):
                     raise ValueError('Retry key already used for a different message')
+            elif channel.startswith('employee:') and self._asks_work_status(body):
+                # A reply from verified task rows is useful without an LLM.
+                # Label it as automated status, never pretend an AI replied.
+                self._record_status_reply(actor.tenant_id, channel, row['id'])
             return row
+
+    @staticmethod
+    def _asks_work_status(body: str) -> bool:
+        question=body.strip().lower()
+        return any(term in question for term in (
+            'what are you working on', 'what are you doing',
+            'current work', 'current task', 'assigned task', 'task status',
+            'work status', 'work update', 'status update',
+            'kis kaam', 'kya kaam', 'kaun sa kaam', 'kya kar rahe',
+        ))
+
+    def _record_status_reply(self, tenant_id: str, channel: str, parent_id: int) -> None:
+        """A DB-grounded status reply. Not a language-model employee response."""
+        employee_id=channel.removeprefix('employee:')
+        worker=self.db.execute("""
+            SELECT name FROM ago_employees WHERE tenant_id=%s AND id=%s
+        """,(tenant_id,employee_id)).fetchone()
+        if worker is None:
+            return
+        tasks=self.db.execute("""
+            SELECT action,status,updated_at
+            FROM ago_governed_tasks
+            WHERE tenant_id=%s AND assignee_id=%s
+            ORDER BY updated_at DESC,id DESC LIMIT 6
+        """,(tenant_id,employee_id)).fetchall()
+        if tasks:
+            lines=['Recorded assigned work for '+worker['name']+':']
+            lines.extend('- '+t['action'][:180]+' — '+t['status'] for t in tasks)
+            lines.append('This is an automatic AGO database status reply, not an AI-generated response.')
+            response='\n'.join(lines)
+        else:
+            response=(worker['name']+' has no assigned governed tasks currently recorded in AGO. '
+                      'Other external activity cannot be verified. '
+                      'This is an automatic database status reply, not an AI-generated response.')
+        self.db.execute("""
+            INSERT INTO ago_company_chat
+              (tenant_id,channel,author_id,author_name,body,reply_to,kind,employee_id)
+            VALUES (%s,%s,NULL,%s,%s,%s,'message',%s)
+        """,(tenant_id,channel,'AGO work status · '+worker['name'],
+              response,parent_id,employee_id))
 
     def activity(self, tenant_id):
         return self.db.execute('''SELECT t.*, p.title AS project_name,
