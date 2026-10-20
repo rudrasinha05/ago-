@@ -19,7 +19,7 @@ const employees=[{id:cto,name:'CTO',department_id:department,kind:'ai',manager_i
 const departments=[{id:department,name:'Engineering'}];
 let tasks=[{id:id(6),action:'research:brief',assignee_id:developer,status:'running',project_name:'Orchestration research'}];
 let messages=[], calls=[];
-let appointments=[],roles={},reports=[];
+let appointments=[],roles={},reports=[],founderProjects=[];
 let workEvents=[{id:1,employee_id:developer,task_id:id(6),body:'research:brief → running',created_at:new Date().toISOString()}];
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try{
@@ -29,12 +29,24 @@ try{
   const req=route.request(),url=new URL(req.url()),path=url.pathname,body=req.postDataJSON();let result=[];
   calls.push({path,method:req.method(),body});
   if(path==='/v1/sessions')result={access_token:'fixture-session'};
-  else if(path==='/v1/console/me')result={id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read']};
+  else if(path==='/v1/console/me')result={id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read','brain:manage']};
   else if(path==='/v1/organization/departments')result=departments;
   else if(path==='/v1/organization/employees')result=employees;
   else if(path.endsWith('/company/activity'))result=tasks;
   else if(path.endsWith('/company/notifications'))result={by_employee:{[developer]:workEvents.length,[cto]:0},recent:[...workEvents].reverse(),event_type:'committed_task_status'};
   else if(path==='/v1/platform/catalog')result={github_projects:[]};
+  else if(path.endsWith('/company/projects/start')){
+    const title=body.brief.split('\n')[0].slice(0,220);
+    const stages=['discovery','architecture','implementation','quality','release'].map((stage,i)=>({
+      stage,position:i+1,deliverable:'Testable milestone '+stage,
+      suggested_assignee_name:i===0?'Developer':null,
+      staffing_required:i!==0,plan_step_id:i===0?id(22):null
+    }));
+    result={id:id(20),title,goal_id:id(21),plan_id:id(23),stages,
+      plan_status:'draft',automatic_execution:false,approval_required:true,reused:false};
+    founderProjects.unshift({...result,staffing_gaps:4});
+  }
+  else if(path.endsWith('/company/projects'))result=founderProjects;
   else if(path.endsWith('/company/governance'))result={board:appointments,employees:employees.map(e=>({...e,...(roles[e.id]||{})})),board_grants_authority:false};
   else if(path.endsWith('/company/board/appoint')){appointments=appointments.filter(a=>a.seat!==body.seat);appointments.push({seat:body.seat,employee_id:body.employee_id});result={...body,authority_granted:false};}
   else if(path.includes('/company/employees/')&&path.endsWith('/role')){const worker=path.split('/').at(-2);roles[worker]=body;result={id:worker,...body};}
@@ -56,6 +68,13 @@ try{
  assert.match(await page.locator('.employee-inspector').innerText(),/Additional responsibilities/);
  await page.getByRole('heading',{name:'Board of Directors'}).waitFor();
  await page.getByRole('heading',{name:'AI Company Command Center'}).waitFor();
+ const founderBrief='Build a complete project management system with audit trails, secure access, automated tests and documentation';
+ await page.getByLabel('Founder project brief').fill(founderBrief);
+ await page.getByRole('button',{name:'Prepare project from brief'}).click();
+ await page.getByText('Draft saved · Independent plan approval needed',{exact:false}).waitFor();
+ assert.equal(founderProjects.length,1);
+ assert.equal(founderProjects[0].automatic_execution,false);
+ assert.equal(founderProjects[0].stages.length,5);
  await page.getByLabel('Appoint Technology Oversight').selectOption(cto);
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'Approve seat'}).click();
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'View member'}).waitFor();
