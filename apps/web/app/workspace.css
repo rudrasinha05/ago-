@@ -85,3 +85,26 @@
 @media(max-width:1020px){.brain-stage{grid-template-columns:1fr 1fr}.brain-hologram{grid-column:1/-1;grid-row:1}.board-seats{grid-template-columns:repeat(2,minmax(135px,1fr))}.command-delivery{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.command-head{align-items:flex-start;flex-direction:column}.brain-stage{display:flex;flex-direction:column}.brain-hologram{min-height:290px}.brain-svg{height:255px}.brain-activity,.brain-stats{border:0}.board-seats,.command-delivery{grid-template-columns:1fr}.map-node{min-height:120px}}
 @media(prefers-reduced-motion:reduce){.brain-svg,.brain-orbit,.company-world line.edge-live,.map-node.working{animation:none}}
+
+
+/* Founder-approved accountability & protected hierarchical reporting */
+.board-seat{align-content:start}.board-detail,.board-appoint button,.accountability-panel button,.accountability-form button{background:#16406c;color:#e4f6ff;border:1px solid #4c86cd;border-radius:7px;padding:7px 9px;font-size:11px;cursor:pointer}
+.board-appoint{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.board-appoint select{font-size:11px;min-width:125px;flex:1;background:#101c39;border:1px solid #6275ab;border-radius:7px;color:#e9efff;padding:6px}
+.board-appoint button:disabled{opacity:.5;cursor:not-allowed}
+.accountability-panel{border-top:1px solid #395674;padding:12px 0;margin-top:8px;font-size:12px}
+.accountability-panel dl{margin:8px 0;line-height:1.5}
+.accountability-form{display:grid;gap:10px;margin-top:12px}
+.accountability-form label{display:grid;gap:5px;color:#e2efff;font-size:12px}
+.accountability-form input,.accountability-form textarea,.accountability-form select{width:100%;min-width:0;color:#f4faff;background:#0b2038;border:1px solid #56749d;border-radius:8px;padding:9px;font:inherit}
+.accountability-form textarea{resize:vertical}
+.upward-reports{border:1px solid #2a5580;border-radius:13px;background:linear-gradient(115deg,#0b1a35,#111e37);padding:18px;margin-top:15px;display:grid;grid-template-columns:1fr 1.25fr 1.25fr;gap:15px}
+.upward-reports h3{font-size:16px;color:#e5f2ff;margin:0}
+.upward-reports h4{font-size:13px;margin:0 0 8px;color:#e5f2ff}
+.upward-reports p{font-size:12px;line-height:1.6;color:#bad0e6}
+.report-inbox{max-height:310px;overflow:auto}
+.report-inbox article{background:#101f39;border:1px solid #315178;border-radius:8px;padding:9px;margin-bottom:8px}
+.report-inbox article strong{font-size:11px;color:#ace5fb}.report-inbox article small{display:block;color:#92adcf;margin-top:4px;font-size:10px}
+.report-inbox article p{color:#e7f4fc;margin:6px 0;white-space:pre-wrap}
+@media(max-width:1150px){.upward-reports{grid-template-columns:1fr 1fr}.upward-reports>div:first-child{grid-column:1/-1}}
+@media(max-width:650px){.upward-reports{grid-template-columns:1fr}.upward-reports>div:first-child{grid-column:auto}}
