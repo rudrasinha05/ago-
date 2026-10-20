@@ -797,6 +797,17 @@ class CompanyChat:
             'awaiting_qa_count':sum(int(e['unreviewed']) for e in counts),
             'recommended_placements':sum(v['candidate_id'] is not None for v in proposed),
             'staffing_decisions_executed':0,
+            'review_recommendations':(
+                (['Review failed QA evidence and open scoped corrective tasks.']
+                 if any(int(e['qa_failed'])>0 for e in counts) else []) +
+                (['Obtain independent QA for completed governed work before release.']
+                 if any(int(e['unreviewed'])>0 for e in counts) else []) +
+                (['Management should review qualified existing staff or governed recruitment requests.']
+                 if proposed else []) +
+                (['Evaluate recorded market hypotheses and customer validation evidence.']
+                 if counts and all(not (e['running'] or e['queued']) for e in counts) else [])
+            ),
+            'recommendations_are_advisory':True,
             'idle_employees':sum(e['running']==0 and e['queued']==0 for e in counts),
             'pending_employee_work':sum(int(e['queued']) for e in counts),
             'unmanaged_task_alerts':sum(int(e['leadership_gaps']) for e in counts),
