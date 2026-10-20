@@ -21,6 +21,7 @@ async function fixtures(page,{reviewer=false}={}) {
     else if(url.pathname==='/v1/tasks')data=[{id:user,action:'My evidence brief',status:'proposed',assignee_id:user},{id:other,action:'Other member task',status:'completed',assignee_id:other}];
     else if(url.pathname==='/v1/meta/brief')data={};
     else if(url.pathname==='/v1/meta/dna/active')data={profile:{qa_target_pct:85,backlog_limit:50,budget_alert_pct:80}};
+    else if(url.pathname==='/v1/organization/company/chat')data={items:[],next_before:null};
     else if(url.pathname==='/v1/organization/departments')data=[{id:department,name:'Research'}];
     else if(url.pathname==='/v1/organization/employees')data=[{id:user,name:'Test member',department_id:department,kind:'human'}];
     else if(url.pathname==='/v1/brain/goals'){if(request.method()==='POST')goals.push({id:other,status:'active',...request.postDataJSON()});data=request.method()==='POST'?goals.at(-1):goals;}
@@ -41,7 +42,7 @@ async function login(page) {
 async function navigate(page,label) {
   if(await page.getByRole('button',{name:'Menu',exact:true}).isVisible())await page.getByRole('button',{name:'Menu',exact:true}).click();
   await page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:label,exact:true}).click();
-  await expect(page.locator('#screen .workspace-view')).toBeVisible();
+  await expect(page.locator(label==='Organization'?'#screen .company-command':'#screen .workspace-view')).toBeVisible();
 }
 async function accessibility(page) {
   await page.evaluate(axe.source);

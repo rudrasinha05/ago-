@@ -13,7 +13,8 @@
     "./platform": {
       "types": "./platform.d.ts",
       "default": "./platform.js"
-    }
+    },
+    "./company": "./company.js"
   },
   "dependencies": {
     "@ago/shared": "0.1.0"

@@ -15,6 +15,7 @@ from ago.graph_store import EnterpriseGraph as _EnterpriseGraph
 from ago.behavior_store import BehaviorStore as _BehaviorStore
 from ago.analytics_store import AnalyticsStore as _AnalyticsStore
 from ago.integration_store import IntegrationStore as _IntegrationStore
+from ago.company_chat import CompanyChat as _CompanyChat
 from ago.access import AccessDecision
 from ago.access import AccessService as _AccessService
 from ago.agent_runtime import AgentRuntime as _AgentRuntime
@@ -1030,7 +1031,19 @@ class IntegrationStorePort(Protocol):
     def plugin_dispatch(self, *, token: str, plugin_id: str, manifest: dict, operation: str, arguments: dict) -> dict: ...
 
 
+
+
+@runtime_checkable
+class CompanyChatPort(Protocol):
+    def channel(self, tenant: Any, channel: Any) -> Any: ...
+    def list(self, tenant: Any, channel: Any, before: Any, limit: Any) -> Any: ...
+    def send(self, actor: Any, channel: Any, body: Any, reply_to: Any, operation_key: Any) -> Any: ...
+    def activity(self, tenant_id: Any) -> Any: ...
+    def staff(self, actor: Any, department_id: Any, manager_id: Any, name: Any, requirement: Any, operation_key: Any) -> Any: ...
+
+
 REPOSITORY_BINDINGS = {
+    CompanyChatPort: _CompanyChat,
     ReviewedChangesPort: _ReviewedChanges,
     EnterpriseGraphPort: _EnterpriseGraph,
     BehaviorStorePort: _BehaviorStore,

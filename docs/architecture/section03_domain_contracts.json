@@ -208,7 +208,9 @@
     "analytics_store": "strategy",
     "integration_store": "operations",
     "api_enterprise_platform": "transport",
-    "github_adapter": "operations"
+    "github_adapter": "operations",
+    "company_chat": "workforce",
+    "api_company_chat": "transport"
   },
   "sql_access": {
     "__init__": [],
@@ -245,6 +247,7 @@
     ],
     "api_agents": [],
     "api_brain": [],
+    "api_company_chat": [],
     "api_contracts": [],
     "api_council": [],
     "api_enterprise_platform": [],
@@ -288,6 +291,15 @@
       "ago_user_roles",
       "ago_users",
       "ago_worker_state_events"
+    ],
+    "company_chat": [
+      "ago_company_chat",
+      "ago_departments",
+      "ago_employees",
+      "ago_governed_tasks",
+      "ago_plan_steps",
+      "ago_strategy_plans",
+      "ago_users"
     ],
     "console_api": [],
     "console_host": [],

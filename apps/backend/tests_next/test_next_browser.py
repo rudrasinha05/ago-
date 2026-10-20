@@ -68,7 +68,7 @@ def test_next_real_eight_routes_goal_and_session_revoke(page, app_url, tenant):
     sign_in_next(page, app_url, tenant)
     for label, heading in [
         ('Strategy', 'Strategy & execution'), ('Governance', 'Governance & oversight'),
-        ('Organization', 'People & departments'), ('Knowledge', 'Institutional knowledge'),
+        ('Organization', 'Company map'), ('Knowledge', 'Institutional knowledge'),
         ('Operations & Tools', 'Enterprise operations'),
         ('Calendar', 'Organizational calendar'), ('Digital Twin', 'Organization Digital Twin'),
     ]:
@@ -144,7 +144,8 @@ def test_next_governed_plan_two_humans_execution_and_qa(
         sign_in_next(page, app_url, tenant)
         sign_in_next(reviewer, app_url, tenant, role="reviewer")
 
-        navigate_next(page, "Organization", "People & departments")
+        navigate_next(page, "Organization", "Company map")
+        page.get_by_text("Advanced organization controls", exact=True).click()
         page.get_by_role("button", name="Add AI employee").click()
         page.locator("#dlg-name").fill("Pilot AI Analyst")
         page.locator("#operation-submit").click()
@@ -359,7 +360,8 @@ def test_next_constitution_emergency_stop_and_independent_recovery(page, browser
         page.locator("#operation-submit").click()
         expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
         expect(page.locator("#screen")).to_contain_text("Browser containment test")
-        navigate_next(page, "Organization", "People & departments")
+        navigate_next(page, "Organization", "Company map")
+        page.get_by_text("Advanced organization controls", exact=True).click()
         page.get_by_role("button", name="Add department", exact=True).click()
         page.locator("#dlg-name").fill("Blocked company change")
         page.locator("#operation-submit").click()
@@ -395,7 +397,8 @@ def test_next_constitution_emergency_stop_and_independent_recovery(page, browser
         page.get_by_role("button", name="Close reviewed incident", exact=True).click()
         page.locator("#operation-submit").click()
         expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
-        navigate_next(page, "Organization", "People & departments")
+        navigate_next(page, "Organization", "Company map")
+        page.get_by_text("Advanced organization controls", exact=True).click()
         page.get_by_role("button", name="Add department", exact=True).click()
         page.locator("#dlg-name").fill("Recovered constitutional organization")
         page.locator("#operation-submit").click()

@@ -560,6 +560,7 @@
       "imports": [
         "api_agents",
         "api_brain",
+        "api_company_chat",
         "api_council",
         "api_enterprise_platform",
         "api_insights",
@@ -777,6 +778,7 @@
         "backend_contracts",
         "behavior_store",
         "calendar_store",
+        "company_chat",
         "console_service",
         "console_store",
         "council_store",
@@ -1063,6 +1065,23 @@
       "context": "operations",
       "layer": "domain",
       "imports": []
+    },
+    "company_chat": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "organization_store"
+      ]
+    },
+    "api_company_chat": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_contracts",
+        "api_m2",
+        "repository_ports"
+      ]
     }
   },
   "protected_sql_writers": {

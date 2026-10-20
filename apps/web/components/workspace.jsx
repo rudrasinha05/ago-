@@ -9,6 +9,7 @@ import {handleAction} from '@ago/ui/compat/actions';
 import {sprite} from '@ago/ui/sprite';
 import {Button,Loading,Notice} from '@ago/ui/components';
 import {Dashboard} from './dashboard';
+import {CompanyMap} from './company-map';
 import {useSession} from './session';
 export function Workspace({page}) {
   const {api,me,logout,epoch}=useSession(); const router=useRouter();
@@ -17,7 +18,7 @@ export function Workspace({page}) {
   state.current.page=page;state.current.me=me;
   const notify=useCallback(message=>{if(!active.current)return;setToast(message);clearTimeout(timer.current);timer.current=setTimeout(()=>setToast(''),5500);},[]);
   const refresh=useCallback(async()=>{
-    const version=++sequence.current, session=epoch.current;setData(null);
+    const version=++sequence.current, session=epoch.current;
     const result=await loadWorkspace(api,page);
     if(!active.current || sequence.current!==version || epoch.current!==session)return;
     state.current.data=result;
@@ -25,7 +26,7 @@ export function Workspace({page}) {
     setData(result);setRevision(x=>x+1);
   },[api,page,epoch]);
   useEffect(()=>{
-    active.current=true;setOpen(false);dialog.current?.close();
+    active.current=true;setData(null);setOpen(false);dialog.current?.close();
     refresh().catch(()=>{if(active.current)setData({});});
     return ()=>{active.current=false;sequence.current++;clearTimeout(timer.current);dialog.current?.close();};
   },[refresh]);
@@ -71,7 +72,7 @@ export function Workspace({page}) {
     <div className="workspace-body"><nav id="primary-nav" className={open?'workspace-nav open':'workspace-nav'} aria-label="Workspaces">{Object.entries(PAGES).map(([key,value])=><Link key={key} href={key==='overview'?'/':'/'+key+'/'} aria-current={page===key?'page':undefined} onClick={()=>setOpen(false)}>{value.title}</Link>)}<a href="/console/">Control Center</a></nav>
       <main id="screen" ref={screen} tabIndex={-1} className="screen">
         <div className="workspace-toolbar"><p className="muted">{PAGES[page].title} · Your organization</p><Button onClick={()=>refresh().catch(()=>notify('Unable to refresh.'))} disabled={data===null}>Refresh</Button></div>
-        {data===null?<Loading />:<><div key={revision} className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current)}} />{page==='overview'&&<Dashboard key={me.id} api={api} me={me} data={data}/>}</>}
+        {data===null?<Loading />:page==='organization'?<><CompanyMap key={me.id} api={api} me={me} data={data} onRefresh={refresh}/><details><summary>Advanced organization controls</summary><div className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current).replaceAll('<h1','<h2').replaceAll('</h1>','</h2>')}} /></details></>:<><div key={revision} className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current)}} />{page==='overview'&&<Dashboard key={me.id} api={api} me={me} data={data}/>}</>}
       </main>
     </div>
     <dialog id="action-dialog" ref={dialog} aria-labelledby="dialog-title" onClick={e=>{if(e.target===dialog.current || e.target.closest("[data-modal-close]"))dialog.current.close();}}><div id="dialog-content" className="dialog-content" /></dialog>

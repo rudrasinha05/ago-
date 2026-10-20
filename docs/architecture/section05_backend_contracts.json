@@ -1720,6 +1720,31 @@
           "returns": "Cursor"
         }
       }
+    },
+    "CompanyChat": {
+      "module": "company_chat",
+      "methods": {
+        "channel": {
+          "arguments": "self, tenant, channel",
+          "returns": "Any"
+        },
+        "list": {
+          "arguments": "self, tenant, channel, before, limit",
+          "returns": "Any"
+        },
+        "send": {
+          "arguments": "self, actor, channel, body, reply_to, operation_key",
+          "returns": "Any"
+        },
+        "activity": {
+          "arguments": "self, tenant_id",
+          "returns": "Any"
+        },
+        "staff": {
+          "arguments": "self, actor, department_id, manager_id, name, requirement, operation_key",
+          "returns": "Any"
+        }
+      }
     }
   }
 }

@@ -508,6 +508,8 @@ jobs:
           npm run build --workspace @ago/web
           python scripts/package_frontend.py
           python scripts/check_frontend_architecture.py
+      - name: Company map, conversation and staffing browser regression
+        run: node scripts/test_company_map_browser.mjs
       - name: Execute six browser/device projects and WCAG scans
         run: npx playwright test --config tests/frontend/playwright.config.mjs
       - name: Apply actual PostgreSQL migrations
