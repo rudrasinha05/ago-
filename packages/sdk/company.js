@@ -36,3 +36,40 @@ export function companyLayout(departments, employees, founderId) {
   const extent=Math.max(1000,...raw.map(n=>n.radius))+250, center=extent,size=extent*2;
   return {size,center,nodes:raw.map(n=>({...n,x:center+Math.cos(n.angle)*n.radius,y:center+Math.sin(n.angle)*n.radius})),edges};
 }
+
+/** Highlight the recorded assignment chain up to the founder, never invented routes. */
+export function activeRouteKeys(layout, employees, tasks) {
+  const routes=new Set(), active=new Set();
+  if(!Array.isArray(tasks))return {routes,active};
+  const people=new Map(employees.map(e=>[e.id,e]));
+  const valid=new Set(layout.edges.map(e=>e.from+'>'+e.to));
+  for(const task of tasks){
+    if(!['proposed','ready','waiting_approval','running'].includes(task.status))continue;
+    let id=task.assignee_id;const seen=new Set();
+    while(id&&people.has(id)&&!seen.has(id)){
+      seen.add(id);active.add(id);
+      const employee=people.get(id);
+      const from=employee.manager_id&&people.has(employee.manager_id)?'employee:'+employee.manager_id:'founder';
+      const edge=from+'>employee:'+id;
+      if(valid.has(edge))routes.add(edge);
+      id=employee.manager_id&&people.has(employee.manager_id)?employee.manager_id:null;
+    }
+  }
+  return {routes,active};
+}
+export function employeeProjects(id,tasks){
+  if(!Array.isArray(tasks))return [];
+  return [...new Set(tasks.filter(t=>t.assignee_id===id&&t.project_name).map(t=>t.project_name))];
+}
+export function boardFunctionSeats(employees){
+  // A governance responsibility is NOT evidence that someone was appointed to a board.
+  const duties=[
+    ['Strategy & Vision','Corporate direction, long-term goals, major project review'],
+    ['Technology Oversight','Architecture, security, technical risk'],
+    ['Finance & Budget','Spend oversight, approved allocation, economics'],
+    ['Risk & Compliance','Policy, audit independence, incident escalation'],
+    ['Quality & Release','Milestone evidence, publishability and release governance']
+  ];
+  const board=employees.filter(e=>/\b(board|director|chairperson|chairman|trustee)\b/i.test(e.name));
+  return duties.map(([title,responsibility],i)=>({title,responsibility,member:board[i]||null}));
+}
