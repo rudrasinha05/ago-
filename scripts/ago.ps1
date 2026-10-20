@@ -69,27 +69,29 @@ try {
         exit $LASTEXITCODE
     }
     if ($Action -eq "serve") {
-        $RadarJob = $null
+        $RadarProcess = $null
         if ($env:AGO_MARKET_TENANT_ID) {
-            # Local process only; the separate job does not keep running if this
-            # PowerShell host exits. Errors cannot stop the application server.
-            $RadarJob = Start-Job -ArgumentList $BackendPath,$env:AGO_MARKET_TENANT_ID -ScriptBlock {
-                param($WorkingDirectory,$TenantId)
-                Set-Location $WorkingDirectory
-                while ($true) {
-                    & python ../../scripts/company_market_watch.py --tenant-id $TenantId --interval-seconds 3600
-                    Start-Sleep -Seconds 60
-                }
-            }
-            Write-Host "Continuous local market research launched. Tenant source feed status is visible in AGO."
+            # Start-Job does NOT reliably inherit AGO_POSTGRES_DSN and other
+            # environment variables. A child process inherits the configured
+            # environment without exposing credentials on the command line.
+            # Never log a DSN or paste tokens into -ArgumentList.
+            & python -c "import sys,uuid;uuid.UUID(sys.argv[1])" $env:AGO_MARKET_TENANT_ID
+            if ($LASTEXITCODE -ne 0) { throw "AGO_MARKET_TENANT_ID must be a UUID." }
+            $RadarProcess = Start-Process -FilePath $Python.Source `
+              -WorkingDirectory $BackendPath `
+              -ArgumentList @('../../scripts/company_market_watch.py','--tenant-id',$env:AGO_MARKET_TENANT_ID,'--interval-seconds','3600') `
+              -PassThru -NoNewWindow
+            Write-Host ("Local market watcher started (PID " + $RadarProcess.Id + ").")
         }
         try {
             & python -m ago.local_ops serve --port $Port
         }
         finally {
-            if ($RadarJob) {
-                Stop-Job -Job $RadarJob -ErrorAction SilentlyContinue
-                Remove-Job -Job $RadarJob -Force -ErrorAction SilentlyContinue
+            if ($RadarProcess) {
+                $RadarProcess.Refresh()
+                if (-not $RadarProcess.HasExited) {
+                    Stop-Process -Id $RadarProcess.Id -Force -ErrorAction SilentlyContinue
+                }
             }
         }
     }
