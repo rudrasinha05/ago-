@@ -116,14 +116,14 @@ class CompanyChat:
             SELECT e.id AS employee_id, COUNT(c.id) AS event_count
             FROM ago_employees e
             LEFT JOIN ago_company_chat c ON c.tenant_id=e.tenant_id
-              AND c.employee_id=e.id AND c.kind IN ('status','report','staffing','github','qa','docs')
+              AND c.employee_id=e.id AND c.kind IN ('status','report','staffing','github','qa','docs','project')
             WHERE e.tenant_id=%s
             GROUP BY e.id ORDER BY e.id
         """, (tenant_id,)).fetchall()
         recent = self.db.execute("""
             SELECT id, employee_id, task_id, body, kind, created_at
             FROM ago_company_chat
-            WHERE tenant_id=%s AND kind IN ('status','report','staffing','github','qa','docs')
+            WHERE tenant_id=%s AND kind IN ('status','report','staffing','github','qa','docs','project')
             ORDER BY id DESC LIMIT 100
         """, (tenant_id,)).fetchall()
         return {
@@ -277,3 +277,150 @@ class CompanyChat:
                 ORDER BY id DESC LIMIT %s
             """, (actor.tenant_id,actor.subject,actor.subject,limit)).fetchall()
         return [dict(row) for row in rows]
+
+    def start_project(self, actor, brief: str, operation_key: str) -> dict:
+        """Atomic founder project intake. Produces a draft, not authorized execution."""
+        from uuid import uuid4
+        import hashlib
+
+        if 'founder' not in actor.roles:
+            raise PermissionError('Only the human founder may start a project')
+        UUID(actor.tenant_id)
+        UUID(actor.subject)
+        UUID(operation_key)
+        text = brief.strip()
+        if not 20 <= len(text) <= 12000:
+            raise ValueError('Project brief must contain 20–12000 characters')
+        title = (text.splitlines()[0].strip() or 'Untitled project')[:220]
+        digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+        with self.db.transaction():
+            self.db.execute('SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE',
+                            (actor.tenant_id,)).fetchone()
+            existing = self.db.execute("""
+                SELECT * FROM ago_founder_intakes
+                WHERE tenant_id=%s AND founder_id=%s AND operation_key=%s
+            """, (actor.tenant_id,actor.subject,operation_key)).fetchone()
+            if existing:
+                if existing['brief_digest'] != digest:
+                    raise ValueError('Idempotency key already used for another project')
+                intake_id = str(existing['id'])
+                reused = True
+            else:
+                employees = self.db.execute("""
+                    SELECT id,name,kind,role_title,department_id FROM ago_employees
+                    WHERE tenant_id=%s ORDER BY name,id
+                """, (actor.tenant_id,)).fetchall()
+                reviewer_rows = self.db.execute("""
+                    SELECT e.id FROM ago_employees e
+                    JOIN ago_user_roles ur ON ur.tenant_id=e.tenant_id AND ur.user_id=e.id
+                    JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id
+                    WHERE e.tenant_id=%s AND e.kind='human' AND u.active
+                      AND ur.role='reviewer'
+                """, (actor.tenant_id,)).fetchall()
+                reviewers = {str(r['id']) for r in reviewer_rows}
+                available_ai = [e for e in employees if e['kind']=='ai']
+                discovery = available_ai[0] if available_ai else None
+                goal_id, plan_id, intake_id = str(uuid4()), str(uuid4()), str(uuid4())
+                self.db.execute("""
+                    INSERT INTO ago_goals(id,tenant_id,created_by,title,description)
+                    VALUES(%s,%s,%s,%s,%s)
+                """, (goal_id,actor.tenant_id,actor.subject,title,text))
+                self.db.execute("""
+                    INSERT INTO ago_strategy_plans(id,tenant_id,goal_id,proposer_id,title)
+                    VALUES(%s,%s,%s,%s,%s)
+                """, (plan_id,actor.tenant_id,goal_id,actor.subject,title))
+                self.db.execute("""
+                    INSERT INTO ago_founder_intakes
+                    (id,tenant_id,founder_id,operation_key,brief_digest,brief,title,goal_id,plan_id)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """, (intake_id,actor.tenant_id,actor.subject,operation_key,
+                      digest,text,title,goal_id,plan_id))
+                # Only an allowlisted, bounded internal brief is seeded as an actual
+                # M3 step. All later engineering stages stay explicit proposals.
+                first_step = str(uuid4()) if discovery else None
+                if discovery:
+                    self.db.execute("""
+                        INSERT INTO ago_plan_steps
+                        (id,tenant_id,plan_id,position,action,assignee_id)
+                        VALUES (%s,%s,%s,1,'internal:brief',%s)
+                    """, (first_step,actor.tenant_id,plan_id,discovery['id']))
+                stages = (
+                    ('discovery','Clarify requirements, risks and measurable acceptance criteria',
+                     ('research','analyst','product'), 'ai'),
+                    ('architecture','Design the approved technical architecture and dependencies',
+                     ('architect','technical lead','cto'), 'ai'),
+                    ('implementation','Implement approved code, tests and technical documentation',
+                     ('developer','engineer','programmer'), 'ai'),
+                    ('quality','Record independent QA, failure evidence and release blockers',
+                     ('quality','qa','tester','reviewer'), 'reviewer'),
+                    ('release','Prepare GitHub review package and owner release decision',
+                     ('devops','release','operations','delivery'), 'ai'),
+                )
+                for index, (stage, deliverable, keywords, required_kind) in enumerate(stages,1):
+                    if stage == 'discovery':
+                        assignee = discovery
+                    elif required_kind == 'reviewer':
+                        assignee = next((e for e in employees if str(e['id']) in reviewers),None)
+                    else:
+                        assignee = next((e for e in available_ai
+                                         if any(keyword in
+                                                (e['name']+' '+(e['role_title'] or '')).lower()
+                                                for keyword in keywords)),None)
+                    self.db.execute("""
+                        INSERT INTO ago_founder_intake_stages
+                        (tenant_id,intake_id,position,stage,deliverable,suggested_assignee_id,plan_step_id)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    """, (actor.tenant_id,intake_id,index,stage,deliverable,
+                          assignee['id'] if assignee else None,
+                          first_step if stage=='discovery' else None))
+                # Notify founder without pretending the staff started work.
+                self.db.execute("""
+                    INSERT INTO ago_company_chat
+                    (tenant_id,channel,author_id,author_name,body,kind,employee_id)
+                    VALUES (%s,'global',%s,'Founder','Project intake saved: ' || %s,
+                            'project',%s)
+                """, (actor.tenant_id,actor.subject,title,actor.subject))
+                reused = False
+
+            row = self.db.execute("""
+                SELECT id,title,goal_id,plan_id,created_at FROM ago_founder_intakes
+                WHERE tenant_id=%s AND id=%s
+            """, (actor.tenant_id,intake_id)).fetchone()
+            steps = self.db.execute("""
+                SELECT s.position,s.stage,s.deliverable,s.suggested_assignee_id,
+                       s.plan_step_id,e.name AS suggested_assignee_name
+                FROM ago_founder_intake_stages s
+                LEFT JOIN ago_employees e
+                  ON e.tenant_id=s.tenant_id AND e.id=s.suggested_assignee_id
+                WHERE s.tenant_id=%s AND s.intake_id=%s ORDER BY s.position
+            """, (actor.tenant_id,intake_id)).fetchall()
+        return {
+            'id': str(row['id']), 'title':row['title'],
+            'goal_id':str(row['goal_id']), 'plan_id':str(row['plan_id']),
+            'created_at':row['created_at'], 'reused':reused,
+            'plan_status':'draft', 'automatic_execution':False,
+            'approval_required':True,
+            'stages':[{
+                'position':s['position'],'stage':s['stage'],'deliverable':s['deliverable'],
+                'suggested_assignee_id':str(s['suggested_assignee_id'])
+                    if s['suggested_assignee_id'] else None,
+                'suggested_assignee_name':s['suggested_assignee_name'],
+                'plan_step_id':str(s['plan_step_id']) if s['plan_step_id'] else None,
+                'staffing_required':s['suggested_assignee_id'] is None,
+            } for s in steps],
+        }
+
+    def projects(self, tenant_id: str, limit: int = 30) -> list[dict]:
+        UUID(tenant_id)
+        if not 1 <= limit <= 50:
+            raise ValueError('Invalid project history limit')
+        return [dict(row) for row in self.db.execute("""
+            SELECT i.id,i.title,i.goal_id,i.plan_id,i.created_at,p.status AS plan_status,
+              (SELECT COUNT(*) FROM ago_founder_intake_stages s
+               WHERE s.tenant_id=i.tenant_id AND s.intake_id=i.id
+                 AND s.suggested_assignee_id IS NULL) AS staffing_gaps
+            FROM ago_founder_intakes i JOIN ago_strategy_plans p
+                 ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+            WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id DESC LIMIT %s
+        """, (tenant_id,limit)).fetchall()]

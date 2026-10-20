@@ -4,6 +4,7 @@ import {resource} from '@ago/sdk/session';
 import {employeeStatus,companyLayout,activeRouteKeys,employeeProjects} from '@ago/sdk/company';
 import {CommandBrain} from './command-brain';
 import {RoleEditor,UpwardReports} from './company-governance';
+import {FounderProjectIntake} from './founder-project-intake';
 const BASE='/v1/organization/company';
 const time=value=>new Date(value).toLocaleString();
 export function CompanyMap({api,me,data,onRefresh}) {
@@ -110,6 +111,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   return <section className="company-command" aria-label="Company map and conversations">
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><button className="btn" disabled={!me.permissions.includes('organization:manage')} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></header>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    <FounderProjectIntake api={api} me={me}/>
     <div className="company-shell">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>

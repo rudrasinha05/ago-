@@ -1,0 +1,50 @@
+"use client";
+import {useCallback,useEffect,useRef,useState} from 'react';
+
+export function FounderProjectIntake({api,me}) {
+ const [brief,setBrief]=useState('');
+ const [projects,setProjects]=useState(null);
+ const [created,setCreated]=useState(null);
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ const retry=useRef(null);
+ const isFounder=me.roles?.includes('founder')&&me.permissions?.includes('brain:manage');
+ const refresh=useCallback(async()=>{
+   try {setProjects(await api.request('/v1/organization/company/projects'));} catch {setProjects(null);}
+ },[api]);
+ useEffect(()=>{if(isFounder)refresh();},[refresh,isFounder]);
+ if(!isFounder)return null;
+ async function start(e){e.preventDefault();if(busy||brief.trim().length<20)return;
+  setBusy(true);setError('');
+  if(!retry.current||retry.current.brief!==brief.trim())retry.current={brief:brief.trim(),key:crypto.randomUUID()};
+  try {
+    const response=await api.request('/v1/organization/company/projects/start',
+      {method:'POST',body:{brief:retry.current.brief,operation_key:retry.current.key}});
+    setCreated(response);setBrief('');retry.current=null;await refresh();
+  } catch(err){setError(err.message);}finally{setBusy(false);}
+ }
+ return <section className="founder-project-intake" aria-label="Start founder project">
+  <div><h3>Start a governed project</h3>
+    <p>Give AGO one brief. It creates a saved goal, draft plan, accountable stage proposals and staffing-gap report. Execution and publication remain approval-gated.</p></div>
+  <form onSubmit={start}>
+    <label>Founder project brief<textarea value={brief} onChange={e=>setBrief(e.target.value)}
+      minLength={20} maxLength={12000} required
+      placeholder="What should the company build? Who uses it, what must it deliver, and what would success look like?"/></label>
+    <button disabled={busy||brief.trim().length<20}>{busy?'Preparing draft…':'Prepare project from brief'}</button>
+  </form>
+  {error&&<p role="alert">{error}</p>}
+  {created&&<div aria-live="polite"><strong>{created.title}</strong>
+    <p>Draft saved · Independent plan approval needed · No unapproved code or external GitHub action started.</p>
+    <ol className="intake-stage-list">{created.stages.map(s=><li key={s.stage}>
+      <strong>{s.position}. {s.stage}</strong><small>{s.deliverable}</small>
+      <span>{s.suggested_assignee_name||'Staffing required'}</span>
+      <small>{s.plan_step_id?'Allowlisted internal review step drafted':'Proposal only; tooling and approval required'}</small>
+    </li>)}</ol>
+    <p>Plan ID: <code>{created.plan_id}</code> · Use Company Brain to review, submit and approve before materialization.</p>
+  </div>}
+  <div><h3>Recent founder projects</h3>
+   {projects===null?<small>Project history unavailable</small>:!projects.length?<small>No founder projects yet</small>:
+   <ol>{projects.slice(0,5).map(p=><li key={p.id}>
+     <strong>{p.title}</strong> · <small>{p.plan_status} · {p.staffing_gaps} staffing gaps</small>
+   </li>)}</ol>}</div>
+ </section>;
+}

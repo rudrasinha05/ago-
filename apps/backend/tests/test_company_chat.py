@@ -218,3 +218,56 @@ def test_completed_ai_run_reports_to_actual_manager_and_creates_popup(case):
     assert feed["by_employee"][agent]>=2
     assert any(row["kind"]=="report" and row["employee_id"]==agent
                for row in feed["recent"])
+
+
+def test_founder_one_prompt_creates_durable_draft_and_never_dispatches(case):
+    client,headers,info=case
+    founder,reviewer=headers['founder'],headers['reviewer']
+    original='Build an admission enquiry management application with followups, roles, documentation, accessibility, security, QA and reviewed GitHub release.'
+    payload={'brief':original,'operation_key':str(uuid4())}
+    first=post(client,BASE+'/projects/start',founder,payload)
+    assert first['automatic_execution'] is False
+    assert first['plan_status']=='draft'
+    assert first['approval_required'] is True
+    assert [s['stage'] for s in first['stages']]==[
+        'discovery','architecture','implementation','quality','release']
+    assert len([s for s in first['stages'] if s['staffing_required']])>=4
+    assert all(not s['plan_step_id'] for s in first['stages'])
+    replay=post(client,BASE+'/projects/start',founder,payload)
+    assert replay['reused'] is True
+    assert replay['goal_id']==first['goal_id'] and replay['plan_id']==first['plan_id']
+    post(client,BASE+'/projects/start',founder,
+         {**payload,'brief':'Another unrelated valid startup project prompt'},expected=400)
+    post(client,BASE+'/projects/start',reviewer,
+         {**payload,'operation_key':str(uuid4())},expected=403)
+    rows=client.get(BASE+'/projects',headers=founder).json()
+    assert any(str(r['id'])==first['id'] for r in rows)
+    assert not info['db'].execute("""
+        SELECT 1 FROM ago_governed_tasks WHERE tenant_id=%s
+    """,(info['tenant'],)).fetchone()
+    from ago.bootstrap import bootstrap
+    other,_=bootstrap(info['db'],organization='Separate founder tenant',
+                      email='isolated@sample.test',password='isolated-password-123')
+    remote=info['login']('isolated@sample.test','isolated-password-123',other)
+    assert client.get(BASE+'/projects',headers=remote).json()==[]
+
+
+def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(case):
+    client,headers,info=case
+    founder=headers['founder']
+    dep=department(client,founder)
+    worker=employee(client,founder,dep)
+    project=post(client,BASE+'/projects/start',founder,{
+        'brief':'Design a production-ready resource scheduling platform with source control, tests and documented user journeys.',
+        'operation_key':str(uuid4()),
+    })
+    discovery=project['stages'][0]
+    assert discovery['suggested_assignee_id']==worker
+    assert discovery['plan_step_id'] is not None
+    assert len([s for s in project['stages'] if s['plan_step_id']])==1
+    rows=client.get('/v1/brain/plans/'+project['plan_id']+'/steps',headers=founder).json()
+    assert len(rows)==1 and rows[0]['action']=='internal:brief'
+    assert rows[0]['task_id'] is None
+    assert not info['db'].execute("""
+        SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s
+    """,(info['tenant'],)).fetchone()

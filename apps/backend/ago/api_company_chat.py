@@ -142,3 +142,28 @@ def list_reports(limit: int = Query(default=100,ge=1,le=100),
                  actor=Depends(authenticated), repositories=Depends(repository_scope)):
     allowed(repositories, actor, 'messages:read')
     return repositories.resolve(CompanyChatPort).reports(actor,limit)
+
+class FounderProjectInput(StrictInput):
+    brief: str = Field(min_length=20,max_length=12000)
+    operation_key: UUID
+
+
+@router.post('/projects/start')
+def founder_project(data: FounderProjectInput, actor=Depends(authenticated),
+                    repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:manage')
+    allowed(repositories,actor,'brain:manage')
+    try:
+        return repositories.resolve(CompanyChatPort).start_project(
+            actor,data.brief,str(data.operation_key))
+    except (ValueError,PermissionError) as exc:
+        translate_error(exc)
+
+
+@router.get('/projects')
+def founder_projects(limit: int = Query(default=30,ge=1,le=50),
+                     actor=Depends(authenticated),
+                     repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'brain:read')
+    return repositories.resolve(CompanyChatPort).projects(actor.tenant_id,limit)

@@ -1767,6 +1767,14 @@
         "reports": {
           "arguments": "self, actor, limit: int=100",
           "returns": "list[dict]"
+        },
+        "start_project": {
+          "arguments": "self, actor, brief: str, operation_key: str",
+          "returns": "dict"
+        },
+        "projects": {
+          "arguments": "self, tenant_id: str, limit: int=30",
+          "returns": "list[dict]"
         }
       }
     }
