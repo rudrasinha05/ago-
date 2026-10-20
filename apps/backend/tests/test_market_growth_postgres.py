@@ -29,7 +29,7 @@ def test_source_ingestion_ceo_ownership_founder_gate_and_tenant_isolation(case, 
     monkeypatch.setattr(market, "retrieve_feed", lambda url: FEED)
     uri = market.FEEDS[1][2]
     first = market.ingest(info["db"], info["tenant"], "nist-news", "news", uri)
-    repeated = market.ingest(info["db"], info["tenant"], "hacker-news", "news", uri)
+    repeated = market.ingest(info["db"], info["tenant"], "nist-news", "news", uri)
     assert first["new_evidence"] == 1 and first["status"] == "ok"
     assert repeated["new_evidence"] == 0
     assert market.nominate_for_founder_review(info["db"], info["tenant"]) == 1
