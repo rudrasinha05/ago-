@@ -6,10 +6,10 @@ const fmt=date=>date?new Date(date).toLocaleString():'Not recorded';
 const typeLabel={plan_review:'Strategy plan review',task_execution:'Governed task authorization',governance_action:'Other governed action'};
 const subject=a=>a.plan_title||a.task_action||a.action;
 const isMine=(a,me)=>a.requester_id===me.id;
-const canDecide=(a,me)=>a.status==='pending'&&a.requester_id!==me.id&&me.permissions?.includes('approval:decide')&&me.roles?.includes('reviewer');
+const canDecide=(a,me)=>a.status==='pending'&&a.requester_id!==me.id&&me.permissions?.includes('approval:decide');
 // Role check is presentation-only; the backend always independently verifies active human, grant, tenant and self-review.
 
-export function CompanyApprovals({api,me,employees=[],onReviewed}) {
+export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onReviewed}) {
  const [rows,setRows]=useState(null),[selected,setSelected]=useState(null);
  const [reason,setReason]=useState(''),[error,setError]=useState('');
  const [busy,setBusy]=useState(false),[toast,setToast]=useState(null);
@@ -23,7 +23,10 @@ export function CompanyApprovals({api,me,employees=[],onReviewed}) {
    const latest=await api.request(BASE+'/approvals');
    if(!Array.isArray(latest))throw new Error('Approval inbox data unavailable.');
    const snapshot=new Map(latest.map(a=>[a.id,a.status]));
-   if(previous.current){
+   if(previous.current===null){
+    const waiting=latest.find(a=>a.status==='pending'&&canDecide(a,me));
+    if(waiting)setToast({id:waiting.id,title:'Pending approval needs review',text:subject(waiting)});
+   }else{
     const fresh=latest.find(a=>a.status==='pending'&&canDecide(a,me)&&!previous.current.has(a.id));
     const resolved=latest.find(a=>isMine(a,me)&&a.status!=='pending'&&previous.current.get(a.id)==='pending');
     if(fresh)setToast({id:fresh.id,title:'Approval requested',text:subject(fresh)});
@@ -34,7 +37,7 @@ export function CompanyApprovals({api,me,employees=[],onReviewed}) {
    setSelected(old=>old?latest.find(x=>x.id===old.id)||null:null);
   }catch{setRows(null);}
  },[api,me.id,me.roles,me.permissions,readable]);
- useEffect(()=>{refresh();const interval=setInterval(refresh,8000);return()=>clearInterval(interval);},[refresh]);
+ useEffect(()=>{refresh();const interval=setInterval(refresh,8000);return()=>clearInterval(interval);},[refresh,refreshSignal]);
  useEffect(()=>{if(!selected)return;const focus=dialog.current?.querySelector('button');focus?.focus();
   const onKey=e=>{if(e.key==='Escape'){e.preventDefault();close();}if(e.key!=='Tab'||!dialog.current)return;
    const targets=[...dialog.current.querySelectorAll('button,textarea')].filter(x=>!x.disabled);
@@ -62,7 +65,7 @@ export function CompanyApprovals({api,me,employees=[],onReviewed}) {
  const pending=(rows||[]).filter(a=>a.status==='pending');
  const actionable=pending.filter(a=>canDecide(a,me));
  const displayed=showAll?rows||[]:pending;
- return <section className="approval-inbox" aria-label="Approvals inbox">
+ return <section id="company-approval-inbox" className="approval-inbox" aria-label="Approvals inbox">
   <header className="approval-header">
    <div><h3>Approvals inbox <span className="approval-badge">{actionable.length} need my review</span></h3>
     <p>{pending.length} pending requests company-wide · Independent human decision required · Requesters cannot approve their own request</p></div>
@@ -88,6 +91,7 @@ export function CompanyApprovals({api,me,employees=[],onReviewed}) {
     <h3>{subject(selected)}</h3>
     <dl>
      <dt>Requested by</dt><dd>{selected.requester_name} · {selected.requester_role||'Role not recorded'}</dd>
+     {selected.requester_manager_name&&<><dt>Reports to</dt><dd>{selected.requester_manager_name}</dd></>}
      <dt>Requested at</dt><dd>{fmt(selected.created_at)}</dd>
      <dt>Status</dt><dd>{selected.status}</dd>
      <dt>Who can approve?</dt><dd>{selected.review_routing}</dd>

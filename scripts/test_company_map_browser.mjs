@@ -15,11 +15,12 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const base=process.env.AGO_PREVIEW_URL||'http://127.0.0.1:'+server.address().port;
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const founder=id(1), tenant=id(2), department=id(3), cto=id(4), developer=id(5);
+let founderBriefSnapshot='';
 const employees=[{id:cto,name:'CTO',department_id:department,kind:'ai',manager_id:null},{id:developer,name:'Developer',department_id:department,kind:'ai',manager_id:cto}];
 const departments=[{id:department,name:'Engineering'}];
 let tasks=[{id:id(6),action:'research:brief',assignee_id:developer,status:'running',project_name:'Orchestration research'}];
 let messages=[], calls=[];
-let appointments=[],roles={},reports=[],founderProjects=[];
+let appointments=[],roles={},reports=[],founderProjects=[],approvalRecords=[];
 let workEvents=[{id:1,employee_id:developer,task_id:id(6),body:'research:brief → running',created_at:new Date().toISOString()}];
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try{
@@ -29,7 +30,7 @@ try{
   const req=route.request(),url=new URL(req.url()),path=url.pathname,body=req.postDataJSON();let result=[];
   calls.push({path,method:req.method(),body});
   if(path==='/v1/sessions')result={access_token:'fixture-session'};
-  else if(path==='/v1/console/me')result={id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read','brain:manage']};
+  else if(path==='/v1/console/me')result={id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read','brain:manage','approval:read','approval:decide']};
   else if(path==='/v1/organization/departments')result=departments;
   else if(path==='/v1/organization/employees')result=employees;
   else if(path.endsWith('/company/activity'))result=tasks;
@@ -47,7 +48,17 @@ try{
     founderProjects.unshift({...result,staffing_gaps:4});
   }
   else if(path.endsWith('/company/projects'))result=founderProjects;
-  else if(path.includes('/v1/brain/plans/')&&path.endsWith('/submit'))result={approval_id:id(24),status:'pending_approval'};
+  else if(path.endsWith('/company/approvals'))result=approvalRecords;
+  else if(path.includes('/v1/brain/plans/')&&path.endsWith('/submit')){
+    result={approval_id:id(24),status:'pending_approval'};
+    approvalRecords.push({id:id(24),requester_id:founder,requester_name:'Founder',
+     requester_role:'Founder',action:'brain:activate:'+id(23),status:'pending',
+     approval_type:'plan_review',plan_title:founderProjects[0].title,
+     plan_id:id(23),goal_brief_excerpt:founderBriefSnapshot,
+     created_at:new Date().toISOString(),
+     review_routing:'Independent authorized human reviewer; not automatically assigned',
+     next_action:'An approved plan requires separate activation and per-task approvals.'});
+  }
   else if(path.endsWith('/company/governance'))result={board:appointments,employees:employees.map(e=>({...e,...(roles[e.id]||{})})),board_grants_authority:false};
   else if(path.endsWith('/company/board/appoint')){appointments=appointments.filter(a=>a.seat!==body.seat);appointments.push({seat:body.seat,employee_id:body.employee_id});result={...body,authority_granted:false};}
   else if(path.includes('/company/employees/')&&path.endsWith('/role')){const worker=path.split('/').at(-2);roles[worker]=body;result={id:worker,...body};}
@@ -79,6 +90,12 @@ try{
  await page.getByRole('button',{name:'Request independent plan review'}).click();
  await page.getByText('Status: pending_approval',{exact:false}).waitFor();
  assert.ok(calls.some(c=>c.path==='/v1/brain/plans/'+id(23)+'/submit'));
+ await page.locator('.approval-inbox').getByText('1 pending requests company-wide').waitFor({timeout:15000});
+ await page.locator('.approval-inbox').getByRole('button',{name:'View approval details'}).click();
+ await page.getByRole('dialog',{name:'Approval details'}).getByText('Founder',{exact:false}).first().waitFor();
+ assert.match(await page.getByRole('dialog',{name:'Approval details'}).innerText(),/independent human reviewer/i);
+ assert.equal(await page.getByRole('dialog',{name:'Approval details'}).getByRole('button',{name:'Approve',exact:true}).count(),0);
+ await page.getByRole('button',{name:'Close approval details'}).click();
  await page.getByLabel('Appoint Technology Oversight').selectOption(cto);
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'Approve seat'}).click();
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'View member'}).waitFor();

@@ -443,6 +443,7 @@ class CompanyChat:
                    a.reason,a.created_at,a.decided_at,
                    COALESCE(requester.name,'Unknown requester') AS requester_name,
                    requester.role_title AS requester_role,
+                   manager.name AS requester_manager_name,
                    COALESCE(reviewer.name,'Not yet decided') AS reviewer_name,
                    p.id AS plan_id,p.title AS plan_title,
                    left(g.description,3000) AS goal_brief_excerpt,
@@ -455,6 +456,8 @@ class CompanyChat:
               ON requester.tenant_id=a.tenant_id AND requester.id=a.requester_id
             LEFT JOIN ago_departments d
               ON d.tenant_id=requester.tenant_id AND d.id=requester.department_id
+            LEFT JOIN ago_employees manager
+              ON manager.tenant_id=requester.tenant_id AND manager.id=requester.manager_id
             LEFT JOIN ago_employees reviewer
               ON reviewer.tenant_id=a.tenant_id AND reviewer.id=a.reviewer_id
             LEFT JOIN ago_strategy_plans p

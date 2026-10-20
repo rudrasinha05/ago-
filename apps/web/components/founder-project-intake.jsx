@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from 'react';
 
-export function FounderProjectIntake({api,me}) {
+export function FounderProjectIntake({api,me,onChanged}) {
  const [brief,setBrief]=useState('');
  const [projects,setProjects]=useState(null);
  const [created,setCreated]=useState(null);
@@ -19,7 +19,7 @@ export function FounderProjectIntake({api,me}) {
   try {
     const response=await api.request('/v1/organization/company/projects/start',
       {method:'POST',body:{brief:retry.current.brief,operation_key:retry.current.key}});
-    setCreated(response);setBrief('');retry.current=null;await refresh();
+    setCreated(response);setBrief('');retry.current=null;await refresh();onChanged?.();
   } catch(err){setError(err.message);}finally{setBusy(false);}
  }
  async function submitForReview(){
@@ -27,7 +27,7 @@ export function FounderProjectIntake({api,me}) {
   setReviewBusy(true);setError('');
   try{const response=await api.request('/v1/brain/plans/'+encodeURIComponent(created.plan_id)+'/submit',{method:'POST'});
     setCreated(old=>({...old,plan_status:response.status,approval_id:response.approval_id}));
-    await refresh();
+    await refresh();onChanged?.();
   }catch(e){setError(e.message);}finally{setReviewBusy(false);}
  }
   return <section className="founder-project-intake" aria-label="Start founder project">

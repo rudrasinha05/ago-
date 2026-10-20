@@ -12,6 +12,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const departments=resource(data,'departments')||[];
   const grouped=resource(data,'employees');
   const employees=useMemo(()=>Object.values(grouped||{}).flat(),[grouped]);
+  const [approvalRefresh,setApprovalRefresh]=useState(0);
   const [channel,setChannel]=useState('global'),[messages,setMessages]=useState([]),[before,setBefore]=useState(null);
   const [tasks,setTasks]=useState(null),[selected,setSelected]=useState(null),[reply,setReply]=useState(null);
   const [centerDraft,setCenterDraft]=useState('');
@@ -112,8 +113,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
   return <section className="company-command" aria-label="Company map and conversations">
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><button className="btn" disabled={!me.permissions.includes('organization:manage')} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></header>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
-    <CompanyApprovals api={api} me={me} employees={employees} onReviewed={refreshEvents}/>
-    <FounderProjectIntake api={api} me={me}/>
+    <CompanyApprovals api={api} me={me} employees={employees} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
+    <FounderProjectIntake api={api} me={me} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <div className="company-shell">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>
