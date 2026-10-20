@@ -19,6 +19,7 @@ const employees=[{id:cto,name:'CTO',department_id:department,kind:'ai',manager_i
 const departments=[{id:department,name:'Engineering'}];
 let tasks=[{id:id(6),action:'research:brief',assignee_id:developer,status:'running',project_name:'Orchestration research'}];
 let messages=[], calls=[];
+let appointments=[],roles={},reports=[];
 let workEvents=[{id:1,employee_id:developer,task_id:id(6),body:'research:brief → running',created_at:new Date().toISOString()}];
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try{
@@ -34,6 +35,10 @@ try{
   else if(path.endsWith('/company/activity'))result=tasks;
   else if(path.endsWith('/company/notifications'))result={by_employee:{[developer]:workEvents.length,[cto]:0},recent:[...workEvents].reverse(),event_type:'committed_task_status'};
   else if(path==='/v1/platform/catalog')result={github_projects:[]};
+  else if(path.endsWith('/company/governance'))result={board:appointments,employees:employees.map(e=>({...e,...(roles[e.id]||{})})),board_grants_authority:false};
+  else if(path.endsWith('/company/board/appoint')){appointments=appointments.filter(a=>a.seat!==body.seat);appointments.push({seat:body.seat,employee_id:body.employee_id});result={...body,authority_granted:false};}
+  else if(path.includes('/company/employees/')&&path.endsWith('/role')){const worker=path.split('/').at(-2);roles[worker]=body;result={id:worker,...body};}
+  else if(path.endsWith('/company/reports'))result=reports;
   else if(path.endsWith('/company/chat')){
    if(req.method()==='POST'){result={...body,id:messages.length+1,author_name:'Rudra',kind:'message',created_at:new Date().toISOString()};messages.push(result);}
    else result={items:messages.filter(m=>url.searchParams.get('channel')==='global'||m.channel===url.searchParams.get('channel')),next_before:null};
@@ -51,6 +56,18 @@ try{
  assert.match(await page.locator('.employee-inspector').innerText(),/Additional responsibilities/);
  await page.getByRole('heading',{name:'Board of Directors'}).waitFor();
  await page.getByRole('heading',{name:'AI Company Command Center'}).waitFor();
+ await page.getByLabel('Appoint Technology Oversight').selectOption(cto);
+ await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'Approve seat'}).click();
+ await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'View member'}).waitFor();
+ await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
+ await page.getByRole('button',{name:'Edit employee accountability'}).click();
+ await page.getByLabel('Official role title').fill('Backend Engineer');
+ await page.getByLabel('Core responsibilities').fill('Build and independently test approved backend modules');
+ await page.getByLabel('Additional responsibilities').fill('Maintain documentation and review own performance');
+ await page.getByRole('button',{name:'Save role details'}).click();
+ await page.locator('.accountability-panel').getByText('Backend Engineer').waitFor();
+ assert.equal(roles[developer].role_title,'Backend Engineer');
+ assert.equal(appointments[0].employee_id,cto);
  await page.getByLabel('Message Developer',{exact:true}).fill('Please show the sources');await page.getByRole('button',{name:'Send',exact:true}).click();
  await page.locator('.chat-message').getByText('Please show the sources',{exact:true}).waitFor();
  await page.locator('.chat-message').getByRole('button',{name:'Reply',exact:true}).click();
