@@ -681,6 +681,54 @@ class CompanyChat:
             'note':'Idle means no recorded running or queued governed task, not employee inactivity. Only authorized, useful work should be assigned.',
         }
 
+    def market_intelligence(self, tenant_id: str, limit: int = 100) -> dict:
+        """Tenant-scoped factual signals, CEO-ranked leads and unpublished campaign drafts."""
+        UUID(tenant_id)
+        if not 1 <= limit <= 200:
+            raise ValueError('Invalid market intelligence limit')
+        signals = self.db.execute("""
+            SELECT s.id,s.source_name,s.source_kind,s.source_url,s.title,s.excerpt,
+                   s.potential_customer,s.opportunity_score,s.score_basis,
+                   s.evidence_level,s.review_status,s.discovery_method,s.discovered_at,
+                   s.published_at,s.nominated_at,s.approval_id,a.status AS approval_status,
+                   e.name AS executive_owner_name
+            FROM ago_market_signals s
+            LEFT JOIN ago_approval_requests a ON a.tenant_id=s.tenant_id
+               AND a.id=s.approval_id
+            LEFT JOIN ago_employees e ON e.tenant_id=s.tenant_id
+               AND e.id=s.executive_owner_id
+            WHERE s.tenant_id=%s
+            ORDER BY (s.review_status='shortlisted') DESC,
+                     s.opportunity_score DESC,s.discovered_at DESC,s.id
+            LIMIT %s
+        """,(tenant_id,limit)).fetchall()
+        drafts = self.db.execute("""
+            SELECT m.id,m.project_id,i.title AS project_title,m.platform,
+                   m.draft_text,m.stage,m.external_post_url,m.approval_id,m.created_at
+            FROM ago_marketing_drafts m
+            JOIN ago_founder_intakes i ON i.tenant_id=m.tenant_id AND i.id=m.project_id
+            WHERE m.tenant_id=%s
+            ORDER BY m.created_at DESC,m.id LIMIT %s
+        """,(tenant_id,limit)).fetchall()
+        scans = self.db.execute("""
+            SELECT source_name,outcome,ingested_count,checked_at,error_class
+            FROM ago_growth_scan_runs WHERE tenant_id=%s
+            ORDER BY checked_at DESC,id DESC LIMIT 12
+        """,(tenant_id,)).fetchall()
+        total = self.db.execute("""
+            SELECT COUNT(*) AS total FROM ago_market_signals WHERE tenant_id=%s
+        """,(tenant_id,)).fetchone()['total']
+        return {
+            'signals':[dict(row) for row in signals],
+            'signal_total':total,
+            'marketing_drafts':[dict(row) for row in drafts],
+            'source_health':[dict(row) for row in scans],
+            'claimed_verified_revenue':False,
+            'external_posting_configured':False,
+            'note':'RSS items are unvalidated hypotheses. Heuristic ranking is not proof of demand. '
+                   'CEO-accountable nomination requires founder review; social posts are drafts only.',
+        }
+
     @staticmethod
     def _opportunity_catalog() -> tuple[tuple[str, ...], ...]:
         """Seed hypotheses only; no claim of AI research or customer interviews."""
