@@ -482,6 +482,7 @@
     "integration_store": [
       "ago_api_quotas",
       "ago_approval_requests",
+      "ago_company_chat",
       "ago_departments",
       "ago_employees",
       "ago_github_dispatch",
