@@ -568,7 +568,12 @@ class CompanyChat:
                    t.id AS task_id,t.action AS task_action,t.status AS task_status,
                    t.assignee_id AS task_assignee_id,
                    assignee.name AS task_assignee_name,
-                   COALESCE(d.name,td.name) AS department_name
+                   COALESCE(d.name,td.name) AS department_name,
+                   o.id AS opportunity_id,o.title AS opportunity_title,
+                   o.target_customer AS opportunity_customer,
+                   o.proposed_offer AS opportunity_offer,
+                   o.revenue_path AS opportunity_revenue,
+                   o.validation_next_step AS opportunity_validation
             FROM ago_approval_requests a
             LEFT JOIN ago_employees requester
               ON requester.tenant_id=a.tenant_id AND requester.id=a.requester_id
@@ -587,6 +592,9 @@ class CompanyChat:
             LEFT JOIN ago_governed_tasks t
               ON t.tenant_id=a.tenant_id AND t.approval_id=a.id
              AND t.action=a.action
+            LEFT JOIN ago_company_opportunities o
+              ON o.tenant_id=a.tenant_id AND o.approval_id=a.id
+             AND a.action=('company:opportunity:' || o.id::text)
             LEFT JOIN ago_employees assignee
               ON assignee.tenant_id=t.tenant_id AND assignee.id=t.assignee_id
             LEFT JOIN ago_departments td
@@ -599,6 +607,7 @@ class CompanyChat:
         for row in rows:
             item = dict(row)
             item["approval_type"] = (
+                "opportunity_review" if item["opportunity_id"] else
                 "plan_review" if item["plan_id"] else
                 "task_execution" if item["task_id"] else "governance_action"
             )
@@ -606,6 +615,8 @@ class CompanyChat:
                 "Founder only — authenticated active human founder"
             )
             item["next_action"] = (
+                "Founder approval permits market validation and a governed project plan. No autonomous sales, email campaigns, ad spend or release is authorized."
+                if item["opportunity_id"] else
                 "An approved plan requires separate activation and per-task approvals."
                 if item["plan_id"] else
                 "An approved task still requires explicit governed execution and QA."
