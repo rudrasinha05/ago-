@@ -881,12 +881,15 @@ class CompanyChat:
                    s.potential_customer,s.opportunity_score,s.score_basis,
                    s.evidence_level,s.review_status,s.discovery_method,s.discovered_at,
                    s.published_at,s.nominated_at,s.approval_id,a.status AS approval_status,
-                   e.name AS executive_owner_name
+                   e.name AS executive_owner_name,
+                   linked.intake_id AS linked_project_id
             FROM ago_market_signals s
             LEFT JOIN ago_approval_requests a ON a.tenant_id=s.tenant_id
                AND a.id=s.approval_id
             LEFT JOIN ago_employees e ON e.tenant_id=s.tenant_id
                AND e.id=s.executive_owner_id
+            LEFT JOIN ago_market_signal_project_links linked ON linked.tenant_id=s.tenant_id
+               AND linked.signal_id=s.id
             WHERE s.tenant_id=%s
             ORDER BY (s.review_status='shortlisted') DESC,
                      s.opportunity_score DESC,s.discovered_at DESC,s.id
