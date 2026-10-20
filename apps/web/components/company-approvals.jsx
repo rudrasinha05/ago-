@@ -106,7 +106,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
        <dt>Revenue pathway</dt><dd>{selected.opportunity_revenue}</dd>
        <dt>Validation prerequisite</dt><dd>{selected.opportunity_validation}</dd>
        <dt>Provenance</dt><dd>Automatically catalog-generated hypothesis; the manager is accountable, but has not personally researched this opportunity.</dd></>}
-     {selected.plan_title&&<><dt>Plan</dt><dd>{selected.plan_title}</dd></>
+     {selected.plan_title&&<><dt>Plan</dt><dd>{selected.plan_title}</dd></>}
      {selected.plan_id&&<><dt>Plan ID</dt><dd><code>{selected.plan_id}</code></dd></>}
      {selected.task_id&&<><dt>Task / assignee</dt><dd>{selected.task_action} · {selected.task_assignee_name||'Unassigned'}</dd></>}
      {selected.goal_brief_excerpt&&<><dt>Founder brief (excerpt)</dt><dd className="approval-long">{selected.goal_brief_excerpt}</dd></>}
