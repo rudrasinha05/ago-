@@ -4,6 +4,7 @@ from uuid import UUID
 from dataclasses import asdict
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.organization_store import OrganizationStore
+from ago.governance import ApprovalRepository
 
 
 class CompanyChat:
@@ -766,21 +767,13 @@ class CompanyChat:
                 if prior:
                     continue
                 opportunity_id=str(uuid4())
-                approval_id=str(uuid4())
                 action='company:opportunity:'+opportunity_id
-                # This is an automatically generated idea; a manager's name
-                # records accountability, not human/model authorship of the idea.
-                self.db.execute("""
-                    INSERT INTO ago_approval_requests
-                      (id,tenant_id,action,requester_id)
-                    VALUES (%s,%s,%s,%s)
-                """,(approval_id,tenant_id,action,owner))
-                self.db.execute("""
-                    INSERT INTO ago_approval_audit
-                      (request_id,tenant_id,actor_id,event,reason)
-                    VALUES (%s,%s,%s,'proposed',
-                            'Company Brain catalog hypothesis; not a validated commercial lead')
-                """,(approval_id,tenant_id,owner))
+                # Governance owns all protected approval/audit writes.
+                # The real executive is an accountability owner; the idea is
+                # explicitly labeled as automatically catalog-generated.
+                proposal=self.repositories.resolve(ApprovalRepository).propose(
+                    tenant_id=tenant_id,action=action,requester_id=str(owner))
+                approval_id=proposal.request_id
                 self.db.execute("""
                     INSERT INTO ago_company_opportunities
                      (id,tenant_id,cycle_start,catalog_key,title,target_customer,
