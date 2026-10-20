@@ -161,12 +161,20 @@ try{
  await page.locator('#company-approval-inbox').getByText('0 need my review',{exact:false}).waitFor();
  await page.locator('#company-approval-inbox').getByRole('button',{name:'View approval details'}).click();
  const approvalDialog=page.getByRole('dialog',{name:'Approval details'});
- await approvalDialog.getByLabel('Mandatory decision reason').fill('Verified scope and independent review');
- await approvalDialog.getByRole('button',{name:'Approve',exact:true}).click();
- await approvalDialog.waitFor({state:'detached'});
+ assert.equal(await approvalDialog.getByRole('button',{name:'Approve',exact:true}).count(),0);
+ await approvalDialog.getByRole('button',{name:'Close approval details'}).click();
+ assert.equal(approvalRecords[0].status,'pending');
+ asReviewer=false;
+ await page.goto(base+'/workspace/organization/');
+ await login();
+ await page.locator('#company-approval-inbox').getByRole('button',{name:'View approval details'}).click();
+ const founderDialog=page.getByRole('dialog',{name:'Approval details'});
+ await founderDialog.getByLabel('Mandatory decision reason').fill('Founder approves documented scope');
+ await founderDialog.getByRole('button',{name:'Approve',exact:true}).click();
+ await founderDialog.waitFor({state:'detached'});
  assert.equal(approvalRecords[0].status,'approved');
- assert.equal(approvalRecords[0].reviewer_id,id(31));
+ assert.equal(approvalRecords[0].reviewer_id,founder);
  assert.ok(calls.some(c=>c.path.includes('/governance/approvals/')&&c.path.endsWith('/decision')&&c.body.approve===true));
  assert.deepEqual(errors,[]);
- console.log('PASS: company map, founder self-review denied, real reviewer approval modal, notification, mobile and WCAG; mocked API');
+ console.log('PASS: company map, founder sole approval authority, employee access read-only, notification, mobile and WCAG; mocked API');
 }finally{await browser.close();server.close();}
