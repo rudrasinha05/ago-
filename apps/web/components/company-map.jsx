@@ -22,6 +22,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const title=channel==='global'?'Global timeline':layout.nodes.find(n=>n.key===channel)?.name||'Conversation';
   const selectedEmployee=employees.find(e=>e.id===selected);
   const status=employeeStatus(selected,tasks);
+  const assignedRepos=id=>(githubState||[]).filter(p=>p.pm_id===id||p.qa_id===id||p.developer_ids.includes(id)).map(p=>p.repository);
+  const displayProjects=id=>[...new Set([...employeeProjects(id,tasks),...assignedRepos(id)])];
   const routing=useMemo(()=>activeRouteKeys(layout,employees,tasks),[layout,employees,tasks]);
   const liveTaskCount=Array.isArray(tasks)?tasks.filter(t=>t.status==='running').length:0;
   const refreshActivity=useCallback(async()=>{
@@ -65,7 +67,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
         const item=p.payload||p;let status=null;
         try{status=await api.request('/v1/platform/github/projects/'+encodeURIComponent(item.id)+'/status');}
         catch{status=null;}
-        return {id:item.id,repository:item.repository,status};
+        return {id:item.id,repository:item.repository,pm_id:item.pm_id,qa_id:item.qa_id,developer_ids:item.developer_ids||[],status};
       }));
       if(alive.current)setGithubState(checked);
     }catch{if(alive.current)setGithubState(null);}
@@ -111,7 +113,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
           <svg width={layout.size} height={layout.size} aria-label="Reporting network; red lines show assigned work" role="img">{layout.edges.map((edge,i)=>{const a=points.get(edge.from),b=points.get(edge.to);return a&&b?<line key={i} className={routing.routes.has(edge.from+'>'+edge.to)?'edge-live':''} x1={a.x} y1={a.y} x2={b.x} y2={b.y}/>:null;})}</svg>
           <form className="map-founder" style={{left:layout.center,top:layout.center,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><strong>♛ Founder / CEO</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
           {layout.nodes.map(n=>{const state=employeeStatus(n.id,tasks);
-             const project=employeeProjects(n.id,tasks);const eventCount=eventData?.by_employee?.[n.id]??0;
+             const project=displayProjects(n.id);const eventCount=eventData?.by_employee?.[n.id]??0;
              return <button key={n.key} aria-label={n.type==='employee'?n.name+', '+state.label+', '+eventCount+' recorded updates':n.name} className={'map-node '+n.type+(channel===n.key?' active':'')+(n.type==='employee'&&state.tone==='busy'?' working':'')+(routing.active.has(n.id)?' assigned':'')} style={{left:n.x,top:n.y}} onClick={()=>choose(n.key)}>
                {n.type==='employee'&&<span className="map-count" title="Recorded work events">{eventCount}</span>}
                <strong>{n.type==='employee'&&<span className={'presence '+state.tone}/>} {n.name}</strong>
@@ -131,7 +133,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
           <dl><dt>Type</dt><dd>{selectedEmployee.kind==='ai'?'AI role · runtime authorization separate':'Human member'}</dd>
            <dt>Department</dt><dd>{departments.find(d=>d.id===selectedEmployee.department_id)?.name||'Unknown'}</dd>
            <dt>Reports to</dt><dd>{employees.find(e=>e.id===selectedEmployee.manager_id)?.name||'Founder / department root'}</dd>
-           <dt>Current projects</dt><dd>{employeeProjects(selected,tasks).join(', ')||'No project linked'}</dd>
+           <dt>Current projects</dt><dd>{displayProjects(selected).join(', ')||'No project linked'}</dd>
            <dt>Recorded updates</dt><dd>{eventData?.by_employee?.[selected]??'Unavailable'}</dd>
            <dt>Core responsibility</dt><dd>Deliver assigned work and verifiable evidence within approved scope.</dd>
            <dt>Additional responsibilities</dt><dd>Maintain code, tests and documentation; report blockers, quality outcomes and completion to immediate superior. Support publishable release checks.</dd></dl>
