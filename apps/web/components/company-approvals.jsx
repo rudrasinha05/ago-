@@ -115,7 +115,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
          required maxLength={3000} rows={3} placeholder="Explain the reviewed scope and your decision"/>
        <div className="approval-actions"><button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(true)}>Approve</button>
         <button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(false)}>Deny</button></div>
-      </>:<p>'Only the authenticated founder can approve or deny this request. You can still inspect its details.'</p>}
+      </>:<p>Only the authenticated founder can approve or deny this request. You can still inspect its details.</p>}
     </div>}
     {error&&<p role="alert">{error}</p>}
    </section>
