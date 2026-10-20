@@ -36,8 +36,8 @@ FEEDS = (
     ("nist-news", "news", "https://www.nist.gov/news-events/news/rss.xml"),
     ("nist-cyber", "news", "https://www.nist.gov/news-events/cybersecurity/rss.xml"),
     ("nist-manufacturing", "article", "https://www.nist.gov/blogs/manufacturing-innovation-blog/rss.xml"),
-    ("openalex-metadata", "research", "https://api.openalex.org/works?per-page=25&sort=publication_date:desc"),
-    ("crossref-metadata", "research", "https://api.crossref.org/works?rows=25&sort=published&order=desc"),
+    ("openalex-metadata", "research", "https://api.openalex.org/works?per-page=25&sort=publication_date:desc&select=id,doi,display_name,publication_date"),
+    ("crossref-metadata", "research", "https://api.crossref.org/works?rows=25&sort=published&order=desc&select=DOI,title,published,URL"),
 )
 MAX_BYTES = 1_000_000
 MAX_ITEMS_PER_FEED = 70
