@@ -8,6 +8,7 @@ const dated=value=>value?new Date(value).toLocaleString():'Not reported';
 export function OpportunityRadar({api,me,onChanged}) {
  const [rows,setRows]=useState(null),[market,setMarket]=useState(null);
  const [working,setWorking]=useState(false),[notice,setNotice]=useState('');
+ const [promoting,setPromoting]=useState(null);
  const [expanded,setExpanded]=useState(false),[signalsOpen,setSignalsOpen]=useState(true);
  const [draftsOpen,setDraftsOpen]=useState(false),[signalFilter,setSignalFilter]=useState('all');
  const canRead=me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read');
@@ -34,6 +35,17 @@ export function OpportunityRadar({api,me,onChanged}) {
    await refresh();onChanged?.();
   }catch(e){setNotice(e.message||'Catalog scan failed.');}
   finally{setWorking(false);}
+ }
+ async function promote(signal){
+  if(!canScan||promoting)return;
+  setPromoting(signal.id);setNotice('');
+  try{
+   const project=await api.request(BASE+'/market-intelligence/'+encodeURIComponent(signal.id)+'/project',{method:'POST'});
+   setNotice('Founder-approved signal linked to project draft: '+project.title+'. Delivery still requires a reviewed and staffed plan.');
+   await refresh();onChanged?.();
+   document.getElementById('ago-project-portfolio')?.scrollIntoView({behavior:'smooth'});
+  }catch(e){setNotice(e.message||'Could not promote the approved research signal.');}
+  finally{setPromoting(null);}
  }
  if(!canRead)return null;
  const signals=(market?.signals||[]).filter(s=>signalFilter==='all'||s.source_kind===signalFilter||s.review_status===signalFilter);
@@ -68,6 +80,9 @@ export function OpportunityRadar({api,me,onChanged}) {
       <small>Relevance: {s.opportunity_score}/100 · {s.score_basis} · {s.potential_customer}</small>
       <small>Status: {s.review_status} · {s.evidence_level} {s.executive_owner_name?'· Accountable CEO: '+s.executive_owner_name:''}</small>
       {s.approval_status&&<small>Founder authorization: {s.approval_status} · Does not authorize product launch, sales or spending</small>}
+      {s.linked_project_id?<small><a href="#ago-project-portfolio">Linked governed draft project: {s.linked_project_id} ↗</a></small>:
+       s.approval_status==='approved'&&canScan?<button type="button" disabled={Boolean(promoting)}
+        onClick={()=>promote(s)}>{promoting===s.id?'Converting…':'Create governed project draft from approved research'}</button>:null}
       {safeUrl(s.source_url)&&<p><a href={safeUrl(s.source_url)} target="_blank" rel="noopener noreferrer">Open original evidence ↗</a></p>}
      </article>)}
     <p>Showing {signals.length} of {market.signal_total} unique stored signals. Source evidence needs customer validation before CEO investment decisions.</p>
