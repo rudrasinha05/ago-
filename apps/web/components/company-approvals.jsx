@@ -9,7 +9,7 @@ const isMine=(a,me)=>a.requester_id===me.id;
 const canDecide=(a,me)=>a.status==='pending'&&a.requester_id!==me.id&&me.permissions?.includes('approval:decide');
 // Role check is presentation-only; the backend always independently verifies active human, grant, tenant and self-review.
 
-export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onReviewed}) {
+export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onReviewed}) {
  const [rows,setRows]=useState(null),[selected,setSelected]=useState(null);
  const [reason,setReason]=useState(''),[error,setError]=useState('');
  const [busy,setBusy]=useState(false),[toast,setToast]=useState(null);
@@ -34,9 +34,10 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onReviewed
    }
    previous.current=snapshot;
    setRows(latest);
+   onData?.(latest);
    setSelected(old=>old?latest.find(x=>x.id===old.id)||null:null);
   }catch{setRows(null);}
- },[api,me.id,me.roles,me.permissions,readable]);
+ },[api,me.id,me.roles,me.permissions,readable,onData]);
  useEffect(()=>{refresh();const interval=setInterval(refresh,8000);return()=>clearInterval(interval);},[refresh,refreshSignal]);
  useEffect(()=>{if(!selected)return;const focus=dialog.current?.querySelector('button');focus?.focus();
   const onKey=e=>{if(e.key==='Escape'){e.preventDefault();close();}if(e.key!=='Tab'||!dialog.current)return;

@@ -13,6 +13,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const grouped=resource(data,'employees');
   const employees=useMemo(()=>Object.values(grouped||{}).flat(),[grouped]);
   const [approvalRefresh,setApprovalRefresh]=useState(0);
+  const [approvalList,setApprovalList]=useState(null);
+  const receiveApprovalData=useCallback(items=>setApprovalList(items),[]);
   const [channel,setChannel]=useState('global'),[messages,setMessages]=useState([]),[before,setBefore]=useState(null);
   const [tasks,setTasks]=useState(null),[selected,setSelected]=useState(null),[reply,setReply]=useState(null);
   const [centerDraft,setCenterDraft]=useState('');
@@ -113,7 +115,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   return <section className="company-command" aria-label="Company map and conversations">
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><button className="btn" disabled={!me.permissions.includes('organization:manage')} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></header>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
-    <CompanyApprovals api={api} me={me} employees={employees} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
+    <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
     <FounderProjectIntake api={api} me={me} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <div className="company-shell">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
@@ -131,11 +133,13 @@ export function CompanyMap({api,me,data,onRefresh}) {
           {layout.nodes.map(n=>{const state=employeeStatus(n.id,tasks);
              const project=displayProjects(n.id);const eventCount=eventData?.by_employee?.[n.id]??0;
              const recordedRole=governanceData?.employees?.find(e=>e.id===n.id)?.role_title;
+             const approvalCount=(approvalList||[]).filter(a=>a.requester_id===n.id&&a.status==='pending').length;
              return <button key={n.key} aria-label={n.type==='employee'?n.name+', '+state.label+', '+eventCount+' recorded updates':n.name} className={'map-node '+n.type+(channel===n.key?' active':'')+(n.type==='employee'&&state.tone==='busy'?' working':'')+(routing.active.has(n.id)?' assigned':'')} style={{left:n.x,top:n.y}} onClick={()=>choose(n.key)}>
                {n.type==='employee'&&<span className="map-count" title="Recorded work events">{eventCount}</span>}
                <strong>{n.type==='employee'&&<span className={'presence '+state.tone}/>} {n.name}</strong>
                <small>{n.type==='department'?'Department':(n.kind==='ai'?'AI employee · ':'Human member · ')+state.label}</small>
                {n.type==='employee'&&<small className="map-role">Role: {recordedRole||'Not assigned'}</small>}
+               {n.type==='employee'&&approvalCount>0&&<small className="map-role">{approvalCount} pending approval request(s)</small>}
                {n.type==='employee'&&<small className="map-project">Project: {project[0]||'No linked project'}{project.length>1?' +'+(project.length-1):''}</small>}
                {n.type==='employee'&&state.tasks.find(t=>t.status==='running')&&<small className="map-task">{state.tasks.find(t=>t.status==='running').action}</small>}
                {n.type==='employee'&&<span className="node-action">View work details ↗</span>}
@@ -156,7 +160,13 @@ export function CompanyMap({api,me,data,onRefresh}) {
            <dt>Core responsibility</dt><dd>Deliver assigned work and verifiable evidence within approved scope.</dd>
            <dt>Additional responsibilities</dt><dd>Maintain code, tests and documentation; report blockers, quality outcomes and completion to immediate superior. Support publishable release checks.</dd></dl>
            <RoleEditor key={selected} employee={selectedEmployee} profile={governanceData?.employees?.find(e=>e.id===selected)} api={api} canManage={me.roles.includes('founder')} onSaved={refreshGovernance}/>
-           <h4>Approvals</h4><p>Open the Approvals inbox above for pending requests and full decision evidence. Only independent authorized human reviewers can decide.</p>
+           <h4>Approvals</h4>
+           {approvalList===null?<p>Approval history unavailable.</p>:
+             !approvalList.filter(a=>a.requester_id===selected||a.task_assignee_id===selected).length?
+             <p>No recorded approval requests for this employee.</p>:
+             approvalList.filter(a=>a.requester_id===selected||a.task_assignee_id===selected).slice(0,5)
+             .map(a=><p key={a.id}>{a.approval_type?.replaceAll('_',' ')} — {a.status} · {a.plan_title||a.task_action||a.action}</p>)}
+           <p><a href="#company-approval-inbox">Open Approval Inbox for the full request and decision details ↑</a></p>
            <h4>Assigned tasks ({status.tasks.length})</h4>{status.tasks.length?status.tasks.slice(0,12).map(t=><div key={t.id}><strong>{t.action}</strong><p>{t.status} · {t.project_name||'No linked project plan'}</p></div>):<p>{tasks===null?'Activity could not be verified.':'No assigned tasks.'}</p>}
            <h4>Latest work events</h4>{(eventData?.recent||[]).filter(e=>e.employee_id===selected).slice(0,5).map(e=><div key={e.id}><small>#{e.id} · {time(e.created_at)}</small><p>{e.body}</p></div>)}
            <p><a href="/tools/">GitHub projects, reviewed operations and delivery evidence →</a></p>
