@@ -44,10 +44,18 @@ try{
       staffing_required:i!==0,plan_step_id:i===0?id(22):null
     }));
     result={id:id(20),title,goal_id:id(21),plan_id:id(23),stages,
-      plan_status:'draft',automatic_execution:false,approval_required:true,reused:false};
+      plan_status:'draft',automatic_execution:false,approval_required:true,reused:false,
+      accountable_manager_id:cto,accountable_manager_name:'CTO',accountable_manager_role:'CTO',
+      assignment_source:'executive_manager',commercial_objective:'Find paying customers',
+      commercial_stage:'offer_needed',verified_revenue_inr:null};
     founderProjects.unshift({...result,staffing_gaps:4});
   }
   else if(path.endsWith('/company/projects'))result=founderProjects;
+  else if(path.endsWith('/company/management/workload'))result={
+    employees:employees.map(e=>({...e,running:e.id===developer?1:0,queued:0,failed:0,
+      completed:0,projects_accountable:e.id===cto?founderProjects.length:0})),
+    leaders:[],idle_employees:employees.length-1,pending_employee_work:0,unassigned_work_generated:false
+  };
   else if(path.endsWith('/company/approvals'))result=approvalRecords;
   else if(path.startsWith('/v1/governance/approvals/')&&path.endsWith('/decision')){
    const record=approvalRecords.find(a=>path.includes(a.id));assert.ok(record);
@@ -93,6 +101,11 @@ try{
  assert.equal(founderProjects.length,1);
  assert.equal(founderProjects[0].automatic_execution,false);
  assert.equal(founderProjects[0].stages.length,5);
+ await page.getByText('Accountable delivery owner: CTO',{exact:false}).waitFor();
+ await page.getByRole('heading',{name:'Management ownership and workforce utilization'}).waitFor();
+ await page.getByRole('button',{name:'Inspect employee workload'}).click();
+ await page.locator('.management-people').getByText('Developer',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Hide employee workload'}).click();
  await page.getByRole('button',{name:'Request independent plan review'}).click();
  await page.getByText('Status: pending_approval',{exact:false}).waitFor();
  assert.ok(calls.some(c=>c.path==='/v1/brain/plans/'+id(23)+'/submit'));
