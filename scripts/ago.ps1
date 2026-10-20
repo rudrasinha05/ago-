@@ -8,7 +8,7 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 migrate
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch")]
+    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch", "company-pulse")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -59,6 +59,13 @@ try {
         & python -m ruff check ago tests tests_browser
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         & python -m pytest -q --basetemp="C:\ago-pytest-temp"
+        exit $LASTEXITCODE
+    }
+    if ($Action -eq "company-pulse") {
+        if (-not $env:AGO_MARKET_TENANT_ID) {
+            throw "Specify the existing AGO_MARKET_TENANT_ID for a tenant-scoped read-only pulse."
+        }
+        & python ../../scripts/company_readiness_audit.py --tenant-id $env:AGO_MARKET_TENANT_ID
         exit $LASTEXITCODE
     }
     if ($Action -eq "market-watch") {
