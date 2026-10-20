@@ -39,7 +39,7 @@ try{
  });
  async function login(){await page.getByLabel('Organization ID').fill(tenant);await page.getByLabel('Work email').fill('founder@example.test');await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByRole('heading',{name:'Company map',exact:true}).waitFor();}
  await page.goto(base+'/workspace/organization/');await login();
- await page.locator('.map-node.employee').filter({hasText:'Developer'}).click();
+ await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
  await page.getByText('Orchestration research',{exact:false}).waitFor();
  assert.match(await page.locator('.employee-inspector').innerText(),/Busy/);
  await page.getByLabel('Message Developer',{exact:true}).fill('Please show the sources');await page.getByRole('button',{name:'Send',exact:true}).click();
@@ -47,7 +47,7 @@ try{
  await page.locator('.chat-message').getByRole('button',{name:'Reply',exact:true}).click();
  await page.getByLabel('Message Developer',{exact:true}).fill('Include experimental evidence');await page.getByRole('button',{name:'Send',exact:true}).click();
  await page.locator('.chat-message').getByText('Include experimental evidence',{exact:true}).waitFor();assert.equal(messages[1].reply_to,1);
- await page.getByRole('button',{name:'Zoom in',exact:true}).click();await page.getByRole('button',{name:'Recenter',exact:true}).click();
+ await page.getByRole('button',{name:'Zoom in',exact:true}).click();await page.getByRole('button',{name:'Founder',exact:true}).click();
  await page.getByLabel('Talk to your company',{exact:true}).fill('Founder project brief');await page.getByRole('button',{name:'Send to global chat',exact:true}).click();
  await page.locator('.chat-message').getByText('Founder project brief',{exact:true}).waitFor();assert.equal(messages[2].channel,'global');
  await page.getByRole('button',{name:'Add needed role',exact:true}).click();await page.getByLabel('Role name',{exact:true}).fill('QA Scientist');await page.getByLabel('Reports to',{exact:true}).selectOption(cto);await page.getByLabel('Why is this role needed?',{exact:true}).fill('Validate research experiment outputs');await page.getByRole('button',{name:'Create role',exact:true}).click();await page.locator('.map-node.employee').filter({hasText:'QA Scientist'}).waitFor();

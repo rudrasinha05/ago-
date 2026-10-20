@@ -17,12 +17,18 @@ Scope: the Organization workspace now opens a founder-centred, pannable and zoom
 ## Verification in this workspace
 
 - Next.js production build passed.
-- SDK tests: 16 passed, including actual status interpretation and hierarchy mapping.
+- SDK tests: 17 passed, including actual status interpretation and hierarchy mapping.
 - Focused backend/architecture tests: 48 passed, 3 database tests skipped. Additional monorepo tests: 5 passed after correcting the new shared-model package boundary.
 - Browser test with explicitly mocked API passed: map selection, task/project inspector, chat/replies, central composer, requirement-based staffing, changed-state popup and mobile width. This does not substitute for database integration tests.
 - Architecture sections 1, 3, 5 and API compatibility checks passed.
 - Full backend run: 563 passed, 202 skipped, two failures. One was the new package-boundary issue subsequently fixed and retested; the other was the pre-existing readiness test requiring an available PostgreSQL server. PostgreSQL could not be started under this execution environment's process-user restrictions.
 - Real PostgreSQL tests are in tests/test_company_chat.py and run in the existing PostgreSQL CI jobs. The browser regression is also registered in CI.
+
+## PostgreSQL CI verification
+
+Commit `7e26c535b4cce45c577374652b5eef74baba3f3e` passed all 767 backend tests on Python 3.14 against actual PostgreSQL, including the new conversation isolation, pagination, idempotency, staffing and transaction-bound task timeline tests. Run 39384331505 also passed the real signed-session Next.js journeys, six browser/device accessibility checks, backup/restore and storage recovery. This supersedes the local PostgreSQL verification limitation above; the local readiness failure was an unavailable test database, not a passing database result.
+
+A subsequent frontend-only layout correction allocates angular space by reporting-tree leaf count, includes empty departments, adds Fit all and focuses selected employees from the sidebar. The supplied 46-person roster has a non-overlap regression test. It does not alter the verified backend or migration.
 
 ## Explicit limits
 

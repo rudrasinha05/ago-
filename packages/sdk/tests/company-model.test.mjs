@@ -19,3 +19,12 @@ test('cycles cannot hang layout and absent managers stay visible',()=>{
  assert.equal(result.nodes.length,4);
  assert.ok(result.edges.some(e=>e.from==='founder'&&e.to==='employee:c'));
 });
+
+test('46-person roster has separated cards and all links fit the drawing bounds',()=>{
+ const departments=Array.from({length:12},(_,i)=>({id:'d'+i}));
+ const people=departments.flatMap((d,i)=>Array.from({length:[3,3,6,5,3,4,4,3,4,4,3,4][i]},(_,j)=>({id:d.id+'e'+j,department_id:d.id,manager_id:j?d.id+'e0':null})));
+ const map=companyLayout(departments,people,'founder');
+ assert.equal(people.length,46);
+ assert.equal(map.nodes.filter(n=>n.type==='employee').length,46);
+ for(const a of map.nodes){assert.ok(a.x>0&&a.y>0&&a.x<map.size&&a.y<map.size);for(const b of map.nodes){if(a.key!==b.key)assert.ok(Math.abs(a.x-b.x)>210||Math.abs(a.y-b.y)>100,`${a.key} overlaps ${b.key}`);}}
+});
