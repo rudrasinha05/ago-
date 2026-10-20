@@ -125,10 +125,12 @@ export function CompanyMap({api,me,data,onRefresh}) {
           <form className="map-founder" style={{left:layout.center,top:layout.center,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><strong>♛ Founder / CEO</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
           {layout.nodes.map(n=>{const state=employeeStatus(n.id,tasks);
              const project=displayProjects(n.id);const eventCount=eventData?.by_employee?.[n.id]??0;
+             const recordedRole=governanceData?.employees?.find(e=>e.id===n.id)?.role_title;
              return <button key={n.key} aria-label={n.type==='employee'?n.name+', '+state.label+', '+eventCount+' recorded updates':n.name} className={'map-node '+n.type+(channel===n.key?' active':'')+(n.type==='employee'&&state.tone==='busy'?' working':'')+(routing.active.has(n.id)?' assigned':'')} style={{left:n.x,top:n.y}} onClick={()=>choose(n.key)}>
                {n.type==='employee'&&<span className="map-count" title="Recorded work events">{eventCount}</span>}
                <strong>{n.type==='employee'&&<span className={'presence '+state.tone}/>} {n.name}</strong>
                <small>{n.type==='department'?'Department':(n.kind==='ai'?'AI employee · ':'Human member · ')+state.label}</small>
+               {n.type==='employee'&&<small className="map-role">Role: {recordedRole||'Not assigned'}</small>}
                {n.type==='employee'&&<small className="map-project">Project: {project[0]||'No linked project'}{project.length>1?' +'+(project.length-1):''}</small>}
                {n.type==='employee'&&state.tasks.find(t=>t.status==='running')&&<small className="map-task">{state.tasks.find(t=>t.status==='running').action}</small>}
                {n.type==='employee'&&<span className="node-action">View work details ↗</span>}
