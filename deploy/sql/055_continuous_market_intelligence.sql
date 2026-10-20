@@ -21,11 +21,12 @@ CREATE TABLE ago_market_signals (
  discovery_method text NOT NULL DEFAULT 'feed_heuristic'
    CHECK(discovery_method='feed_heuristic'),
  discovered_at timestamptz NOT NULL DEFAULT now(),
+ nominated_at timestamptz,
  published_at timestamptz,
  UNIQUE(tenant_id,url_digest),
  FOREIGN KEY(tenant_id,executive_owner_id) REFERENCES ago_employees(tenant_id,id),
  FOREIGN KEY(approval_id) REFERENCES ago_approval_requests(id),
- CHECK(review_status<>'shortlisted' OR approval_id IS NOT NULL)
+ CHECK(review_status<>'shortlisted' OR (approval_id IS NOT NULL AND nominated_at IS NOT NULL))
 );
 CREATE UNIQUE INDEX ago_market_signal_approval ON ago_market_signals(tenant_id,approval_id) WHERE approval_id IS NOT NULL;
 CREATE INDEX ago_market_signals_queue ON ago_market_signals
