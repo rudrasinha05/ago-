@@ -346,7 +346,7 @@ def test_founder_project_history_shows_actual_suggested_staff_not_fictional_ceo(
     client,headers,info=case
     f=headers['founder']
     department_id=department(client,f)
-    worker=employee(client,f,department_id)
+    employee(client,f,department_id)
     created=post(client,BASE+'/projects/start',f,{
         'brief':'Build a secure onboarding system with role based audits and an accessible dashboard',
         'operation_key':str(uuid4()),
