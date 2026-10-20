@@ -97,7 +97,7 @@ try{
  const founderBrief='Build a complete project management system with audit trails, secure access, automated tests and documentation';
  await page.getByLabel('Founder project brief').fill(founderBrief);
  await page.getByRole('button',{name:'Prepare project from brief'}).click();
- await page.getByText('Draft saved · Independent plan approval needed',{exact:false}).waitFor();
+ await page.getByText('Draft saved · Founder approval needed',{exact:false}).waitFor();
  assert.equal(founderProjects.length,1);
  assert.equal(founderProjects[0].automatic_execution,false);
  assert.equal(founderProjects[0].stages.length,5);
@@ -106,7 +106,7 @@ try{
  await page.getByRole('button',{name:'Inspect employee workload'}).click();
  await page.locator('.management-people').getByText('Developer',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Hide employee workload'}).click();
- await page.getByRole('button',{name:'Request independent plan review'}).click();
+ await page.getByRole('button',{name:'Submit plan for founder approval'}).click();
  await page.getByText('Status: pending_approval',{exact:false}).waitFor();
  assert.ok(calls.some(c=>c.path==='/v1/brain/plans/'+id(23)+'/submit'));
  await page.locator('.approval-inbox').getByText('1 pending requests company-wide').waitFor({timeout:15000});
