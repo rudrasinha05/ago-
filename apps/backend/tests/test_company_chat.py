@@ -503,8 +503,8 @@ def test_idle_company_opportunities_are_tenant_scoped_audited_and_idempotent(cas
     assert client.post(BASE+'/opportunities/scan',headers=headers['reviewer']).status_code==403
     assert client.get(BASE+'/opportunities',headers=headers['reviewer']).status_code==403
     assert info['db'].execute(
-        'SELECT COUNT(*) FROM ago_approval_audit WHERE tenant_id=%s AND event=%s',
-        (tenant,'proposed')).fetchone()[0]>=3
+        'SELECT COUNT(*) AS total FROM ago_approval_audit WHERE tenant_id=%s AND event=%s',
+        (tenant,'proposed')).fetchone()['total']>=3
     from ago.bootstrap import bootstrap
     other,_=bootstrap(info['db'],organization='Unrelated idea tenant',
                       email='unrelated-ideas@example.test',
@@ -526,8 +526,12 @@ def test_opportunities_do_not_interrupt_running_delivery_and_founder_escalates(c
     worker=employee(client,founder,dep)
     task=post(client,'/v1/tasks',founder,
               {'assignee_id':worker,'action':'internal:brief'})
-    info['db'].execute(
-        'UPDATE ago_governed_tasks SET status=%s WHERE tenant_id=%s AND id=%s',
-        ('running',info['tenant'],task['id']))
+    # Enter a real approved running state rather than bypassing task lifecycle constraints.
+    approval=post(client,'/v1/governance/approvals',founder,{'action':'internal:brief'})
+    post(client,'/v1/tasks/'+task['id']+'/approval',founder,
+         {'approval_id':approval['request_id']})
+    post(client,'/v1/governance/approvals/'+approval['request_id']+'/decision',founder,
+         {'approve':True,'reason':'Founder authorized this delivery task'})
+    post(client,'/v1/tasks/'+task['id']+'/start',founder)
     scanned=post(client,BASE+'/opportunities/scan',founder,{})
     assert scanned['created']==0 and scanned['reason']=='delivery_running'
