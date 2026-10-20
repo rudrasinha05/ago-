@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from ago.main import create_app
-from ago.api_company_chat import ChatInput, StaffingInput, ReportInput, RoleProfileInput
+from ago.api_company_chat import ChatInput, StaffingInput, ReportInput
 from ago.company_chat import CompanyChat
 from test_m7_http_postgres import case as case, post
 from test_enterprise_http_21_27 import department, employee
