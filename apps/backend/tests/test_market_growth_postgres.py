@@ -121,3 +121,47 @@ def test_project_delivery_health_and_recommendations_never_forge_work(case):
                ("qualified_existing_worker", "review_staffing_gap")
                for st in state["unassigned_project_stages"])
     assert all(st["project_id"] for st in state["unassigned_project_stages"])
+
+
+def test_founder_approved_research_is_traceably_converted_to_one_draft(case, monkeypatch):
+    client, headers, info = case
+    founder = headers["founder"]
+    dep = department(client, founder)
+    post(client, "/v1/organization/employees", founder,
+         {"department_id": dep, "name": "CEO", "kind": "ai"})
+    monkeypatch.setattr(market, "retrieve_feed", lambda url: FEED)
+    assert market.ingest(info["db"], info["tenant"], "nist-news",
+                         "news", market.FEEDS[1][2])["new_evidence"] == 1
+    assert market.nominate_for_founder_review(info["db"], info["tenant"]) == 1
+    entry = client.get("/v1/organization/company/market-intelligence",
+                       headers=founder).json()["signals"][0]
+    url = "/v1/organization/company/market-intelligence/"+entry["id"]+"/project"
+    assert client.post(url, headers=founder).status_code == 403
+    assert client.post(url, headers=headers["reviewer"]).status_code == 403
+    approval = post(client, "/v1/governance/approvals/"+entry["approval_id"]+
+                    "/decision", founder, {"approve": True,
+                                           "reason": "Validate scoped evidence with consenting customers"})
+    assert approval["status"] == "approved"
+    project = post(client, url, founder, {})
+    assert project["source_signal_id"] == entry["id"]
+    assert project["plan_status"] == "draft"
+    assert project["automatic_execution"] is False
+    assert project["promotion_authorized"] is False
+    again = post(client, url, founder, {})
+    assert project["id"] == again["id"]
+    assert again["reused"] is True
+    details = client.get("/v1/organization/company/projects/"+project["id"],
+                         headers=founder).json()
+    assert entry["source_url"] in details["brief"]
+    assert details["status_label"] == "under_process"
+    after = client.get("/v1/organization/company/market-intelligence",
+                       headers=founder).json()["signals"][0]
+    assert after["linked_project_id"] == project["id"]
+    stored = info["db"].execute("""
+      SELECT COUNT(*) AS total FROM ago_market_signal_project_links
+      WHERE tenant_id=%s AND signal_id=%s
+    """,(info["tenant"],entry["id"])).fetchone()["total"]
+    assert stored == 1
+    assert not info["db"].execute("""
+      SELECT 1 FROM ago_agent_runs r WHERE r.tenant_id=%s
+    """,(info["tenant"],)).fetchone()
