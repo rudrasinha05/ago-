@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from ago.main import create_app
-from ago.api_company_chat import ChatInput, StaffingInput
+from ago.api_company_chat import ChatInput, StaffingInput, ReportInput, RoleProfileInput
 from ago.company_chat import CompanyChat
 from test_m7_http_postgres import case as case, post
 from test_enterprise_http_21_27 import department, employee
@@ -124,3 +124,60 @@ def test_notification_counters_are_persistent_and_tenant_scoped(case):
     after_report = client.get(BASE+'/notifications', headers=founder).json()
     assert after_report['by_employee'][worker] == 2
     assert after_report['recent'][0]['body'] == 'Module checkpoint recorded'
+
+def test_founder_approves_real_board_seat_and_role_profile(case):
+    client, headers, _ = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    dep = department(client, founder)
+    worker = employee(client, founder, dep)
+    role = {"role_title":"Engineering Lead", "core_responsibilities":"Review architecture and delivery",
+            "extra_responsibilities":"Maintain source documents and test results"}
+    update = client.put(BASE+"/employees/"+worker+"/role",json=role,headers=founder)
+    assert update.status_code == 200, update.text
+    assert update.json()["role_title"] == "Engineering Lead"
+    denied = client.put(BASE+"/employees/"+worker+"/role",json=role,headers=reviewer)
+    assert denied.status_code == 403,denied.text
+    appointment = {"seat":"Technology Oversight","employee_id":worker}
+    created = post(client, BASE+"/board/appoint", founder, appointment)
+    assert created["authority_granted"] is False
+    assert post(client,BASE+"/board/appoint",founder,appointment)["unchanged"] is True
+    post(client,BASE+"/board/appoint",reviewer,appointment,expected=403)
+    result = client.get(BASE+"/governance",headers=founder).json()
+    assert any(e["id"]==worker and e["extra_responsibilities"]==role["extra_responsibilities"]
+               for e in result["employees"])
+    assert any(s["seat"]=="Technology Oversight" and s["employee_id"]==worker
+               for s in result["board"])
+    assert result["board_grants_authority"] is False
+
+
+def test_reports_go_only_to_immediate_superior_and_increment_event_badge(case):
+    from ago.security_controls import SecurityControls
+    client,headers,info=case
+    founder,reviewer=headers["founder"],headers["reviewer"]
+    with info["db"].transaction():
+        # Existing independently provisioned reviewer is a real human employee.
+        info["db"].execute("""
+            UPDATE ago_employees SET manager_id=%s WHERE tenant_id=%s AND id=%s
+        """,(info["founder_id"],info["tenant"],info["reviewer_id"]))
+        SecurityControls(info["db"]).grant(info["tenant"],"reviewer","messages:write")
+        SecurityControls(info["db"]).grant(info["tenant"],"reviewer","messages:read")
+    payload={"kind":"module_complete","body":"Module complete; tests and docs attached to reviewed GitHub work",
+             "operation_key":str(uuid4())}
+    first=post(client,BASE+"/reports",reviewer,payload)
+    assert str(first["recipient_id"])==info["founder_id"]
+    assert post(client,BASE+"/reports",reviewer,payload)["id"]==first["id"]
+    post(client,BASE+"/reports",reviewer,{**payload,"body":"Changed"},expected=400)
+    reports=client.get(BASE+"/reports",headers=founder).json()
+    assert any(r["id"]==first["id"] and r["kind"]=="module_complete" for r in reports)
+    events=client.get(BASE+"/notifications",headers=founder).json()
+    assert events["by_employee"][info["reviewer_id"]]==1
+    assert events["recent"][0]["kind"]=="report"
+    # Shared activity does not disclose the private report body.
+    global_chat=client.get(BASE+"/chat",headers=founder).json()["items"]
+    assert any(m["kind"]=="report" for m in global_chat)
+    assert all(payload["body"] not in m["body"] for m in global_chat)
+    # Manager is a destination, not an arbitrary actor-supplied recipient.
+    with pytest.raises(ValueError):
+        ReportInput(**{**payload,"recipient_id":str(uuid4())})
+    # Founder cannot report to self; root user must have an actual superior.
+    post(client,BASE+"/reports",founder,{**payload,"operation_key":str(uuid4())},expected=403)
