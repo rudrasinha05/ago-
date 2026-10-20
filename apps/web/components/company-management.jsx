@@ -22,7 +22,11 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
    <div className="management-metrics"><span><strong>{report.employees.length}</strong>Employees tracked</span>
     <span><strong>{report.idle_employees}</strong>No governed work queued/running</span>
     <span><strong>{report.pending_employee_work}</strong>Governed tasks awaiting action</span>
-    <span><strong>{report.unmanaged_task_alerts??0}</strong>Tasks needing management escalation</span></div>
+    <span><strong>{report.unmanaged_task_alerts??0}</strong>Tasks needing management escalation</span>
+    <span><strong>{report.qa_passed_count??'—'}</strong>Independently passed QA</span>
+    <span><strong>{report.qa_failed_count??'—'}</strong>Failed QA assessments</span>
+    <span><strong>{report.awaiting_qa_count??'—'}</strong>Completed tasks awaiting QA</span>
+    <span><strong>{report.recommended_placements??'—'}</strong>Suggested existing candidates</span></div>
    {report.employees.length>0&&report.idle_employees===report.employees.length&&
     <div className="management-backlog" role="status">
      <h4>Company delivery idle — management attention required</h4>
@@ -38,11 +42,14 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
       <ol>{report.unassigned_project_stages.slice(0,12).map((s,i)=><li key={s.project_title+'-'+s.stage+'-'+i}>
        <strong>{s.project_title} — {s.stage}</strong> · {s.responsible_manager_name} accountable
        <small>{s.deliverable}</small>
+       <small>{s.candidate_name?'Workload-aware suggestion: '+s.candidate_name+' ('+s.candidate_workload+' active/queued tasks)':'No qualified matching active staff; review HR request'}. No autonomous assignment has occurred.</small>
+       <a href="#ago-project-portfolio">Inspect project record ↗</a>
       </li>)}</ol>
     </div>}
    <button type="button" onClick={()=>setExpanded(x=>!x)}>{expanded?'Hide':'Inspect'} employee workload</button>
    {expanded&&<div className="management-people">{report.employees.map(e=><article key={e.id}>
     <b>{e.name}</b><small>{e.role_title||e.kind} · {e.running} running · {e.queued} queued · {e.failed} failed · {e.projects_accountable} managed projects</small>
+    <small>Evidence-backed QA: {e.qa_passed??0} passed · {e.qa_failed??0} failed · {e.unreviewed??0} waiting for independent review</small>
     <small>{e.running||e.queued?'Governed work recorded':'Idle in recorded governed queue; management needs to assess useful next assignment'}</small>
     {(e.leadership_gaps??0)>0&&<small>Management escalation required on {e.leadership_gaps} standalone task(s)</small>}
    </article>)}</div>}
