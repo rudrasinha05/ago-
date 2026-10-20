@@ -316,9 +316,9 @@ def prepare_marketing_drafts(db, tenant_id: str) -> int:
             if not title:
                 continue
             for platform in ("linkedin", "x", "instagram", "facebook"):
-                body = (f"Building in progress: {title}. We are evaluating needs, "
-                        "accessibility and quality before any public release. "
-                        "This is a development update, not a product launch or customer offer.")
+                body = (f"Evaluating a project concept: {title}. We are exploring user needs, "
+                        "accessibility and quality requirements before implementation or release. "
+                        "No product is available or offered for sale yet.")
                 inserted = db.execute("""
                     INSERT INTO ago_marketing_drafts
                       (id,tenant_id,project_id,platform,draft_text)
