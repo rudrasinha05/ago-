@@ -47,6 +47,7 @@ try{
     founderProjects.unshift({...result,staffing_gaps:4});
   }
   else if(path.endsWith('/company/projects'))result=founderProjects;
+  else if(path.includes('/v1/brain/plans/')&&path.endsWith('/submit'))result={approval_id:id(24),status:'pending_approval'};
   else if(path.endsWith('/company/governance'))result={board:appointments,employees:employees.map(e=>({...e,...(roles[e.id]||{})})),board_grants_authority:false};
   else if(path.endsWith('/company/board/appoint')){appointments=appointments.filter(a=>a.seat!==body.seat);appointments.push({seat:body.seat,employee_id:body.employee_id});result={...body,authority_granted:false};}
   else if(path.includes('/company/employees/')&&path.endsWith('/role')){const worker=path.split('/').at(-2);roles[worker]=body;result={id:worker,...body};}
@@ -75,6 +76,9 @@ try{
  assert.equal(founderProjects.length,1);
  assert.equal(founderProjects[0].automatic_execution,false);
  assert.equal(founderProjects[0].stages.length,5);
+ await page.getByRole('button',{name:'Request independent plan review'}).click();
+ await page.getByText('Status: pending_approval',{exact:false}).waitFor();
+ assert.ok(calls.some(c=>c.path==='/v1/brain/plans/'+id(23)+'/submit'));
  await page.getByLabel('Appoint Technology Oversight').selectOption(cto);
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'Approve seat'}).click();
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'View member'}).waitFor();
