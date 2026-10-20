@@ -161,12 +161,24 @@ def founder_project(data: FounderProjectInput, actor=Depends(authenticated),
 
 
 @router.get('/projects')
-def founder_projects(limit: int = Query(default=30,ge=1,le=50),
+def founder_projects(limit: int = Query(default=50,ge=1,le=100),
+                     offset: int = Query(default=0,ge=0,le=100000),
                      actor=Depends(authenticated),
                      repositories=Depends(repository_scope)):
     allowed(repositories,actor,'organization:read')
     allowed(repositories,actor,'brain:read')
-    return repositories.resolve(CompanyChatPort).projects(actor.tenant_id,limit)
+    return repositories.resolve(CompanyChatPort).projects(actor.tenant_id,limit,offset)
+
+
+@router.get('/projects/{project_id}')
+def founder_project_details(project_id: UUID,actor=Depends(authenticated),
+                            repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'brain:read')
+    try:
+        return repositories.resolve(CompanyChatPort).project_details(actor.tenant_id,str(project_id))
+    except (ValueError,LookupError) as exc:
+        translate_error(exc)
 
 @router.get('/approvals')
 def approval_inbox(limit: int = Query(default=100,ge=1,le=100),
