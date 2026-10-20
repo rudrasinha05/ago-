@@ -42,7 +42,7 @@ export function OpportunityRadar({api,me,onChanged}) {
  const drafts=market?.marketing_drafts||[];
  return <section id="ago-opportunities" className="opportunity-radar" aria-label="Company opportunity radar">
   <header><div><h3>Continuous Market & Opportunity Intelligence</h3>
-    <p>Evidence from source feeds, research papers and technology reporting. Scoring is a relevance heuristic, not proven demand or profit. CEO-accountable nominations go to founder review.</p></div>
+    <p>Evidence from official news feeds, research papers, industrial reporting and open metadata APIs. Scoring is a relevance heuristic, not proven demand or profit. CEO-accountable nominations go to founder review.</p></div>
     {canScan&&<button type="button" onClick={scan} disabled={working}>{working?'Checking…':'Scan catalog ideas'}</button>}
   </header>
   {notice&&<p role="status">{notice}</p>}
