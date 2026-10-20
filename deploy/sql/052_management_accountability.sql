@@ -1,7 +1,9 @@
 -- AGO: accountable delivery ownership belongs to management, never merely the worker.
--- Every governed task receives a tenant-valid accountable manager on INSERT.
+-- Every governed task receives a tenant-valid responsible employee on INSERT;
+-- unmanaged standalone tenants receive a visible management-escalation flag.
 -- Existing company/tenant tasks are safely backfilled; no task is executed here.
 ALTER TABLE ago_governed_tasks ADD COLUMN accountable_manager_id uuid;
+ALTER TABLE ago_governed_tasks ADD COLUMN management_escalation_required boolean NOT NULL DEFAULT false;
 CREATE FUNCTION ago_assign_task_manager() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE supervisor uuid;
 BEGIN
@@ -14,8 +16,11 @@ BEGIN
     WHERE e.tenant_id=NEW.tenant_id AND e.kind='human'
     ORDER BY e.id LIMIT 1;
   END IF;
+  -- Historical standalone/sandbox tenants can have no active founder at all.
+  -- Do not invent a manager: keep an accountable executor and flag leadership gap.
+  NEW.management_escalation_required := supervisor IS NULL;
   IF supervisor IS NULL THEN
-    RAISE EXCEPTION 'Task cannot exist without an accountable manager';
+    supervisor := NEW.assignee_id;
   END IF;
   NEW.accountable_manager_id := supervisor;
   RETURN NEW;
@@ -31,10 +36,20 @@ UPDATE ago_governed_tasks t SET accountable_manager_id=
             JOIN ago_user_roles r ON r.tenant_id=e.tenant_id AND r.user_id=e.id AND r.role='founder'
             JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id AND u.active
             WHERE e.tenant_id=t.tenant_id AND e.kind='human'
-            ORDER BY e.id LIMIT 1))
+            ORDER BY e.id LIMIT 1),t.assignee_id)
  WHERE t.accountable_manager_id IS NULL;
+UPDATE ago_governed_tasks t SET management_escalation_required=true
+WHERE NOT EXISTS (
+ SELECT 1 FROM ago_employees e
+ WHERE e.tenant_id=t.tenant_id AND e.id=t.assignee_id AND e.manager_id IS NOT NULL
+) AND NOT EXISTS (
+ SELECT 1 FROM ago_employees e
+ JOIN ago_user_roles r ON r.tenant_id=e.tenant_id AND r.user_id=e.id AND r.role='founder'
+ JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id AND u.active
+ WHERE e.tenant_id=t.tenant_id AND e.kind='human'
+);
 
--- Fail atomically if any old tenant has no qualifying supervisor.
+-- All governed actions have an accountable identity; unmanaged tasks are explicitly flagged.
 ALTER TABLE ago_governed_tasks ALTER COLUMN accountable_manager_id SET NOT NULL;
 ALTER TABLE ago_governed_tasks ADD CONSTRAINT ago_task_manager_fk
  FOREIGN KEY(tenant_id,accountable_manager_id) REFERENCES ago_employees(tenant_id,id);
