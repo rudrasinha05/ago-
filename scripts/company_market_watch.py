@@ -211,7 +211,7 @@ def nominate_for_founder_review(db, tenant_id: str) -> int:
         count = db.execute("""
             SELECT COUNT(*) AS total FROM ago_market_signals
             WHERE tenant_id=%s AND review_status='shortlisted'
-              AND discovered_at >= date_trunc('week',now())
+              AND nominated_at >= date_trunc('week',now())
         """, (tenant_id,)).fetchone()["total"]
         quota = max(0, MAX_NEW_NOMINATIONS_WEEKLY - count)
         if quota == 0:
@@ -232,7 +232,7 @@ def nominate_for_founder_review(db, tenant_id: str) -> int:
             )
             db.execute("""
                 UPDATE ago_market_signals
-                SET executive_owner_id=%s,review_status='shortlisted',approval_id=%s
+                SET executive_owner_id=%s,review_status='shortlisted',approval_id=%s,nominated_at=now()
                 WHERE tenant_id=%s AND id=%s AND review_status='discovered'
             """, (owner["id"], proposal.request_id, tenant_id, row["id"]))
         return len(rows)
