@@ -152,6 +152,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       <a href="#ago-unified-cockpit">Company Brain</a>
       <a href="#company-approval-inbox">Founder Approvals</a>
       <a href="#ago-opportunities">Business Opportunities</a>
+       <a href="#ago-project-portfolio">Project Portfolio</a>
       <a href="#ago-workforce">Workforce</a>
       <a href="#ago-company-org-map">Organization & Chat</a>
     </nav>
