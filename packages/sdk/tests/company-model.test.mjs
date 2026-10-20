@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {employeeStatus,companyLayout} from '../company.js';
+import {employeeStatus,companyLayout,activeRouteKeys,employeeProjects,boardFunctionSeats} from '../company.js';
 test('missing activity stays unknown; running outranks waiting; idle is not online',()=>{
  assert.equal(employeeStatus('a',null).label,'Unknown');
  assert.equal(employeeStatus('a',[]).tone,'idle');
@@ -27,4 +27,19 @@ test('46-person roster has separated cards and all links fit the drawing bounds'
  assert.equal(people.length,46);
  assert.equal(map.nodes.filter(n=>n.type==='employee').length,46);
  for(const a of map.nodes){assert.ok(a.x>0&&a.y>0&&a.x<map.size&&a.y<map.size);for(const b of map.nodes){if(a.key!==b.key)assert.ok(Math.abs(a.x-b.x)>210||Math.abs(a.y-b.y)>100,`${a.key} overlaps ${b.key}`);}}
+});
+
+test('assigned employees highlight entire actual reporting route; completed work clears it',()=>{
+ const employees=[{id:'lead',department_id:'d'},{id:'dev',department_id:'d',manager_id:'lead'}];
+ const layout=companyLayout([{id:'d'}],employees,'founder');
+ const live=activeRouteKeys(layout,employees,[{assignee_id:'dev',status:'running'}]);
+ assert.ok(live.routes.has('founder>employee:lead'));
+ assert.ok(live.routes.has('employee:lead>employee:dev'));
+ assert.equal(activeRouteKeys(layout,employees,[{assignee_id:'dev',status:'completed'}]).routes.size,0);
+ assert.deepEqual(employeeProjects('dev',[{assignee_id:'dev',project_name:'Alpha'},{assignee_id:'dev',project_name:'Alpha'},{assignee_id:'dev',project_name:'Beta'}]),['Alpha','Beta']);
+});
+test('board functions never invent appointed directors',()=>{
+ const seats=boardFunctionSeats([{name:'Engineer',id:'e'}]);
+ assert.equal(seats.length,5);
+ assert.ok(seats.every(s=>s.member===null));
 });
