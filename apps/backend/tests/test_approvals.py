@@ -57,3 +57,15 @@ def test_reason_and_proposal_required():
         sample().decide(
             reviewer_id="human-1", tenant_id="tenant-a", approve=True, reason=" "
         )
+
+def test_verified_founder_can_decide_own_request_only_when_explicitly_authorized():
+    request = sample()
+    with pytest.raises(PermissionError):
+        request.decide(reviewer_id="agent-1",tenant_id="tenant-a",approve=True,
+                       reason="Self approval without verified founder role")
+    decided = request.decide(
+        reviewer_id="agent-1",tenant_id="tenant-a",approve=True,
+        reason="Founder final authorization",founder_authorized=True,
+    )
+    assert decided.reviewer_id=="agent-1"
+    assert decided.status==ApprovalStatus.APPROVED

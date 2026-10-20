@@ -60,7 +60,7 @@ try{
   else if(path.startsWith('/v1/governance/approvals/')&&path.endsWith('/decision')){
    const record=approvalRecords.find(a=>path.includes(a.id));assert.ok(record);
    record.status=body.approve?'approved':'rejected';record.reason=body.reason;
-   record.reviewer_id=id(31);record.reviewer_name='Independent Reviewer';
+   record.reviewer_id=founder;record.reviewer_name='Founder';
    record.decided_at=new Date().toISOString();result={request_id:record.id,status:record.status};
   }
   else if(path.includes('/v1/brain/plans/')&&path.endsWith('/submit')){
@@ -70,7 +70,7 @@ try{
      approval_type:'plan_review',plan_title:founderProjects[0].title,
      plan_id:id(23),goal_brief_excerpt:founderBriefSnapshot,
      created_at:new Date().toISOString(),
-     review_routing:'Independent authorized human reviewer; not automatically assigned',
+     review_routing:'Founder only — authenticated active human founder',
      next_action:'An approved plan requires separate activation and per-task approvals.'});
   }
   else if(path.endsWith('/company/governance'))result={board:appointments,employees:employees.map(e=>({...e,...(roles[e.id]||{})})),board_grants_authority:false};

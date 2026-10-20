@@ -502,10 +502,10 @@ class CompanyChat:
         """, (tenant_id,limit)).fetchall()]
 
     def approval_inbox(self, tenant_id: str, limit: int = 100) -> list[dict]:
-        """Evidence-backed approvals, without inventing a designated reviewer.
+        """Evidence-backed approvals; founder alone issues final decisions.
 
-        Actual approval:decide authority and independent-human checks are
-        enforced by GovernanceGate at the existing decision endpoint.
+        ApprovalRepository and SecurityControls enforce active human founder
+        authority. Independent QA evidence remains a separate process.
         """
         UUID(tenant_id)
         if not 1 <= limit <= 100:
@@ -558,7 +558,7 @@ class CompanyChat:
                 "task_execution" if item["task_id"] else "governance_action"
             )
             item["review_routing"] = (
-                "Independent authorized human reviewer; not automatically assigned"
+                "Founder only — authenticated active human founder"
             )
             item["next_action"] = (
                 "An approved plan requires separate activation and per-task approvals."

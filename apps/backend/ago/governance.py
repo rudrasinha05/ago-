@@ -60,7 +60,7 @@ class ApprovalRepository:
         authorized: bool = False,
     ) -> ApprovalRequest:
         if not authorized:
-            raise PermissionError("Reviewer authorization required")
+            raise PermissionError("Authenticated founder authorization required")
         for value in (request_id, tenant_id, reviewer_id):
             UUID(value)
         with self.connection.transaction():
@@ -90,12 +90,34 @@ class ApprovalRepository:
                 (reviewer_id, tenant_id),
             ).fetchone()
             if human is None:
-                raise PermissionError("Active human reviewer required")
+                raise PermissionError("Active human decision-maker required")
+            founder = self.connection.execute(
+                """SELECT 1 FROM ago_users u
+                     JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
+                     JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
+                   WHERE u.id=%s AND u.tenant_id=%s AND u.active
+                     AND e.kind='human' AND r.role='founder'""",
+                (reviewer_id, tenant_id),
+            ).fetchone()
+            active_founder_exists = self.connection.execute(
+                """SELECT 1 FROM ago_users u
+                     JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
+                     JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
+                   WHERE u.tenant_id=%s AND u.active AND e.kind='human'
+                     AND r.role='founder' LIMIT 1""",
+                (tenant_id,),
+            ).fetchone()
+            if active_founder_exists and founder is None:
+                raise PermissionError("Only the active human founder may approve or deny")
+            # Legacy standalone test tenants have no founder role; preserve
+            # their independently reviewed historical flows without granting
+            # the founder role to fictitious or automated employees.
             decided = current.decide(
                 reviewer_id=reviewer_id,
                 tenant_id=tenant_id,
                 approve=approve,
                 reason=reason,
+                founder_authorized=founder is not None,
             )
             self.connection.execute(
                 """UPDATE ago_approval_requests

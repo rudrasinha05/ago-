@@ -6,8 +6,8 @@ const fmt=date=>date?new Date(date).toLocaleString():'Not recorded';
 const typeLabel={plan_review:'Strategy plan review',task_execution:'Governed task authorization',governance_action:'Other governed action'};
 const subject=a=>a.plan_title||a.task_action||a.action;
 const isMine=(a,me)=>a.requester_id===me.id;
-const canDecide=(a,me)=>a.status==='pending'&&a.requester_id!==me.id&&me.permissions?.includes('approval:decide');
-// Role check is presentation-only; the backend always independently verifies active human, grant, tenant and self-review.
+const canDecide=(a,me)=>a.status==='pending'&&me.roles?.includes('founder')&&me.permissions?.includes('approval:decide');
+// Presentation only: backend verifies active human founder, tenant, permission and immutable audit.
 
 export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onReviewed}) {
  const [rows,setRows]=useState(null),[selected,setSelected]=useState(null);
@@ -69,7 +69,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
  return <section id="company-approval-inbox" className="approval-inbox" aria-label="Approvals inbox">
   <header className="approval-header">
    <div><h3>Approvals inbox <span className="approval-badge">{actionable.length} need my review</span></h3>
-    <p>{pending.length} pending requests company-wide · Independent human decision required · Requesters cannot approve their own request</p></div>
+    <p>{pending.length} pending requests company-wide · Only the founder can approve or deny · Independent QA remains separate</p></div>
    <button type="button" onClick={()=>setShowAll(x=>!x)}>{showAll?'Show pending only':'Show history'}</button>
   </header>
   {rows===null?<p>Approval requests could not be loaded. Check permissions or connection.</p>:
@@ -77,7 +77,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
    <div className="approval-rows">{displayed.map(a=><article key={a.id} className="approval-entry">
     <div><strong>{subject(a)}</strong><small>{typeLabel[a.approval_type]} · {a.status} · Requested {fmt(a.created_at)}</small>
      <small>From: {a.requester_name} ({a.requester_role||'Role not recorded'})</small>
-     <small>{canDecide(a,me)?'Action needed from you':isMine(a,me)?'Awaiting independent human reviewer':'Decision requires reviewer permission'}</small></div>
+     <small>{canDecide(a,me)?'Founder decision required':isMine(a,me)?'Awaiting your founder decision':'Awaiting founder decision'}</small></div>
     <button type="button" onClick={()=>open(a)}>View approval details</button>
    </article>)}</div>}
   {toast&&<div className="approval-toast" role="status">
@@ -115,7 +115,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
          required maxLength={3000} rows={3} placeholder="Explain the reviewed scope and your decision"/>
        <div className="approval-actions"><button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(true)}>Approve</button>
         <button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(false)}>Deny</button></div>
-      </>:<p>{isMine(selected,me)?'You requested this approval. An independent human reviewer must decide.':'Only an independently authorized human reviewer can decide. This view does not grant permissions.'}</p>}
+      </>:<p>'Only the authenticated founder can approve or deny this request. You can still inspect its details.'</p>}
     </div>}
     {error&&<p role="alert">{error}</p>}
    </section>
@@ -151,7 +151,7 @@ export function ApprovalTopAlerts({api,me,onView,enabled=true}) {
    Approvals {pending>0&&<span aria-label={pending+' approvals need your review'}>{pending}</span>}
   </button>
   {notice&&<div className="approval-top-notice" role="status">
-   <strong>New approval for review</strong>
+   <strong>Founder approval needed</strong>
    <p>{notice.requester||'Employee'} requests: {notice.title}</p>
    <button type="button" onClick={()=>{setNotice(null);onView?.();}}>View details</button>
    <button type="button" onClick={()=>setNotice(null)} aria-label="Dismiss approval popup">×</button>

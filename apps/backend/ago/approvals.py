@@ -32,12 +32,13 @@ class ApprovalRequest:
         return cls(str(uuid4()), tenant_id, action, requester_id)
 
     def decide(
-        self, *, reviewer_id: str, tenant_id: str, approve: bool, reason: str
+        self, *, reviewer_id: str, tenant_id: str, approve: bool, reason: str,
+        founder_authorized: bool = False,
     ) -> "ApprovalRequest":
         if tenant_id != self.tenant_id:
             raise PermissionError("Cross-tenant approval denied")
-        if not reviewer_id.strip() or reviewer_id == self.requester_id:
-            raise PermissionError("Independent reviewer required")
+        if not reviewer_id.strip() or (reviewer_id == self.requester_id and not founder_authorized):
+            raise PermissionError("Self-authorization requires verified human founder authority")
         if self.status != ApprovalStatus.PENDING:
             raise ValueError("Approval request already decided")
         if not reason.strip():

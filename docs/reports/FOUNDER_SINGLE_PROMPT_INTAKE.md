@@ -87,3 +87,18 @@ escalation. This is not universal enforcement across every enterprise tool.
 Unstaffed project deliverables now also appear in the management workload
 queue with the *real accountable leadership owner*. They are not synthetic
 tasks and do not automatically authorize work or guarantee employee occupancy.
+
+## Founder-only operational decisions (053)
+Final generic M2 plan/task/action approval decisions are restricted to the
+active human founder with the live `approval:decide` grant. The founder may
+approve their *own* initial project brief after reviewing full details and
+recording a mandatory reason. Non-founder roles cannot exercise the HTTP
+decision API, even if an obsolete role grant exists. Existing audit,
+tenant isolation, single terminal decision and exact action/scope rules
+remain in force. Independent QA is separate from founder authorization.
+
+A legacy isolated test tenant without a founder identity retains its original
+repository-level independent human decision mechanism for migration
+compatibility. Such tenants cannot use the HTTP founder-only decision path.
+Multi-party constitutional/legal review gates and external independence
+requirements remain distinct and have not been silently bypassed.

@@ -117,7 +117,7 @@ def main() -> None:
         )
     print(f"Tenant created: {tenant_id}")
     print(f"Founder created: {user_id}")
-    print("Grant an independent second human the appropriate reviewer role.")
+    print("Only the active human founder can issue approval decisions.")
 
 
 if __name__ == "__main__":

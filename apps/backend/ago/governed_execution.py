@@ -25,7 +25,7 @@ class GovernanceGate:
         if principal.tenant_id != tenant_id:
             raise PermissionError("Cross-tenant decision denied")
         if not self.security.permitted(principal, "approval:decide", tenant_id):
-            raise PermissionError("Reviewer lacks approval permission")
+            raise PermissionError("Only authenticated founder may authorize approvals")
         return self.approvals.decide(
             request_id=request_id, tenant_id=tenant_id,
             reviewer_id=principal.subject, approve=approve,

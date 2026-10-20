@@ -279,7 +279,7 @@ def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(ca
     assert replay['plan_status']=='pending_approval'
     approved=post(client,
        '/v1/governance/approvals/'+review['approval_id']+'/decision',
-       headers['reviewer'],{'approve':True,'reason':'Approved bounded scope review'})
+       founder,{'approve':True,'reason':'Founder authorized bounded scope review'})
     assert approved['status']=='approved'
     post(client,'/v1/brain/plans/'+project['plan_id']+'/activate',founder)
     created=post(client,'/v1/brain/plans/'+project['plan_id']+'/materialize',founder)
@@ -288,7 +288,7 @@ def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(ca
     post(client,'/v1/tasks/'+task_id+'/approval',founder,
          {'approval_id':task_approval['request_id']})
     post(client,'/v1/governance/approvals/'+task_approval['request_id']+'/decision',
-         headers['reviewer'],{'approve':True,'reason':'Independent task approval'})
+         founder,{'approve':True,'reason':'Founder approved task authorization'})
     agent_run=post(client,'/v1/agents/tasks/'+task_id+'/run',founder)
     packet=agent_run['result']
     assert packet['kind']=='founder_scope_packet'
@@ -323,17 +323,20 @@ def test_company_approval_inbox_truthful_authority_and_cross_tenant(case):
     assert entry['reviewer_id'] is None
     assert entry['status']=='pending'
     assert entry['goal_brief_excerpt']==original
-    assert 'Independent' in entry['review_routing']
+    assert 'Founder only' in entry['review_routing']
     assert entry['task_id'] is None
-    # No self-approval even when founder has granted decision permission.
+    # Reviewer cannot decide even if granted approval:decide; founder can
+    # decide on a request that they originally submitted.
+    from ago.security_controls import SecurityControls
+    SecurityControls(info['db']).grant(info['tenant'],'reviewer','approval:decide')
     post(client,'/v1/governance/approvals/'+approval['approval_id']+'/decision',
-         founder,{'approve':True,'reason':'Trying self-approval'},expected=403)
+         reviewer,{'approve':True,'reason':'Trying reviewer approval'},expected=403)
     post(client,'/v1/governance/approvals/'+approval['approval_id']+'/decision',
-         reviewer,{'approve':False,'reason':'Acceptance criteria need revision'})
+         founder,{'approve':False,'reason':'Founder requested improvements'})
     updated=client.get(BASE+'/approvals',headers=founder).json()
     entry=next(x for x in updated if str(x['id'])==approval['approval_id'])
-    assert entry['status']=='rejected' and entry['reason']=='Acceptance criteria need revision'
-    assert str(entry['reviewer_id'])==info['reviewer_id']
+    assert entry['status']=='rejected' and entry['reason']=='Founder requested improvements'
+    assert str(entry['reviewer_id'])==info['founder_id']
     from ago.bootstrap import bootstrap
     other,_=bootstrap(info['db'],organization='Isolated approvals',
                       email='other-approvals@example.test',password='test-strong-password-123')
