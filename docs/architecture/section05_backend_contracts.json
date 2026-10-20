@@ -1787,6 +1787,14 @@
         "management_workload": {
           "arguments": "self, tenant_id: str",
           "returns": "dict"
+        },
+        "opportunity_radar": {
+          "arguments": "self, tenant_id: str, limit: int=30",
+          "returns": "list[dict]"
+        },
+        "scan_opportunities": {
+          "arguments": "self, tenant_id: str",
+          "returns": "dict"
         }
       }
     }

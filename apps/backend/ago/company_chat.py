@@ -668,3 +668,129 @@ class CompanyChat:
             'unassigned_work_generated':False,
             'note':'Idle means no recorded running or queued governed task, not employee inactivity. Only authorized, useful work should be assigned.',
         }
+
+    @staticmethod
+    def _opportunity_catalog() -> tuple[tuple[str, ...], ...]:
+        """Seed hypotheses only; no claim of AI research or customer interviews."""
+        return (
+            ('admission_followup','Admission follow-up setup for training institutes',
+             'Independent coaching and training institutes',
+             'Inbound inquiries get lost across calls and spreadsheets',
+             'Lead capture, counselling follow-up and weekly admission reports',
+             'Paid setup plus optional monthly maintenance',
+             'Interview three institute owners and test willingness to pay'),
+            ('local_services_crm','Customer and appointment follow-up for local services',
+             'Small repair, tutoring and appointment-based businesses',
+             'Inquiries and booked appointments are not consistently followed up',
+             'Enquiry intake, opt-in appointment reminders and simple reporting',
+             'Paid onboarding followed by a support retainer only after a pilot',
+             'Interview five businesses and obtain customer contact consent'),
+            ('assessment_reports','Assessment and reporting service for institutes',
+             'Independent training centres and vocational institutes',
+             'Progress reports and evaluations create repetitive admin work',
+             'Instructor-reviewed assessment and progress-report workflows',
+             'Pilot delivery fee, then a verified subscription offer',
+             'Validate instructor requirements, privacy needs and budget'),
+        )
+
+    def opportunity_radar(self, tenant_id: str, limit: int = 30) -> list[dict]:
+        UUID(tenant_id)
+        if not 1 <= limit <= 100:
+            raise ValueError('Invalid opportunity limit')
+        return [dict(row) for row in self.db.execute("""
+            SELECT o.id,o.cycle_start,o.catalog_key,o.title,o.target_customer,
+                   o.customer_problem,o.proposed_offer,o.revenue_path,
+                   o.validation_next_step,o.accountable_manager_id,
+                   e.name AS accountable_manager_name,o.assignment_source,
+                   o.discovery_type,o.approval_id,a.status AS approval_status,
+                   a.reason AS approval_reason,o.created_at
+            FROM ago_company_opportunities o
+            JOIN ago_approval_requests a ON a.tenant_id=o.tenant_id
+              AND a.id=o.approval_id
+            JOIN ago_employees e ON e.tenant_id=o.tenant_id
+              AND e.id=o.accountable_manager_id
+            WHERE o.tenant_id=%s
+            ORDER BY o.created_at DESC,o.catalog_key LIMIT %s
+        """,(tenant_id,limit)).fetchall()]
+
+    def scan_opportunities(self, tenant_id: str) -> dict:
+        """Monthly idempotent idle-work suggestions, never outside transactions."""
+        from uuid import uuid4
+        UUID(tenant_id)
+        created=[]
+        with self.db.transaction():
+            tenant=self.db.execute(
+                'SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE',
+                (tenant_id,)).fetchone()
+            if tenant is None:
+                raise LookupError('Company not found')
+            founder=self.db.execute("""
+                SELECT e.id FROM ago_employees e
+                JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id AND u.active
+                JOIN ago_user_roles r ON r.tenant_id=e.tenant_id AND r.user_id=e.id
+                WHERE e.tenant_id=%s AND r.role='founder' AND e.kind='human'
+                ORDER BY e.id LIMIT 1
+            """,(tenant_id,)).fetchone()
+            if founder is None:
+                return {'created':0,'reason':'no_active_founder','opportunities':[]}
+            executives=self.db.execute("""
+                SELECT id,name,role_title FROM ago_employees
+                WHERE tenant_id=%s ORDER BY
+                CASE
+                  WHEN lower(trim(coalesce(role_title,''))) IN
+                       ('ceo','chief executive officer') OR lower(name)='ceo' THEN 0
+                  WHEN lower(trim(coalesce(role_title,''))) IN
+                       ('coo','chief operating officer') THEN 1
+                  WHEN lower(trim(coalesce(role_title,''))) IN
+                       ('cto','chief technology officer') THEN 2
+                  ELSE 99 END,id
+            """,(tenant_id,)).fetchall()
+            executive=next((e for e in executives
+                      if (e['role_title'] or '').strip().lower()
+                         in ('ceo','chief executive officer','coo',
+                             'chief operating officer','cto','chief technology officer')
+                      or e['name'].strip().lower()=='ceo'),None)
+            owner=executive['id'] if executive else founder['id']
+            assignment='executive_manager' if executive else 'founder_escalation'
+            work=self.db.execute("""
+                SELECT 1 FROM ago_governed_tasks
+                WHERE tenant_id=%s AND status='running' LIMIT 1
+            """,(tenant_id,)).fetchone()
+            if work:
+                return {'created':0,'reason':'delivery_running','opportunities':[]}
+            for key,title,customer,problem,offer,revenue,validation in self._opportunity_catalog():
+                prior=self.db.execute("""
+                    SELECT id FROM ago_company_opportunities WHERE tenant_id=%s
+                      AND cycle_start=date_trunc('month',now())::date AND catalog_key=%s
+                """,(tenant_id,key)).fetchone()
+                if prior:
+                    continue
+                opportunity_id=str(uuid4())
+                approval_id=str(uuid4())
+                action='company:opportunity:'+opportunity_id
+                # This is an automatically generated idea; a manager's name
+                # records accountability, not human/model authorship of the idea.
+                self.db.execute("""
+                    INSERT INTO ago_approval_requests
+                      (id,tenant_id,action,requester_id)
+                    VALUES (%s,%s,%s,%s)
+                """,(approval_id,tenant_id,action,owner))
+                self.db.execute("""
+                    INSERT INTO ago_approval_audit
+                      (request_id,tenant_id,actor_id,event,reason)
+                    VALUES (%s,%s,%s,'proposed',
+                            'Company Brain catalog hypothesis; not a validated commercial lead')
+                """,(approval_id,tenant_id,owner))
+                self.db.execute("""
+                    INSERT INTO ago_company_opportunities
+                     (id,tenant_id,cycle_start,catalog_key,title,target_customer,
+                      customer_problem,proposed_offer,revenue_path,validation_next_step,
+                      accountable_manager_id,assignment_source,approval_id)
+                    VALUES (%s,%s,date_trunc('month',now())::date,
+                            %s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,(opportunity_id,tenant_id,key,title,customer,problem,
+                     offer,revenue,validation,owner,assignment,approval_id))
+                created.append({'id':opportunity_id,'title':title})
+        return {'created':len(created),
+                'reason':'idle_hypotheses_proposed' if created else 'already_proposed_this_month',
+                'opportunities':created}

@@ -179,3 +179,19 @@ def management_workload(actor=Depends(authenticated), repositories=Depends(repos
     allowed(repositories,actor,'organization:read')
     allowed(repositories,actor,'task:read')
     return repositories.resolve(CompanyChatPort).management_workload(actor.tenant_id)
+
+@router.get('/opportunities')
+def opportunity_radar(limit: int = Query(default=30,ge=1,le=100),
+                      actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'brain:read')
+    return repositories.resolve(CompanyChatPort).opportunity_radar(actor.tenant_id,limit)
+
+
+@router.post('/opportunities/scan')
+def scan_opportunities(actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:manage')
+    allowed(repositories,actor,'brain:manage')
+    if 'founder' not in actor.roles:
+        translate_error(PermissionError('Only founder can initiate this manual company scan'))
+    return repositories.resolve(CompanyChatPort).scan_opportunities(actor.tenant_id)

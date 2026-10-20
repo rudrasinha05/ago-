@@ -7,6 +7,7 @@ import {RoleEditor,UpwardReports} from './company-governance';
 import {FounderProjectIntake} from './founder-project-intake';
 import {CompanyApprovals} from './company-approvals';
 import {ManagementWorkload} from './company-management';
+import {OpportunityRadar} from './company-opportunities';
 const BASE='/v1/organization/company';
 const time=value=>new Date(value).toLocaleString();
 export function CompanyMap({api,me,data,onRefresh}) {
@@ -151,6 +152,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
     <FounderProjectIntake api={api} me={me} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
+    <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
     <div className={"company-shell"+(fullscreen?" company-fullscreen":"")} aria-label="Organization map workspace">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>
