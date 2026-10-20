@@ -78,6 +78,10 @@ def test_staffing_maps_manager_and_records_requirement_once(case):
     assert timeline[0]['kind'] == 'staffing'
     assert payload['requirement'] in timeline[0]['body']
     assert timeline[0]['employee_id'] == created['id']
+    profile = client.get(BASE+'/governance',headers=f).json()['employees']
+    assert any(e['id']==created['id'] and e['role_title']==payload['name']
+               and e['core_responsibilities']==payload['requirement'] for e in profile)
+
 
 
 def test_task_status_is_saved_without_browser_polling(case):
