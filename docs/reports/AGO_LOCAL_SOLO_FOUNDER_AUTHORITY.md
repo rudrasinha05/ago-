@@ -65,3 +65,32 @@ For an unstaffed Quality stage created before enabling sole-founder mode, the re
 ## Approval replay protection
 
 The stage activation service reads the actual recorded approval decision author. For self-approved sole-founder local proposals, it re-verifies active human founder eligibility and the local opt-in **again at activation**. Changing the server to production or disabling the option after approval blocks new stage activation; no approved request is silently replayed into a broader environment.
+
+## Five-seat Board review (explicit local opt-in)
+
+Set `AGO_LOCAL_FULL_BOARD_REVIEW=true` alongside `AGO_LOCAL_COMPANY_CHAIN=true`
+and `AGO_LLM_PROVIDER=ollama_local` in the SAME backend terminal. Only
+development/test environments can use the seven-role path. No cloud or new
+service is started automatically.
+
+Before task execution the existing approved founder-owned discovery task must
+be linked to exactly **seven distinct real AI employees**: founder-appointed
+Strategy & Vision (CEO), Technology Oversight (CTO), Finance & Budget,
+Risk & Compliance, Quality & Release, then the real project manager and
+assigned AI worker. A missing or duplicate seat causes preflight refusal;
+no credits or task status are consumed.
+
+The bounded local Ollama chain executes each Board seat in the fixed order.
+Every Board output must explicitly contain one verifiable
+`BOARD_RECOMMENDATION: APPROVE` line to reach the next seat and the
+PM/worker. An explicit `DENY` or missing/ambiguous line stops downstream model
+calls, records the responsible seat and a founder-visible review hold.
+Board votes remain **AI advisory decisions**, not human authentication,
+automatic GitHub approval, production authorization, QA verdicts, payments or
+release. The run reserves seven **virtual** model-attempt credits; a held run
+does not refund the unused reservation. Real provider usage is separately
+resource-bound.
+
+The older two-seat CEO/CTO path remains the default when the opt-in flag is
+not set, preserving existing localhost setups. Full Board execution and
+reviewed code delivery are deliberately separate achievements.
