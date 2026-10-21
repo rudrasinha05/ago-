@@ -229,7 +229,8 @@ def activate_project_delegation(project_id: UUID,proposal_id: UUID,
 def approval_inbox(limit: int = Query(default=100,ge=1,le=100),
                    actor=Depends(authenticated), repositories=Depends(repository_scope)):
     allowed(repositories, actor, 'approval:read')
-    return repositories.resolve(CompanyChatPort).approval_inbox(actor.tenant_id,limit)
+    return repositories.resolve(CompanyChatPort).approval_inbox(
+        actor.tenant_id,limit,reader_id=actor.subject)
 
 @router.get('/management/workload')
 def management_workload(actor=Depends(authenticated), repositories=Depends(repository_scope)):

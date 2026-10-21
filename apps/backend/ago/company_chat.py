@@ -1,5 +1,7 @@
 """Tenant-visible company conversations. Channels are filters, never private DMs."""
 from __future__ import annotations
+
+from ago.governance import founder_solo_eligible
 from uuid import UUID
 from dataclasses import asdict
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
@@ -994,12 +996,9 @@ class CompanyChat:
             ORDER BY d.created_at,d.id
         """,(tenant_id,project_id)).fetchall()]
 
-    def approval_inbox(self, tenant_id: str, limit: int = 100) -> list[dict]:
-        """Evidence-backed approvals; founder alone issues final decisions.
-
-        ApprovalRepository and SecurityControls enforce active human founder
-        authority. Independent QA evidence remains a separate process.
-        """
+    def approval_inbox(self, tenant_id: str, limit: int = 100,
+                       reader_id: str | None = None) -> list[dict]:
+        """Persisted approvals with explicit founder-only localhost routing."""
         UUID(tenant_id)
         if not 1 <= limit <= 100:
             raise ValueError("Invalid approval inbox limit")
@@ -1061,6 +1060,7 @@ class CompanyChat:
             ORDER BY (a.status='pending') DESC,a.created_at DESC,a.id DESC
             LIMIT %s
         """, (tenant_id,limit)).fetchall()
+        solo = bool(reader_id and founder_solo_eligible(self.db, tenant_id, reader_id))
         result = []
         for row in rows:
             item = dict(row)
@@ -1074,9 +1074,12 @@ class CompanyChat:
                 item["market_signal_id"] or item["opportunity_id"] or item["founder_intake_id"]
             )
             item["requires_founder_decision"] = strategic
+            item["founder_solo_mode"] = bool(solo and not strategic)
             item["review_routing"] = (
                 "Founder only — active authenticated human founder"
                 if strategic else
+                "Founder-only local authority — no separate active human approver"
+                if solo else
                 "Independent active human reviewer with approval:decide; requester cannot self-approve"
             )
             item["next_action"] = (

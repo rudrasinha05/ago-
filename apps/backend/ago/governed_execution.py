@@ -28,7 +28,14 @@ class GovernanceGate:
             request_id=request_id, tenant_id=tenant_id
         )
         permission = "approval:founder" if strategic else "approval:decide"
-        if not self.security.permitted(principal, permission, tenant_id):
+        solo = (
+            not strategic
+            and self.security.permitted(principal, "approval:founder", tenant_id)
+            and self.approvals.founder_solo_eligible(
+                tenant_id=tenant_id, founder_id=principal.subject
+            )
+        )
+        if not solo and not self.security.permitted(principal, permission, tenant_id):
             raise PermissionError(
                 "Only the active founder may authorize strategic approvals"
                 if strategic else "Independent operational review permission required"
@@ -36,7 +43,7 @@ class GovernanceGate:
         return self.approvals.decide(
             request_id=request_id, tenant_id=tenant_id,
             reviewer_id=principal.subject, approve=approve,
-            reason=reason, authorized=True, founder_only=strategic,
+            reason=reason, authorized=True, founder_only=strategic, solo_founder=solo,
         )
 
     def authorize_task(self, task: GovernedTask, *, principal: Principal) -> GovernedTask:

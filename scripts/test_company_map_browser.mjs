@@ -266,7 +266,7 @@ try{
  await approvalDialog.getByRole('button',{name:'Close approval details'}).click();
  // The header on other workspaces must describe the independent lane.
  await page.locator('#primary-nav').getByRole('link',{name:'Overview'}).click();
- await page.locator('.approval-top-notice').getByText('Independent review needed').waitFor({timeout:15000});
+ await page.locator('.approval-top-notice').getByText('Operational approval needed').waitFor({timeout:15000});
  await page.locator('#primary-nav').getByRole('link',{name:'Governance'}).click();
  await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor();
  await page.locator('#company-approval-inbox .approval-entry').filter({hasText:'tool:review:'+id(6)})
