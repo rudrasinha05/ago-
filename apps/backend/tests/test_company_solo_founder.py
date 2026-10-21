@@ -65,3 +65,41 @@ def test_solo_mode_never_enables_self_approval_when_reviewer_exists(case, monkey
                     {"approve": True, "reason": "Actual active human decision"})
     assert approved["status"] == "approved"
     assert approved["reviewer_id"] == info["reviewer_id"]
+
+
+def test_solo_founder_is_actual_quality_stage_owner_without_fake_reviewer(case, monkeypatch):
+    from uuid import uuid4
+    from test_enterprise_http_21_27 import department
+    client, headers, info = case
+    founder = headers["founder"]
+    monkeypatch.setenv("AGO_FOUNDER_SOLO_APPROVAL", "true")
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    info["db"].execute(
+        "UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s",
+        (info["tenant"], info["reviewer_id"]),
+    )
+    dept = department(client, founder)
+    pm = post(client, "/v1/organization/employees", founder,
+              {"department_id":dept,"name":"Project Manager","kind":"ai"})["id"]
+    project = post(client, "/v1/organization/company/projects/start", founder,
+                   {"brief":"Deliver secure AI company software with real QA and tracked tasks",
+                    "operation_key":str(uuid4())})
+    assert project["accountable_manager_id"] == pm
+    quality = next(s for s in project["stages"] if s["stage"]=="quality")
+    assert quality["suggested_assignee_id"] == info["founder_id"]
+    endpoint = "/v1/organization/company/projects/" + project["id"] + "/delegations"
+    proposed = post(client, endpoint, founder,
+                    {"stage":"quality", "assignee_id":info["founder_id"]})
+    assert proposed["status"] == "pending_founder_decision"
+    approved = post(client,
+                    "/v1/governance/approvals/" + proposed["approval_id"] + "/decision",
+                    founder, {"approve":True, "reason":"Independent of AI delivery manager"})
+    assert approved["status"]=="approved"
+    strategy = post(client, "/v1/brain/plans/" + project["plan_id"] + "/submit", founder)
+    post(client, "/v1/governance/approvals/" + strategy["approval_id"] + "/decision",
+         founder, {"approve":True, "reason":"Authorize founder scope"})
+    post(client, "/v1/brain/plans/" + project["plan_id"] + "/activate", founder)
+    activated = post(client, endpoint + "/" + proposed["proposal_id"] + "/activate",
+                     founder)
+    assert activated["assignee_id"] == info["founder_id"]
+    assert activated["task_executed"] is False

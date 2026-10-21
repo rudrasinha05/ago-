@@ -38,3 +38,6 @@ Do not start cloud services, reboot or wake the laptop, or create a second fake 
 Check current develop CI: backend quality, full nine-job matrix and the focused company-growth tests.
 Run authenticated founder-only local smoke tests and genuine model/Board workflow on the founder's laptop.
 Board voting, trusted AI approval evidence, end-to-end engineering and real GitHub release stay separately pending.
+## QA ownership when the founder is the only human
+
+In explicit sole-founder local mode, Quality stage can nominate the active human founder only if a different actual employee is the accountable delivery manager. The founder can review an AI worker's actual finished task under existing qa:review and author/reviewer separation, without a fake reviewer identity. The model's Board advisory is never an automatically passed QA verdict. Founder-as-delivery-manager still leaves a Quality staffing conflict visible.

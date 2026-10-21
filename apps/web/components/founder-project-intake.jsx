@@ -50,7 +50,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
       '### '+x.position+'. '+x.stage,
       x.deliverable,
       'Suggested employee: '+(x.suggested_assignee_name||'Not assigned'),
-      'Independently approved employee: '+(x.approved_assignee_name||'Not delegated'),
+      'Authorized stage employee: '+(x.approved_assignee_name||'Not delegated'),
       'Executing employee: '+(x.executing_employee||'None'),
       'Task: '+(x.task_id||'Not materialized')+' | Status: '+(x.task_status||'Not started'),
       'Agent run: '+(x.agent_run_status||'No run')+' | Failure code: '+(x.agent_failure_code||'None'),
@@ -139,7 +139,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
           <small>{st.deliverable}</small>
           <small>Suggested: {st.suggested_assignee_name||'Employee needed'} · Executing: {st.executing_employee||'No governed task started'}</small>
           <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no independent verdict'}</small>
-          <small>Delegated stage worker: {st.approved_assignee_name||'Awaiting independent personnel review'} {st.delegated_at?'· applied '+new Date(st.delegated_at).toLocaleString():''}</small>
+          <small>Delegated stage worker: {st.approved_assignee_name||'Awaiting authorized personnel decision'} {st.delegated_at?'· applied '+new Date(st.delegated_at).toLocaleString():''}</small>
           <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
           {st.founder_agent_result?.kind==='local_company_governed_handoff'&&
            <details className="ago-ai-chain">

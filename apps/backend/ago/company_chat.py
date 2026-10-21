@@ -547,6 +547,13 @@ class CompanyChat:
                         assignee = discovery
                     elif required_kind == 'reviewer':
                         assignee = next((e for e in employees if str(e['id']) in reviewers),None)
+                        if assignee is None and founder_solo_eligible(
+                            self.db, actor.tenant_id, actor.subject
+                        ):
+                            assignee = next(
+                                (e for e in employees if str(e['id']) == actor.subject
+                                 and str(e['id']) != str(leader['id'])), None
+                            )
                     else:
                         assignee = next((e for e in available_ai
                                          if any(keyword in
@@ -849,9 +856,14 @@ class CompanyChat:
             if worker is None:
                 raise LookupError('Selected worker not in this company')
             if stage=='quality':
-                if (worker['kind']!='human' or not worker['reviewer_active']
-                        or str(worker['id'])==str(project['accountable_manager_id'])):
-                    raise PermissionError('QA needs an independent authorized human reviewer')
+                solo_qa = (
+                    str(worker['id']) == actor.subject
+                    and founder_solo_eligible(self.db, actor.tenant_id, actor.subject)
+                )
+                if (worker['kind']!='human' or
+                        not (worker['reviewer_active'] or solo_qa) or
+                        str(worker['id'])==str(project['accountable_manager_id'])):
+                    raise PermissionError('QA needs an authorized human separate from the delivery manager')
             elif worker['kind']!='ai':
                 raise PermissionError('Delivery execution stages must select AI workers')
             if position['plan_step_id']:
@@ -880,7 +892,9 @@ class CompanyChat:
             if prior:
                 return {'proposal_id':str(prior['id']),
                         'approval_id':str(prior['approval_id']),
-                        'status':'pending_independent_review','reused':True,
+                        'status':('pending_founder_decision' if founder_solo_eligible(
+                            self.db, actor.tenant_id, actor.subject
+                        ) else 'pending_independent_review'),'reused':True,
                         'task_executed':False}
             proposal_id=str(uuid4())
             approval=self.repositories.resolve(ApprovalRepository).propose(
@@ -895,7 +909,9 @@ class CompanyChat:
             """,(proposal_id,actor.tenant_id,project_id,stage,
                  assignee_id,actor.subject,approval.request_id))
         return {'proposal_id':proposal_id,'approval_id':approval.request_id,
-                'status':'pending_independent_review','stage':stage,
+                'status':('pending_founder_decision' if founder_solo_eligible(
+                    self.db, actor.tenant_id, actor.subject
+                ) else 'pending_independent_review'),'stage':stage,
                 'worker_name':worker['name'],'reused':False,'task_executed':False}
 
     def activate_stage_delegation(self, actor, project_id: str,
@@ -953,7 +969,7 @@ class CompanyChat:
                   (tenant_id,channel,author_id,author_name,body,kind,employee_id)
                 VALUES (%s,'global',%s,'Company Brain',%s,'project',%s)
             """,(actor.tenant_id,actor.subject,
-                 'Independently reviewed project stage assignment: '+
+                 'Authorized reviewed project stage assignment: '+
                  proposed['stage']+' → '+proposed['worker_name']+
                  '; approved task execution remains separate.',
                  proposed['assignee_id']))
