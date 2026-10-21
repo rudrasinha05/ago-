@@ -160,3 +160,51 @@ Fresh source checks can individually report degraded even when worker is alive.
 - Verify test database migrations 055-056, signed-session UI navigation,
   one CEO-sourced approval → one draft lineage, no side effects, test backup
   and actual local server run. Release is not certified by repo commits.
+
+
+## Explicit opt-in Docker preview research worker (host must already exist)
+
+An isolated market research sidecar is packaged in the non-root Docker image
+and declared in `deploy/docker/compose.market.preview.yml`. It has a bounded
+hourly poll interval, read-only root, no public port, only database/internal
+network plus separate research egress, no Docker socket, and Docker
+`restart: unless-stopped`. **This is NOT 24/7 cloud hosting**, production
+secrets management or an approval to expose the service publicly.
+
+Do not run this with a production database. All preview data is test/demo
+data; never use it for customer sales, spend or production assertions.
+
+From the repository root, after configuring throwaway preview secrets and
+obtaining a real existing preview tenant UUID:
+
+```bash
+export AGO_PREVIEW_DB_PASSWORD="(a strong unique local preview secret)"
+export AGO_PREVIEW_SESSION_SECRET="(a different random 32+ byte signing secret)"
+export AGO_MARKET_TENANT_ID="(existing preview tenant UUID)"
+docker compose -f deploy/docker/compose.preview.yml \
+  -f deploy/docker/compose.market.preview.yml config --quiet
+docker compose -f deploy/docker/compose.preview.yml \
+  -f deploy/docker/compose.market.preview.yml up --build -d
+docker compose -f deploy/docker/compose.preview.yml \
+  -f deploy/docker/compose.market.preview.yml logs --tail=40 market-worker
+```
+
+The preview PostgreSQL must have migration 055–057 applied first using
+the reviewed operator migration procedure; compose intentionally does **not**
+silently migrate existing data. Worker allows only exactly
+`postgresql://ago_preview:...@postgres:5432/ago_preview` in a deliberately
+set `AGO_MARKET_PREVIEW_CONTAINER=true` process and only
+`AGO_ENVIRONMENT=development`. The production path remains fail-closed.
+For true managed 24/7 operation, provision an approved host, secret vault,
+restricted egress ACL, monitoring/alerts, durable queue and external
+resilience drills. A restart policy cannot prevent physical host power-off.
+
+## Optional AI planning (not autonomous execution)
+
+`project:plan` is now an opt-in bounded text-generation handler for
+**already-approved** project-linked tasks with a stored founder intake.
+Model calls require explicit `AGO_ENABLE_PAID_MODELS=true`,
+`AGO_LLM_API_KEY`, `AGO_LLM_MODEL` and virtual-credit charge. Its output
+is an advisory five-stage planning candidate requiring independent human QA.
+It cannot create departments, hire, modify GitHub, execute code, override
+approvals or claim product release. The default config makes no provider call.
