@@ -9,9 +9,10 @@ from uuid import uuid4
 import pytest
 
 import ago.model_handlers as handlers
-from ago.company_ollama_chain import LocalCompanyChain
+from ago.company_ollama_chain import run_four_role_chain
+from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.credits import CreditBudget
-from ago.repository_ports import LocalCompanyChainPort
+from ago.repository_ports import CompanyOllamaChainQueriesPort
 
 
 def uid():
@@ -84,8 +85,10 @@ class FakeModel:
 def test_real_sequential_source_backed_ceo_cto_pm_worker_chain():
     db=ApprovedProjectDb()
     model=FakeModel()
-    result=LocalCompanyChain(db).run(
-        tenant_id=db.tenant,actor_id=db.founder,task=db.task(),provider=model)
+    participants=CompanyOllamaChainQueries(db).assignments(
+        tenant_id=db.tenant,actor_id=db.founder,task=db.task())
+    result=run_four_role_chain(
+        task=db.task(),participants=participants,provider=model)
     assert result["kind"]=="local_company_governed_handoff"
     assert [x["role"] for x in result["handoffs"]]==[
         "ceo","cto","pm","employee"]
@@ -106,8 +109,9 @@ def test_no_hierarchy_no_autonomous_work(changes):
     db=ApprovedProjectDb(**changes)
     model=FakeModel()
     with pytest.raises(PermissionError):
-        LocalCompanyChain(db).run(
-            tenant_id=db.tenant,actor_id=db.founder,task=db.task(),provider=model)
+        participants=CompanyOllamaChainQueries(db).assignments(
+            tenant_id=db.tenant,actor_id=db.founder,task=db.task())
+        run_four_role_chain(task=db.task(),participants=participants,provider=model)
     assert model.prompts==[]
 
 
@@ -116,7 +120,7 @@ def test_no_project_brief_and_no_task_approval_scope_denied():
     task=db.task()
     task.project_context=None
     with pytest.raises(PermissionError):
-        LocalCompanyChain(db).assignments(
+        CompanyOllamaChainQueries(db).assignments(
             tenant_id=db.tenant,actor_id=db.founder,task=task)
     assert db.queries==[]
 
@@ -139,8 +143,8 @@ def test_opt_in_registers_handoff_under_existing_approved_task_action(monkeypatc
         def resolve(self,port):
             if port is CreditBudget:
                 return Credits()
-            if port is LocalCompanyChainPort:
-                return LocalCompanyChain(db)
+            if port is CompanyOllamaChainQueries:
+                return CompanyOllamaChainQueries(db)
             raise AssertionError("Unexpected repository port")
     monkeypatch.setenv("AGO_LLM_PROVIDER","ollama_local")
     monkeypatch.setenv("AGO_ENABLE_LOCAL_MODELS","true")
