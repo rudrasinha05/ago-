@@ -1811,6 +1811,18 @@
         "approved_signal_project": {
           "arguments": "self, actor, signal_id: str",
           "returns": "dict"
+        },
+        "propose_stage_delegation": {
+          "arguments": "self, actor, project_id: str, stage: str, assignee_id: str",
+          "returns": "dict"
+        },
+        "activate_stage_delegation": {
+          "arguments": "self, actor, project_id: str, proposal_id: str",
+          "returns": "dict"
+        },
+        "project_delegations": {
+          "arguments": "self, tenant_id: str, project_id: str",
+          "returns": "list[dict]"
         }
       }
     }
