@@ -32,7 +32,7 @@ if ($env:AGO_ENVIRONMENT -and $env:AGO_ENVIRONMENT.ToLowerInvariant() -notin @("
 if (-not $env:AGO_POSTGRES_DSN) {
     throw "AGO_POSTGRES_DSN is not configured in this terminal. Use the existing verified local ago_test session; no new tenant is needed."
 }
-foreach ($commandName in @("python", "node", "npm")) {
+foreach ($commandName in @("python", "node", "npm.cmd")) {
     if (-not (Get-Command $commandName -ErrorAction SilentlyContinue)) {
         throw "$commandName was not found on PATH. Frontend requires Node.js 22+, npm and Python."
     }
@@ -71,10 +71,10 @@ try {
     Write-Host "AGO visual frontend: packaging the saved circular Company Map and Company Brain."
     if (-not (Test-Path (Join-Path $root "node_modules\next\package.json"))) {
         Write-Host "Installing pinned frontend dependencies from package-lock.json..."
-        & npm ci
+        & npm.cmd ci
         if ($LASTEXITCODE -ne 0) { throw "npm ci failed; frontend was not packaged." }
     }
-    & npm run build --workspace "@ago/web"
+    & npm.cmd run build --workspace "@ago/web"
     if ($LASTEXITCODE -ne 0) { throw "Next.js Company Map build failed." }
     & python scripts/package_frontend.py
     if ($LASTEXITCODE -ne 0) { throw "Next.js frontend packaging failed." }

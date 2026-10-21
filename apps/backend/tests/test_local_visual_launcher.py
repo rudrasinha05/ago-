@@ -7,11 +7,11 @@ def test_visual_launcher_is_local_only_and_targets_real_react_company_map():
     script = (root / "scripts" / "ago-visual.ps1").read_text(encoding="utf-8")
     assert "company-map.jsx" in script
     assert "command-brain.jsx" in script
-    assert 'npm run build --workspace "@ago/web"' in script
+    assert 'npm.cmd run build --workspace "@ago/web"' in script
     assert "python scripts/package_frontend.py" in script
     assert "workspace/organization/" in script
     assert "python -m ago.local_ops doctor" in script
-    assert "migrate" not in script.lower().split("Push-Location $backend")[1]
+    assert "python -m ago.event_runtime migrate" not in script
     assert "init-solo" not in script
     assert "ollama pull" not in script
 
