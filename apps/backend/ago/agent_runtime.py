@@ -49,6 +49,11 @@ class AgentRuntime:
             context_row = (self.repositories.resolve(AgentRuntimeQueries)
                            .select_ago_founder_project_12((task_id, actor.tenant_id))
                            .fetchone())
+            # Project briefs are founder-confidential. Until every delegated AI
+            # role has independently approved content access, nonfounders cannot
+            # execute work that materializes the private brief into result logs.
+            if context_row is not None and "founder" not in actor.roles:
+                raise PermissionError("Confidential project execution requires founder authority")
             project_context = ({
                 "title": context_row["title"], "brief": context_row["brief"],
                 "intake_id": str(context_row["id"]),
