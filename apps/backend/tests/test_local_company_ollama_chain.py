@@ -150,7 +150,7 @@ def test_ceo_deny_stops_handoff_before_cto_pm_and_worker():
         def __init__(self): self.calls=0
         def generate(self, prompt):
             self.calls+=1
-            return "BOARD_RECOMMENDATION: DENY\\nRISKS: Founder must revise the scope"
+            return "BOARD_RECOMMENDATION: DENY\nRISKS: Founder must revise the scope"
     model=DenyingCEO()
     assignments=CompanyOllamaChainQueries(db).assignments(
         tenant_id=db.tenant, actor_id=db.founder, task=db.task())
