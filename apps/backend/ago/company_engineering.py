@@ -139,3 +139,26 @@ def stage_candidate(value: dict, destination) -> dict:
     with (root / "AGO_REVIEW_MANIFEST.json").open("x", encoding="utf-8") as stream:
         json.dump(manifest, stream, indent=2, sort_keys=True)
     return manifest
+
+
+def draft_github_commit_operation(
+    value: dict, *, project_id: str, operation_id: str, expected_sha: str, message: str,
+) -> dict:
+    """Exact unsubmitted Section34 operation; never invokes GitHub or grants RBAC."""
+    from uuid import UUID
+
+    UUID(project_id)
+    UUID(operation_id)
+    candidate = verify_persisted_candidate(value)
+    operation = {
+        "id": operation_id,
+        "project_id": project_id,
+        "operation": "commit_files",
+        "payload": {
+            "expected_sha": expected_sha,
+            "message": message,
+            "files": candidate["files"],
+        },
+    }
+    validate_operation(operation)
+    return operation
