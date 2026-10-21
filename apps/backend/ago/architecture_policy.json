@@ -66,9 +66,9 @@
       "imports": [
         "agent_runtime_queries",
         "backend_contracts",
-        "company_ollama_chain",
         "enterprise_store",
         "organizational_dna",
+        "repository_ports",
         "task_store"
       ]
     },
@@ -307,7 +307,7 @@
     },
     "company_ollama_chain": {
       "context": "workforce",
-      "layer": "service",
+      "layer": "persistence",
       "imports": [
         "backend_contracts"
       ]
@@ -748,9 +748,9 @@
       "layer": "service",
       "imports": [
         "backend_contracts",
-        "company_ollama_chain",
         "credits",
-        "model_provider"
+        "model_provider",
+        "repository_ports"
       ]
     },
     "model_provider": {
@@ -889,6 +889,7 @@
         "behavior_store",
         "calendar_store",
         "company_chat",
+        "company_ollama_chain",
         "console_service",
         "console_store",
         "council_store",
