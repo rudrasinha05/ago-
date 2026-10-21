@@ -88,3 +88,54 @@ def reviewed_candidate(raw: str) -> dict:
         "publishable": False,
         "next_gate": "Founder source review, isolated test execution, QA and reviewed GitHub operation",
     }
+
+
+def verify_persisted_candidate(value: dict) -> dict:
+    """Reject any post-inference tampering before the founder stages files."""
+    if not isinstance(value, dict):
+        raise ValueError("Stored engineering candidate required")
+    expected = reviewed_candidate(json.dumps({
+        "files": value.get("files"),
+        "acceptance_checks": value.get("acceptance_checks"),
+    }))
+    # Evidence and digest must still describe precisely these source bytes.
+    if (
+        value.get("kind") != expected["kind"]
+        or value.get("candidate_sha256") != expected["candidate_sha256"]
+        or value.get("file_evidence") != expected["file_evidence"]
+        or value.get("source_parse_passed") is not True
+        or value.get("tests_executed") is not False
+        or value.get("github_committed") is not False
+        or value.get("qa_approved") is not False
+        or value.get("publishable") is not False
+    ):
+        raise PermissionError("Engineering candidate changed after review")
+    return expected
+
+
+def stage_candidate(value: dict, destination) -> dict:
+    """Write a *new*, explicit local review directory, never modify Git history."""
+    from pathlib import Path
+
+    candidate = verify_persisted_candidate(value)
+    root = Path(destination)
+    if root.exists() or root.is_symlink():
+        raise FileExistsError("Review destination already exists; never overwrite")
+    root.mkdir(parents=True, exist_ok=False)
+    for item in candidate["files"]:
+        target = root.joinpath(*item["path"].split("/"))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("x", encoding="utf-8", newline="") as handle:
+            handle.write(item["content"])
+    manifest = {
+        "candidate_sha256": candidate["candidate_sha256"],
+        "file_evidence": candidate["file_evidence"],
+        "acceptance_checks": candidate["acceptance_checks"],
+        "python_source_parsed": True,
+        "tests_executed": False,
+        "git_committed": False,
+        "human_review_required": True,
+    }
+    with (root / "AGO_REVIEW_MANIFEST.json").open("x", encoding="utf-8") as stream:
+        json.dump(manifest, stream, indent=2, sort_keys=True)
+    return manifest
