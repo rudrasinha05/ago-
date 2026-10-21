@@ -131,7 +131,7 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     saved=info["db"].execute("""
         SELECT result FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s
     """,(info["tenant"],task_id)).fetchone()
-    assert saved["result"]["roles_completed"]==4
+    assert saved["result"]["roles_completed"]==expected_count
     details=client.get(BASE+"/projects/"+project["id"],headers=founder)
     assert details.status_code==200,details.text
     chain=details.json()["stages"][0]["founder_agent_result"]
