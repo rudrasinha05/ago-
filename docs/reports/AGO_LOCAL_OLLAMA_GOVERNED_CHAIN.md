@@ -11,6 +11,7 @@ There are NO cloud deployments or auto-start worker requirements.
   **1.9 GB download/model**. The 4 GB GPU may partially offload it depending
   on available VRAM, concurrent apps, CUDA compatibility and current RAM.
 - Fallback: **`qwen2.5:1.5b`** (~986 MB) for lower memory pressure.
+- The installed `qwen2.5-coder:1.5b` code-focused model is also supported for manually authorized AGO localhost inference. Use the exact installed model tag; its software-engineering ability remains subject to model-output and QA tests.
 - Do **not** silently choose 7B/14B models or use `qwen2.5` without `:3b`,
   since the default may require >4 GB VRAM. Leave extra headroom for Windows
   and browser processes. Actual GPU share/tokens per second require a local test.

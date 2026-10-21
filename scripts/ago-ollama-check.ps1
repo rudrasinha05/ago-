@@ -4,7 +4,7 @@ Read-only, founder-started AGO Ollama localhost/model check.
 Does NOT install, pull, start or auto-enable Ollama or wake the laptop.
 #>
 param(
-    [ValidateSet("qwen2.5:3b", "qwen2.5:1.5b")]
+    [ValidateSet("qwen2.5:3b", "qwen2.5:1.5b", "qwen2.5-coder:1.5b")]
     [string]$Model = "qwen2.5:3b"
 )
 
