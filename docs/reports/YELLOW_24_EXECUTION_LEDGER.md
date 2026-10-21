@@ -65,3 +65,34 @@ commercial tasks into the original checklist.
   Never ask for secret API keys in chat or add cloud hosting on your own.
 - Current protected branch: `develop`; current architecture/API/DB validation
   requires same-final-SHA checks. CI status must be inspected separately.
+
+### Local Ollama founder-governed chain (2026-10-21)
+
+- Selected `qwen2.5:3b` (1.9 GB distributed Q4) for the founder's GTX 1650
+  4 GB VRAM, with `qwen2.5:1.5b` as an explicit low-memory alternative.
+- Added separate bounded `company_ollama_chain` reasoning and
+  `company_ollama_chain_queries` tenant-aware source-backed role lookup.
+- Real identities: CEO from founder-appointed Strategy & Vision seat; CTO
+  from Technology Oversight; PM from recorded project lead; employee from
+  the independently approved project discovery task. Four **distinct**
+  existing AI employees are mandatory.
+- Opt-in `AGO_LLM_PROVIDER=ollama_local`,
+  `AGO_ENABLE_LOCAL_MODELS=true`, `AGO_LOCAL_COMPANY_CHAIN=true` keeps
+  previous deterministic handlers unchanged unless the founder explicitly
+  enables four-role local drafting.
+- Existing `POST /v1/agents/tasks/{task_id}/run` performs the task authorization
+  and independent reviewer gate. New role preflight runs **before** an
+  approved task is consumed. Four sequential local-only model passes create
+  an actual tagged, persisted deliverable with independent QA required.
+- Founder-only project inspector renders each completed role handoff from
+  the durable run record; never invents background working employees.
+- Ollama HTTP endpoint is fixed loopback; proxies and redirects disabled.
+  No model pulling/startup, external AI fallback, tools, GitHub file writes,
+  customer marketing or company mutation. One local model at a time.
+- Unit plus real PostgreSQL / mocked-Ollama CI is evidence of **integration**,
+  not proof of model performance on the founder's hardware.
+- **Status for #24/#27/#53 remains SUSPENDED for FULL AUTONOMOUS
+  MANAGEMENT/DELIVERY**; the bounded local 4-stage drafting implementation
+  is done. Unbounded CTO/PM managerial authority, self-directed engineering
+  execution, PR/CI and human independent QA are separate unfinished gates.
+- Runbook: `docs/reports/AGO_LOCAL_OLLAMA_GOVERNED_CHAIN.md`.
