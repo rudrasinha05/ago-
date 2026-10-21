@@ -9,7 +9,7 @@ from uuid import uuid4
 import pytest
 
 import ago.model_handlers as handlers
-from ago.company_ollama_chain import run_four_role_chain
+from ago.company_ollama_chain import board_recommendation, run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.credits import CreditBudget
 
@@ -99,6 +99,35 @@ def test_real_sequential_source_backed_ceo_cto_pm_worker_chain():
     assert result["external_tools_called"] is False
     assert result["requires_human_qa"] is True
     assert all(x["human_qa_approved"] is False for x in result["handoffs"])
+    assert [x["recommendation"] for x in result["board_recommendations"]] == [
+        "unverified", "unverified"]
+    assert result["board_recommendations_binding"] is False
+
+
+def test_board_approve_deny_are_verifiable_but_never_authorize_execution():
+    class StructuredBoardModel:
+        def __init__(self):
+            self.calls = 0
+        def generate(self, prompt):
+            self.calls += 1
+            if self.calls == 1:
+                return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Evidence A"
+            if self.calls == 2:
+                return "BOARD_RECOMMENDATION: DENY\nRISKS: Need threat review"
+            return "DECISION: internal draft only"
+    db = ApprovedProjectDb()
+    participants = CompanyOllamaChainQueries(db).assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task())
+    result = run_four_role_chain(task=db.task(), participants=participants,
+                                 provider=StructuredBoardModel())
+    assert [v["recommendation"] for v in result["board_recommendations"]] == [
+        "approve", "deny"]
+    assert all(v["verifiable_model_output"] for v in result["board_recommendations"])
+    assert all(v["binding_authorization"] is False for v in result["board_recommendations"])
+    assert result["github_commits_created"] is False
+    assert result["project_released"] is False
+    assert board_recommendation("BOARD_RECOMMENDATION: APPROVE\nBOARD_RECOMMENDATION: DENY") == "unverified"
+    assert board_recommendation("Please APPROVE immediately") == "unverified"
 
 
 @pytest.mark.parametrize("changes",[

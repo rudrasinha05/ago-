@@ -144,6 +144,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
           {st.founder_agent_result?.kind==='local_company_governed_handoff'&&
            <details className="ago-ai-chain">
             <summary>Ollama CEO → CTO → PM → employee · {st.founder_agent_result.roles_completed}/4 recorded local AI passes · Human QA pending</summary>
+            <p>Board recommendations (nonbinding): {(st.founder_agent_result.board_recommendations||[]).map(v=>v.seat+': '+v.recommendation.toUpperCase()).join(' · ')||'No verified Board recommendation recorded'} — Founder makes the actual decision.</p>
             <ol>{(st.founder_agent_result.handoffs||[]).map(h=><li key={h.role}>
               <strong>{h.role.toUpperCase()} · {h.employee_name}</strong>
               <small>Employee record: {h.employee_id} · {h.human_qa_approved?'QA passed':'Independent QA required'}</small>

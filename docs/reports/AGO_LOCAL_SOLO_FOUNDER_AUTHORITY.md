@@ -16,8 +16,8 @@ Owner direction: one human founder, real hierarchical AI-company staff and exist
 
 Current Board appointments are durable company role records, not actual approval permissions by themselves.
 AI Board members have no human login or power to approve protected operations using forged credentials.
-An AI member may recommend approve or deny through a genuine approved model-run artifact.
-Making those recommendations into scoped, recorded Board votes with executable consequences remains a separate workflow. Nothing in this batch claims it is finished.
+In the local Ollama CEO/CTO chain, an explicit single BOARD_RECOMMENDATION line produces a stored, nonbinding approve/deny recommendation linked to that real employee and task run. An absent/ambiguous line remains unverified.
+Actual permission-bearing Board votes, Finance/Risk/Quality seats, and executable consequences still require separate scoped authorization and evidence. This batch does not grant those powers. Nothing in this batch claims it is finished.
 Founder final project release and security controls are unchanged. This is a functional AI-company organization under construction, not a market-ready fully autonomous company.
 
 ## Windows VS Code operator
