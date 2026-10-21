@@ -594,6 +594,10 @@
         "audit": {
           "arguments": "self, tenant: str, actor: str, document: str",
           "returns": "list[dict]"
+        },
+        "eligible_members": {
+          "arguments": "self, tenant: str, actor: str, project: str",
+          "returns": "list[dict]"
         }
       }
     },
