@@ -49,6 +49,7 @@ CREATE TRIGGER ago_stage_delegation_activations_append_only
 CREATE FUNCTION ago_guard_project_stage_delegation()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE proposal record; reviewer_is_independent boolean; plan_activated boolean;
+        worker_eligible boolean;
 BEGIN
  SELECT d.approval_id,d.requester_id,a.action,a.status,a.reviewer_id
  INTO proposal
@@ -77,6 +78,22 @@ BEGIN
  ) INTO plan_activated;
  IF NOT plan_activated
  THEN RAISE EXCEPTION 'Founder-approved active project plan required'; END IF;
+ -- Independent QA can never be assigned to the person who reviewed their
+ -- own staffing request. Execution workers must be real tenant-owned AI staff.
+ SELECT EXISTS(
+  SELECT 1 FROM ago_employees e
+  LEFT JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id AND u.active
+  LEFT JOIN ago_user_roles r ON r.tenant_id=e.tenant_id
+    AND r.user_id=e.id AND r.role='reviewer'
+  WHERE e.tenant_id=NEW.tenant_id AND e.id=NEW.assignee_id
+    AND (
+      (NEW.stage='quality' AND e.kind='human' AND r.role='reviewer'
+       AND proposal.reviewer_id <> NEW.assignee_id)
+      OR (NEW.stage<>'quality' AND e.kind='ai')
+    )
+ ) INTO worker_eligible;
+ IF NOT worker_eligible
+ THEN RAISE EXCEPTION 'Ineligible worker or reviewer conflict'; END IF;
  RETURN NEW;
 END $$;
 CREATE TRIGGER ago_guard_project_stage_delegation_insert
