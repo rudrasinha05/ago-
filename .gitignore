@@ -41,3 +41,13 @@ build/
 
 coverage.json
 htmlcov/
+
+# Confidential AGO founder/company documents: local source-of-truth ONLY.
+# The current AGO software repository is public; never commit these trees.
+.ago-private/
+company-private/
+company-confidential/
+private-projects/
+project-vault/
+confidential-documents/
+local-private/
