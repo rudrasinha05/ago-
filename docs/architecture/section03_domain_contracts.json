@@ -122,6 +122,7 @@
     "calendar_store": "operations",
     "company_chat": "workforce",
     "company_ollama_chain": "workforce",
+    "company_ollama_chain_queries": "workforce",
     "console_api": "transport",
     "console_host": "transport",
     "console_service": "governance",
@@ -326,7 +327,8 @@
       "ago_user_roles",
       "ago_users"
     ],
-    "company_ollama_chain": [
+    "company_ollama_chain": [],
+    "company_ollama_chain_queries": [
       "ago_company_board_appointments",
       "ago_employees",
       "ago_founder_intake_stages",
