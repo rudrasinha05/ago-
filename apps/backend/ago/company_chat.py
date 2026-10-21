@@ -573,7 +573,10 @@ class CompanyChat:
                    q.verdict AS qa_verdict,q.evidence AS qa_evidence,
                    q.created_at AS qa_reviewed_at,ar.status AS agent_run_status,
                    ar.failure_code AS agent_failure_code,ar.started_at AS agent_started_at,
-                   ar.finished_at AS agent_finished_at
+                   ar.finished_at AS agent_finished_at,
+                   assigned.assignee_id AS approved_assignee_id,
+                   delegated.name AS approved_assignee_name,
+                   assigned.applied_at AS delegated_at
             FROM ago_founder_intake_stages s
             LEFT JOIN ago_employees e ON e.tenant_id=s.tenant_id
               AND e.id=s.suggested_assignee_id
@@ -583,6 +586,11 @@ class CompanyChat:
             LEFT JOIN ago_employees executor ON executor.tenant_id=t.tenant_id AND executor.id=t.assignee_id
             LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id AND q.task_id=t.id
             LEFT JOIN ago_agent_runs ar ON ar.tenant_id=t.tenant_id AND ar.task_id=t.id
+            LEFT JOIN ago_project_stage_delegation_activations assigned
+              ON assigned.tenant_id=s.tenant_id AND assigned.intake_id=s.intake_id
+                 AND assigned.stage=s.stage
+            LEFT JOIN ago_employees delegated
+              ON delegated.tenant_id=assigned.tenant_id AND delegated.id=assigned.assignee_id
             WHERE s.tenant_id=%s AND s.intake_id=%s ORDER BY s.position
         """,(tenant_id,project_id)).fetchall()
         result = dict(row)
@@ -591,6 +599,7 @@ class CompanyChat:
         result['qa_passed_stages'] = completed
         result['stage_count'] = len(stages)
         result['completion_percent'] = round(100*completed/max(len(stages),1))
+        result['reviewed_delegations_count'] = sum(s['approved_assignee_id'] is not None for s in stages)
         result['unassigned_stages'] = sum(s['suggested_assignee_id'] is None for s in stages)
         result['running_stages'] = sum(s['task_status']=='running' for s in stages)
         result['failed_stages'] = sum(s['task_status']=='failed' or s['qa_verdict']=='fail'
