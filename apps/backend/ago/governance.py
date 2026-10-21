@@ -101,6 +101,13 @@ class ApprovalRepository:
             ).fetchone()
             if row is None:
                 raise LookupError("Approval not found")
+            # Direct repository callers cannot mislabel a strategic request as an
+            # operational one to bypass the founder-only controller path.
+            scoped_founder = self.requires_founder_decision(
+                request_id=request_id, tenant_id=tenant_id
+            )
+            if scoped_founder != founder_only:
+                raise PermissionError("Approval authority does not match stored action scope")
             current = ApprovalRequest(
                 request_id=str(row["id"]),
                 tenant_id=str(row["tenant_id"]),
