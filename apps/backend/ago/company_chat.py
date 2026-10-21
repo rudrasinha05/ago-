@@ -224,12 +224,32 @@ class CompanyChat:
                        (employee.id, actor.tenant_id, row['id']))
             return asdict(employee)
 
-    def notifications(self, tenant_id: str) -> dict:
-        """Persistent work-event counts, excluding ordinary chat messages.
-
-        Includes task transitions and authenticated upward reports.
-        The latest event ID is safe for incremental browser polling.
-        """
+    def notifications(self, tenant_id: str, reader_id: str | None = None) -> dict:
+        """Read only role-visible persisted events; no cross-project pop-up leaks."""
+        UUID(tenant_id)
+        if reader_id is None:
+            raise PermissionError('Authenticated notification reader required')
+        UUID(reader_id)
+        founder=self.db.execute("""
+            SELECT 1 FROM ago_users u JOIN ago_employees e
+              ON e.tenant_id=u.tenant_id AND e.id=u.id AND e.kind='human'
+            JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
+              AND r.role='founder'
+            WHERE u.tenant_id=%s AND u.id=%s AND u.active
+        """,(tenant_id,reader_id)).fetchone() is not None
+        if not founder:
+            scoped = self.db.execute("""
+                SELECT id,employee_id,task_id,body,kind,created_at
+                FROM ago_company_chat
+                WHERE tenant_id=%s AND employee_id=%s
+                  AND kind IN ('status','report','staffing','github','qa','docs')
+                ORDER BY id DESC LIMIT 100
+            """,(tenant_id,reader_id)).fetchall()
+            return {
+                'by_employee': {reader_id:len(scoped)},
+                'recent':[dict(row) for row in scoped],
+                'event_type':'committed_work_event',
+            }
         rows = self.db.execute("""
             SELECT e.id AS employee_id, COUNT(c.id) AS event_count
             FROM ago_employees e
