@@ -87,3 +87,27 @@ def test_worker_scope_and_project_isolation_are_denied(case):
     assert client.get(path,headers=headers["reviewer"]).status_code==403
     assert client.get(path,headers=founder).status_code==200
     assert client.get(path).status_code==401
+
+def test_confidential_registry_denies_unassigned_company_readers(case):
+    """Company-level RBAC alone must not reveal founder's confidential projects."""
+    client,headers,info=case
+    founder,reviewer=headers["founder"],headers["reviewer"]
+    project=post(client,BASE+"/projects/start",founder,{
+        "brief":"Confidential invention prototype with founder-only business plans and unreleased research",
+        "operation_key":str(uuid4())})
+    # Reviewer is granted ordinary organization/brain read in this disposable
+    # tenant to prove *per-project* access is checked independently.
+    for permission in ("organization:read","brain:read"):
+        info["db"].execute("""
+            INSERT INTO ago_role_permissions(tenant_id,role,permission)
+            VALUES (%s,'reviewer',%s) ON CONFLICT DO NOTHING
+        """,(info["tenant"],permission))
+    registry=client.get(BASE+"/projects",headers=reviewer)
+    assert registry.status_code==200,registry.text
+    assert all(str(x["id"])!=project["id"] for x in registry.json())
+    assert client.get(BASE+"/projects/"+project["id"],headers=reviewer).status_code==404
+    assert client.get(BASE+"/projects/"+project["id"]+"/delegations",
+                      headers=reviewer).status_code==404
+    founder_list=client.get(BASE+"/projects",headers=founder)
+    assert any(x["id"]==project["id"] for x in founder_list.json())
+    assert client.get(BASE+"/projects/"+project["id"],headers=founder).status_code==200
