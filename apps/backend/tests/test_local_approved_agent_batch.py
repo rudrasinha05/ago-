@@ -2,6 +2,7 @@
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from uuid import uuid4
+
 import pytest
 
 SCRIPT=Path(__file__).resolve().parents[3]/"scripts"/"local_approved_agent_batch.py"
