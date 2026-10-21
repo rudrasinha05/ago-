@@ -7,9 +7,10 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 serve
 .\scripts\ago.ps1 migrate
 .\scripts\ago.ps1 market-watch  # opt-in in a separate terminal, Ctrl+C stops
+.\scripts\ago.ps1 safe-reconcile  # manual stale-run recovery, no replay
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch", "company-pulse")]
+    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -67,6 +68,20 @@ try {
             throw "Specify the existing AGO_MARKET_TENANT_ID for a tenant-scoped read-only pulse."
         }
         & python ../../scripts/company_readiness_audit.py --tenant-id $env:AGO_MARKET_TENANT_ID
+        exit $LASTEXITCODE
+    }
+    if ($Action -eq "safe-reconcile") {
+        if (-not $env:AGO_MARKET_TENANT_ID) {
+            throw "Set existing AGO_MARKET_TENANT_ID before local recovery."
+        }
+        & python ../../scripts/company_safe_reconcile.py --tenant-id $env:AGO_MARKET_TENANT_ID
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $Confirmation = Read-Host "To mark abandoned local runs FAILED without replay, type MARK_STALE_FAILED"
+        if ($Confirmation -cne "MARK_STALE_FAILED") {
+            Write-Host "Recovery cancelled. No state changed."
+            exit 2
+        }
+        & python ../../scripts/company_safe_reconcile.py --tenant-id $env:AGO_MARKET_TENANT_ID --apply --confirm MARK_STALE_FAILED
         exit $LASTEXITCODE
     }
     if ($Action -eq "market-watch") {
