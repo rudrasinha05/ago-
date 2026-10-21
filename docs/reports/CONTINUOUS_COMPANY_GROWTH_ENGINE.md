@@ -65,21 +65,26 @@ reviewed delegated-organization charter; do not bypass existing HR guards.
    `AGO_POSTGRES_DSN` points to the intended **localhost** database.
 3. Obtain the tenant UUID from the existing operator `tenants` command.
    Set `AGO_MARKET_TENANT_ID` to **that actual UUID**, not a random one.
-4. Launch `./scripts/ago.ps1 serve`: the local PowerShell wrapper launches
-   the market watcher with one-hour cadence when the tenant ID is configured.
-   Or run `./scripts/ago.ps1 market-watch` in its own terminal.
+4. **Founder-controlled startup:** run `./scripts/ago.ps1 serve` to start only
+   the localhost server. Setting `AGO_MARKET_TENANT_ID` does NOT start any
+   watcher. If and only if the founder chooses to perform research, open a
+   **separate terminal** and run `./scripts/ago.ps1 market-watch`. Stop either
+   foreground process with Ctrl+C; closing the terminals stops the work.
 5. Open Organization → Continuous Market & Opportunity Intelligence. Verify
    a real feed-health record, sourced URLs, observed scores, CEO nominations
    and the lack of falsely claimed marketing publication.
-6. If the PC is off or no PostgreSQL service is available, the local observer
-   **cannot keep running**. For true 24/7 operations deploy managed workers,
-   durable queues, outbound quotas, backup/restore, incident alerts and monitoring
-   only under an owner-reviewed deployment change.
+6. **The founder decides when the laptop is on, off, awake or asleep.** AGO
+   must never wake the PC, install OS startup tasks, run hidden scheduled jobs,
+   request hosted infrastructure, or enable cloud service on its own. If the
+   laptop is off or PostgreSQL is unavailable, the local observer stops and
+   resumes only when the founder manually starts it again.
 
 Example (values are placeholders):
 ```powershell
 $env:AGO_MARKET_TENANT_ID = "<actual-tenant-uuid-from-AGO-tenants>"
 .\scripts\ago.ps1 serve
+# In a SEPARATE terminal, only when the founder explicitly wants research:
+.\scripts\ago.ps1 market-watch
 ```
 
 ## Promotion / outreach / money — gates still open
@@ -137,9 +142,10 @@ prove production or customer revenue.
   unreviewed completions, stalled in-flight tasks and stale agent runs.
   It prints **only nonsecret structured observations** and operator actions.
   No destructive restart or repeat of non-idempotent external effects.
-- `scripts/ago.ps1 serve` now launches the watcher as a separate inherited-
-  environment child process. The previous Start-Job approach did not
-  reliably inherit the PostgreSQL configuration. This fix is local only.
+- `scripts/ago.ps1 serve` starts the local server **only**. The previous
+  automatic watcher process has been removed; the founder explicitly launches
+  `scripts/ago.ps1 market-watch` when desired and terminates it with Ctrl+C.
+  No cloud service or laptop power-management changes are part of AGO.
 
 ### Quick local health check
 After backing up the correct database, applying reviewed migrations 055-056,
@@ -195,9 +201,10 @@ silently migrate existing data. Worker allows only exactly
 `postgresql://ago_preview:...@postgres:5432/ago_preview` in a deliberately
 set `AGO_MARKET_PREVIEW_CONTAINER=true` process and only
 `AGO_ENVIRONMENT=development`. The production path remains fail-closed.
-For true managed 24/7 operation, provision an approved host, secret vault,
-restricted egress ACL, monitoring/alerts, durable queue and external
-resilience drills. A restart policy cannot prevent physical host power-off.
+Managed hosting and cloud databases are outside the authorized AGO scope.
+The optional Docker Compose profile is for **local machine preview only**, and
+must not be started without a founder action. Container restart settings cannot
+override the founder's laptop power, sleep or shutdown decisions.
 
 ## Optional AI planning (not autonomous execution)
 
