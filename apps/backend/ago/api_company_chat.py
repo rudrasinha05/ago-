@@ -180,6 +180,49 @@ def founder_project_details(project_id: UUID,actor=Depends(authenticated),
     except (ValueError,LookupError) as exc:
         translate_error(exc)
 
+class StageDelegationInput(StrictInput):
+    stage: Literal['discovery','architecture','implementation','quality','release']
+    assignee_id: UUID
+
+
+@router.post('/projects/{project_id}/delegations')
+def propose_project_delegation(project_id: UUID, data: StageDelegationInput,
+                               actor=Depends(authenticated),
+                               repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:manage')
+    allowed(repositories,actor,'brain:manage')
+    try:
+        return repositories.resolve(CompanyChatPort).propose_stage_delegation(
+            actor,str(project_id),data.stage,str(data.assignee_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
+@router.get('/projects/{project_id}/delegations')
+def list_project_delegations(project_id: UUID, actor=Depends(authenticated),
+                             repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'brain:read')
+    try:
+        return repositories.resolve(CompanyChatPort).project_delegations(
+            actor.tenant_id,str(project_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
+@router.post('/projects/{project_id}/delegations/{proposal_id}/activate')
+def activate_project_delegation(project_id: UUID,proposal_id: UUID,
+                                actor=Depends(authenticated),
+                                repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:manage')
+    allowed(repositories,actor,'brain:manage')
+    try:
+        return repositories.resolve(CompanyChatPort).activate_stage_delegation(
+            actor,str(project_id),str(proposal_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
 @router.get('/approvals')
 def approval_inbox(limit: int = Query(default=100,ge=1,le=100),
                    actor=Depends(authenticated), repositories=Depends(repository_scope)):
