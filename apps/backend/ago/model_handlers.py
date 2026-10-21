@@ -36,6 +36,9 @@ def optional_model_handlers(
     model = os.getenv("AGO_LLM_MODEL")
     mode = os.getenv("AGO_LLM_PROVIDER","paid")
     if mode == "ollama_local":
+        # Default sized for the founder's GTX 1650 4GB, not a 7B+ model.
+        # Never download or start Ollama automatically.
+        model = model or "qwen2.5:3b"
         if os.getenv("AGO_ENABLE_LOCAL_MODELS") != "true" or not model:
             return {}
         provider = OllamaLocalTextProvider(
