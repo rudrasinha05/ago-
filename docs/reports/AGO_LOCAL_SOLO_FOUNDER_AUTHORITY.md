@@ -94,3 +94,15 @@ resource-bound.
 The older two-seat CEO/CTO path remains the default when the opt-in flag is
 not set, preserving existing localhost setups. Full Board execution and
 reviewed code delivery are deliberately separate achievements.
+
+## Board hold is a task blocker, not an accepted deliverable
+
+When an approved AI Board inference returns a DENY or an unverified verdict
+in full-board mode, the real governed **task** ends as `failed` (delivery
+blocked); the actual local model-attempt run ends as `completed` because the
+inference and its persisted evidence completed. Its API response reports
+`delivery_status=blocked`. A failed task cannot receive a passing QA verdict
+under the existing TaskStore/QualityStore gates. Manager reporting emits a
+durable `blocker` instead of incorrectly reporting `module_complete` once
+reviewed migration 061 is applied. Any corrective action needs a new approved
+task; no automatic re-run or Board override is performed.

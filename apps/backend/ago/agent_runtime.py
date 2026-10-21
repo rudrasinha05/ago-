@@ -96,6 +96,12 @@ class AgentRuntime:
             if not isinstance(result, dict):
                 raise ValueError("Agent result must be a dictionary")
             payload = json.dumps(result, allow_nan=False)
+            # A blocked AI Board handoff is a completed inference attempt,
+            # never a completed business deliverable or passable QA artifact.
+            board_hold = (
+                result.get("kind") == "local_company_governed_handoff"
+                and result.get("board_blocked") is True
+            )
             if len(payload) > 32000:
                 raise ValueError("Agent result exceeds size limit")
             with self.db.transaction():
@@ -108,7 +114,7 @@ class AgentRuntime:
                 self.repositories.resolve(TaskStore).finish(
                     task_id=task.id,
                     tenant_id=actor.tenant_id,
-                    success=True,
+                    success=not board_hold,
                 )
         except Exception as exc:
             with self.db.transaction():
@@ -121,7 +127,11 @@ class AgentRuntime:
                     success=False,
                 )
             raise RuntimeError("Governed agent execution failed") from exc
-        return {"id": run_id, "task_id": task.id, "status": "completed", "result": result}
+        return {
+            "id": run_id, "task_id": task.id, "status": "completed",
+            "delivery_status": "blocked" if board_hold else "completed",
+            "result": result,
+        }
 
     def recover_stale(self, *, tenant_id: str, minimum_age_seconds: int = 3600) -> int:
         """Mark abandoned runs failed; never auto-replay possible side effects."""

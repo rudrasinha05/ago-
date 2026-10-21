@@ -16,9 +16,11 @@ from test_m7_http_postgres import case as case, post
 BASE="/v1/organization/company"
 
 
-@pytest.mark.parametrize("full_board", [False, True])
+@pytest.mark.parametrize("full_board,deny_risk", [
+    (False,False), (True,False), (True,True),
+])
 def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
-    case, monkeypatch, full_board,
+    case, monkeypatch, full_board, deny_risk,
 ):
     import ago.model_handlers as model_handlers
 
@@ -71,6 +73,8 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         def generate(self, prompt):
             calls.append(prompt)
             assert len(prompt)<=4000
+            if deny_risk and "ROLE: RISK\n" in prompt:
+                return "BOARD_RECOMMENDATION: DENY\nRISKS: Security risk unresolved"
             return (("BOARD_RECOMMENDATION: APPROVE\n" if "BOARD_ADVISORY:" in prompt else "") +
                     "DECISION: verified draft\nDELIVERABLE: internal role note\n"
                     "RISKS: needs QA\nACCEPTANCE: human must review")
@@ -111,18 +115,25 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     response=post(client,"/v1/agents/tasks/"+task_id+"/run",founder)
     result=response["result"]
     assert result["kind"]=="local_company_governed_handoff"
-    expected_count=7 if full_board else 4
-    expected_people=([ceo,cto,finance,risk,quality] if full_board else [ceo,cto])
+    expected_count=4 if deny_risk else (7 if full_board else 4)
+    expected_people=(
+        [ceo,cto,finance,risk] if deny_risk
+        else ([ceo,cto,finance,risk,quality,pm,worker] if full_board
+              else [ceo,cto,pm,worker])
+    )
     expected_roles=(
-        ["ceo","cto","finance","risk","quality","pm","employee"]
-        if full_board else ["ceo","cto","pm","employee"]
+        ["ceo","cto","finance","risk"] if deny_risk
+        else (["ceo","cto","finance","risk","quality","pm","employee"]
+              if full_board else ["ceo","cto","pm","employee"])
     )
     assert result["roles_completed"]==expected_count and len(calls)==expected_count
-    assert result["roles_expected"]==expected_count
-    assert result["handoff_complete"] is True
-    assert result["board_review_cleared"] is full_board
-    assert [r["employee_id"] for r in result["handoffs"]]==expected_people+[pm,worker]
+    assert result["roles_expected"]==(7 if full_board else 4)
+    assert result["handoff_complete"] is not deny_risk
+    assert result["board_review_cleared"] is (full_board and not deny_risk)
+    assert result["board_blocked"] is deny_risk
+    assert [r["employee_id"] for r in result["handoffs"]]==expected_people
     assert [r["role"] for r in result["handoffs"]]==expected_roles
+    assert response["delivery_status"]==("blocked" if deny_risk else "completed")
     assert result["requires_human_qa"] is True
     assert result["github_commits_created"] is False
     assert result["external_tools_called"] is False
@@ -132,6 +143,18 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         SELECT result FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s
     """,(info["tenant"],task_id)).fetchone()
     assert saved["result"]["roles_completed"]==expected_count
+    task_row=info["db"].execute("""
+        SELECT status FROM ago_governed_tasks
+        WHERE tenant_id=%s AND id=%s
+    """,(info["tenant"],task_id)).fetchone()
+    assert task_row["status"]==("failed" if deny_risk else "completed")
+    report=info["db"].execute("""
+        SELECT kind FROM ago_company_reports
+        WHERE tenant_id=%s AND task_id=%s
+        ORDER BY id DESC LIMIT 1
+    """,(info["tenant"],task_id)).fetchone()
+    assert report is not None
+    assert report["kind"]==("blocker" if deny_risk else "module_complete")
     details=client.get(BASE+"/projects/"+project["id"],headers=founder)
     assert details.status_code==200,details.text
     chain=details.json()["stages"][0]["founder_agent_result"]
