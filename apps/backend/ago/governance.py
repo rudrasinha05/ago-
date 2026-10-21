@@ -49,6 +49,33 @@ class ApprovalRepository:
             )
         return proposal
 
+    def requires_founder_decision(self, *, request_id: str, tenant_id: str) -> bool:
+        """Founder exercises strategic authority; other approvals require independent review.
+
+        The target is resolved exclusively from the durable approval record,
+        NEVER from client-supplied role, reason or requested policy level.
+        """
+        UUID(request_id)
+        UUID(tenant_id)
+        row = self.connection.execute("""
+            SELECT a.action,
+                   EXISTS (
+                     SELECT 1 FROM ago_strategy_plans p
+                     JOIN ago_founder_intakes i ON i.tenant_id=p.tenant_id
+                       AND i.plan_id=p.id
+                     WHERE p.tenant_id=a.tenant_id
+                       AND a.action=('brain:activate:' || p.id::text)
+                   ) AS founder_project_plan
+            FROM ago_approval_requests a WHERE a.tenant_id=%s AND a.id=%s
+        """, (tenant_id, request_id)).fetchone()
+        if row is None:
+            raise LookupError("Approval not found")
+        action = row["action"]
+        return (
+            action.startswith(("company:market-signal:", "company:opportunity:"))
+            or bool(row["founder_project_plan"])
+        )
+
     def decide(
         self,
         *,
@@ -58,6 +85,7 @@ class ApprovalRepository:
         approve: bool,
         reason: str,
         authorized: bool = False,
+        founder_only: bool = False,
     ) -> ApprovalRequest:
         if not authorized:
             raise PermissionError("Authenticated founder authorization required")
@@ -99,17 +127,17 @@ class ApprovalRepository:
                      AND e.kind='human' AND r.role='founder'""",
                 (reviewer_id, tenant_id),
             ).fetchone()
-            if founder is None:
-                raise PermissionError("Only the active human founder may approve or deny")
-            # Legacy standalone test tenants have no founder role; preserve
-            # their independently reviewed historical flows without granting
-            # the founder role to fictitious or automated employees.
+            if founder_only and founder is None:
+                raise PermissionError("Strategic decisions require an active human founder")
+            # Operational changes must be independently reviewed, even when
+            # their requester is also the founder. A strategic founder decision
+            # can authorize a founder-submitted plan without forging a reviewer.
             decided = current.decide(
                 reviewer_id=reviewer_id,
                 tenant_id=tenant_id,
                 approve=approve,
                 reason=reason,
-                founder_authorized=founder is not None,
+                founder_authorized=bool(founder_only and founder),
             )
             self.connection.execute(
                 """UPDATE ago_approval_requests
