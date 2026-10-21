@@ -8,6 +8,7 @@ on:
       - "apps/backend/ago/api_company_chat.py"
       - "apps/backend/tests/test_company_market_watch.py"
       - "apps/backend/tests/test_market_growth_postgres.py"
+      - "apps/backend/tests/test_company_dual_approval.py"
       - "apps/backend/tests/test_company_readiness_audit.py"
       - "apps/web/components/company-management.jsx"
       - "apps/web/components/company-opportunities.jsx"
@@ -62,7 +63,7 @@ jobs:
           python scripts/check_engineering_quality.py
       - name: Offline research, real PostgreSQL workflows and readiness invariants
         run: |
-          python -m pytest -q             apps/backend/tests/test_company_market_watch.py             apps/backend/tests/test_market_growth_postgres.py             apps/backend/tests/test_company_readiness_audit.py
+          python -m pytest -q             apps/backend/tests/test_company_market_watch.py             apps/backend/tests/test_market_growth_postgres.py             apps/backend/tests/test_company_dual_approval.py             apps/backend/tests/test_company_readiness_audit.py
       - name: Enforce focused Python lint
         run: |
           python -m ruff check             apps/backend/ago/company_chat.py             apps/backend/ago/api_company_chat.py             apps/backend/tests/test_company_market_watch.py             apps/backend/tests/test_market_growth_postgres.py             apps/backend/tests/test_company_readiness_audit.py
