@@ -141,6 +141,16 @@ export function FounderProjectIntake({api,me,onChanged}) {
           <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no independent verdict'}</small>
           <small>Delegated stage worker: {st.approved_assignee_name||'Awaiting independent personnel review'} {st.delegated_at?'· applied '+new Date(st.delegated_at).toLocaleString():''}</small>
           <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
+          {st.founder_agent_result?.kind==='local_company_governed_handoff'&&
+           <details className="ago-ai-chain">
+            <summary>Ollama CEO → CTO → PM → employee · {st.founder_agent_result.roles_completed}/4 recorded local AI passes · Human QA pending</summary>
+            <ol>{(st.founder_agent_result.handoffs||[]).map(h=><li key={h.role}>
+              <strong>{h.role.toUpperCase()} · {h.employee_name}</strong>
+              <small>Employee record: {h.employee_id} · {h.human_qa_approved?'QA passed':'Independent QA required'}</small>
+              <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{h.draft}</p>
+             </li>)}</ol>
+            <p>These are AI-generated review drafts, not executed GitHub changes or a published release.</p>
+           </details>}
           {st.qa_evidence&&<details><summary>Independent QA evidence</summary><p>{st.qa_evidence}</p></details>}
          </li>)}</ol>
          <CompanyDocumentVault api={api} project={projectDetail}/>
