@@ -147,6 +147,12 @@ export function FounderProjectIntake({api,me,onChanged}) {
             <p>Board recommendations (nonbinding): {(st.founder_agent_result.board_recommendations||[]).map(v=>v.seat+': '+v.recommendation.toUpperCase()).join(' · ')||'No verified Board recommendation recorded'} — Founder makes the actual decision.</p>
             {st.founder_agent_result.board_blocked&&<p role="status"><strong>Board {st.founder_agent_result.board_block_reason==='unverified'?'decision unverified':'objection recorded'} — internal handoff paused after {st.founder_agent_result.blocked_by_board_seat||'Board'}.</strong> Downstream AI roles did not execute in this run. Founder must examine the objection and authorize an appropriately reviewed next action; this is not an automatic project rejection or release.</p>}
             {st.founder_agent_result.board_review_mode==='full_five_seat'&&<p>Five-seat governance review: {st.founder_agent_result.board_review_cleared?'All five AI Board recommendations recorded APPROVE; founder authority and independent QA are still required.':'Board review incomplete or stopped — never an automatic approval.'}</p>}
+            {st.founder_agent_result.engineering_candidate&&<section className="ago-engineering-review" aria-label="Uncommitted engineering candidate">
+              <h5>Generated source candidate — not built, tested or committed</h5>
+              <p>Proposal checksum: <code>{st.founder_agent_result.engineering_candidate.candidate_sha256}</code></p>
+              <ul>{st.founder_agent_result.engineering_candidate.file_evidence.map(f=><li key={f.path}><code>{f.path}</code> · {f.bytes} bytes · syntax {f.python_syntax_checked?'checked':'not checked'} · <code>{f.sha256.slice(0,12)}</code></li>)}</ul>
+              <p>Founder must inspect source, run independent tests and approve a separate GitHub operation. No auto-commit.</p>
+            </section>}
             <ol>{(st.founder_agent_result.handoffs||[]).map(h=><li key={h.role}>
               <strong>{h.role.toUpperCase()} · {h.employee_name}</strong>
               <small>Employee record: {h.employee_id} · {h.human_qa_approved?'QA passed':'Independent QA required'}</small>

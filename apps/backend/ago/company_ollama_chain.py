@@ -1,4 +1,6 @@
-"""Pure bounded four-role Ollama drafting; no database imports or side effects."""
+"""Pure bounded AI governance and engineering artifact drafting; no database side effects."""
+
+from ago.company_engineering import reviewed_candidate
 
 ROLE_STAGES=(
     ("ceo","Strategy & Vision",
@@ -39,7 +41,9 @@ def board_recommendation(text: str) -> str:
     return lines[0].lower() if len(lines) == 1 and lines[0] in {"APPROVE", "DENY"} else "unverified"
 
 
-def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
+def run_four_role_chain(
+    *, task, participants: list[dict], provider, engineering_candidates: bool = False,
+) -> dict:
     project=task.project_context
     title=str(project["title"])[:180]
     brief=str(project["brief"])[:1500]
@@ -49,6 +53,8 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
     stages = FULL_BOARD_STAGES if full_board else ROLE_STAGES
     if len(participants) != len(stages):
         raise PermissionError("Incomplete real company hierarchy")
+    if engineering_candidates and not full_board:
+        raise PermissionError("Engineering artifact needs the complete five-seat Board")
     if len({p["employee_id"] for p in participants}) != len(participants):
         raise PermissionError("Each Board and delivery role needs a distinct AI employee")
     if any(role != person["role"] for (role, _, _), person in zip(stages, participants)):
@@ -57,16 +63,27 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
     board_advice=[]
     blocked_seat=None
     block_reason=None
+    engineering_candidate=None
     previous=""
     for (role,_,goal),person in zip(stages,participants,strict=True):
         if role!=person["role"]:
             raise RuntimeError("Internal role order mismatch")
+        code_author = role=="employee" and engineering_candidates
         prompt=(
-            "Generate one concrete INTERNAL artifact, never a claim of execution. "
-            "Output text only, with headings: DECISION, DELIVERABLE, RISKS, ACCEPTANCE. "
-            "No tools, links to private content, hiring, spending, code execution, "
-            "GitHub operations, publishing or approvals. An independent HUMAN must QA.\n"
-            "ROLE: "+role.upper()+"\nROLE_GOAL: "+goal+"\n"
+            ("Produce ONLY one valid JSON object with EXACT fields files and "
+             "acceptance_checks. files must contain 2 to 6 objects with EXACT "
+             "fields path and content; include a Python src/*.py file and a "
+             "tests/test_*.py file. acceptance_checks is a list of 1 to 5 "
+             "plain-language checks. Small correct Python functions and standard "
+             "library tests only. No Markdown fences, code execution, secrets, "
+             "network, imports from untrusted packages, or repository actions. "
+             "Your response is NOT a committed file or passed test.\n"
+             if code_author else
+             "Generate one concrete INTERNAL artifact, never a claim of execution. "
+             "Output text only, with headings: DECISION, DELIVERABLE, RISKS, ACCEPTANCE. "
+             "No tools, links to private content, hiring, spending, code execution, "
+             "GitHub operations, publishing or approvals. Human QA is pending.\n")
+            +"ROLE: "+role.upper()+"\nROLE_GOAL: "+goal+"\n"
             +("BOARD_ADVISORY: State exactly one independent scoped recommendation line "
               "BOARD_RECOMMENDATION: APPROVE or BOARD_RECOMMENDATION: DENY. "
               "This does NOT authorize execution, approval or release.\n"
@@ -81,6 +98,14 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
         if not output or len(output)>12000:
             raise RuntimeError("Local model did not return bounded role evidence")
         bounded=output[:950]
+        if code_author:
+            # Untrusted model output must become an exact-file artifact before
+            # it can be considered reviewable. Invalid content fails the task
+            # through AgentRuntime; it is never executed or sent to GitHub.
+            engineering_candidate=reviewed_candidate(output)
+            bounded=("Code proposal prepared for founder review: "
+                     +str(len(engineering_candidate["files"]))+
+                     " files, Python syntax checked; tests NOT executed.")
         if role in BOARD_ROLE_SEATS:
             vote = board_recommendation(bounded)
             board_seat=BOARD_ROLE_SEATS[role]
@@ -109,6 +134,10 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
         "kind":"local_company_governed_handoff",
         "project_id":str(project["intake_id"]),
         "task_id":task.id,
+        "engineering_candidate":engineering_candidate,
+        "engineering_candidate_status":(
+            "syntax_reviewed" if engineering_candidate else "not_requested"
+        ),
         "handoffs":handoffs,
         "board_recommendations":board_advice,
         "board_recommendations_binding":False,

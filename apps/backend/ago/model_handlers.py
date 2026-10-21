@@ -42,8 +42,12 @@ def optional_model_handlers(
         model = model or "qwen2.5:3b"
         if os.getenv("AGO_ENABLE_LOCAL_MODELS") != "true" or not model:
             return {}
+        engineering_enabled = (
+            os.getenv("AGO_LOCAL_ENGINEERING_CANDIDATES") == "true"
+        )
         provider = OllamaLocalTextProvider(
-            model=model, timeout_seconds=60, max_output_tokens=384,
+            model=model, timeout_seconds=60,
+            max_output_tokens=1024 if engineering_enabled else 384,
             keep_alive="90s",
         )
         usage_category="local_model_attempt"
@@ -124,6 +128,7 @@ def optional_model_handlers(
             )
             return run_four_role_chain(
                 task=task, participants=participants, provider=provider,
+                engineering_candidates=engineering_enabled,
             )
 
         handlers["internal:brief"] = governed_company_handoff
