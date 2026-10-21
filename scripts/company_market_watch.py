@@ -356,6 +356,27 @@ def watch(dsn: str, tenant_id: str, once: bool, interval: int) -> int:
         time.sleep(min(interval, 60) if degraded else interval)
 
 
+def preview_database_allowed(dsn: str) -> bool:
+    """Permit ONLY dedicated reviewed Docker preview service's internal DB.
+
+    This is not a production deployment bypass or a generic remote-DB option.
+    """
+    if local_database(dsn):
+        return True
+    if os.getenv("AGO_MARKET_PREVIEW_CONTAINER") != "true":
+        return False
+    try:
+        parsed = urlsplit(dsn)
+        return (parsed.scheme in ("postgresql", "postgres")
+                and parsed.hostname == "postgres"
+                and parsed.port in (None, 5432)
+                and parsed.username == "ago_preview"
+                and parsed.path == "/ago_preview"
+                and not parsed.fragment)
+    except ValueError:
+        return False
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="AGO continuous market signals (local only)")
     parser.add_argument("--tenant-id", required=True)
@@ -367,8 +388,8 @@ def main(argv=None) -> int:
         parser.error("Market research interval must be between 900 and 86400 seconds")
     dsn = os.getenv("AGO_POSTGRES_DSN", "")
     if (os.getenv("AGO_ENVIRONMENT", "development") not in ("development", "test", "testing")
-            or not local_database(dsn)):
-        parser.error("Only local development/test PostgreSQL is supported")
+            or not preview_database_allowed(dsn)):
+        parser.error("Only local development/test or explicitly opted-in isolated Docker preview PostgreSQL is supported")
     return watch(dsn, tenant_id, args.once, args.interval_seconds)
 
 
