@@ -3,8 +3,8 @@
 Build, package, and launch AGO's actual founder Company Map in one terminal.
 .DESCRIPTION
 The detailed circular Company Map / Company Brain is the Next.js app under
-apps/web, NOT the older /console/ admin interface. This helper keeps the
-existing AGO_POSTGRES_DSN/session and does not change database contents,
+apps/web, NOT the older /console/ admin interface. This helper reuses the session AGO_POSTGRES_DSN or securely prompts for the
+existing local ago_test password in a fresh terminal. It never changes database contents,
 perform migrations, create tenants or download Ollama models.
 .EXAMPLE
 .\scripts\ago-visual.ps1
@@ -30,7 +30,20 @@ if ($env:AGO_ENVIRONMENT -and $env:AGO_ENVIRONMENT.ToLowerInvariant() -notin @("
     throw "Visual launcher supports localhost development/testing only."
 }
 if (-not $env:AGO_POSTGRES_DSN) {
-    throw "AGO_POSTGRES_DSN is not configured in this terminal. Use the existing verified local ago_test session; no new tenant is needed."
+    # PowerShell environment variables are process-scoped. A new VS Code
+    # terminal does not inherit the DSN set by a previous migration session.
+    # Only reconnect to the known historical localhost database; never create
+    # a database, tenant, password file, Windows-wide variable or migration.
+    Write-Host "New terminal detected: reconnecting to the existing local ago_test database."
+    $securePassword = Read-Host "PostgreSQL password for postgres (hidden)" -AsSecureString
+    $password = [System.Net.NetworkCredential]::new("", $securePassword).Password
+    if ([string]::IsNullOrEmpty($password)) {
+        throw "No PostgreSQL password entered. Nothing was changed."
+    }
+    $encodedPassword = [Uri]::EscapeDataString($password)
+    $env:AGO_POSTGRES_DSN = "postgresql://postgres:${encodedPassword}@127.0.0.1:5432/ago_test"
+    Remove-Variable password, securePassword, encodedPassword -ErrorAction SilentlyContinue
+    Write-Host "Existing local ago_test selected for this terminal only."
 }
 foreach ($commandName in @("python", "node", "npm.cmd")) {
     if (-not (Get-Command $commandName -ErrorAction SilentlyContinue)) {

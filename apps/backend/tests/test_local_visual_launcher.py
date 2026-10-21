@@ -21,3 +21,16 @@ def test_existing_ago_operator_labels_basic_and_visual_ui_separately():
     source = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
     assert "Visual Company Map:" in source
     assert "The basic /console/ is NOT the circular Company Map." in source
+
+
+def test_visual_launcher_recovers_fresh_terminal_without_recreating_company():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago-visual.ps1").read_text(encoding="utf-8")
+    assert 'if (-not $env:AGO_POSTGRES_DSN)' in script
+    assert 'Read-Host "PostgreSQL password for postgres (hidden)" -AsSecureString' in script
+    assert '[Uri]::EscapeDataString($password)' in script
+    assert '"postgresql://postgres:${encodedPassword}@127.0.0.1:5432/ago_test"' in script
+    assert 'Remove-Variable password, securePassword, encodedPassword' in script
+    assert 'No PostgreSQL password entered. Nothing was changed.' in script
+    assert "init-solo" not in script
+    assert "python -m ago.event_runtime migrate" not in script
