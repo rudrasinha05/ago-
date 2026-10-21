@@ -26,7 +26,7 @@ def timeline(channel: str = 'global', before: int | None = Query(default=None, g
     allowed(repositories, actor, 'messages:read')
     try:
         return repositories.resolve(CompanyChatPort).list(actor.tenant_id, channel, before, limit, reader_id=actor.subject)
-    except ValueError as exc:
+    except (ValueError, PermissionError) as exc:
         translate_error(exc)
 
 
