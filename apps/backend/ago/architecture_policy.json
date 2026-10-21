@@ -304,6 +304,13 @@
         "organization_store"
       ]
     },
+    "company_ollama_chain": {
+      "context": "workforce",
+      "layer": "service",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
     "console_api": {
       "context": "transport",
       "layer": "transport",
@@ -740,6 +747,7 @@
       "layer": "service",
       "imports": [
         "backend_contracts",
+        "company_ollama_chain",
         "credits",
         "model_provider"
       ]
