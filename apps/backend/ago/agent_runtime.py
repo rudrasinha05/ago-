@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import replace
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from ago.agent_runtime_queries import AgentRuntimeQueries
+from ago.company_ollama_chain import LocalCompanyChain
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.task_store import TaskStore
 from ago.organizational_dna import GenomeStore
@@ -40,12 +43,6 @@ class AgentRuntime:
                 raise PermissionError("Task requires an AI employee")
             experiment = self.repositories.resolve(EnterpriseOperationsStore).experiment_variant(
                 tenant_id=actor.tenant_id, task_id=task_id)
-            task = self.repositories.resolve(TaskStore).authorize_and_start(
-                task_id=task_id,
-                principal=actor,
-            )
-            dna = self.repositories.resolve(GenomeStore).effective(
-                tenant_id=actor.tenant_id, employee_id=str(row["assignee_id"]))
             context_row = (self.repositories.resolve(AgentRuntimeQueries)
                            .select_ago_founder_project_12((task_id, actor.tenant_id))
                            .fetchone())
@@ -58,6 +55,21 @@ class AgentRuntime:
                 "title": context_row["title"], "brief": context_row["brief"],
                 "intake_id": str(context_row["id"]),
             } if context_row else None)
+            # Validate the explicit founder-appointed four-agent chain BEFORE
+            # consuming an approved task or inserting an agent run.
+            if (row["action"] == "internal:brief"
+                    and os.getenv("AGO_LLM_PROVIDER") == "ollama_local"
+                    and os.getenv("AGO_ENABLE_LOCAL_MODELS") == "true"
+                    and os.getenv("AGO_LOCAL_COMPANY_CHAIN") == "true"):
+                LocalCompanyChain(self.db).assignments(
+                    tenant_id=actor.tenant_id, actor_id=actor.subject,
+                    task=SimpleNamespace(id=task_id,project_context=project_context),
+                )
+            task = self.repositories.resolve(TaskStore).authorize_and_start(
+                task_id=task_id, principal=actor,
+            )
+            dna = self.repositories.resolve(GenomeStore).effective(
+                tenant_id=actor.tenant_id, employee_id=str(row["assignee_id"]))
             task = replace(task, dna_context=dna, experiment_context=experiment,
                            project_context=project_context)
             run_id = str(uuid4())
