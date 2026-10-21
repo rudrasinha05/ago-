@@ -53,6 +53,9 @@ $oldPgOptions = [Environment]::GetEnvironmentVariable("PGOPTIONS", "Process")
 $securePassword = Read-Host "Local PostgreSQL password for $DbUser" -AsSecureString
 try {
     $env:PGPASSWORD = [System.Net.NetworkCredential]::new("", $securePassword).Password
+    if ([string]::IsNullOrEmpty($env:PGPASSWORD)) {
+        throw "No PostgreSQL password was entered. Re-run the script and type the actual local password (hidden input)."
+    }
     $env:PGOPTIONS = "-c default_transaction_read_only=on"
     $summaries = @()
     $details = @()

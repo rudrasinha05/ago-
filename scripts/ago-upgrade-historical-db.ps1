@@ -18,6 +18,9 @@ if ($env:AGO_ENVIRONMENT -and $env:AGO_ENVIRONMENT -ne "development") {
 $env:AGO_ENVIRONMENT = "development"
 $secure = Read-Host "PostgreSQL password for $DbUser" -AsSecureString
 $plain = [System.Net.NetworkCredential]::new("", $secure).Password
+if ([string]::IsNullOrEmpty($plain)) {
+    throw "No PostgreSQL password was entered. The upgrade is cancelled without changes."
+}
 $encodedUser = [Uri]::EscapeDataString($DbUser)
 $encodedPass = [Uri]::EscapeDataString($plain)
 $env:AGO_POSTGRES_DSN = "postgresql://${encodedUser}:${encodedPass}@127.0.0.1:5432/ago_test"
