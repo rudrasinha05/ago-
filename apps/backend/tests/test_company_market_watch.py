@@ -107,3 +107,21 @@ def test_market_worker_database_scope_denies_arbitrary_remote_and_production(mon
         "postgresql://ago_preview:secret@postgres:5432/company_prod") is False
     assert market.preview_database_allowed(
         "postgresql://unreviewed:secret@postgres:5432/ago_preview") is False
+
+
+def test_railway_preview_allowlist_requires_exact_private_postgres_identity(monkeypatch):
+    good="postgresql://postgres:unique-preview-secret@postgres.railway.internal:5432/railway"
+    monkeypatch.delenv("AGO_MARKET_RAILWAY_PREVIEW",raising=False)
+    assert market.preview_database_allowed(good) is False
+    monkeypatch.setenv("AGO_MARKET_RAILWAY_PREVIEW","true")
+    assert market.preview_database_allowed(good) is True
+    for bad in (
+        "postgresql://postgres:secret@postgres.up.railway.app:5432/railway",
+        "postgresql://postgres:secret@database.railway.internal:5432/railway",
+        "postgresql://postgres:secret@postgres.railway.internal:5432/customer_prod",
+        "postgresql://operator:secret@postgres.railway.internal:5432/railway",
+        "postgresql://postgres:secret@postgres.railway.internal:6543/railway",
+        "postgresql://postgres@postgres.railway.internal:5432/railway",
+        "postgresql://postgres:secret@postgres.railway.internal:5432/railway?options=-c",
+    ):
+        assert market.preview_database_allowed(bad) is False, bad
