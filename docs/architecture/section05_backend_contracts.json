@@ -280,7 +280,7 @@
           "returns": "Any"
         },
         "notifications": {
-          "arguments": "self, tenant_id: str",
+          "arguments": "self, tenant_id: str, reader_id: str | None=None",
           "returns": "dict"
         },
         "governance": {
