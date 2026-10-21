@@ -5,6 +5,7 @@ import {boardFunctionSeats} from '@ago/sdk/company';
 const brief=(text,max=110)=>text?.length>max?text.slice(0,max)+'…':text;
 export function CommandBrain({tasks,notifications,employees,onSelect,governance,onAppoint,canGovern}) {
  const [choices,setChoices]=useState({});
+ const [rotation,setRotation]=useState(0);
  const known=Array.isArray(tasks);
  const active=known?tasks.filter(t=>t.status==='running'):[];
  const queued=known?tasks.filter(t=>['proposed','ready','waiting_approval'].includes(t.status)):[];
@@ -22,9 +23,12 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
          {events.length?events.slice(0,6).map(e=><li key={e.id}><span className="brain-dot"/><div><strong>Work event #{e.id}</strong><small>{brief(e.body)}</small></div></li>):<li><span className="brain-dot dormant"/><div><strong>{notifications?'Awaiting task transitions':'Event feed unavailable'}</strong><small>Recorded task events will appear here.</small></div></li>}
        </ol>
      </section>
-     <div className="brain-hologram" role="img" aria-label="Animated 3D-style holographic brain; activity derived from recorded task events">
+     <div className="brain-hologram" aria-label="Interactive founder-controlled 3D work observatory">
        <div className="brain-orbit orbit-one"/><div className="brain-orbit orbit-two"/>
-       <svg viewBox="0 0 420 300" className="brain-svg" aria-hidden="true">
+       <div className={'brain-volume '+(active.length?'brain-volume-active':'')}
+         role="img" aria-label={'3D-style rotating company work brain: '+active.length+' verified running tasks, '+queued.length+' awaiting action; not a simulated conscious AI'}
+         style={{'--brain-rotation':rotation+'deg'}}>
+        <svg viewBox="0 0 420 300" className="brain-svg" aria-hidden="true">
         <defs><radialGradient id="agoBrainFill" cx=".44" cy=".35" r=".78"><stop stopColor="#335bd0" stopOpacity=".93"/><stop offset=".57" stopColor="#1e347d" stopOpacity=".8"/><stop offset="1" stopColor="#070c29"/></radialGradient>
           <linearGradient id="agoBrainStroke" x1="0" x2="1"><stop stopColor="#69ecff"/><stop offset=".48" stopColor="#ab83ff"/><stop offset="1" stopColor="#fa518e"/></linearGradient>
           <filter id="agoBrainGlow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
@@ -44,9 +48,15 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
         </g>
         <g fill="#f99cff" filter="url(#agoBrainGlow)"><circle cx="162" cy="126" r="5"/><circle cx="254" cy="106" r="5"/><circle cx="205" cy="162" r="5"/><circle cx="269" cy="197" r="5"/><circle cx="147" cy="201" r="4"/><circle cx="295" cy="137" r="4"/></g>
         <path d="M209 244 Q216 265 202 281 M228 243 Q234 265 225 282" fill="none" stroke="#64cffa" strokeWidth="6" opacity=".8"/>
-       </svg>
+        </svg>
+       </div>
+       <div className="brain-rotate-controls" aria-label="Rotate work brain">
+         <button type="button" aria-label="Rotate brain left" onClick={()=>setRotation(x=>Math.max(-68,x-15))}>↶</button>
+         <button type="button" aria-label="Reset brain rotation" onClick={()=>setRotation(0)}>Front view</button>
+         <button type="button" aria-label="Rotate brain right" onClick={()=>setRotation(x=>Math.min(68,x+15))}>↷</button>
+       </div>
        <div className="brain-label label-analyze">Analyze</div><div className="brain-label label-plan">Plan</div><div className="brain-label label-delegate">Delegate</div><div className="brain-label label-review">Review</div>
-       <div className="brain-running"><span className={'brain-led '+(known?'connected':'')}/>{known?'Monitoring task records':'Waiting for activity API'}</div>
+       <div className="brain-running"><span className={'brain-led '+(known?'connected':'')}/>{known?(active.length?'Recorded work is running · '+active.length+' active':queued.length?'Awaiting authorization / worker action':'Monitoring task records'):'Waiting for activity API'}</div>
      </div>
      <section className="brain-stats"><h3>Brain activity & delivery</h3><p className="brain-sub">Actual stored task states</p>
       <div className="brain-stat"><small>Employees working</small><b>{new Set(active.map(t=>t.assignee_id)).size}</b></div>
