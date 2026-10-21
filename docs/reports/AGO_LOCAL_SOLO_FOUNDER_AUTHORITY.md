@@ -106,3 +106,13 @@ under the existing TaskStore/QualityStore gates. Manager reporting emits a
 durable `blocker` instead of incorrectly reporting `module_complete` once
 reviewed migration 061 is applied. Any corrective action needs a new approved
 task; no automatic re-run or Board override is performed.
+
+## Genuine AI worker reporting hierarchy
+
+In full Board mode, the appointed discovery worker must have a real,
+tenant-owned `manager_id` ancestry that reaches the actual accountable
+PM. An employee title alone cannot stand in for a management relationship.
+The read-only preflight uses a bounded, cycle-safe recursive PostgreSQL
+query before starting the task or reserving model credits. The legacy
+four-role path remains backward-compatible. Founder must assign the real
+reporting line using existing authorized organization staffing controls.

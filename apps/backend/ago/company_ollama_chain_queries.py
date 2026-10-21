@@ -68,6 +68,32 @@ class CompanyOllamaChainQueries:
         """,(tenant_id,row["accountable_manager_id"])).fetchone()
         if not pm or not worker or worker["action"]!="internal:brief":
             raise PermissionError("Real accountable PM and discovery assignee required")
+        if full_board:
+            # A real corporate hierarchy requires the worker to report up to
+            # this exact accountable PM; display titles alone are not enough.
+            # The bounded recursive walk also refuses forged cycles.
+            chain=self.db.execute("""
+                WITH RECURSIVE reporting_chain AS (
+                    SELECT e.id,e.manager_id,0 AS depth,ARRAY[e.id] AS visited
+                    FROM ago_employees e
+                    WHERE e.tenant_id=%s AND e.id=%s
+                    UNION ALL
+                    SELECT boss.id,boss.manager_id,reporting_chain.depth+1,
+                           reporting_chain.visited || boss.id
+                    FROM ago_employees boss JOIN reporting_chain
+                      ON reporting_chain.manager_id=boss.id
+                    WHERE boss.tenant_id=%s AND reporting_chain.depth<25
+                      AND NOT boss.id=ANY(reporting_chain.visited)
+                )
+                SELECT EXISTS(
+                    SELECT 1 FROM reporting_chain
+                    WHERE id=%s AND depth>0
+                ) AS reports_to_manager
+            """,(tenant_id,str(worker["id"]),tenant_id,str(pm["id"]))).fetchone()
+            if not chain or not chain["reports_to_manager"]:
+                raise PermissionError(
+                    "Full Board execution requires actual employee-to-PM reporting hierarchy"
+                )
         ordered=[
             {"role":"ceo",**board["Strategy & Vision"]},
             {"role":"cto",**board["Technology Oversight"]},

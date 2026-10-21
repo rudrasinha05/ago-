@@ -28,14 +28,16 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     founder,reviewer=headers["founder"],headers["reviewer"]
     dept=department(client,founder)
 
-    def ai(name):
-        return post(client,"/v1/organization/employees",founder,
-                    {"department_id":dept,"name":name,"kind":"ai"})["id"]
+    def ai(name, manager=None):
+        payload={"department_id":dept,"name":name,"kind":"ai"}
+        if manager:
+            payload["manager_id"]=manager
+        return post(client,"/v1/organization/employees",founder,payload)["id"]
 
     ceo=ai("Strategy Agent")
     cto=ai("Technology Agent")
     pm=ai("Delivery Manager")
-    worker=ai("Research Worker")
+    worker=ai("Research Worker",pm if full_board else None)
     finance=ai("Finance Director") if full_board else None
     risk=ai("Risk Director") if full_board else None
     quality=ai("Quality Director") if full_board else None

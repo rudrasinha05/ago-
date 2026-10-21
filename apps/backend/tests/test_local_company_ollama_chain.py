@@ -30,7 +30,7 @@ class Cursor:
 class ApprovedProjectDb:
     def __init__(self, *, active=True, duplicate=False, ceo_missing=False,
                  extra_board_missing=False, extra_board_duplicate=False,
-                 human_board=False):
+                 human_board=False, wrong_manager=False):
         self.tenant, self.founder, self.task_id, self.intake = (
             uid(), uid(), uid(), uid()
         )
@@ -44,6 +44,7 @@ class ApprovedProjectDb:
         self.ceo_missing = ceo_missing
         self.extra_board_missing = extra_board_missing
         self.human_board = human_board
+        self.wrong_manager = wrong_manager
         self.queries = []
 
     def execute(self, sql, parameters):
@@ -73,6 +74,8 @@ class ApprovedProjectDb:
                     result.append({"seat":"Quality & Release","id":self.quality,
                                    "name":"Quality AI","kind":"ai"})
             return Cursor(result)
+        if "WITH RECURSIVE reporting_chain" in sql:
+            return Cursor([{"reports_to_manager":not self.wrong_manager}])
         if "FROM ago_governed_tasks t" in sql:
             return Cursor([{"id":self.employee,"name":"Engineer AI",
                             "kind":"ai","action":"internal:brief"}])
@@ -306,7 +309,7 @@ def test_full_board_deny_or_missing_verdict_stops_downstream(
 
 @pytest.mark.parametrize("changes",[
     {"extra_board_missing":True},{"extra_board_duplicate":True},
-    {"human_board":True},
+    {"human_board":True},{"wrong_manager":True},
 ])
 def test_full_board_preflight_rejects_missing_duplicates_and_human_impostors(
     monkeypatch,changes,
