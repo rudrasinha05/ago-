@@ -167,7 +167,8 @@ def founder_projects(limit: int = Query(default=50,ge=1,le=100),
                      repositories=Depends(repository_scope)):
     allowed(repositories,actor,'organization:read')
     allowed(repositories,actor,'brain:read')
-    return repositories.resolve(CompanyChatPort).projects(actor.tenant_id,limit,offset)
+    return repositories.resolve(CompanyChatPort).projects(
+        actor.tenant_id,limit,offset,reader_id=actor.subject)
 
 
 @router.get('/projects/{project_id}')
@@ -176,7 +177,8 @@ def founder_project_details(project_id: UUID,actor=Depends(authenticated),
     allowed(repositories,actor,'organization:read')
     allowed(repositories,actor,'brain:read')
     try:
-        return repositories.resolve(CompanyChatPort).project_details(actor.tenant_id,str(project_id))
+        return repositories.resolve(CompanyChatPort).project_details(
+            actor.tenant_id,str(project_id),reader_id=actor.subject)
     except (ValueError,LookupError) as exc:
         translate_error(exc)
 
@@ -205,7 +207,7 @@ def list_project_delegations(project_id: UUID, actor=Depends(authenticated),
     allowed(repositories,actor,'brain:read')
     try:
         return repositories.resolve(CompanyChatPort).project_delegations(
-            actor.tenant_id,str(project_id))
+            actor.tenant_id,str(project_id),reader_id=actor.subject)
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)
 
