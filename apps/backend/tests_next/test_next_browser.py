@@ -145,11 +145,14 @@ def test_next_governed_plan_two_humans_execution_and_qa(
         sign_in_next(reviewer, app_url, tenant, role="reviewer")
 
         navigate_next(page, "Organization", "Company map")
-        page.get_by_text("Advanced organization controls", exact=True).click()
-        page.get_by_role("button", name="Add AI employee").click()
-        page.locator("#dlg-name").fill("Pilot AI Analyst")
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
+        page.get_by_role("button", name="Add needed role").click()
+        role_dialog = page.get_by_role("dialog", name="Add a role your project needs")
+        role_dialog.get_by_label("Role name").fill("Pilot AI Analyst")
+        role_dialog.get_by_label("Why is this role needed?").fill(
+            "Acceptance test analyst for governed AI work"
+        )
+        role_dialog.get_by_role("button", name="Create role").click()
+        expect(role_dialog).to_be_hidden(timeout=15000)
         expect(page.locator("#screen")).to_contain_text("Pilot AI Analyst")
 
         navigate_next(page, "Strategy", "Strategy & execution")
@@ -361,15 +364,14 @@ def test_next_constitution_emergency_stop_and_independent_recovery(page, browser
         expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
         expect(page.locator("#screen")).to_contain_text("Browser containment test")
         navigate_next(page, "Organization", "Company map")
-        page.get_by_text("Advanced organization controls", exact=True).click()
         page.get_by_role("button", name="Add department", exact=True).click()
-        page.locator("#dlg-name").fill("Blocked company change")
-        page.locator("#operation-submit").click()
-        expect(page.locator("#operation-error")).to_contain_text(
+        page.get_by_label("Department name").fill("Blocked company change")
+        page.get_by_role("button", name="Create department", exact=True).click()
+        expect(page.locator(".company-error")).to_contain_text(
             "Constitution or emergency containment"
         )
         page.get_by_role("button", name="Cancel", exact=True).click()
-        expect(page.get_by_role("dialog")).to_be_hidden()
+        expect(page.get_by_label("Department name")).to_have_count(0)
         navigate_next(page, "Governance", "Governance & oversight")
         page.get_by_role("button", name="Prepare recovery review", exact=True).click()
         page.locator("#dlg-postmortem").fill(
@@ -398,11 +400,10 @@ def test_next_constitution_emergency_stop_and_independent_recovery(page, browser
         page.locator("#operation-submit").click()
         expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
         navigate_next(page, "Organization", "Company map")
-        page.get_by_text("Advanced organization controls", exact=True).click()
         page.get_by_role("button", name="Add department", exact=True).click()
-        page.locator("#dlg-name").fill("Recovered constitutional organization")
-        page.locator("#operation-submit").click()
-        expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
+        page.get_by_label("Department name").fill("Recovered constitutional organization")
+        page.get_by_role("button", name="Create department", exact=True).click()
+        expect(page.get_by_label("Department name")).to_have_count(0, timeout=15000)
         expect(page.locator("#screen")).to_contain_text("Recovered constitutional organization")
     finally:
         context.close()

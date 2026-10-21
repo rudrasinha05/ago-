@@ -266,9 +266,9 @@ try{
    next_action:'A different human must review this request',created_at:new Date().toISOString()});
  // Restore desktop viewport after the mobile screenshot; desktop navigation is collapsed on phones.
  await page.setViewportSize({width:1700,height:1100});
- // An independent reviewer can reach the inbox without organization:read.
+ // Single visual Company Map approval inbox remains reachable by independent reviewer.
  asReviewer=true;
- await page.goto(base+'/workspace/governance/');
+ await page.goto(base+'/workspace/organization/');
  await page.getByLabel('Organization ID').fill(tenant);
  await page.getByLabel('Work email').fill('reviewer@example.test');
  await page.getByLabel('Password',{exact:true}).fill('test-reviewer-password');
@@ -287,7 +287,7 @@ try{
  // The header on other workspaces must describe the independent lane.
  await page.locator('#primary-nav').getByRole('link',{name:'Overview'}).click();
  await page.locator('.approval-top-notice').getByText('Operational approval needed').waitFor({timeout:15000});
- await page.locator('#primary-nav').getByRole('link',{name:'Governance'}).click();
+ await page.locator('#primary-nav').getByRole('link',{name:'Organization'}).click();
  await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor();
  await page.locator('#company-approval-inbox .approval-entry').filter({hasText:'tool:review:'+id(6)})
    .getByRole('button',{name:'View approval details'}).click();
