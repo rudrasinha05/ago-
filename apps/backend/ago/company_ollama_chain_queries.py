@@ -1,6 +1,7 @@
 """Persistence-only tenant-scoped verification of appointed local AGO AI identities."""
 from __future__ import annotations
 
+import os
 from uuid import UUID
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
@@ -34,16 +35,26 @@ class CompanyOllamaChainQueries:
         """,(tenant_id,str(project["intake_id"]),actor_id,task.id)).fetchone()
         if row is None or row["plan_status"]!="active":
             raise PermissionError("Founder-owned ACTIVE plan and linked discovery task required")
+        full_board=os.getenv("AGO_LOCAL_FULL_BOARD_REVIEW", "").lower()=="true"
+        if full_board and os.getenv("AGO_ENVIRONMENT","development").lower() not in (
+            "development", "test", "testing"
+        ):
+            raise PermissionError("Five-seat local Board review is not enabled outside local development")
+        board_seats=["Strategy & Vision","Technology Oversight"]
+        if full_board:
+            board_seats+=["Finance & Budget","Risk & Compliance","Quality & Release"]
+        # Fixed, bounded seat names; the SQL placeholders never contain user input.
+        placeholders=",".join(["%s"]*len(board_seats))
         seats=self.db.execute("""
             SELECT b.seat,e.id,e.name,e.kind
             FROM ago_company_board_appointments b
             JOIN ago_employees e ON e.tenant_id=b.tenant_id
               AND e.id=b.employee_id
-            WHERE b.tenant_id=%s AND b.seat IN (%s,%s)
-        """,(tenant_id,"Strategy & Vision","Technology Oversight")).fetchall()
+            WHERE b.tenant_id=%s AND b.seat IN (""" + placeholders + """)
+        """,tuple([tenant_id]+board_seats)).fetchall()
         board={r["seat"]:dict(r) for r in seats}
-        if not {"Strategy & Vision","Technology Oversight"} <= board.keys():
-            raise PermissionError("Founder must appoint real CEO and CTO AI board roles")
+        if not set(board_seats) <= board.keys():
+            raise PermissionError("Founder must appoint all required real AI Board seats")
         worker=self.db.execute("""
             SELECT e.id,e.name,e.kind,t.action
             FROM ago_governed_tasks t
@@ -60,15 +71,23 @@ class CompanyOllamaChainQueries:
         ordered=[
             {"role":"ceo",**board["Strategy & Vision"]},
             {"role":"cto",**board["Technology Oversight"]},
+        ]
+        if full_board:
+            ordered.extend([
+                {"role":"finance",**board["Finance & Budget"]},
+                {"role":"risk",**board["Risk & Compliance"]},
+                {"role":"quality",**board["Quality & Release"]},
+            ])
+        ordered.extend([
             {"role":"pm",**dict(pm)},
             {"role":"employee",**dict(worker)},
-        ]
-        # Board membership alone is not a source of security permissions.
-        # Separate identities are essential to a genuine multi-role handoff.
+        ])
+        # Five-seat AI Board membership creates no human credentials, RBAC or
+        # publication powers. Distinct, existing identities are mandatory.
         if any(item["kind"]!="ai" for item in ordered):
-            raise PermissionError("All four governed reasoning roles must be actual AI employees")
-        if len({str(item["id"]) for item in ordered})!=4:
-            raise PermissionError("CEO, CTO, PM and worker must be four DISTINCT real employees")
+            raise PermissionError("Board, PM and worker must be actual AI employees")
+        if len({str(item["id"]) for item in ordered})!=len(ordered):
+            raise PermissionError("All Board, PM and worker roles need distinct employees")
         return [{"role":item["role"],"employee_id":str(item["id"]),
                  "employee_name":item["name"]} for item in ordered]
 

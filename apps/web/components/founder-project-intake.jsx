@@ -143,9 +143,10 @@ export function FounderProjectIntake({api,me,onChanged}) {
           <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
           {st.founder_agent_result?.kind==='local_company_governed_handoff'&&
            <details className="ago-ai-chain">
-            <summary>Ollama CEO → CTO → PM → employee · {st.founder_agent_result.roles_completed}/4 recorded local AI passes · Human QA pending</summary>
+            <summary>Ollama Board → PM → employee · {st.founder_agent_result.roles_completed}/{st.founder_agent_result.roles_expected||4} recorded AI passes · Human QA pending</summary>
             <p>Board recommendations (nonbinding): {(st.founder_agent_result.board_recommendations||[]).map(v=>v.seat+': '+v.recommendation.toUpperCase()).join(' · ')||'No verified Board recommendation recorded'} — Founder makes the actual decision.</p>
-            {st.founder_agent_result.board_blocked&&<p role="status"><strong>Board objection recorded — internal handoff paused after {st.founder_agent_result.blocked_by_board_seat||'Board'}.</strong> Downstream AI roles did not execute in this run. Founder must examine the objection and authorize an appropriately reviewed next action; this is not an automatic project rejection or release.</p>}
+            {st.founder_agent_result.board_blocked&&<p role="status"><strong>Board {st.founder_agent_result.board_block_reason==='unverified'?'decision unverified':'objection recorded'} — internal handoff paused after {st.founder_agent_result.blocked_by_board_seat||'Board'}.</strong> Downstream AI roles did not execute in this run. Founder must examine the objection and authorize an appropriately reviewed next action; this is not an automatic project rejection or release.</p>}
+            {st.founder_agent_result.board_review_mode==='full_five_seat'&&<p>Five-seat governance review: {st.founder_agent_result.board_review_cleared?'All five AI Board recommendations recorded APPROVE; founder authority and independent QA are still required.':'Board review incomplete or stopped — never an automatic approval.'}</p>}
             <ol>{(st.founder_agent_result.handoffs||[]).map(h=><li key={h.role}>
               <strong>{h.role.toUpperCase()} · {h.employee_name}</strong>
               <small>Employee record: {h.employee_id} · {h.human_qa_approved?'QA passed':'Independent QA required'}</small>

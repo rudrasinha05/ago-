@@ -119,7 +119,7 @@ def optional_model_handlers(
                 tenant_id=actor.tenant_id,
                 actor_id=actor.subject,
                 operation_key=f"local-chain:{task.id}",
-                amount="4",
+                amount=str(len(participants)),
                 category="local_model_attempt",
             )
             return run_four_role_chain(
