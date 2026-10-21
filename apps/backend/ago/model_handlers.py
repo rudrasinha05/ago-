@@ -5,6 +5,7 @@ import os
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.credits import CreditBudget
+from ago.company_ollama_chain import LocalCompanyChain
 from ago.model_provider import OllamaLocalTextProvider, ResponsesTextProvider
 
 
@@ -37,7 +38,10 @@ def optional_model_handlers(
     if mode == "ollama_local":
         if os.getenv("AGO_ENABLE_LOCAL_MODELS") != "true" or not model:
             return {}
-        provider = OllamaLocalTextProvider(model=model)
+        provider = OllamaLocalTextProvider(
+            model=model, timeout_seconds=60, max_output_tokens=384,
+            keep_alive="90s",
+        )
         usage_category="local_model_attempt"
     elif mode == "paid":
         if os.getenv("AGO_ENABLE_PAID_MODELS") != "true":
@@ -95,4 +99,30 @@ def optional_model_handlers(
             "market_release_verified":False,
         }
 
-    return {"research:brief": research_brief,"project:plan": project_plan}
+    handlers = {"research:brief": research_brief, "project:plan": project_plan}
+    # Exact manual opt-in; default built-in internal:brief stays deterministic.
+    # The agent runtime independently enforces approved task + founder actor.
+    if mode == "ollama_local" and os.getenv("AGO_LOCAL_COMPANY_CHAIN") == "true":
+        def governed_company_handoff(task):
+            if task.action != "internal:brief" or not task.project_context:
+                raise PermissionError("Bound founder project discovery required")
+            if "founder" not in actor.roles:
+                raise PermissionError("Confidential AGO model chain requires active founder")
+            chain = LocalCompanyChain(db)
+            chain.assignments(
+                tenant_id=actor.tenant_id, actor_id=actor.subject, task=task,
+            )
+            repositories.resolve(CreditBudget).charge(
+                tenant_id=actor.tenant_id,
+                actor_id=actor.subject,
+                operation_key=f"local-chain:{task.id}",
+                amount="4",
+                category="local_model_attempt",
+            )
+            return chain.run(
+                tenant_id=actor.tenant_id, actor_id=actor.subject,
+                task=task, provider=provider,
+            )
+
+        handlers["internal:brief"] = governed_company_handoff
+    return handlers
