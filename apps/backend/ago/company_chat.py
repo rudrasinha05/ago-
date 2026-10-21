@@ -741,8 +741,14 @@ class CompanyChat:
                 "plan_review" if item["plan_id"] else
                 "task_execution" if item["task_id"] else "governance_action"
             )
+            strategic = bool(
+                item["market_signal_id"] or item["opportunity_id"] or item["founder_intake_id"]
+            )
+            item["requires_founder_decision"] = strategic
             item["review_routing"] = (
-                "Founder only — authenticated active human founder"
+                "Founder only — active authenticated human founder"
+                if strategic else
+                "Independent active human reviewer with approval:decide; requester cannot self-approve"
             )
             item["next_action"] = (
                 "Founder approval permits market validation and a governed project plan. No autonomous sales, email campaigns, ad spend or release is authorized."
