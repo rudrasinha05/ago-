@@ -368,3 +368,15 @@ def test_disabled_chain_keeps_previous_no_model_execution(monkeypatch):
     assert set(registered)=={"research:brief","project:plan"}
     monkeypatch.delenv("AGO_ENABLE_LOCAL_MODELS",raising=False)
     assert handlers.optional_model_handlers(None,None)=={}
+
+
+def test_engineering_requires_real_five_seat_preflight_before_model_or_credit(monkeypatch):
+    db = ApprovedProjectDb()
+    monkeypatch.setenv("AGO_LOCAL_ENGINEERING_CANDIDATES", "true")
+    monkeypatch.delenv("AGO_LOCAL_FULL_BOARD_REVIEW", raising=False)
+    with pytest.raises(PermissionError, match="five real reviewed Board seats"):
+        CompanyOllamaChainQueries(db).assignments(
+            tenant_id=db.tenant, actor_id=db.founder, task=db.task()
+        )
+    assert all("FROM ago_company_board_appointments" not in statement
+               for statement, _ in db.queries)
