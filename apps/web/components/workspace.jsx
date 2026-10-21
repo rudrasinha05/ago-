@@ -10,7 +10,7 @@ import {sprite} from '@ago/ui/sprite';
 import {Button,Loading,Notice} from '@ago/ui/components';
 import {Dashboard} from './dashboard';
 import {CompanyMap} from './company-map';
-import {CompanyApprovals,ApprovalTopAlerts} from './company-approvals';
+import {ApprovalTopAlerts} from './company-approvals';
 import {useSession} from './session';
 export function Workspace({page}) {
   const {api,me,logout,epoch}=useSession(); const router=useRouter();
@@ -69,11 +69,11 @@ export function Workspace({page}) {
   }
   return <div id="workspace" className="next-workspace">
     <div dangerouslySetInnerHTML={{__html:sprite}} />
-    <header className="workspace-header"><Link href="/" className="brand">AGO <span>Workspace</span></Link><p>{me.display_name}<span className="member-role">{me.roles?.join(' · ')}</span></p><Button onClick={()=>setOpen(x=>!x)} aria-expanded={open} aria-controls="primary-nav" className="btn nav-toggle">Menu</Button><ApprovalTopAlerts api={api} me={me} enabled={page!=='governance'&&page!=='organization'} onView={()=>router.push('/governance/#company-approval-inbox')}/><Button onClick={logout}>Sign out</Button></header>
-    <div className="workspace-body"><nav id="primary-nav" className={open?'workspace-nav open':'workspace-nav'} aria-label="Workspaces">{Object.entries(PAGES).map(([key,value])=><Link key={key} href={key==='overview'?'/':'/'+key+'/'} aria-current={page===key?'page':undefined} onClick={()=>setOpen(false)}>{value.title}</Link>)}<a href="/console/">Control Center</a></nav>
+    <header className="workspace-header"><Link href="/" className="brand">AGO <span>Workspace</span></Link><p>{me.display_name}<span className="member-role">{me.roles?.join(' · ')}</span></p><Button onClick={()=>setOpen(x=>!x)} aria-expanded={open} aria-controls="primary-nav" className="btn nav-toggle">Menu</Button><ApprovalTopAlerts api={api} me={me} enabled={page!=='governance'&&page!=='organization'} onView={()=>router.push('/organization/#company-approval-inbox')}/><Button onClick={logout}>Sign out</Button></header>
+    <div className="workspace-body"><nav id="primary-nav" className={open?'workspace-nav open':'workspace-nav'} aria-label="Workspaces">{Object.entries(PAGES).map(([key,value])=><Link key={key} href={key==='overview'?'/':'/'+key+'/'} aria-current={page===key?'page':undefined} onClick={()=>setOpen(false)}>{value.title}</Link>)}</nav>
       <main id="screen" ref={screen} tabIndex={-1} className="screen">
         <div className="workspace-toolbar"><p className="muted">{PAGES[page].title} · Your organization</p><Button onClick={()=>refresh().catch(()=>notify('Unable to refresh.'))} disabled={data===null}>Refresh</Button></div>
-        {data===null?<Loading />:page==='organization'?<><CompanyMap key={me.id} api={api} me={me} data={data} onRefresh={refresh}/><details><summary>Advanced organization controls</summary><div className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current).replaceAll('<h1','<h2').replaceAll('</h1>','</h2>')}} /></details></>:<>{page==='governance'&&<CompanyApprovals api={api} me={me}/>}<div key={revision} className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current)}} />{page==='overview'&&<Dashboard key={me.id} api={api} me={me} data={data}/>}</>}
+        {data===null?<Loading />:page==='organization'?<CompanyMap key={me.id} api={api} me={me} data={data} onRefresh={refresh}/>:<><div key={revision} className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current)}} />{page==='overview'&&<Dashboard key={me.id} api={api} me={me} data={data}/>}</>}
       </main>
     </div>
     <dialog id="action-dialog" ref={dialog} aria-labelledby="dialog-title" onClick={e=>{if(e.target===dialog.current || e.target.closest("[data-modal-close]"))dialog.current.close();}}><div id="dialog-content" className="dialog-content" /></dialog>

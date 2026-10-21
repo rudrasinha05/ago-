@@ -49,6 +49,6 @@ export function SessionProvider({children}) {
       <Field id="password" label="Password" type="password" autoComplete="current-password" required />
       <Field id="factor_code" label="One-time or recovery code (if enabled)" type="password" autoComplete="one-time-code" />
       {error&&<Notice error>{error}</Notice>}<Button kind="primary" type="submit" disabled={busy}>{busy?'Signing in…':'Sign in'}</Button>
-    </form><Button onClick={ssoLogin} disabled={busy}>Sign in with organization SSO</Button><p className="muted">Ask your administrator for your organization ID and account.</p><a href="/console/">Open existing Control Center</a></div></main>}
+    </form><Button onClick={ssoLogin} disabled={busy}>Sign in with organization SSO</Button><p className="muted">Ask your administrator for your organization ID and account.</p></div></main>}
   </SessionContext.Provider>;
 }

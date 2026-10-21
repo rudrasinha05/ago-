@@ -21,7 +21,7 @@ for app, title in [('web', 'AGO Workspace'), ('admin', 'AGO Administration'),
                 assert response.status == 200 and title in html
                 if app == 'web':
                     assert 'Organization ID' in html and 'Work email' in html
-                    assert '/workspace/_next/' in html and '/console/' in html
+                    assert '/workspace/_next/' in html
                     for route in ['strategy', 'governance', 'organization', 'knowledge',
                                   'tools', 'calendar', 'twin']:
                         assert (folder/route/'index.html').is_file(), route
