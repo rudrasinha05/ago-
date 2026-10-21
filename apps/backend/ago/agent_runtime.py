@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from ago.agent_runtime_queries import AgentRuntimeQueries
+from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.task_store import TaskStore
 from ago.organizational_dna import GenomeStore
@@ -60,9 +61,7 @@ class AgentRuntime:
                     and os.getenv("AGO_LLM_PROVIDER") == "ollama_local"
                     and os.getenv("AGO_ENABLE_LOCAL_MODELS") == "true"
                     and os.getenv("AGO_LOCAL_COMPANY_CHAIN") == "true"):
-                # Imported only during execution: repository_ports binds AgentRuntime.
-                from ago.repository_ports import LocalCompanyChainPort
-                self.repositories.resolve(LocalCompanyChainPort).assignments(
+                self.repositories.resolve(CompanyOllamaChainQueries).assignments(
                     tenant_id=actor.tenant_id, actor_id=actor.subject,
                     task=SimpleNamespace(id=task_id,project_context=project_context),
                 )
