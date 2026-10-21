@@ -27,6 +27,21 @@ export function FounderProjectIntake({api,me,onChanged}) {
   try{const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(project.id));setProjectDetail(result);}
   catch(e){setProjectError(e.message||'Project details are unavailable.');}
  }
+ function exportEngineeringCandidate(run){
+  if(!run?.board_review_cleared||!run.engineering_candidate)return;
+  // Portable receipt for the local CLI. Preserve exact source bytes and hashes.
+  // A download does not execute files, submit a GitHub change or pass QA.
+  const portable={result:{
+    board_review_cleared:true,
+    engineering_candidate:run.engineering_candidate,
+  }};
+  const blob=new Blob([JSON.stringify(portable,null,2)],{type:'application/json;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;
+  link.download='ago-engineering-'+run.engineering_candidate.candidate_sha256.slice(0,16)+'.json';
+  document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
  function exportProjectReport(){
   if(!projectDetail)return;
   const p=projectDetail;
@@ -149,6 +164,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
             {st.founder_agent_result.board_review_mode==='full_five_seat'&&<p>Five-seat governance review: {st.founder_agent_result.board_review_cleared?'All five AI Board recommendations recorded APPROVE; founder authority and independent QA are still required.':'Board review incomplete or stopped — never an automatic approval.'}</p>}
             {st.founder_agent_result.engineering_candidate&&<section className="ago-engineering-review" aria-label="Uncommitted engineering candidate">
               <h5>Generated source candidate — not built, tested or committed</h5>
+              <button type="button" onClick={()=>exportEngineeringCandidate(st.founder_agent_result)}>Export exact files for local Founder review</button>
               <p>Proposal checksum: <code>{st.founder_agent_result.engineering_candidate.candidate_sha256}</code></p>
               <ul>{st.founder_agent_result.engineering_candidate.file_evidence.map(f=><li key={f.path}><code>{f.path}</code> · {f.bytes} bytes · syntax {f.python_syntax_checked?'checked':'not checked'} · <code>{f.sha256.slice(0,12)}</code></li>)}</ul>
               <p>Founder must inspect source, run independent tests and approve a separate GitHub operation. No auto-commit.</p>
