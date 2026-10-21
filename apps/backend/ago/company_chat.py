@@ -72,17 +72,15 @@ class CompanyChat:
             SELECT 1 FROM ago_user_roles WHERE tenant_id=%s AND user_id=%s
               AND role='founder'
         """,(tenant,reader_id)).fetchone() is not None
-        # Global is shared for founders, but ordinary staff only read global
-        # messages. This avoids mixing another employee's private channel into
-        # the global feed.
-        if channel == 'global' and not founder:
-            channel='global_only'
+        # Founder may view the entire global audit timeline; normal employees
+        # receive actual global-channel messages only. No synthetic channel IDs.
         # A department includes its employee conversations and task events.
         rows = self.db.execute('''SELECT c.*, parent.body AS reply_body, parent.author_name AS reply_author FROM ago_company_chat c LEFT JOIN ago_company_chat parent ON parent.tenant_id=c.tenant_id AND parent.id=c.reply_to
           WHERE c.tenant_id=%s AND (%s='global' OR c.channel=%s OR
             (%s LIKE 'department:%%' AND c.employee_id IN
               (SELECT id FROM ago_employees WHERE tenant_id=%s AND department_id::text=substring(%s from 12))))
           AND (%s::bigint IS NULL OR c.id < %s)
+          AND (%s::boolean OR c.channel='global' OR %s<>'global')
           AND (c.kind<>'project' OR EXISTS (
               SELECT 1 FROM ago_founder_intakes i
               WHERE i.tenant_id=c.tenant_id AND i.founder_id=%s))
@@ -91,7 +89,7 @@ class CompanyChat:
               WHERE i.tenant_id=parent.tenant_id AND i.founder_id=%s))
           ORDER BY c.id DESC LIMIT %s''',
           (tenant, channel, channel, channel, tenant, channel, before, before,
-           reader_id,reader_id,limit+1)).fetchall()
+           founder,channel,reader_id,reader_id,limit+1)).fetchall()
         return {'items': list(reversed(rows[:limit])),
                 'next_before': rows[limit-1]['id'] if len(rows)>limit else None}
 
