@@ -26,11 +26,57 @@ class CompanyChat:
         ).fetchone():
             raise ValueError('Channel unavailable')
 
+    def _channel_permission(self, tenant: str, actor_id: str, channel: str) -> bool:
+        """Fail-closed per-channel read/write; broad company RBAC is insufficient."""
+        UUID(tenant)
+        UUID(actor_id)
+        self.channel(tenant, channel)
+        identity = self.db.execute("""
+            SELECT e.id,e.department_id,e.manager_id,e.kind
+            FROM ago_users u JOIN ago_employees e
+              ON e.tenant_id=u.tenant_id AND e.id=u.id
+            WHERE u.tenant_id=%s AND u.id=%s AND u.active
+        """,(tenant,actor_id)).fetchone()
+        if identity is None or identity['kind'] != 'human':
+            return False
+        if channel == 'global':
+            return True
+        founder = self.db.execute("""
+            SELECT 1 FROM ago_user_roles r
+            WHERE r.tenant_id=%s AND r.user_id=%s AND r.role='founder'
+        """,(tenant,actor_id)).fetchone()
+        if founder:
+            return True
+        kind, _, target = channel.partition(':')
+        if kind == 'department':
+            return str(identity['department_id']) == target
+        if kind == 'employee':
+            if actor_id == target:
+                return True
+            target_manager = self.db.execute("""
+                SELECT manager_id FROM ago_employees WHERE tenant_id=%s AND id=%s
+            """,(tenant,target)).fetchone()
+            return (target_manager is not None and
+                    target_manager['manager_id'] is not None and
+                    str(target_manager['manager_id']) == actor_id)
+        return False
+
     def list(self, tenant, channel, before, limit, reader_id: str | None = None):
         self.channel(tenant, channel)
         if reader_id is None:
             raise PermissionError('Authenticated company reader required')
         UUID(reader_id)
+        if not self._channel_permission(tenant,reader_id,channel):
+            raise PermissionError('Channel access denied')
+        founder=self.db.execute("""
+            SELECT 1 FROM ago_user_roles WHERE tenant_id=%s AND user_id=%s
+              AND role='founder'
+        """,(tenant,reader_id)).fetchone() is not None
+        # Global is shared for founders, but ordinary staff only read global
+        # messages. This avoids mixing another employee's private channel into
+        # the global feed.
+        if channel == 'global' and not founder:
+            channel='global_only'
         # A department includes its employee conversations and task events.
         rows = self.db.execute('''SELECT c.*, parent.body AS reply_body, parent.author_name AS reply_author FROM ago_company_chat c LEFT JOIN ago_company_chat parent ON parent.tenant_id=c.tenant_id AND parent.id=c.reply_to
           WHERE c.tenant_id=%s AND (%s='global' OR c.channel=%s OR
@@ -51,15 +97,19 @@ class CompanyChat:
 
     def send(self, actor, channel, body, reply_to, operation_key):
         self.channel(actor.tenant_id, channel)
+        if not self._channel_permission(actor.tenant_id,actor.subject,channel):
+            raise PermissionError('Channel access denied')
         body = body.strip()
         if not body:
             raise ValueError('Write a message first')
         with self.db.transaction():
-            if reply_to is not None and not self.db.execute(
-                'SELECT id FROM ago_company_chat WHERE tenant_id=%s AND id=%s',
-                (actor.tenant_id, reply_to),
-            ).fetchone():
-                raise ValueError('Reply unavailable')
+            if reply_to is not None:
+                parent = self.db.execute("""
+                    SELECT channel,kind FROM ago_company_chat
+                    WHERE tenant_id=%s AND id=%s
+                """,(actor.tenant_id,reply_to)).fetchone()
+                if parent is None or parent['channel']!=channel or parent['kind']=='project':
+                    raise ValueError('Reply unavailable')
             author = self.db.execute("SELECT COALESCE(e.name, 'AGO member') AS display_name FROM ago_users u LEFT JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id WHERE u.tenant_id=%s AND u.id=%s",
                                      (actor.tenant_id, actor.subject)).fetchone()
             row = self.db.execute('''INSERT INTO ago_company_chat
