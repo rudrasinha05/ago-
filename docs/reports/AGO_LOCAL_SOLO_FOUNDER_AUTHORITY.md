@@ -61,3 +61,7 @@ For a **brand-new** empty local organization, AGO also offers a separate `init-s
 ## Legacy Quality staffing backlog
 
 For an unstaffed Quality stage created before enabling sole-founder mode, the read-only management workload can now recommend the real founder only when the local policy is eligible and a different employee is the accountable delivery manager. The suggestion cannot appoint itself, approve execution, claim QA pass or create a reviewer identity. Independently authorized existing human reviewers keep their normal lane.
+
+## Approval replay protection
+
+The stage activation service reads the actual recorded approval decision author. For self-approved sole-founder local proposals, it re-verifies active human founder eligibility and the local opt-in **again at activation**. Changing the server to production or disabling the option after approval blocks new stage activation; no approved request is silently replayed into a broader environment.

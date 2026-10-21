@@ -107,6 +107,14 @@ def test_solo_founder_is_actual_quality_stage_owner_without_fake_reviewer(case, 
     post(client, "/v1/governance/approvals/" + strategy["approval_id"] + "/decision",
          founder, {"approve":True, "reason":"Authorize founder scope"})
     post(client, "/v1/brain/plans/" + project["plan_id"] + "/activate", founder)
+    monkeypatch.setenv("AGO_ENVIRONMENT", "production")
+    post(client, endpoint + "/" + proposed["proposal_id"] + "/activate",
+         founder, expected=403)
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    monkeypatch.setenv("AGO_FOUNDER_SOLO_APPROVAL", "false")
+    post(client, endpoint + "/" + proposed["proposal_id"] + "/activate",
+         founder, expected=403)
+    monkeypatch.setenv("AGO_FOUNDER_SOLO_APPROVAL", "true")
     activated = post(client, endpoint + "/" + proposed["proposal_id"] + "/activate",
                      founder)
     assert activated["assignee_id"] == info["founder_id"]

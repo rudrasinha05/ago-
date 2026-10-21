@@ -933,7 +933,7 @@ class CompanyChat:
             if project is None:
                 raise LookupError('Project unavailable')
             proposed=self.db.execute("""
-                SELECT d.*,a.status AS approval_status,e.name AS worker_name
+                SELECT d.*,a.status AS approval_status,a.reviewer_id,e.name AS worker_name
                 FROM ago_project_stage_delegation_proposals d
                 JOIN ago_approval_requests a ON a.tenant_id=d.tenant_id AND a.id=d.approval_id
                 JOIN ago_employees e ON e.tenant_id=d.tenant_id AND e.id=d.assignee_id
@@ -953,6 +953,18 @@ class CompanyChat:
                         'reused':True,'task_executed':False}
             if project['status']!='active':
                 raise PermissionError('Founder strategic plan must be approved and active')
+            # The local single-founder exception must still be in force when
+            # the reviewed stage assignment is actually activated, not only
+            # when its approval row was originally written. Never replay this
+            # exception after environment or active human authority changes.
+            if (proposed['reviewer_id'] is not None
+                    and str(proposed['reviewer_id'])==str(proposed['requester_id'])
+                    and not founder_solo_eligible(
+                        self.db, actor.tenant_id, actor.subject
+                    )):
+                raise PermissionError(
+                    'Local sole-founder approval is not eligible for stage activation'
+                )
             self.repositories.resolve(ApprovalRepository).assert_executable(
                 request_id=str(proposed['approval_id']),tenant_id=actor.tenant_id,
                 action='company:stage-delegation:'+proposal_id,
