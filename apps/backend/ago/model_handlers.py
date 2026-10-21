@@ -5,7 +5,7 @@ import json
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.credits import CreditBudget
-from ago.model_provider import ResponsesTextProvider
+from ago.model_provider import OllamaLocalTextProvider, ResponsesTextProvider
 
 
 
@@ -32,13 +32,23 @@ def optional_model_handlers(
     db: DatabaseConnection, actor, *, repositories: RepositoryScope | None = None
 ) -> dict:
     repositories = repositories or RepositoryScope(db)
-    if os.getenv("AGO_ENABLE_PAID_MODELS") != "true":
-        return {}
-    api_key = os.getenv("AGO_LLM_API_KEY")
     model = os.getenv("AGO_LLM_MODEL")
-    if not api_key or not model:
+    mode = os.getenv("AGO_LLM_PROVIDER","paid")
+    if mode == "ollama_local":
+        if os.getenv("AGO_ENABLE_LOCAL_MODELS") != "true" or not model:
+            return {}
+        provider = OllamaLocalTextProvider(model=model)
+        usage_category="local_model_attempt"
+    elif mode == "paid":
+        if os.getenv("AGO_ENABLE_PAID_MODELS") != "true":
+            return {}
+        api_key = os.getenv("AGO_LLM_API_KEY")
+        if not api_key or not model:
+            return {}
+        provider = ResponsesTextProvider(api_key=api_key, model=model)
+        usage_category="paid_model_attempt"
+    else:
         return {}
-    provider = ResponsesTextProvider(api_key=api_key, model=model)
 
     def research_brief(task):
         # Virtual credits cap attempts; provider bills separately in real currency.
@@ -47,7 +57,7 @@ def optional_model_handlers(
             actor_id=actor.subject,
             operation_key=f"model:{task.id}",
             amount="1",
-            category="paid_model_attempt",
+            category=usage_category,
         )
         answer = provider.generate(
             "Prepare a factual internal research brief on this approved task: " + task.action[:500]
@@ -58,6 +68,7 @@ def optional_model_handlers(
             "kind": "llm_brief",
             "text": answer,
             "model": model,
+            "provider_mode": mode,
             "requires_human_qa": True,
         }
 
@@ -68,7 +79,7 @@ def optional_model_handlers(
             actor_id=actor.subject,
             operation_key=f"model:{task.id}",
             amount="1",
-            category="paid_model_attempt",
+            category=usage_category,
         )
         text=provider.generate(prompt)
         return {
@@ -76,6 +87,7 @@ def optional_model_handlers(
             "intake_id":task.project_context["intake_id"],
             "text":text,
             "model":model,
+            "provider_mode":mode,
             "requires_human_qa":True,
             "plan_activated":False,
             "employees_hired":False,
