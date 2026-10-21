@@ -162,3 +162,66 @@ def test_two_seat_drafting_cannot_spoof_full_board_engineering():
             task=fake_task(), participants=small,
             provider=None, engineering_candidates=True,
         )
+
+
+def test_explicit_staging_materializes_exact_files_and_manifest(tmp_path):
+    from ago.company_engineering import stage_candidate, verify_persisted_candidate
+
+    proposal = reviewed_candidate(json.dumps(candidate()))
+    assert verify_persisted_candidate(proposal)["candidate_sha256"] == proposal[
+        "candidate_sha256"
+    ]
+    destination = tmp_path / "inspect-candidate"
+    assert not destination.exists()
+    manifest = stage_candidate(proposal, destination)
+    assert (destination / "src" / "adder.py").read_text() == candidate()["files"][0]["content"]
+    assert (destination / "tests" / "test_adder.py").read_text() == candidate()["files"][1]["content"]
+    assert manifest["tests_executed"] is False
+    assert manifest["git_committed"] is False
+    assert json.loads((destination / "AGO_REVIEW_MANIFEST.json").read_text()) == manifest
+    with pytest.raises(FileExistsError):
+        stage_candidate(proposal, destination)
+
+
+def test_source_change_and_forged_verified_status_are_rejected(tmp_path):
+    from ago.company_engineering import stage_candidate
+
+    tampered = reviewed_candidate(json.dumps(candidate()))
+    tampered["files"][0]["content"] = "print('changed')\n"
+    with pytest.raises(PermissionError):
+        stage_candidate(tampered, tmp_path / "should-not-exist")
+    assert not (tmp_path / "should-not-exist").exists()
+    tampered = reviewed_candidate(json.dumps(candidate()))
+    tampered["tests_executed"] = True
+    with pytest.raises(PermissionError):
+        stage_candidate(tampered, tmp_path / "should-not-exist")
+
+
+def test_offline_operator_inspects_and_stages_only_after_confirmation(tmp_path, capsys):
+    from scripts.ago_engineering_candidate import main
+
+    data = {
+        "result": {
+            "board_review_cleared": True,
+            "engineering_candidate": reviewed_candidate(json.dumps(candidate())),
+        },
+    }
+    source = tmp_path / "approved-run.json"
+    source.write_text(json.dumps(data), encoding="utf-8")
+    folder = tmp_path / "review"
+    assert main(["--input", str(source), "--output", str(folder)]) == 0
+    assert not folder.exists()
+    report = json.loads(capsys.readouterr().out)
+    assert report["mode"] == "dry_run"
+    assert main(["--input", str(source), "--output", str(folder),
+                 "--apply"]) == 2
+    assert not folder.exists()
+    capsys.readouterr()
+    assert main(["--input", str(source), "--output", str(folder),
+                 "--apply", "--confirm", "WRITE_REVIEWED_CANDIDATE"]) == 0
+    assert folder.is_dir()
+    assert "files_staged_for_human_review" in capsys.readouterr().out
+    data["result"]["board_review_cleared"] = False
+    source.write_text(json.dumps(data), encoding="utf-8")
+    assert main(["--input", str(source), "--output", str(tmp_path / "next")]) == 2
+    assert not (tmp_path / "next").exists()
