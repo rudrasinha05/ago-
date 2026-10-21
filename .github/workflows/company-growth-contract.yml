@@ -10,6 +10,8 @@ on:
       - "apps/backend/tests/test_market_growth_postgres.py"
       - "apps/backend/tests/test_company_dual_approval.py"
       - "apps/backend/tests/test_company_project_delegation.py"
+      - "scripts/check_confidential_artifacts.py"
+      - ".gitignore"
       - "apps/backend/tests/test_company_readiness_audit.py"
       - "apps/web/components/company-management.jsx"
       - "apps/web/components/company-opportunities.jsx"
@@ -59,6 +61,8 @@ jobs:
           AGO_MARKET_TENANT_ID: 00000000-0000-0000-0000-000000000001
         run: |
           docker compose -f deploy/docker/compose.preview.yml -f deploy/docker/compose.market.preview.yml config --quiet
+      - name: Block private company files in tracked public software Git
+        run: python scripts/check_confidential_artifacts.py
       - name: Install isolated backend
         run: python -m pip install -e './apps/backend[dev,postgres]'
       - name: Apply ALL migrations to disposable CI database, including 055 and 056
