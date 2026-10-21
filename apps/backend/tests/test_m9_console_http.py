@@ -74,6 +74,13 @@ def test_console_assets_ship_in_python_package_and_do_not_persist_tokens():
     assert "same-origin" in core
 
 
+@pytest.fixture(autouse=True)
+def historic_console_mode(monkeypatch):
+    # Old M9 page retained only to regress-test its old behavior.
+    monkeypatch.setenv("AGO_LEGACY_CONSOLE_TEST_MODE", "true")
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+
+
 @pytest.fixture
 def live_console(monkeypatch):
     dsn = os.getenv("AGO_TEST_POSTGRES_DSN")

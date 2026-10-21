@@ -115,7 +115,7 @@ try {
         }
         else {
             Write-Host "Company Map React frontend is not packaged. From repo root use .\\scripts\\ago-visual.ps1"
-            Write-Host "The basic /console/ is NOT the circular Company Map."
+            Write-Host "Old /console/ redirects to the visual Company Map; no duplicate UI."
         }
         & python -m ago.local_ops serve --port $Port
     }

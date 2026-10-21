@@ -6,6 +6,7 @@ by existing signed-session and tenant-RBAC-protected /v1 APIs.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -22,23 +23,37 @@ CONSOLE_CSP = (
 )
 
 
+def _legacy_console_for_tests() -> bool:
+    # M9 browser-regression mode; never available for normal founder launch.
+    return (
+        os.getenv("AGO_LEGACY_CONSOLE_TEST_MODE") == "true"
+        and os.getenv("AGO_ENVIRONMENT", "development") in ("development", "test", "testing")
+    )
+
+
 def register_console(app: FastAPI) -> None:
     """Install public shells; all private data still requires authorized APIs."""
     if (FRONTEND / "index.html").is_file():
         app.mount("/workspace", StaticFiles(directory=FRONTEND, html=True), name="workspace")
-    app.mount(
-        "/console/assets",
-        StaticFiles(directory=ASSETS, check_dir=True),
-        name="console-assets",
-    )
+    if _legacy_console_for_tests():
+        app.mount(
+            "/console/assets",
+            StaticFiles(directory=ASSETS, check_dir=True),
+            name="console-assets",
+        )
 
     @app.get("/console", include_in_schema=False)
     def redirect_console():
-        return RedirectResponse(url="/console/", status_code=308)
+        return RedirectResponse(
+            url="/console/" if _legacy_console_for_tests() else "/workspace/organization/",
+            status_code=308,
+        )
 
     @app.get("/console/", include_in_schema=False)
     def console_home():
-        return FileResponse(ASSETS / "index.html", media_type="text/html")
+        if _legacy_console_for_tests():
+            return FileResponse(ASSETS / "index.html", media_type="text/html")
+        return RedirectResponse(url="/workspace/organization/", status_code=308)
 
 
 def console_headers(path: str) -> dict[str, str]:

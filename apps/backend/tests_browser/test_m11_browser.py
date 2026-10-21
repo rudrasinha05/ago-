@@ -38,7 +38,8 @@ def app_url():
          "--host", "127.0.0.1", "--port", "18771", "--no-proxy-headers"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        env=dict(os.environ, AGO_ENVIRONMENT="development"),
+        env=dict(os.environ, AGO_ENVIRONMENT="development",
+                 AGO_LEGACY_CONSOLE_TEST_MODE="true"),
     )
     try:
         for _ in range(80):

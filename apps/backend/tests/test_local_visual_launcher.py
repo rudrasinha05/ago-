@@ -51,3 +51,32 @@ def test_company_map_is_the_only_organization_screen():
     assert company.count("<CompanyApprovals ") == 1
     assert "api.request('/v1/organization/departments'" in company
     assert "Create department" in company
+
+
+def test_old_console_urls_default_to_one_visual_company_map(monkeypatch):
+    from fastapi.testclient import TestClient
+    from ago.main import create_app
+    monkeypatch.delenv("AGO_LEGACY_CONSOLE_TEST_MODE", raising=False)
+    with TestClient(create_app()) as client:
+        for path in ("/console", "/console/"):
+            response = client.get(path, follow_redirects=False)
+            assert response.status_code == 308
+            assert response.headers["location"] == "/workspace/organization/"
+            assert "no-store" in response.headers["cache-control"]
+        assert client.get("/console/assets/index.html").status_code == 404
+        assert client.get("/v1/console/me").status_code == 401
+
+
+def test_legacy_console_only_runs_in_explicit_local_test_mode(monkeypatch):
+    from fastapi.testclient import TestClient
+    from ago.main import create_app
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    monkeypatch.setenv("AGO_LEGACY_CONSOLE_TEST_MODE", "true")
+    with TestClient(create_app()) as client:
+        response = client.get("/console/", follow_redirects=False)
+        assert response.status_code == 200
+        assert 'src="/console/assets/app.js"' in response.text
+    monkeypatch.setenv("AGO_ENVIRONMENT", "production")
+    with TestClient(create_app()) as client:
+        response = client.get("/console/", follow_redirects=False)
+        assert response.status_code == 308
