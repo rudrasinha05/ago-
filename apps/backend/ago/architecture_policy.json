@@ -305,10 +305,19 @@
         "organization_store"
       ]
     },
+    "company_engineering": {
+      "context": "workforce",
+      "layer": "service",
+      "imports": [
+        "github_adapter"
+      ]
+    },
     "company_ollama_chain": {
       "context": "workforce",
       "layer": "service",
-      "imports": []
+      "imports": [
+        "company_engineering"
+      ]
     },
     "company_ollama_chain_queries": {
       "context": "workforce",
