@@ -35,6 +35,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [draft,setDraft]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState(''),[sending,setSending]=useState(false);
   const [zoom,setZoom]=useState(.42),[pan,setPan]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
   const [fullscreen,setFullscreen]=useState(false),[inspectorOpen,setInspectorOpen]=useState(true);
+  const [addingDepartment,setAddingDepartment]=useState(false);
   const [updated,setUpdated]=useState(null),[popup,setPopup]=useState(null),[loading,setLoading]=useState(false);
   const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null),[governanceData,setGovernanceData]=useState(null);const lastEvent=useRef(null);
   const viewport=useRef(null),drag=useRef(null),previous=useRef(null),sequence=useRef(0),alive=useRef(false),retry=useRef(null),feed=useRef(null),staffKey=useRef(null);
@@ -183,8 +184,20 @@ export function CompanyMap({api,me,data,onRefresh}) {
     const signature=JSON.stringify(values);if(staffKey.current?.signature!==signature)staffKey.current={signature,key:crypto.randomUUID()};
     setSending(true);try{await api.request(BASE+'/staffing',{method:'POST',body:{...values,operation_key:staffKey.current.key}});staffKey.current=null;setStaffing(false);await onRefresh();}
     catch(e){setError(e.message);}finally{setSending(false);}}
+  async function createDepartment(event){
+    event.preventDefault();
+    const name=String(new FormData(event.currentTarget).get('name')||'').trim();
+    if(!name||sending)return;
+    setSending(true);setError('');
+    try{
+      await api.request('/v1/organization/departments',{method:'POST',body:{name}});
+      setAddingDepartment(false);
+      await onRefresh();
+    }catch(e){setError(e.message);}finally{setSending(false);}
+  }
   return <section id="ago-unified-cockpit" className="company-command" aria-label="Company map and conversations">
-    <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><button className="btn" disabled={!me.permissions.includes('organization:manage')} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></header>
+    <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div>{me.permissions.includes('organization:manage')&&<div className="company-heading-actions"><button type="button" className="btn" aria-expanded={addingDepartment} onClick={()=>setAddingDepartment(v=>!v)}>Add department</button><button type="button" className="btn" disabled={!departments.length} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></div>}</header>
+    {addingDepartment&&me.permissions.includes('organization:manage')&&<form className="company-add-department" onSubmit={createDepartment}><label htmlFor="company-department-name">Department name</label><input id="company-department-name" name="name" autoFocus required maxLength={150} placeholder="e.g. Engineering"/><button className="btn" disabled={sending}>{sending?'Saving…':'Create department'}</button><button type="button" className="btn" onClick={()=>setAddingDepartment(false)}>Cancel</button></form>}
     <nav className="company-cockpit-nav" aria-label="Company control center sections">
       <a href="#ago-unified-cockpit">Company Brain</a>
       <a href="#company-approval-inbox">Founder Approvals</a>

@@ -34,3 +34,20 @@ def test_visual_launcher_recovers_fresh_terminal_without_recreating_company():
     assert 'No PostgreSQL password entered. Nothing was changed.' in script
     assert "init-solo" not in script
     assert "python -m ago.event_runtime migrate" not in script
+
+
+def test_company_map_is_the_only_organization_screen():
+    root = Path(__file__).resolve().parents[3]
+    workspace = (root / "apps/web/components/workspace.jsx").read_text(encoding="utf-8")
+    company = (root / "apps/web/components/company-map.jsx").read_text(encoding="utf-8")
+    signin = (root / "apps/web/components/session.jsx").read_text(encoding="utf-8")
+    assert workspace.count("<CompanyMap ") == 1
+    assert "Advanced organization controls" not in workspace
+    assert "<CompanyApprovals api={api} me={me}/>" not in workspace
+    assert "router.push('/organization/#company-approval-inbox')" in workspace
+    assert 'href="/console/"' not in workspace
+    assert 'href="/console/"' not in signin
+    assert company.count("<CommandBrain ") == 1
+    assert company.count("<CompanyApprovals ") == 1
+    assert "api.request('/v1/organization/departments'" in company
+    assert "Create department" in company

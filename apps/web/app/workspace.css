@@ -232,3 +232,6 @@
 .project-portfolio-details p{font-size:12px}
 #ago-project-portfolio{scroll-margin-top:75px}
 @media(max-width:580px){.market-signal-filters button{min-height:36px}.project-portfolio-grid{grid-template-columns:1fr}}
+
+/* One canonical organization page: creation controls live beside the Company Map. */
+.company-heading-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.company-add-department{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#10273a;border:1px solid var(--map-border);border-radius:12px;padding:12px;margin-bottom:16px}.company-add-department label{font-size:13px}.company-add-department input{flex:1;min-width:160px;max-width:380px}
