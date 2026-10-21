@@ -1,5 +1,6 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from 'react';
+import {CompanyDocumentVault} from './company-document-vault';
 
 export function FounderProjectIntake({api,me,onChanged}) {
  const [brief,setBrief]=useState('');
@@ -142,6 +143,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
           <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
           {st.qa_evidence&&<details><summary>Independent QA evidence</summary><p>{st.qa_evidence}</p></details>}
          </li>)}</ol>
+         <CompanyDocumentVault api={api} project={projectDetail}/>
          <p>No external publication is claimed without a linked verified release. <a href="#ago-opportunities">Promotion desk ↑</a></p>
         </>}
        </div>}
