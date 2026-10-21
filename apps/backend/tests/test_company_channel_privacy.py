@@ -45,6 +45,15 @@ def test_private_employee_department_messages_and_notifications_are_scoped(case)
     assert all(x["employee_id"]==info["reviewer_id"]
                for x in own_events.json()["recent"])
     assert worker not in own_events.json()["by_employee"]
+    # A reviewer with broad task-read permission must not see an unrelated
+    # employee's unlinked task action via the global activity stream.
+    task=post(client,"/v1/tasks",founder,{
+        "assignee_id":worker,"action":"internal:brief"})
+    outsider_activity=client.get(BASE+"/activity",headers=outsider)
+    assert outsider_activity.status_code==200,outsider_activity.text
+    assert all(str(row["id"])!=task["id"] for row in outsider_activity.json())
+    founder_activity=client.get(BASE+"/activity",headers=founder)
+    assert any(str(row["id"])==task["id"] for row in founder_activity.json())
     # Agent run packets may include founder brief excerpts; generic agent
     # visibility must not override founder confidentiality.
     assert client.get("/v1/agents/runs",headers=outsider).status_code==403
