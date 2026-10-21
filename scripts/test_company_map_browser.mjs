@@ -67,7 +67,7 @@ try{
     result={approval_id:id(24),status:'pending_approval'};
     approvalRecords.push({id:id(24),requester_id:founder,requester_name:'Founder',
      requester_role:'Founder',action:'brain:activate:'+id(23),status:'pending',
-     approval_type:'plan_review',plan_title:founderProjects[0].title,
+     approval_type:'plan_review',requires_founder_decision:true,plan_title:founderProjects[0].title,
      plan_id:id(23),goal_brief_excerpt:founderBriefSnapshot,
      created_at:new Date().toISOString(),
      review_routing:'Founder only — authenticated active human founder',
