@@ -5,7 +5,7 @@ import os
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.credits import CreditBudget
-from ago.company_ollama_chain import LocalCompanyChain
+from ago.repository_ports import LocalCompanyChainPort
 from ago.model_provider import OllamaLocalTextProvider, ResponsesTextProvider
 
 
@@ -111,7 +111,7 @@ def optional_model_handlers(
                 raise PermissionError("Bound founder project discovery required")
             if "founder" not in actor.roles:
                 raise PermissionError("Confidential AGO model chain requires active founder")
-            chain = LocalCompanyChain(db)
+            chain = repositories.resolve(LocalCompanyChainPort)
             chain.assignments(
                 tenant_id=actor.tenant_id, actor_id=actor.subject, task=task,
             )
