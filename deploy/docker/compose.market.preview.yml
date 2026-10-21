@@ -1,0 +1,36 @@
+# Opt-in RESEARCH-ONLY sidecar for a trusted Docker PREVIEW host.
+# Compose together with compose.preview.yml. NOT a public production install.
+# This watcher does NOT post ads, spend money, hire workers or run arbitrary tools.
+services:
+  market-worker:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 96
+    mem_limit: 384m
+    tmpfs: ["/tmp:mode=1777"]
+    environment:
+      AGO_ENVIRONMENT: development
+      AGO_MARKET_PREVIEW_CONTAINER: "true"
+      AGO_POSTGRES_DSN: postgresql://ago_preview:${AGO_PREVIEW_DB_PASSWORD:?set unique preview password}@postgres:5432/ago_preview
+      AGO_SESSION_SECRET: ${AGO_PREVIEW_SESSION_SECRET:?set unique preview signing secret}
+      AGO_ENABLE_PAID_MODELS: "false"
+      AGO_M8_EXTERNAL_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - python
+      - /app/scripts/company_market_watch.py
+      - --tenant-id
+      - ${AGO_MARKET_TENANT_ID:?set the existing real preview tenant UUID}
+      - --interval-seconds
+      - "3600"
+    networks: [ago_internal, ago_research_egress]
+    # No externally exposed ports; no credential volume or Docker socket.
+networks:
+  ago_research_egress: {}
