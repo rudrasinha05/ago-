@@ -11,7 +11,7 @@ from pydantic import Field
 
 from ago.api_contracts import StrictInput
 from ago.api_m2 import authenticated, allowed, repository_scope, translate_error
-from ago.document_vault import DocumentVault
+from ago.repository_ports import DocumentVaultPort
 
 router=APIRouter(prefix="/v1/organization/company",tags=["AGO local documents"])
 
@@ -37,7 +37,7 @@ def create_document(project_id: UUID,data: DocumentInput,actor=Depends(authentic
                     repositories=Depends(repository_scope)):
     allowed(repositories,actor,"approval:founder")
     try:
-        return repositories.resolve(DocumentVault).create(
+        return repositories.resolve(DocumentVaultPort).create(
             actor.tenant_id,actor.subject,str(project_id),
             data.title,data.body,data.classification)
     except (ValueError,PermissionError,LookupError) as exc:
@@ -48,7 +48,7 @@ def create_document(project_id: UUID,data: DocumentInput,actor=Depends(authentic
 def list_documents(project_id: UUID,actor=Depends(authenticated),
                    repositories=Depends(repository_scope)):
     try:
-        return repositories.resolve(DocumentVault).list(
+        return repositories.resolve(DocumentVaultPort).list(
             actor.tenant_id,actor.subject,str(project_id))
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)
@@ -58,7 +58,7 @@ def list_documents(project_id: UUID,actor=Depends(authenticated),
 def read_document(document_id: UUID,actor=Depends(authenticated),
                   repositories=Depends(repository_scope)):
     try:
-        return repositories.resolve(DocumentVault).read(
+        return repositories.resolve(DocumentVaultPort).read(
             actor.tenant_id,actor.subject,str(document_id))
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)
@@ -69,7 +69,7 @@ def revise_document(document_id: UUID,data: DocumentRevisionInput,
                     actor=Depends(authenticated),repositories=Depends(repository_scope)):
     allowed(repositories,actor,"approval:founder")
     try:
-        return repositories.resolve(DocumentVault).revise(
+        return repositories.resolve(DocumentVaultPort).revise(
             actor.tenant_id,actor.subject,str(document_id),data.body)
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)
@@ -80,7 +80,7 @@ def document_permission(document_id: UUID,data: DocumentPermissionInput,
                         actor=Depends(authenticated),repositories=Depends(repository_scope)):
     allowed(repositories,actor,"approval:founder")
     try:
-        return repositories.resolve(DocumentVault).change_access(
+        return repositories.resolve(DocumentVaultPort).change_access(
             actor.tenant_id,actor.subject,str(document_id),str(data.grantee_id),
             data.event,data.rationale)
     except (ValueError,PermissionError,LookupError) as exc:
@@ -92,7 +92,7 @@ def document_audit(document_id: UUID,actor=Depends(authenticated),
                    repositories=Depends(repository_scope)):
     allowed(repositories,actor,"approval:founder")
     try:
-        return repositories.resolve(DocumentVault).audit(
+        return repositories.resolve(DocumentVaultPort).audit(
             actor.tenant_id,actor.subject,str(document_id))
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)
