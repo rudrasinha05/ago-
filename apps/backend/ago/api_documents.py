@@ -54,6 +54,17 @@ def list_documents(project_id: UUID,actor=Depends(authenticated),
         translate_error(exc)
 
 
+@router.get("/projects/{project_id}/documents/eligible")
+def eligible_document_members(project_id: UUID,actor=Depends(authenticated),
+                              repositories=Depends(repository_scope)):
+    allowed(repositories,actor,"approval:founder")
+    try:
+        return repositories.resolve(DocumentVaultPort).eligible_members(
+            actor.tenant_id,actor.subject,str(project_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
 @router.get("/documents/{document_id}")
 def read_document(document_id: UUID,actor=Depends(authenticated),
                   repositories=Depends(repository_scope)):
