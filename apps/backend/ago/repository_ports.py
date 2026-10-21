@@ -16,6 +16,7 @@ from ago.behavior_store import BehaviorStore as _BehaviorStore
 from ago.analytics_store import AnalyticsStore as _AnalyticsStore
 from ago.integration_store import IntegrationStore as _IntegrationStore
 from ago.company_chat import CompanyChat as _CompanyChat
+from ago.company_ollama_chain import LocalCompanyChain as _LocalCompanyChain
 from ago.document_vault import DocumentVault as _DocumentVault
 from ago.access import AccessDecision
 from ago.access import AccessService as _AccessService
@@ -1038,6 +1039,12 @@ class IntegrationStorePort(Protocol):
 
 
 @runtime_checkable
+class LocalCompanyChainPort(Protocol):
+    def assignments(self, *, tenant_id: str, actor_id: str, task: Any) -> list[dict]: ...
+    def run(self, *, tenant_id: str, actor_id: str, task: Any, provider: Any) -> dict: ...
+
+
+@runtime_checkable
 class DocumentVaultPort(Protocol):
     def create(self, tenant: str, actor: str, project: str, title: str,
                body: str, classification: str) -> dict: ...
@@ -1079,6 +1086,7 @@ class CompanyChatPort(Protocol):
 
 REPOSITORY_BINDINGS = {
     CompanyChatPort: _CompanyChat,
+    LocalCompanyChainPort: _LocalCompanyChain,
     DocumentVaultPort: _DocumentVault,
     ReviewedChangesPort: _ReviewedChanges,
     EnterpriseGraphPort: _EnterpriseGraph,
