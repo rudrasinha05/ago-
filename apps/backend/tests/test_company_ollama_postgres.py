@@ -6,6 +6,7 @@ run evidence are real and isolated to a disposable fixture transaction.
 """
 from uuid import uuid4
 
+import json
 import pytest
 
 from ago.credits import CreditBudget
@@ -16,11 +17,12 @@ from test_m7_http_postgres import case as case, post
 BASE="/v1/organization/company"
 
 
-@pytest.mark.parametrize("full_board,deny_risk", [
-    (False,False), (True,False), (True,True),
+@pytest.mark.parametrize("full_board,deny_risk,engineering", [
+    (False,False,False), (True,False,False), (True,True,False),
+    (True,False,True),
 ])
 def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
-    case, monkeypatch, full_board, deny_risk,
+    case, monkeypatch, full_board, deny_risk, engineering,
 ):
     import ago.model_handlers as model_handlers
 
@@ -72,11 +74,21 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         def __init__(self,**kwargs):
             assert kwargs["model"]=="qwen2.5:3b"
             assert kwargs["keep_alive"]=="90s"
+            assert kwargs["max_output_tokens"]==(1024 if engineering else 384)
         def generate(self, prompt):
             calls.append(prompt)
             assert len(prompt)<=4000
             if deny_risk and "ROLE: RISK\n" in prompt:
                 return "BOARD_RECOMMENDATION: DENY\nRISKS: Security risk unresolved"
+            if engineering and "ROLE: EMPLOYEE\n" in prompt:
+                return json.dumps({
+                    "files": [
+                        {"path":"src/logic.py", "content":"def answer():\n    return 42\n"},
+                        {"path":"tests/test_logic.py", "content":
+                         "from src.logic import answer\n\ndef test_answer():\n    assert answer()==42\n"},
+                    ],
+                    "acceptance_checks":["Run isolated pytest after founder source review"],
+                })
             return (("BOARD_RECOMMENDATION: APPROVE\n" if "BOARD_ADVISORY:" in prompt else "") +
                     "DECISION: verified draft\nDELIVERABLE: internal role note\n"
                     "RISKS: needs QA\nACCEPTANCE: human must review")
@@ -84,6 +96,10 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     monkeypatch.setenv("AGO_LLM_PROVIDER","ollama_local")
     monkeypatch.setenv("AGO_ENABLE_LOCAL_MODELS","true")
     monkeypatch.setenv("AGO_LOCAL_COMPANY_CHAIN","true")
+    if engineering:
+        monkeypatch.setenv("AGO_LOCAL_ENGINEERING_CANDIDATES","true")
+    else:
+        monkeypatch.delenv("AGO_LOCAL_ENGINEERING_CANDIDATES",raising=False)
     if full_board:
         monkeypatch.setenv("AGO_LOCAL_FULL_BOARD_REVIEW","true")
     else:
@@ -137,6 +153,13 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     assert [r["role"] for r in result["handoffs"]]==expected_roles
     assert response["delivery_status"]==("blocked" if deny_risk else "completed")
     assert result["requires_human_qa"] is True
+    assert result["engineering_candidate_status"]==(
+        "syntax_reviewed" if engineering else "not_requested"
+    )
+    if engineering:
+        assert result["engineering_candidate"]["source_parse_passed"] is True
+        assert result["engineering_candidate"]["tests_executed"] is False
+        assert result["engineering_candidate"]["github_committed"] is False
     assert result["github_commits_created"] is False
     assert result["external_tools_called"] is False
     assert result["project_released"] is False
@@ -145,6 +168,10 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         SELECT result FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s
     """,(info["tenant"],task_id)).fetchone()
     assert saved["result"]["roles_completed"]==expected_count
+    if engineering:
+        assert saved["result"]["engineering_candidate"]["candidate_sha256"]==(
+            result["engineering_candidate"]["candidate_sha256"]
+        )
     task_row=info["db"].execute("""
         SELECT status FROM ago_governed_tasks
         WHERE tenant_id=%s AND id=%s
