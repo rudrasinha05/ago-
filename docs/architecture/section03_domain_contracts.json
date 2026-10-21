@@ -121,6 +121,7 @@
     "bootstrap": "entrypoints",
     "calendar_store": "operations",
     "company_chat": "workforce",
+    "company_ollama_chain": "workforce",
     "console_api": "transport",
     "console_host": "transport",
     "console_service": "governance",
@@ -324,6 +325,16 @@
       "ago_tenants",
       "ago_user_roles",
       "ago_users"
+    ],
+    "company_ollama_chain": [
+      "ago_company_board_appointments",
+      "ago_employees",
+      "ago_founder_intake_stages",
+      "ago_founder_intakes",
+      "ago_founder_project_lead",
+      "ago_governed_tasks",
+      "ago_plan_steps",
+      "ago_strategy_plans"
     ],
     "console_api": [],
     "console_host": [],
