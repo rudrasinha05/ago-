@@ -1,7 +1,7 @@
 """Optional paid model handler registration. Disabled unless explicitly configured."""
 
-import os
 import json
+import os
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.credits import CreditBudget
