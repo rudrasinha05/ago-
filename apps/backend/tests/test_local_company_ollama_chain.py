@@ -12,7 +12,6 @@ import ago.model_handlers as handlers
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.credits import CreditBudget
-from ago.repository_ports import CompanyOllamaChainQueriesPort
 
 
 def uid():
