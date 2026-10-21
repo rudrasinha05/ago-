@@ -30,6 +30,7 @@ class GovernanceGate:
         permission = "approval:founder" if strategic else "approval:decide"
         solo = (
             not strategic
+            and "founder" in principal.roles
             and self.security.permitted(principal, "approval:founder", tenant_id)
             and self.approvals.founder_solo_eligible(
                 tenant_id=tenant_id, founder_id=principal.subject
