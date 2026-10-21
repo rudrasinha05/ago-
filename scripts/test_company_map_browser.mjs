@@ -244,6 +244,8 @@ try{
    approval_type:'governance_action',requires_founder_decision:false,
    review_routing:'Independent active human reviewer; no self-review',
    next_action:'A different human must review this request',created_at:new Date().toISOString()});
+ // Restore desktop viewport after the mobile screenshot; desktop navigation is collapsed on phones.
+ await page.setViewportSize({width:1700,height:1100});
  // An independent reviewer can reach the inbox without organization:read.
  asReviewer=true;
  await page.goto(base+'/workspace/governance/');
