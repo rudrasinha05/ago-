@@ -22,9 +22,9 @@ because it renders an attractive dashboard or has pending approvals.
 | #85 | Delegated CEO operational policy | Source nomination governance, accountable owner, strict human founder action | **PARTIAL:** explicit revocable, cost-bounded charter allowing some operational actions |
 | #87 | Workforce and organizational analytics | Historical governed task, independent QA, project health and staffing measurements | **CODED:** same-SHA test acceptance and production metric calibration |
 | #89 | AI-driven self-improvement proposals | Pure evidence-based advisory next-actions for QA failure, QA gaps, workforce and opportunities | **PARTIAL:** actual evaluated AI suggestions/experiments, independent review and rollback |
-| #92 | Durable reliable worker hosting | Correct inherited-environment locally supervised process, health reporting, retry/degraded codes | **PARTIAL:** server-backed persistent workers/queue; local PC power loss stops operations |
+| #92 | Durable local worker operation | Founder explicitly starts `market-watch` in a separate terminal; health reporting and bounded retry | **FOUNDER CONTROLLED:** no background service on `serve`, no wake-on-LAN, no cloud hosting; worker stops when founder stops it or laptop turns off |
 | #94 | Recovery/fault handling | Local read-only company-pulse detects stale feeds, stuck tasks/runs, failed QA and gives safe operator instructions; existing stale-run reconciliation | **PARTIAL:** supervised nonduplicating recovery of authorised internal work; incident alert delivery |
-| #95 | Disaster recovery verified | Existing local backup/restore infrastructure, reviewed operator docs and read-only pulse | **PARTIAL:** independently performed restore drill, backup manifest, production incident simulation |
+| #95 | Local disaster recovery | Existing local backup/restore checks, reviewed operator docs and read-only pulse | **PARTIAL:** founder-performed localhost restore drill and verified backup manifest; no production environment required |
 
 ## Focused, reproducible acceptance
 - CI workflow: `.github/workflows/company-growth-contract.yml`
@@ -44,21 +44,27 @@ because it renders an attractive dashboard or has pending approvals.
   `apps/web/components/founder-project-intake.jsx`.
 
 ## P0 integrity conflict remains separate
-Historical tests expect an independent human reviewer for many scopes; latest
-founder-final-only guard rejects them. Weakening founder restrictions or faking
-a human reviewer to turn a build green is forbidden. See GitHub issue #2;
-acceptance requires explicit two-stage reviewed policy with independent QA
-and **same-final-commit** green backend, browser and 9-job integration suite.
+Founder strategic finality and independent operational QA are now modeled as
+separate scoped approval lanes (migration 057). The backend quality CI verified
+**803 passed / 0 failed** and a focused company growth CI passed before this
+local-only policy update. GitHub issue #2 still tracks the strict requirement
+that the **same-final-commit** full architecture/browser 9-job integration matrix
+must pass; do not weaken reviewer protections to manufacture a green build.
 
-## External conditions required before 100% autonomous company claim
-- Real configured AI model budgets, approved scopes/tooling and experienced
-  specialized employees, actual GitHub permission, running multi-agent queue.
-- Authorized social media and customer-consent controls, verified invoicing,
-  payment and profit evidence.
-- Owner-approved 24/7 hosting, independent monitoring, backups/restore testing,
-  credential vault, platform policy compliance and secure release governance.
-- Evidence of at least one real project developed, independently QA-passed,
-  deployed, acquired customers and settled payments.
+## Founder-controlled personal-laptop scope (21 October 2026)
+- AGO runs on the founder's Windows laptop. The founder exclusively decides
+  when the laptop is on, off, awake or asleep and whether any local server,
+  watcher, workflow or test runs. No auto-wake, OS startup registration or
+  implicit cloud deployment is permitted.
+- `serve` starts only the local AGO server; the researcher runs only after
+  the founder explicitly invokes `market-watch` in a separate foreground
+  terminal. A powered-off laptop means zero AGO background processing.
+- PostgreSQL remains local development-only; optional Docker Compose is
+  local-preview-only and must be manually launched.
+- Real configured AI model budgets, scoped tools, human QA, reliable local
+  recovery drills and evidence-based project deliveries remain independent
+  release goals. Customer payments, public deployment and paid advertising
+  are not part of the current local-development acceptance.
 
 No temporary "implemented" checklist row above is proof of customer revenue,
 public marketing publication, external hosted uptime or full self-modification.
