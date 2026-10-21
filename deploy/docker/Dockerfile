@@ -33,6 +33,8 @@ RUN python -m pip install --no-cache-dir '/tmp/wheels/'*.whl 'psycopg[binary]>=3
     rm -rf /tmp/wheels && \
     python -c 'from importlib.resources import files; p=files("ago").joinpath("console","index.html"); assert p.is_file(); assert files("ago").joinpath("frontend","index.html").is_file()'
 COPY --chown=ago:ago deploy/sql/ /app/deploy/sql/
+# Read-only research observer; runtime retains no GitHub, browser or advertising token.
+COPY --chown=ago:ago scripts/company_market_watch.py /app/scripts/company_market_watch.py
 WORKDIR /app
 USER 10001:10001
 EXPOSE 8000
