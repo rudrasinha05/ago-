@@ -14,7 +14,6 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from uuid import UUID
 
-
 CONFIRM="EXECUTE_APPROVED_INTERNAL_TASKS"
 
 
@@ -93,11 +92,11 @@ def main(argv=None) -> int:
     try:
         records=request("GET","/v1/organization/company/activity")
         if not isinstance(records,list):
-            raise ValueError("Authenticated task activity unavailable")
+            raise TypeError("Authenticated task activity unavailable")
         result=batch(records,lambda task_id:request(
             "POST","/v1/agents/tasks/"+task_id+"/run"),
             limit=args.limit,apply=args.apply,confirm=args.confirm)
-    except Exception as exc:
+    except (OSError, ValueError, PermissionError, TypeError, RuntimeError) as exc:
         # Do not print tokens, endpoint messages, project content or traceback.
         print(json.dumps({"status":"stopped_without_retry",
                          "error_type":type(exc).__name__,
