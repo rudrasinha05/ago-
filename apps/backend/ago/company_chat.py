@@ -516,8 +516,12 @@ class CompanyChat:
             } for s in steps],
         }
 
-    def projects(self, tenant_id: str, limit: int = 30, offset: int = 0) -> list[dict]:
+    def projects(self, tenant_id: str, limit: int = 30, offset: int = 0,
+                 reader_id: str | None = None) -> list[dict]:
         UUID(tenant_id)
+        if reader_id is None:
+            raise PermissionError('Authenticated project reader required')
+        UUID(reader_id)
         if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
             raise ValueError('Invalid project history pagination')
         return [dict(row) for row in self.db.execute("""
@@ -544,13 +548,27 @@ class CompanyChat:
                  AND l.intake_id=i.id
             JOIN ago_employees e ON e.tenant_id=l.tenant_id
                  AND e.id=l.accountable_manager_id
-            WHERE i.tenant_id=%s ORDER BY i.created_at DESC,i.id DESC LIMIT %s OFFSET %s
-        """, (tenant_id,limit,offset)).fetchall()]
+            WHERE i.tenant_id=%s
+              AND (
+                i.founder_id=%s
+                OR l.accountable_manager_id=%s
+                OR EXISTS (
+                  SELECT 1 FROM ago_project_stage_delegation_activations a
+                  WHERE a.tenant_id=i.tenant_id AND a.intake_id=i.id
+                    AND a.assignee_id=%s
+                )
+              )
+            ORDER BY i.created_at DESC,i.id DESC LIMIT %s OFFSET %s
+        """, (tenant_id,reader_id,reader_id,reader_id,limit,offset)).fetchall()]
 
-    def project_details(self, tenant_id: str, project_id: str) -> dict:
-        """Actual project plan, employee assignments, task lifecycle and QA; no invented release."""
+    def project_details(self, tenant_id: str, project_id: str,
+                        reader_id: str | None = None) -> dict:
+        """Need-to-know founder, accountable manager or approved stage worker only."""
         UUID(tenant_id)
         UUID(project_id)
+        if reader_id is None:
+            raise PermissionError('Authenticated project reader required')
+        UUID(reader_id)
         row = self.db.execute("""
             SELECT i.id,i.title,i.brief,i.created_at,i.plan_id,p.status AS plan_status,
                    l.accountable_manager_id,e.name AS accountable_manager_name,
@@ -562,7 +580,15 @@ class CompanyChat:
             JOIN ago_employees e ON e.tenant_id=l.tenant_id
               AND e.id=l.accountable_manager_id
             WHERE i.tenant_id=%s AND i.id=%s
-        """,(tenant_id,project_id)).fetchone()
+              AND (
+                i.founder_id=%s OR l.accountable_manager_id=%s
+                OR EXISTS (
+                  SELECT 1 FROM ago_project_stage_delegation_activations a
+                  WHERE a.tenant_id=i.tenant_id AND a.intake_id=i.id
+                    AND a.assignee_id=%s
+                )
+              )
+        """,(tenant_id,project_id,reader_id,reader_id,reader_id)).fetchone()
         if row is None:
             raise LookupError('Project not found')
         stages = self.db.execute("""
@@ -831,12 +857,25 @@ class CompanyChat:
                 'assignee_id':str(proposed['assignee_id']),
                 'reused':False,'task_executed':False}
 
-    def project_delegations(self, tenant_id: str, project_id: str) -> list[dict]:
+    def project_delegations(self, tenant_id: str, project_id: str,
+                            reader_id: str | None = None) -> list[dict]:
         UUID(tenant_id)
         UUID(project_id)
+        if reader_id is None:
+            raise PermissionError('Authenticated project reader required')
+        UUID(reader_id)
         available=self.db.execute("""
-            SELECT 1 FROM ago_founder_intakes WHERE tenant_id=%s AND id=%s
-        """,(tenant_id,project_id)).fetchone()
+            SELECT 1 FROM ago_founder_intakes i
+            JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id
+              AND l.intake_id=i.id
+            WHERE i.tenant_id=%s AND i.id=%s
+              AND (i.founder_id=%s OR l.accountable_manager_id=%s
+                OR EXISTS(
+                  SELECT 1 FROM ago_project_stage_delegation_activations a
+                  WHERE a.tenant_id=i.tenant_id AND a.intake_id=i.id
+                    AND a.assignee_id=%s
+                ))
+        """,(tenant_id,project_id,reader_id,reader_id,reader_id)).fetchone()
         if available is None:
             raise LookupError('Project unavailable')
         return [dict(r) for r in self.db.execute("""
