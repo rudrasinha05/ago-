@@ -16,6 +16,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [api_company_chat](../../apps/backend/ago/api_company_chat.py) | transport | transport | api_contracts, api_m2, repository_ports |
 | [api_contracts](../../apps/backend/ago/api_contracts.py) | transport | transport | None |
 | [api_council](../../apps/backend/ago/api_council.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
+| [api_documents](../../apps/backend/ago/api_documents.py) | transport | transport | api_contracts, api_m2, document_vault |
 | [api_enterprise_platform](../../apps/backend/ago/api_enterprise_platform.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, reviewed_changes, security |
 | [api_insights](../../apps/backend/ago/api_insights.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security, simulation |
 | [api_knowledge](../../apps/backend/ago/api_knowledge.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security, storage_adapters |
@@ -43,6 +44,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [department_automation](../../apps/backend/ago/department_automation.py) | operations | service | backend_contracts, department_automation_queries, governance, security, task_store, tool_catalog, tool_enrollment |
 | [department_automation_queries](../../apps/backend/ago/department_automation_queries.py) | operations | persistence | backend_contracts |
 | [dna_domain](../../apps/backend/ago/dna_domain.py) | strategy | domain | None |
+| [document_vault](../../apps/backend/ago/document_vault.py) | knowledge | persistence | backend_contracts |
 | [enterprise_domains](../../apps/backend/ago/enterprise_domains.py) | operations | domain | None |
 | [enterprise_store](../../apps/backend/ago/enterprise_store.py) | operations | persistence | analytics_store, architecture_guard, backend_contracts, behavior_store, calendar_store, enterprise_domains, governance_domain, security |
 | [event_contracts](../../apps/backend/ago/event_contracts.py) | platform | domain | events |
@@ -74,7 +76,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [m6_permissions](../../apps/backend/ago/m6_permissions.py) | entrypoints | composition | security_controls |
 | [m7_permissions](../../apps/backend/ago/m7_permissions.py) | entrypoints | composition | security_controls |
 | [m8_permissions](../../apps/backend/ago/m8_permissions.py) | entrypoints | composition | security_controls |
-| [main](../../apps/backend/ago/main.py) | entrypoints | composition | api_agents, api_brain, api_company_chat, api_council, api_enterprise_platform, api_insights, api_knowledge, api_m2, api_meta, api_operations, api_tools, console_api, console_host, http_errors, platform, readiness, release_security, security_material |
+| [main](../../apps/backend/ago/main.py) | entrypoints | composition | api_agents, api_brain, api_company_chat, api_council, api_documents, api_enterprise_platform, api_insights, api_knowledge, api_m2, api_meta, api_operations, api_tools, console_api, console_host, http_errors, platform, readiness, release_security, security_material |
 | [memory](../../apps/backend/ago/memory.py) | knowledge | domain | None |
 | [memory_policies](../../apps/backend/ago/memory_policies.py) | knowledge | domain | None |
 | [message_contracts](../../apps/backend/ago/message_contracts.py) | platform | domain | None |
