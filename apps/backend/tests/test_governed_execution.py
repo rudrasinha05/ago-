@@ -22,6 +22,9 @@ class FakeApprovals:
         if not self.approved:
             raise PermissionError("Not approved")
 
+    def requires_founder_decision(self, *, request_id, tenant_id):
+        return False  # Default fake request is an independently reviewed operation.
+
     def decide(self, **kwargs):
         return kwargs
 
@@ -75,3 +78,4 @@ def test_decide_passes_authenticated_identity():
     )
     assert result["reviewer_id"] == "reviewer"
     assert result["authorized"] is True
+    assert result["founder_only"] is False
