@@ -16,7 +16,7 @@ from ago.repository_ports import DocumentVaultPort
 router=APIRouter(prefix="/v1/organization/company",tags=["AGO local documents"])
 
 
-class DocumentInput(StrictInput):
+class CompanyDocumentCreateInput(StrictInput):
     title: str=Field(min_length=1,max_length=180)
     body: str=Field(min_length=1,max_length=20000)
     classification: Literal["founder_only","project_restricted"]="founder_only"
@@ -33,7 +33,7 @@ class DocumentPermissionInput(StrictInput):
 
 
 @router.post("/projects/{project_id}/documents")
-def create_document(project_id: UUID,data: DocumentInput,actor=Depends(authenticated),
+def create_document(project_id: UUID,data: CompanyDocumentCreateInput,actor=Depends(authenticated),
                     repositories=Depends(repository_scope)):
     allowed(repositories,actor,"approval:founder")
     try:
