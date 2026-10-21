@@ -6,6 +6,8 @@ run evidence are real and isolated to a disposable fixture transaction.
 """
 from uuid import uuid4
 
+import pytest
+
 from ago.credits import CreditBudget
 from test_enterprise_http_21_27 import department
 from test_m7_http_postgres import case as case, post
@@ -14,7 +16,10 @@ from test_m7_http_postgres import case as case, post
 BASE="/v1/organization/company"
 
 
-def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(case, monkeypatch):
+@pytest.mark.parametrize("full_board", [False, True])
+def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
+    case, monkeypatch, full_board,
+):
     import ago.model_handlers as model_handlers
 
     client,headers,info=case
@@ -29,6 +34,9 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(case, mon
     cto=ai("Technology Agent")
     pm=ai("Delivery Manager")
     worker=ai("Research Worker")
+    finance=ai("Finance Director") if full_board else None
+    risk=ai("Risk Director") if full_board else None
+    quality=ai("Quality Director") if full_board else None
     edited=client.put(BASE+"/employees/"+pm+"/role",headers=founder,json={
         "role_title":"Project Manager",
         "core_responsibilities":"Accountable founder scoped software delivery",
@@ -63,12 +71,17 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(case, mon
         def generate(self, prompt):
             calls.append(prompt)
             assert len(prompt)<=4000
-            return ("DECISION: verified draft\nDELIVERABLE: internal role note\n"
+            return (("BOARD_RECOMMENDATION: APPROVE\n" if "BOARD_ADVISORY:" in prompt else "") +
+                    "DECISION: verified draft\nDELIVERABLE: internal role note\n"
                     "RISKS: needs QA\nACCEPTANCE: human must review")
 
     monkeypatch.setenv("AGO_LLM_PROVIDER","ollama_local")
     monkeypatch.setenv("AGO_ENABLE_LOCAL_MODELS","true")
     monkeypatch.setenv("AGO_LOCAL_COMPANY_CHAIN","true")
+    if full_board:
+        monkeypatch.setenv("AGO_LOCAL_FULL_BOARD_REVIEW","true")
+    else:
+        monkeypatch.delenv("AGO_LOCAL_FULL_BOARD_REVIEW",raising=False)
     monkeypatch.setenv("AGO_LLM_MODEL","qwen2.5:3b")
     monkeypatch.setattr(model_handlers,"OllamaLocalTextProvider",LocalFake)
 
@@ -84,21 +97,32 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(case, mon
         SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s
     """,(info["tenant"],task_id)).fetchone() is None
 
-    for seat,identity in (
-        ("Strategy & Vision",ceo),
-        ("Technology Oversight",cto),
-    ):
+    seats = [("Strategy & Vision",ceo),("Technology Oversight",cto)]
+    if full_board:
+        seats += [
+            ("Finance & Budget",finance),
+            ("Risk & Compliance",risk),
+            ("Quality & Release",quality),
+        ]
+    for seat,identity in seats:
         post(client,BASE+"/board/appoint",founder,{
             "seat":seat,"employee_id":identity})
 
     response=post(client,"/v1/agents/tasks/"+task_id+"/run",founder)
     result=response["result"]
     assert result["kind"]=="local_company_governed_handoff"
-    assert result["roles_completed"]==4 and len(calls)==4
-    assert [r["employee_id"] for r in result["handoffs"]]==[
-        ceo,cto,pm,worker]
-    assert [r["role"] for r in result["handoffs"]]==[
-        "ceo","cto","pm","employee"]
+    expected_count=7 if full_board else 4
+    expected_people=([ceo,cto,finance,risk,quality] if full_board else [ceo,cto])
+    expected_roles=(
+        ["ceo","cto","finance","risk","quality","pm","employee"]
+        if full_board else ["ceo","cto","pm","employee"]
+    )
+    assert result["roles_completed"]==expected_count and len(calls)==expected_count
+    assert result["roles_expected"]==expected_count
+    assert result["handoff_complete"] is True
+    assert result["board_review_cleared"] is full_board
+    assert [r["employee_id"] for r in result["handoffs"]]==expected_people+[pm,worker]
+    assert [r["role"] for r in result["handoffs"]]==expected_roles
     assert result["requires_human_qa"] is True
     assert result["github_commits_created"] is False
     assert result["external_tools_called"] is False
@@ -111,7 +135,10 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(case, mon
     details=client.get(BASE+"/projects/"+project["id"],headers=founder)
     assert details.status_code==200,details.text
     chain=details.json()["stages"][0]["founder_agent_result"]
-    assert chain["roles_completed"]==4
+    assert chain["roles_completed"]==expected_count
     assert chain["handoffs"][0]["employee_id"]==ceo
+    assert chain["board_review_mode"]==(
+        "full_five_seat" if full_board else "legacy_two_seat"
+    )
     post(client,"/v1/agents/tasks/"+task_id+"/run",founder,expected=403)
-    assert len(calls)==4  # duplicate runs are forbidden
+    assert len(calls)==expected_count  # duplicate runs are forbidden
