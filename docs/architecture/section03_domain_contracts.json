@@ -314,6 +314,8 @@
       "ago_market_signals",
       "ago_marketing_drafts",
       "ago_plan_steps",
+      "ago_project_stage_delegation_activations",
+      "ago_project_stage_delegation_proposals",
       "ago_strategy_plans",
       "ago_task_reviews",
       "ago_tenants",
