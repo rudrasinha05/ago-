@@ -254,7 +254,7 @@ def test_full_board_all_five_clear_before_management_drafting(monkeypatch):
         def generate(self, prompt):
             self.prompts.append(prompt)
             if "BOARD_ADVISORY:" in prompt:
-                return "BOARD_RECOMMENDATION: APPROVE\\nDELIVERABLE: Reviewed internal plan"
+                return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Reviewed internal plan"
             return "DECISION: Draft delivery task"
     model=Approvals()
     result=run_four_role_chain(task=db.task(),participants=people,provider=model)
@@ -287,11 +287,11 @@ def test_full_board_deny_or_missing_verdict_stops_downstream(
         def __init__(self): self.calls=[]
         def generate(self, prompt):
             self.calls.append(prompt)
-            if "ROLE: "+stopping_role.upper()+"\\n" in prompt:
+            if "ROLE: "+stopping_role.upper()+"\n" in prompt:
                 if reason=="deny":
-                    return "BOARD_RECOMMENDATION: DENY\\nRISKS: Need founder review"
+                    return "BOARD_RECOMMENDATION: DENY\nRISKS: Need founder review"
                 return "DECISION: model provided no reliable Board recommendation"
-            return "BOARD_RECOMMENDATION: APPROVE\\nDELIVERABLE: Internal recommendation"
+            return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Internal recommendation"
     model=Blocker()
     result=run_four_role_chain(task=db.task(),participants=people,provider=model)
     assert len(model.calls)==expected_calls
@@ -335,7 +335,7 @@ def test_full_board_charges_seven_virtual_attempts(monkeypatch):
     class Model:
         def __init__(self, **kwargs): pass
         def generate(self, prompt):
-            return "BOARD_RECOMMENDATION: APPROVE\\nDELIVERABLE: Reviewed draft"
+            return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Reviewed draft"
     class Credits:
         def charge(self,**kwargs): charged.append(kwargs)
     class Repos:
