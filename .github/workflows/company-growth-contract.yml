@@ -29,6 +29,8 @@ on:
       - "apps/backend/tests/test_local_model_provider.py"
       - "apps/backend/ago/company_ollama_chain.py"
       - "apps/backend/ago/company_engineering.py"
+      - "apps/backend/ago/architecture_policy.json"
+      - "docs/architecture/section03_domain_contracts.json"
       - "apps/backend/tests/test_company_engineering.py"
       - "scripts/ago_engineering_candidate.py"
       - "apps/backend/ago/agent_runtime.py"
