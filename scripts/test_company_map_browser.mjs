@@ -151,8 +151,28 @@ try{
  assert.equal(founderProjects.length,1);
  assert.equal(founderProjects[0].automatic_execution,false);
  assert.equal(founderProjects[0].stages.length,5);
+ // Test fixture is a founder-inspector replay, not a fabricated release.
+ founderProjects[0].stages[0].founder_agent_result={
+   kind:'local_company_governed_handoff',roles_completed:4,roles_expected:7,
+   board_review_mode:'full_five_seat',board_review_cleared:false,
+   board_blocked:true,board_block_reason:'deny',
+   blocked_by_board_seat:'Risk & Compliance',
+   board_recommendations:[
+     {seat:'Strategy & Vision',recommendation:'approve'},
+     {seat:'Technology Oversight',recommendation:'approve'},
+     {seat:'Finance & Budget',recommendation:'approve'},
+     {seat:'Risk & Compliance',recommendation:'deny'},
+   ],
+   handoffs:[{role:'risk',employee_name:'Risk Director',employee_id:id(27),
+     human_qa_approved:false,draft:'BOARD_RECOMMENDATION: DENY'}],
+   github_commits_created:false,project_released:false,
+ };
  // UI regression: founder manages per-document ACL inside AGO; no GitHub calls.
  await page.getByRole('button',{name:/Inspect full project/}).first().click();
+ await page.locator('.ago-ai-chain summary').getByText('4/7 recorded AI passes',{exact:false}).waitFor();
+ await page.locator('.ago-ai-chain summary').click();
+ await page.getByText('Board objection recorded',{exact:false}).waitFor();
+ await page.getByText('Board review incomplete or stopped',{exact:false}).waitFor();
  const vault=page.locator('.ago-document-vault');
  await vault.getByRole('heading',{name:'Confidential documents · AGO local vault'}).waitFor();
  await vault.getByLabel('Title',{exact:true}).fill('Review-only API plan');
