@@ -108,5 +108,10 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(case, mon
         SELECT result FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s
     """,(info["tenant"],task_id)).fetchone()
     assert saved["result"]["roles_completed"]==4
+    details=client.get(BASE+"/projects/"+project["id"],headers=founder)
+    assert details.status_code==200,details.text
+    chain=details.json()["stages"][0]["founder_agent_result"]
+    assert chain["roles_completed"]==4
+    assert chain["handoffs"][0]["employee_id"]==ceo
     post(client,"/v1/agents/tasks/"+task_id+"/run",founder,expected=403)
     assert len(calls)==4  # duplicate runs are forbidden
