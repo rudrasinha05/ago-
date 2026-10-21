@@ -6,8 +6,13 @@ const fmt=date=>date?new Date(date).toLocaleString():'Not recorded';
 const typeLabel={plan_review:'Strategy plan review',task_execution:'Governed task authorization',opportunity_review:'Business opportunity proposal',market_signal_review:'Internet market signal for founder review',governance_action:'Other governed action'};
 const subject=a=>a.market_signal_title||a.opportunity_title||a.plan_title||a.task_action||a.action;
 const isMine=(a,me)=>a.requester_id===me.id;
-const canDecide=(a,me)=>a.status==='pending'&&me.roles?.includes('founder')&&me.permissions?.includes('approval:decide');
-// Presentation only: backend verifies active human founder, tenant, permission and immutable audit.
+const canDecide=(a,me)=>a.status==='pending'&&(
+ a.requires_founder_decision
+  ? me.roles?.includes('founder')
+  : a.requester_id!==me.id&&me.permissions?.includes('approval:decide')
+);
+// Presentation only: server re-verifies real human identity, exact authority,
+// independent reviewer rules and tenant-scoped immutable audit.
 
 export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onReviewed}) {
  const [rows,setRows]=useState(null),[selected,setSelected]=useState(null);
@@ -69,7 +74,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
  return <section id="company-approval-inbox" className="approval-inbox" aria-label="Approvals inbox">
   <header className="approval-header">
    <div><h3>Approvals inbox <span className="approval-badge">{actionable.length} need my review</span></h3>
-    <p>{pending.length} pending requests company-wide · Only the founder can approve or deny · Independent QA remains separate</p></div>
+    <p>{pending.length} pending requests company-wide · Founder decides strategic proposals; qualified independent humans review operational changes and QA</p></div>
    <button type="button" onClick={()=>setShowAll(x=>!x)}>{showAll?'Show pending only':'Show history'}</button>
   </header>
   {rows===null?<p>Approval requests could not be loaded. Check permissions or connection.</p>:
@@ -77,7 +82,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
    <div className="approval-rows">{displayed.map(a=><article key={a.id} className="approval-entry">
     <div><strong>{subject(a)}</strong><small>{typeLabel[a.approval_type]} · {a.status} · Requested {fmt(a.created_at)}</small>
      <small>From: {a.requester_name} ({a.requester_role||'Role not recorded'})</small>
-     <small>{canDecide(a,me)?'Founder decision required':isMine(a,me)?'Awaiting your founder decision':'Awaiting founder decision'}</small></div>
+     <small>{canDecide(a,me)?'Your review is required':isMine(a,me)?'Awaiting an authorized reviewer':a.requires_founder_decision?'Awaiting founder decision':'Awaiting independent human review'}</small></div>
     <button type="button" onClick={()=>open(a)}>View approval details</button>
    </article>)}</div>}
   {toast&&<div className="approval-toast" role="status">
