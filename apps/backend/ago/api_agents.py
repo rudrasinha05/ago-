@@ -23,6 +23,9 @@ def runs(
     repositories: RepositoryScope = Depends(repository_scope),
 ):
     allowed(repositories, actor, "agent:read")
+    # Result evidence can contain founder project excerpts. A generic employee
+    # agent:read role must never expose other confidential projects.
+    allowed(repositories, actor, "approval:founder")
     return repositories.resolve(AgentRuntimePort).list(tenant_id=actor.tenant_id)
 
 
