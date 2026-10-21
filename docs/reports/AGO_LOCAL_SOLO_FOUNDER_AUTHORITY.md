@@ -26,11 +26,16 @@ From your existing AGO repo PowerShell terminal:
 
     cd C:\Users\rudra\Projects\ago-
     .\scripts\ago-sync.ps1
+    # Only after an authorized local database backup, apply new migration 060:
+    .\scripts\ago.ps1 migrate    # explicitly type MIGRATE when prompted
     $env:AGO_FOUNDER_SOLO_APPROVAL = 'true'
     .\scripts\ago.ps1 doctor
     .\scripts\ago.ps1 serve
 
-Never paste credentials into chat; do not run migration or initialize a new tenant merely to enable the mode.
+Never paste credentials into chat. The earlier solo-approval API needs no database
+migration by itself, but *new Quality-stage activation* requires reviewed migration
+060. Back up the existing local database before applying it; keep your tenant and
+other records untouched. Never initialize a replacement tenant to enable this mode.
 Do not start cloud services, reboot or wake the laptop, or create a second fake reviewer identity.
 
 ## Acceptance
