@@ -1737,7 +1737,7 @@
           "returns": "Any"
         },
         "list": {
-          "arguments": "self, tenant, channel, before, limit",
+          "arguments": "self, tenant, channel, before, limit, reader_id: str | None=None",
           "returns": "Any"
         },
         "send": {
@@ -1745,7 +1745,7 @@
           "returns": "Any"
         },
         "activity": {
-          "arguments": "self, tenant_id",
+          "arguments": "self, tenant_id, reader_id: str | None=None",
           "returns": "Any"
         },
         "staff": {
