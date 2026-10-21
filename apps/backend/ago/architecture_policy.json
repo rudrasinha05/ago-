@@ -144,7 +144,7 @@
       "imports": [
         "api_contracts",
         "api_m2",
-        "document_vault"
+        "repository_ports"
       ]
     },
     "api_enterprise_platform": {
@@ -887,6 +887,7 @@
         "database_store",
         "department_automation",
         "department_automation_queries",
+        "document_vault",
         "enterprise_store",
         "executive_intelligence",
         "executive_intelligence_queries",
