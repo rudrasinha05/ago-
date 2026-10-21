@@ -26,16 +26,26 @@ class CompanyChat:
         ).fetchone():
             raise ValueError('Channel unavailable')
 
-    def list(self, tenant, channel, before, limit):
+    def list(self, tenant, channel, before, limit, reader_id: str | None = None):
         self.channel(tenant, channel)
+        if reader_id is None:
+            raise PermissionError('Authenticated company reader required')
+        UUID(reader_id)
         # A department includes its employee conversations and task events.
         rows = self.db.execute('''SELECT c.*, parent.body AS reply_body, parent.author_name AS reply_author FROM ago_company_chat c LEFT JOIN ago_company_chat parent ON parent.tenant_id=c.tenant_id AND parent.id=c.reply_to
           WHERE c.tenant_id=%s AND (%s='global' OR c.channel=%s OR
             (%s LIKE 'department:%%' AND c.employee_id IN
               (SELECT id FROM ago_employees WHERE tenant_id=%s AND department_id::text=substring(%s from 12))))
           AND (%s::bigint IS NULL OR c.id < %s)
+          AND (c.kind<>'project' OR EXISTS (
+              SELECT 1 FROM ago_founder_intakes i
+              WHERE i.tenant_id=c.tenant_id AND i.founder_id=%s))
+          AND (parent.kind IS DISTINCT FROM 'project' OR EXISTS (
+              SELECT 1 FROM ago_founder_intakes i
+              WHERE i.tenant_id=parent.tenant_id AND i.founder_id=%s))
           ORDER BY c.id DESC LIMIT %s''',
-          (tenant, channel, channel, channel, tenant, channel, before, before, limit+1)).fetchall()
+          (tenant, channel, channel, channel, tenant, channel, before, before,
+           reader_id,reader_id,limit+1)).fetchall()
         return {'items': list(reversed(rows[:limit])),
                 'next_before': rows[limit-1]['id'] if len(rows)>limit else None}
 
@@ -110,12 +120,25 @@ class CompanyChat:
         """,(tenant_id,channel,'AGO work status · '+worker['name'],
               response,parent_id,employee_id))
 
-    def activity(self, tenant_id):
+    def activity(self, tenant_id, reader_id: str | None = None):
+        if reader_id is None:
+            raise PermissionError('Authenticated activity reader required')
+        UUID(tenant_id)
+        UUID(reader_id)
         return self.db.execute('''SELECT t.*, p.title AS project_name,
       p.id AS plan_id FROM ago_governed_tasks t
       LEFT JOIN ago_plan_steps s ON s.tenant_id=t.tenant_id AND s.task_id=t.id
       LEFT JOIN ago_strategy_plans p ON p.tenant_id=s.tenant_id AND p.id=s.plan_id
-      WHERE t.tenant_id=%s ORDER BY t.updated_at DESC''', (tenant_id,)).fetchall()
+      LEFT JOIN ago_founder_intakes i ON i.tenant_id=p.tenant_id AND i.plan_id=p.id
+      LEFT JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
+      WHERE t.tenant_id=%s
+        AND (
+          i.id IS NULL OR i.founder_id=%s OR l.accountable_manager_id=%s
+          OR EXISTS (SELECT 1 FROM ago_project_stage_delegation_activations a
+             WHERE a.tenant_id=i.tenant_id AND a.intake_id=i.id
+               AND a.assignee_id=%s)
+        )
+      ORDER BY t.updated_at DESC''', (tenant_id,reader_id,reader_id,reader_id)).fetchall()
 
     def staff(self, actor, department_id, manager_id, name, requirement, operation_key):
         db = self.db
