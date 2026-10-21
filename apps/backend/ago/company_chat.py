@@ -665,6 +665,185 @@ class CompanyChat:
             project['promotion_authorized']=False
             return project
 
+    def propose_stage_delegation(self, actor, project_id: str, stage: str,
+                                 assignee_id: str) -> dict:
+        """Create a real scoped operational review, not an agent instruction."""
+        from uuid import uuid4
+        UUID(actor.tenant_id)
+        UUID(project_id)
+        UUID(assignee_id)
+        if stage not in ('discovery','architecture','implementation','quality','release'):
+            raise ValueError('Unknown delivery stage')
+        if 'founder' not in actor.roles:
+            raise PermissionError('Human founder must authorize personnel proposals')
+        with self.db.transaction():
+            project=self.db.execute("""
+                SELECT i.id,i.plan_id,p.status,l.accountable_manager_id
+                FROM ago_founder_intakes i JOIN ago_strategy_plans p
+                  ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                JOIN ago_founder_project_lead l
+                  ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
+                WHERE i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
+            """,(actor.tenant_id,project_id)).fetchone()
+            if project is None:
+                raise LookupError('Project does not exist in founder company')
+            if project['status'] not in ('draft','pending_approval','active'):
+                raise PermissionError('Project cannot receive new delegation proposals')
+            position=self.db.execute("""
+                SELECT s.stage,s.plan_step_id,s.suggested_assignee_id
+                FROM ago_founder_intake_stages s
+                WHERE s.tenant_id=%s AND s.intake_id=%s AND s.stage=%s
+            """,(actor.tenant_id,project_id,stage)).fetchone()
+            if position is None:
+                raise LookupError('Requested stage not found')
+            worker=self.db.execute("""
+                SELECT e.id,e.name,e.kind,e.role_title,e.manager_id,
+                  EXISTS(
+                     SELECT 1 FROM ago_users u JOIN ago_user_roles r
+                      ON r.tenant_id=u.tenant_id AND r.user_id=u.id
+                     WHERE u.tenant_id=e.tenant_id AND u.id=e.id AND u.active
+                       AND r.role='reviewer'
+                  ) AS reviewer_active
+                FROM ago_employees e
+                WHERE e.tenant_id=%s AND e.id=%s
+            """,(actor.tenant_id,assignee_id)).fetchone()
+            if worker is None:
+                raise LookupError('Selected worker not in this company')
+            if stage=='quality':
+                if (worker['kind']!='human' or not worker['reviewer_active']
+                        or str(worker['id'])==str(project['accountable_manager_id'])):
+                    raise PermissionError('QA needs an independent authorized human reviewer')
+            elif worker['kind']!='ai':
+                raise PermissionError('Delivery execution stages must select AI workers')
+            if position['plan_step_id']:
+                planned=self.db.execute("""
+                   SELECT assignee_id FROM ago_plan_steps
+                   WHERE tenant_id=%s AND plan_id=%s AND id=%s
+                """,(actor.tenant_id,project['plan_id'],position['plan_step_id'])).fetchone()
+                if planned and str(planned['assignee_id'])!=assignee_id:
+                    raise PermissionError('Existing governed step must not be silently reassigned')
+            existing=self.db.execute("""
+                SELECT a.proposal_id,a.assignee_id
+                FROM ago_project_stage_delegation_activations a
+                WHERE a.tenant_id=%s AND a.intake_id=%s AND a.stage=%s
+            """,(actor.tenant_id,project_id,stage)).fetchone()
+            if existing:
+                raise PermissionError('Stage already delegated; revisions require new governed policy')
+            prior=self.db.execute("""
+                SELECT d.id,d.approval_id,a.status
+                FROM ago_project_stage_delegation_proposals d
+                JOIN ago_approval_requests a ON a.tenant_id=d.tenant_id
+                   AND a.id=d.approval_id
+                WHERE d.tenant_id=%s AND d.intake_id=%s AND d.stage=%s
+                  AND d.assignee_id=%s AND a.status='pending'
+                ORDER BY d.created_at DESC LIMIT 1
+            """,(actor.tenant_id,project_id,stage,assignee_id)).fetchone()
+            if prior:
+                return {'proposal_id':str(prior['id']),
+                        'approval_id':str(prior['approval_id']),
+                        'status':'pending_independent_review','reused':True,
+                        'task_executed':False}
+            proposal_id=str(uuid4())
+            approval=self.repositories.resolve(ApprovalRepository).propose(
+                tenant_id=actor.tenant_id,
+                action='company:stage-delegation:'+proposal_id,
+                requester_id=actor.subject,
+            )
+            self.db.execute("""
+                INSERT INTO ago_project_stage_delegation_proposals
+                   (id,tenant_id,intake_id,stage,assignee_id,requester_id,approval_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """,(proposal_id,actor.tenant_id,project_id,stage,
+                 assignee_id,actor.subject,approval.request_id))
+        return {'proposal_id':proposal_id,'approval_id':approval.request_id,
+                'status':'pending_independent_review','stage':stage,
+                'worker_name':worker['name'],'reused':False,'task_executed':False}
+
+    def activate_stage_delegation(self, actor, project_id: str,
+                                   proposal_id: str) -> dict:
+        """Apply one approved stage owner. Never launches models, tools or tasks."""
+        from uuid import uuid4
+        UUID(actor.tenant_id)
+        UUID(project_id)
+        UUID(proposal_id)
+        if 'founder' not in actor.roles:
+            raise PermissionError('Human founder must apply reviewed personnel decisions')
+        with self.db.transaction():
+            project=self.db.execute("""
+                SELECT i.id,i.plan_id,p.status
+                FROM ago_founder_intakes i JOIN ago_strategy_plans p
+                  ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                WHERE i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
+            """,(actor.tenant_id,project_id)).fetchone()
+            if project is None:
+                raise LookupError('Project unavailable')
+            proposed=self.db.execute("""
+                SELECT d.*,a.status AS approval_status,e.name AS worker_name
+                FROM ago_project_stage_delegation_proposals d
+                JOIN ago_approval_requests a ON a.tenant_id=d.tenant_id AND a.id=d.approval_id
+                JOIN ago_employees e ON e.tenant_id=d.tenant_id AND e.id=d.assignee_id
+                WHERE d.tenant_id=%s AND d.id=%s AND d.intake_id=%s
+            """,(actor.tenant_id,proposal_id,project_id)).fetchone()
+            if proposed is None:
+                raise LookupError('Matching reviewed proposal not found')
+            existing=self.db.execute("""
+                SELECT id,proposal_id FROM ago_project_stage_delegation_activations
+                WHERE tenant_id=%s AND intake_id=%s AND stage=%s
+            """,(actor.tenant_id,project_id,proposed['stage'])).fetchone()
+            if existing:
+                if str(existing['proposal_id'])!=proposal_id:
+                    raise PermissionError('Stage already assigned by another approved proposal')
+                return {'id':str(existing['id']),'stage':proposed['stage'],
+                        'assignee_id':str(proposed['assignee_id']),
+                        'reused':True,'task_executed':False}
+            if project['status']!='active':
+                raise PermissionError('Founder strategic plan must be approved and active')
+            self.repositories.resolve(ApprovalRepository).assert_executable(
+                request_id=str(proposed['approval_id']),tenant_id=actor.tenant_id,
+                action='company:stage-delegation:'+proposal_id,
+            )
+            activation_id=str(uuid4())
+            self.db.execute("""
+                INSERT INTO ago_project_stage_delegation_activations
+                  (id,tenant_id,proposal_id,intake_id,stage,assignee_id,applied_by)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """,(activation_id,actor.tenant_id,proposal_id,project_id,
+                 proposed['stage'],proposed['assignee_id'],actor.subject))
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                  (tenant_id,channel,author_id,author_name,body,kind,employee_id)
+                VALUES (%s,'global',%s,'Company Brain',%s,'project',%s)
+            """,(actor.tenant_id,actor.subject,
+                 'Independently reviewed project stage assignment: '+
+                 proposed['stage']+' → '+proposed['worker_name']+
+                 '; approved task execution remains separate.',
+                 proposed['assignee_id']))
+        return {'id':activation_id,'stage':proposed['stage'],
+                'assignee_id':str(proposed['assignee_id']),
+                'reused':False,'task_executed':False}
+
+    def project_delegations(self, tenant_id: str, project_id: str) -> list[dict]:
+        UUID(tenant_id)
+        UUID(project_id)
+        available=self.db.execute("""
+            SELECT 1 FROM ago_founder_intakes WHERE tenant_id=%s AND id=%s
+        """,(tenant_id,project_id)).fetchone()
+        if available is None:
+            raise LookupError('Project unavailable')
+        return [dict(r) for r in self.db.execute("""
+            SELECT d.id,d.stage,d.assignee_id,e.name AS worker_name,
+                   a.status AS approval_status,d.approval_id,d.created_at,
+                   v.applied_at,v.applied_by
+            FROM ago_project_stage_delegation_proposals d
+            JOIN ago_approval_requests a ON a.tenant_id=d.tenant_id
+              AND a.id=d.approval_id
+            JOIN ago_employees e ON e.tenant_id=d.tenant_id AND e.id=d.assignee_id
+            LEFT JOIN ago_project_stage_delegation_activations v
+              ON v.tenant_id=d.tenant_id AND v.proposal_id=d.id
+            WHERE d.tenant_id=%s AND d.intake_id=%s
+            ORDER BY d.created_at,d.id
+        """,(tenant_id,project_id)).fetchall()]
+
     def approval_inbox(self, tenant_id: str, limit: int = 100) -> list[dict]:
         """Evidence-backed approvals; founder alone issues final decisions.
 
