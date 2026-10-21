@@ -225,3 +225,62 @@ def test_offline_operator_inspects_and_stages_only_after_confirmation(tmp_path, 
     source.write_text(json.dumps(data), encoding="utf-8")
     assert main(["--input", str(source), "--output", str(tmp_path / "next")]) == 2
     assert not (tmp_path / "next").exists()
+
+
+def test_reviewed_candidate_produces_exact_unsubmitted_github_operation():
+    from uuid import uuid4
+
+    from ago.company_engineering import draft_github_commit_operation
+    from ago.github_adapter import validate_operation
+
+    source = reviewed_candidate(json.dumps(candidate()))
+    project_id, operation_id = str(uuid4()), str(uuid4())
+    op = draft_github_commit_operation(
+        source, project_id=project_id, operation_id=operation_id,
+        expected_sha="a" * 40, message="Candidate ready for separate reviewer",
+    )
+    assert set(op) == {"id", "project_id", "operation", "payload"}
+    assert op["project_id"] == project_id
+    assert op["id"] == operation_id
+    assert op["operation"] == "commit_files"
+    assert op["payload"]["files"] == candidate()["files"]
+    assert op["payload"]["expected_sha"] == "a" * 40
+    validate_operation(op)
+    with pytest.raises(ValueError):
+        draft_github_commit_operation(
+            source, project_id=project_id, operation_id=operation_id,
+            expected_sha="not-the-real-sha", message="No direct authority",
+        )
+
+
+def test_cli_stages_reviewable_github_draft_without_dispatch(tmp_path, capsys):
+    from uuid import uuid4
+
+    from scripts.ago_engineering_candidate import main
+
+    p = tmp_path / "receipt.json"
+    p.write_text(json.dumps({
+        "result": {
+            "board_review_cleared": True,
+            "engineering_candidate": reviewed_candidate(json.dumps(candidate())),
+        },
+    }), encoding="utf-8")
+    output = tmp_path / "draft-review"
+    opts = [
+        "--input", str(p), "--output", str(output),
+        "--github-project-id", str(uuid4()),
+        "--github-operation-id", str(uuid4()),
+        "--github-expected-sha", "a" * 40,
+        "--github-message", "Scoped source candidate reviewed by founder",
+    ]
+    assert main(opts) == 0
+    dry = json.loads(capsys.readouterr().out)
+    assert dry["github_draft_ready"] is True
+    assert dry["github_submitted"] is False
+    assert not output.exists()
+    assert main(opts + ["--apply", "--confirm", "WRITE_REVIEWED_CANDIDATE"]) == 0
+    capsys.readouterr()
+    spec = json.loads((output / "AGO_UNSUBMITTED_GITHUB_OPERATION.json").read_text())
+    assert spec["operation"] == "commit_files"
+    assert spec["payload"]["files"] == candidate()["files"]
+    assert not (output / ".git").exists()
