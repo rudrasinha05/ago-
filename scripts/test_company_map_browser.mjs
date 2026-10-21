@@ -152,10 +152,12 @@ try{
  await vault.getByLabel('Employee').selectOption(id(35));
  await vault.getByLabel('Reason for the permission change').fill('Independent QA needs explicit access');
  await vault.getByRole('button',{name:'Grant read access'}).click();
+ await vault.getByText('Specific employee now has document access.').waitFor();
  assert.equal(docAccess.at(-1).event,'grant');
  await vault.getByLabel('Employee').selectOption(id(35));
  await vault.getByLabel('Reason for the permission change').fill('QA scope review is complete now');
  await vault.getByRole('button',{name:'Revoke access'}).click();
+ await vault.getByText('Access revoked. Next read will be denied.').waitFor();
  assert.equal(docAccess.at(-1).event,'revoke');
  await vault.getByLabel('Document content / next revision').fill('Updated local requirements');
  await vault.getByRole('button',{name:'Save new revision'}).click();
