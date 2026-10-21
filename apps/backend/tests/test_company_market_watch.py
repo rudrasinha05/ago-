@@ -107,3 +107,26 @@ def test_market_worker_database_scope_denies_arbitrary_remote_and_production(mon
         "postgresql://ago_preview:secret@postgres:5432/company_prod") is False
     assert market.preview_database_allowed(
         "postgresql://unreviewed:secret@postgres:5432/ago_preview") is False
+
+
+def test_founder_explicitly_controls_local_server_worker_and_preview_restart():
+    """No hidden watcher when serving and no cloud-specific research connector."""
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    server = script.split('if ($Action -eq "serve") {', 1)[1].split(
+        '\n    else {', 1
+    )[0]
+    assert "ago.local_ops serve" in server
+    assert "Start-Job" not in server
+    assert "Start-Process" not in server
+    assert "company_market_watch.py" not in server
+    assert 'if ($Action -eq "market-watch")' in script
+    worker = (root / "scripts" / "company_market_watch.py").read_text(
+        encoding="utf-8"
+    )
+    assert "AGO_MARKET_RAILWAY_PREVIEW" not in worker
+    assert "postgres.railway.internal" not in worker
+    for file in ("compose.preview.yml", "compose.market.preview.yml"):
+        local = (root / "deploy" / "docker" / file).read_text(encoding="utf-8")
+        assert "restart: unless-stopped" not in local
+        assert 'restart: "no"' in local
