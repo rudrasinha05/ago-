@@ -66,9 +66,10 @@
       "imports": [
         "agent_runtime_queries",
         "backend_contracts",
+        "company_ollama_chain",
+        "enterprise_store",
         "organizational_dna",
-        "task_store",
-        "enterprise_store"
+        "task_store"
       ]
     },
     "agent_runtime_queries": {
