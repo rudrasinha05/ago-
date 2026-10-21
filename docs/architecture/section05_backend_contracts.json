@@ -128,8 +128,12 @@
           "arguments": "self, *, tenant_id: str, action: str, requester_id: str",
           "returns": "ApprovalRequest"
         },
+        "founder_solo_eligible": {
+          "arguments": "self, *, tenant_id: str, founder_id: str",
+          "returns": "bool"
+        },
         "decide": {
-          "arguments": "self, *, request_id: str, tenant_id: str, reviewer_id: str, approve: bool, reason: str, authorized: bool=False, founder_only: bool=False",
+          "arguments": "self, *, request_id: str, tenant_id: str, reviewer_id: str, approve: bool, reason: str, authorized: bool=False, founder_only: bool=False, solo_founder: bool=False",
           "returns": "ApprovalRequest"
         },
         "list_requests": {
@@ -312,7 +316,7 @@
           "returns": "list[dict]"
         },
         "approval_inbox": {
-          "arguments": "self, tenant_id: str, limit: int=100",
+          "arguments": "self, tenant_id: str, limit: int=100, reader_id: str | None=None",
           "returns": "list[dict]"
         },
         "management_workload": {
