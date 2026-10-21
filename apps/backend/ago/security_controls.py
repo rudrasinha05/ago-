@@ -37,7 +37,7 @@ class SecurityControls:
     def permitted(self, principal: Principal, permission: str, tenant_id: str) -> bool:
         if not permission or principal.tenant_id != tenant_id:
             return False
-        if permission == "approval:decide":
+        if permission == "approval:founder":
             founder = self.connection.execute(
                 """SELECT 1 FROM ago_users u
                    JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
@@ -46,8 +46,7 @@ class SecurityControls:
                      AND e.kind='human' AND r.role='founder' LIMIT 1""",
                 (principal.subject, tenant_id),
             ).fetchone()
-            if founder is None:
-                return False
+            return founder is not None
         row = self.connection.execute(
             """SELECT 1 FROM ago_users u
                JOIN ago_user_roles r ON r.user_id=u.id AND r.tenant_id=u.tenant_id
