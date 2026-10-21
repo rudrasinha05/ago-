@@ -132,6 +132,13 @@ try{
  assert.match(await page.locator('.employee-inspector').innerText(),/Additional responsibilities/);
  await page.getByRole('heading',{name:'Board of Directors'}).waitFor();
  await page.getByRole('heading',{name:'AI Company Command Center'}).waitFor();
+ const brain=page.locator('.brain-volume');
+ const initialRotation=await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation'));
+ await page.getByRole('button',{name:'Rotate brain right'}).click();
+ assert.notEqual(await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation')),initialRotation);
+ assert.match(await brain.getAttribute('aria-label'),/verified running tasks/);
+ await page.getByRole('button',{name:'Reset brain rotation'}).click();
+ assert.equal(await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation')),'0deg');
  const founderBrief='Build a complete project management system with audit trails, secure access, automated tests and documentation';
  await page.getByLabel('Founder project brief').fill(founderBrief);
  await page.getByRole('button',{name:'Prepare project from brief'}).click();
