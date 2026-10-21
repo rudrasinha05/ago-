@@ -14,6 +14,17 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const departments=resource(data,'departments')||[];
   const grouped=resource(data,'employees');
   const employees=useMemo(()=>Object.values(grouped||{}).flat(),[grouped]);
+  const founderView=me.roles?.includes('founder');
+  const ownMember=employees.find(e=>e.id===me.id);
+  const canReadChannel=key=>{
+    if(founderView||key==='global')return true;
+    if(key.startsWith('department:'))return ownMember?.department_id===key.slice(11);
+    if(key.startsWith('employee:')){
+      const person=employees.find(e=>e.id===key.slice(9));
+      return key.slice(9)===me.id||person?.manager_id===me.id;
+    }
+    return false;
+  };
   const [approvalRefresh,setApprovalRefresh]=useState(0);
   const [approvalList,setApprovalList]=useState(null);
   const receiveApprovalData=useCallback(items=>setApprovalList(items),[]);
@@ -138,7 +149,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   useEffect(()=>{refreshGitHub();const timer=setInterval(refreshGitHub,45000);return()=>clearInterval(timer);},[refreshGitHub]);
   useEffect(()=>{if(!popup&&eventQueue.length){setPopup(eventQueue[0]);setEventQueue(old=>old.slice(1));}},[popup,eventQueue]);
   useEffect(()=>{if(!popup)return;const timer=setTimeout(()=>setPopup(null),6500);return()=>clearTimeout(timer);},[popup]);
-  function choose(key){setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));const node=layout.nodes.find(n=>n.key===key);if(node){setZoom(.85);setPan({x:(layout.center-node.x)*.85,y:(layout.center-node.y)*.85});}}
+  function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));const node=layout.nodes.find(n=>n.key===key);if(node){setZoom(.85);setPan({x:(layout.center-node.x)*.85,y:(layout.center-node.y)*.85});}}
   function center(){setZoom(.42);setPan({x:0,y:0});}
   async function older(){const version=sequence.current;setLoading(true);try{
     const result=await api.request(BASE+'/chat?channel='+encodeURIComponent(channel)+'&before='+before);
@@ -192,8 +203,9 @@ export function CompanyMap({api,me,data,onRefresh}) {
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>
         {departments.map(d=>{const members=employees.filter(e=>e.department_id===d.id);if(query&&!d.name.toLowerCase().includes(query.toLowerCase())&&!members.some(e=>e.name.toLowerCase().includes(query.toLowerCase())))return null;
           function branch(e,seen=new Set()){if(seen.has(e.id))return null;const next=new Set([...seen,e.id]);return <li key={e.id}><button aria-label={e.name} className={[channel==='employee:'+e.id?'chosen':'',routing.active.has(e.id)?'chat-assigned':'',employeeStatus(e.id,tasks).tone==='busy'?'chat-working':''].filter(Boolean).join(' ')} onClick={()=>choose('employee:'+e.id)}><span className={'presence '+employeeStatus(e.id,tasks).tone}/>{e.name}{(eventData?.by_employee?.[e.id]??0)>0&&<span className="chat-event-count" aria-label={(eventData?.by_employee?.[e.id]??0)+" recorded work events"}>{eventData.by_employee[e.id]}</span>}</button><ul>{members.filter(x=>x.manager_id===e.id).map(x=>branch(x,next))}</ul></li>;}
+          if(!canReadChannel('department:'+d.id))return null;
           return <details key={d.id} open><summary>{d.name}</summary><button onClick={()=>choose('department:'+d.id)} className={channel==='department:'+d.id?'chosen':''}>Open {d.name} chat</button><ul>{members.filter(e=>!members.some(x=>x.id===e.manager_id)).map(e=>branch(e))}</ul></details>;})}
-        <p className="channel-note">Channels are shared within your organization, including employee conversations.</p>
+        <p className="channel-note">Global chat is shared. Department and employee conversations are restricted to the founder and authorized members. AGO enforces access on every read and write.</p>
       </aside>
       <div className="company-canvas" ref={viewport} onPointerDown={e=>{if(e.target.closest('button,textarea,input,a,form'))return;drag.current={x:e.clientX,y:e.clientY,startX:pan.x,startY:pan.y};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current)setPan({x:drag.current.startX+(e.clientX-drag.current.x),y:drag.current.startY+(e.clientY-drag.current.y)});}} onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}} onWheel={e=>{if(e.ctrlKey||e.target.closest('textarea'))return;setZoom(z=>Math.max(.08,Math.min(1.7,z-e.deltaY*.0007)));}}>
         <div className="map-controls"><button aria-label="Zoom in" onClick={()=>setZoom(z=>Math.min(1.7,z+.1))}>+</button><button aria-label="Zoom out" onClick={()=>setZoom(z=>Math.max(.08,z-.1))}>−</button><button onClick={center}>Founder</button><button aria-label={fullscreen?"Exit full screen":"Full screen map"} aria-pressed={fullscreen} onClick={()=>setFullscreen(v=>!v)}>{fullscreen?"Exit full screen":"⛶ Full screen"}</button><button onClick={()=>{setZoom(Math.min((viewport.current?.clientWidth||600)/layout.size,(viewport.current?.clientHeight||700)/layout.size)*.9);setPan({x:0,y:0});}}>Fit all</button><span>{Math.round(zoom*100)}%</span></div>
