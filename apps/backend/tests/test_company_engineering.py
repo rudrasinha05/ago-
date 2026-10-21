@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from runpy import run_path
 
 import pytest
 
@@ -198,7 +200,9 @@ def test_source_change_and_forged_verified_status_are_rejected(tmp_path):
 
 
 def test_offline_operator_inspects_and_stages_only_after_confirmation(tmp_path, capsys):
-    from scripts.ago_engineering_candidate import main
+    main = run_path(
+        str(Path(__file__).resolve().parents[3] / "scripts" / "ago_engineering_candidate.py")
+    )["main"]
 
     data = {
         "result": {
@@ -256,7 +260,9 @@ def test_reviewed_candidate_produces_exact_unsubmitted_github_operation():
 def test_cli_stages_reviewable_github_draft_without_dispatch(tmp_path, capsys):
     from uuid import uuid4
 
-    from scripts.ago_engineering_candidate import main
+    main = run_path(
+        str(Path(__file__).resolve().parents[3] / "scripts" / "ago_engineering_candidate.py")
+    )["main"]
 
     p = tmp_path / "receipt.json"
     p.write_text(json.dumps({
