@@ -7,9 +7,9 @@ laptop, calls a model, or changes approvals. Ctrl+C terminates watch mode.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
 import os
+from datetime import UTC, datetime
 from time import sleep
 from uuid import UUID
 
@@ -55,7 +55,7 @@ def reconcile(db, tenant: str, min_age: int, *, apply: bool) -> dict:
             if batch<100:
                 break
     return {
-        "tenant_id":tenant,"checked_at":datetime.now(timezone.utc).isoformat(),
+        "tenant_id":tenant,"checked_at":datetime.now(UTC).isoformat(),
         "mode":"mark_failed_without_replay" if apply else "read_only",
         "observed_stale_runs":pending,"marked_failed":updated,
         "external_actions_replayed":False,
