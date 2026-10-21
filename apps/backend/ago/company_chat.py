@@ -75,7 +75,7 @@ class CompanyChat:
         # Founder may view the entire global audit timeline; normal employees
         # receive actual global-channel messages only. No synthetic channel IDs.
         # A department includes its employee conversations and task events.
-        rows = self.db.execute('''SELECT c.*, parent.body AS reply_body, parent.author_name AS reply_author FROM ago_company_chat c LEFT JOIN ago_company_chat parent ON parent.tenant_id=c.tenant_id AND parent.id=c.reply_to
+        rows = self.db.execute('''SELECT c.*, parent.body AS reply_body, parent.author_name AS reply_author FROM ago_company_chat c LEFT JOIN ago_company_chat parent ON parent.tenant_id=c.tenant_id AND parent.id=c.reply_to AND parent.channel=c.channel
           WHERE c.tenant_id=%s AND (%s='global' OR c.channel=%s OR
             (%s LIKE 'department:%%' AND c.employee_id IN
               (SELECT id FROM ago_employees WHERE tenant_id=%s AND department_id::text=substring(%s from 12))))
@@ -181,12 +181,20 @@ class CompanyChat:
       LEFT JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
       WHERE t.tenant_id=%s
         AND (
-          i.id IS NULL OR i.founder_id=%s OR l.accountable_manager_id=%s
+          i.founder_id=%s OR l.accountable_manager_id=%s
           OR EXISTS (SELECT 1 FROM ago_project_stage_delegation_activations a
              WHERE a.tenant_id=i.tenant_id AND a.intake_id=i.id
                AND a.assignee_id=%s)
+          OR (i.id IS NULL AND (
+               t.assignee_id=%s
+               OR EXISTS (SELECT 1 FROM ago_user_roles r
+                 JOIN ago_users u ON u.tenant_id=r.tenant_id AND u.id=r.user_id
+                 JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
+                 WHERE r.tenant_id=t.tenant_id AND r.user_id=%s
+                   AND r.role='founder' AND u.active AND e.kind='human')
+             ))
         )
-      ORDER BY t.updated_at DESC''', (tenant_id,reader_id,reader_id,reader_id)).fetchall()
+      ORDER BY t.updated_at DESC''', (tenant_id,reader_id,reader_id,reader_id,reader_id)).fetchall()
 
     def staff(self, actor, department_id, manager_id, name, requirement, operation_key):
         db = self.db
