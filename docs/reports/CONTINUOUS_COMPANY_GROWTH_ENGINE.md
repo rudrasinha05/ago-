@@ -174,7 +174,7 @@ An isolated market research sidecar is packaged in the non-root Docker image
 and declared in `deploy/docker/compose.market.preview.yml`. It has a bounded
 hourly poll interval, read-only root, no public port, only database/internal
 network plus separate research egress, no Docker socket, and Docker
-`restart: unless-stopped`. **This is NOT 24/7 cloud hosting**, production
+`restart: "no"` (founder manual start). **This is NOT 24/7 cloud hosting**, production
 secrets management or an approval to expose the service publicly.
 
 Do not run this with a production database. All preview data is test/demo
@@ -203,8 +203,10 @@ set `AGO_MARKET_PREVIEW_CONTAINER=true` process and only
 `AGO_ENVIRONMENT=development`. The production path remains fail-closed.
 Managed hosting and cloud databases are outside the authorized AGO scope.
 The optional Docker Compose profile is for **local machine preview only**, and
-must not be started without a founder action. Container restart settings cannot
-override the founder's laptop power, sleep or shutdown decisions.
+must not be started without a founder action. Both the local API and database
+containers and the optional worker have `restart: "no"`: they do not restart
+without a founder-initiated `docker compose up` action. Laptop shutdown always
+stops local work.
 
 ## Optional AI planning (not autonomous execution)
 
