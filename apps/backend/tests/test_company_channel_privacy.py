@@ -14,7 +14,7 @@ def test_private_employee_department_messages_and_notifications_are_scoped(case)
     other=department(client,founder)
     # Grant broad API capabilities but NEVER employee/project membership.
     for perm in ("organization:read","task:read","messages:read",
-                 "messages:write","brain:read"):
+                 "messages:write","brain:read","agent:read"):
         info["db"].execute("""
             INSERT INTO ago_role_permissions(tenant_id,role,permission)
             VALUES (%s,'reviewer',%s) ON CONFLICT DO NOTHING
@@ -45,3 +45,7 @@ def test_private_employee_department_messages_and_notifications_are_scoped(case)
     assert all(x["employee_id"]==info["reviewer_id"]
                for x in own_events.json()["recent"])
     assert worker not in own_events.json()["by_employee"]
+    # Agent run packets may include founder brief excerpts; generic agent
+    # visibility must not override founder confidentiality.
+    assert client.get("/v1/agents/runs",headers=outsider).status_code==403
+    assert client.get("/v1/agents/runs",headers=founder).status_code==200
