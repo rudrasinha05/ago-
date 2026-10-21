@@ -10,12 +10,12 @@ because it renders an attractive dashboard or has pending approvals.
 | #2 | 34-section architecture documentation | Existing 1-34 roadmap, references, architecture contracts retained | **NOT FULLY ACCEPTED:** complete section-by-section implementation and final cross-section validation |
 | #11 | End-to-end module integration | Company cockpit, research-to-project API, scoped PostgreSQL and focused CI job | **NOT ACCEPTED:** full green same-SHA integration/browser/DB CI |
 | #16 | Employee/project association | Accountable manager + proposed stage owner titles on company map; source-based project card | **CODED:** verify authenticated real-data browser navigation |
-| #24 | Automated management delegation | Accountability, approvals, CEO research shortlist, real task lifecycle, project routing suggestions | **PARTIAL:** autonomous CEO→CTO→PM→workers delegation after bounded authorization |
+| #24 | Automated management delegation | Accountable leadership, actual workforce handoff proposals, independent operational review and appended stage activation records | **PARTIAL:** executable CEO→CTO→PM agent decision chain still needs separately approved scoped tool use |
 | #26 | Auto employee provisioning | Existing authenticated HR/staffing API; workload-sensitive suggested existing staff and flagged staffing gaps | **PARTIAL:** governed AI department/employee provisioning in CEO charter |
 | #28 | Employee performance measurement | Actual task/completed/failed/QA-unreviewed counts, reviewer verdicts and per-employee cockpit | **CODED:** real workflow acceptance; no fictional productivity score |
 | #45 | Research-to-project conversion | Migration 056, immutable source linkage, signed founder endpoint, one-click idempotent project draft | **CODED:** focused CI and founder actual browser verification; does not run code |
 | #53 | Intelligent AI project planning | Five-stage scoped founder brief, qualification suggestions, transparent acceptance/QA | **PARTIAL:** autonomous LLM strategy/architecture evidence with independent review |
-| #54 | Automatic development-team assignment | Skill-matched lowest-workload staff suggestions and project management accountability | **PARTIAL:** execution team assignment through reviewed delegation; no fake dispatch |
+| #54 | Development-team assignment | Skill/workload candidate suggestions plus new real founder-initiated stage owner proposal → independent reviewer approval → founder activation → employee event, with immutable worker linkage | **CODED / CI ACCEPTANCE PENDING:** no task execution or GitHub commit inferred from assignment; automatic staffing remains a separate governed capability |
 | #58 | GitHub PR/commit/CI by AI workforce | Existing governed GitHub adapter and CI infrastructure, new focused acceptance workflow | **PARTIAL:** signed real PR/CI/review/release loop with authorized credentials |
 | #59 | Project documentation | Founder scope packet; client-side Markdown export of real project brief, tasks, QA and evidence | **CODED:** signed-session browser smoke; no invented PDF/release |
 | #60 | Independent project QA | Real human QA store; run-level and verdict/evidence details in project portfolio, backlog count | **PARTIAL:** arbitrary project artifacts and release E2E test coverage |
@@ -68,3 +68,26 @@ must pass; do not weaken reviewer protections to manufacture a green build.
 
 No temporary "implemented" checklist row above is proof of customer revenue,
 public marketing publication, external hosted uptime or full self-modification.
+
+## Local stage delegation integration — focus on P1 only
+The founder first creates a scoped draft via `POST /v1/organization/company/projects/start`.
+For an existing tenant employee (not a fictional agent), propose their role as an
+actual **project stage** owner via
+`POST /v1/organization/company/projects/{project_id}/delegations` with
+`{"stage":"implementation","assignee_id":"<existing-employee-id>"}`.
+This creates an independently reviewed **operational** request whose action
+is cryptographically bound to the generated proposal identifier. The
+founder's original strategy also requires its own founder-only approval
+and plan activation. Only after **both** approvals may the founder call
+`POST /v1/organization/company/projects/{project_id}/delegations/{proposal_id}/activate`.
+A committed, append-only, tenant-scoped record and employee project event are
+then created. Replays of the same activation return the existing record.
+`GET /v1/organization/company/projects/{project_id}/delegations` lists
+real approvals and ownership; the project inspector distinguishes
+`approved_assignee_name` from suggested staff.
+Quality-stage delegation is restricted to an existing active human reviewer
+and cannot be assigned to the project's accountable manager.
+The system does **not** create or authorize executable tasks, recruit
+new employees, write code, dispatch agents, publish a release, or claim
+revenue as a side effect of project stage delegation.
+**No cloud, Railway, auto-start worker or laptop power control is involved.**
