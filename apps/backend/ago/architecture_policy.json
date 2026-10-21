@@ -78,6 +78,18 @@
         "backend_contracts"
       ]
     },
+    "analytics_store": {
+      "context": "strategy",
+      "layer": "persistence",
+      "imports": [
+        "architecture_guard",
+        "backend_contracts",
+        "graph_store",
+        "reviewed_changes",
+        "security",
+        "security_controls"
+      ]
+    },
     "api_agents": {
       "context": "transport",
       "layer": "transport",
@@ -101,6 +113,15 @@
         "security"
       ]
     },
+    "api_company_chat": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_contracts",
+        "api_m2",
+        "repository_ports"
+      ]
+    },
     "api_contracts": {
       "context": "transport",
       "layer": "transport",
@@ -114,6 +135,27 @@
         "api_m2",
         "backend_contracts",
         "repository_ports",
+        "security"
+      ]
+    },
+    "api_documents": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_contracts",
+        "api_m2",
+        "document_vault"
+      ]
+    },
+    "api_enterprise_platform": {
+      "context": "transport",
+      "layer": "transport",
+      "imports": [
+        "api_contracts",
+        "api_m2",
+        "backend_contracts",
+        "repository_ports",
+        "reviewed_changes",
         "security"
       ]
     },
@@ -222,6 +264,17 @@
       "layer": "foundation",
       "imports": []
     },
+    "behavior_store": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "graph_store",
+        "reviewed_changes",
+        "security",
+        "security_controls"
+      ]
+    },
     "bootstrap": {
       "context": "entrypoints",
       "layer": "composition",
@@ -240,6 +293,15 @@
         "governance",
         "security",
         "security_controls"
+      ]
+    },
+    "company_chat": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "governance",
+        "organization_store"
       ]
     },
     "console_api": {
@@ -332,6 +394,13 @@
       "context": "strategy",
       "layer": "domain",
       "imports": []
+    },
+    "document_vault": {
+      "context": "knowledge",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
     },
     "enterprise_domains": {
       "context": "operations",
@@ -431,6 +500,11 @@
       "layer": "foundation",
       "imports": []
     },
+    "github_adapter": {
+      "context": "operations",
+      "layer": "domain",
+      "imports": []
+    },
     "goals": {
       "context": "strategy",
       "layer": "persistence",
@@ -463,6 +537,17 @@
         "security",
         "security_controls",
         "workflows"
+      ]
+    },
+    "graph_store": {
+      "context": "knowledge",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "reviewed_changes",
+        "security",
+        "security_controls",
+        "semantic_memory_store"
       ]
     },
     "handoffs": {
@@ -505,6 +590,21 @@
         "security",
         "security_controls",
         "sso_provider"
+      ]
+    },
+    "integration_store": {
+      "context": "operations",
+      "layer": "persistence",
+      "imports": [
+        "analytics_store",
+        "backend_contracts",
+        "github_adapter",
+        "graph_store",
+        "identity_factors",
+        "reviewed_changes",
+        "security",
+        "security_controls",
+        "task_store"
       ]
     },
     "knowledge_store": {
@@ -562,6 +662,7 @@
         "api_brain",
         "api_company_chat",
         "api_council",
+        "api_documents",
         "api_enterprise_platform",
         "api_insights",
         "api_knowledge",
@@ -827,6 +928,16 @@
         "workflows"
       ]
     },
+    "reviewed_changes": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts",
+        "governance",
+        "security",
+        "security_controls"
+      ]
+    },
     "scheduler": {
       "context": "platform",
       "layer": "foundation",
@@ -989,100 +1100,6 @@
       "context": "workforce",
       "layer": "domain",
       "imports": []
-    },
-    "reviewed_changes": {
-      "context": "governance",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts",
-        "governance",
-        "security",
-        "security_controls"
-      ]
-    },
-    "graph_store": {
-      "context": "knowledge",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts",
-        "reviewed_changes",
-        "security",
-        "security_controls",
-        "semantic_memory_store"
-      ]
-    },
-    "behavior_store": {
-      "context": "workforce",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts",
-        "graph_store",
-        "reviewed_changes",
-        "security",
-        "security_controls"
-      ]
-    },
-    "analytics_store": {
-      "context": "strategy",
-      "layer": "persistence",
-      "imports": [
-        "architecture_guard",
-        "backend_contracts",
-        "graph_store",
-        "reviewed_changes",
-        "security",
-        "security_controls"
-      ]
-    },
-    "integration_store": {
-      "context": "operations",
-      "layer": "persistence",
-      "imports": [
-        "analytics_store",
-        "backend_contracts",
-        "github_adapter",
-        "graph_store",
-        "identity_factors",
-        "reviewed_changes",
-        "security",
-        "security_controls",
-        "task_store"
-      ]
-    },
-    "api_enterprise_platform": {
-      "context": "transport",
-      "layer": "transport",
-      "imports": [
-        "api_contracts",
-        "api_m2",
-        "backend_contracts",
-        "repository_ports",
-        "reviewed_changes",
-        "security"
-      ]
-    },
-    "github_adapter": {
-      "context": "operations",
-      "layer": "domain",
-      "imports": []
-    },
-    "company_chat": {
-      "context": "workforce",
-      "layer": "persistence",
-      "imports": [
-        "backend_contracts",
-        "governance",
-        "organization_store"
-      ]
-    },
-    "api_company_chat": {
-      "context": "transport",
-      "layer": "transport",
-      "imports": [
-        "api_contracts",
-        "api_m2",
-        "repository_ports"
-      ]
     }
   },
   "protected_sql_writers": {
@@ -1145,6 +1162,18 @@
     ],
     "ago_github_dispatch": [
       "integration_store"
+    ],
+    "ago_company_documents": [
+      "document_vault"
+    ],
+    "ago_company_document_revisions": [
+      "document_vault"
+    ],
+    "ago_company_document_acl_events": [
+      "document_vault"
+    ],
+    "ago_company_document_access_audit": [
+      "document_vault"
     ]
   },
   "exceptions": []
