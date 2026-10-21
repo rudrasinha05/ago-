@@ -327,3 +327,58 @@ def test_tenant_lookup_returns_only_local_organization_name_and_uuid(
     assert output == [{"tenant_id":identifier, "organization":"AGO Existing"}]
     assert "password" not in json.dumps(output)
     assert "email" not in json.dumps(output)
+
+
+def test_solo_onboarding_opt_in_is_not_implicit(local_environment, monkeypatch):
+    monkeypatch.delenv("AGO_FOUNDER_SOLO_APPROVAL", raising=False)
+    with pytest.raises(PermissionError):
+        local_ops.provision_solo(
+            organization="AGO Founder Only", founder_email="solo@example.test",
+            founder_password="founder-pass-123456", verify_schema=lambda *_: True,
+        )
+    monkeypatch.setenv("AGO_FOUNDER_SOLO_APPROVAL", "true")
+    monkeypatch.setenv("AGO_ENVIRONMENT", "production")
+    with pytest.raises(PermissionError):
+        local_ops.provision_solo(
+            organization="AGO Founder Only", founder_email="solo@example.test",
+            founder_password="founder-pass-123456", verify_schema=lambda *_: True,
+        )
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    monkeypatch.setenv("AGO_POSTGRES_DSN", "postgresql://u:p@evil.example/ago")
+    with pytest.raises(PermissionError):
+        local_ops.provision_solo(
+            organization="AGO Founder Only", founder_email="solo@example.test",
+            founder_password="founder-pass-123456", verify_schema=lambda *_: True,
+        )
+
+
+def test_solo_onboarding_creates_no_reviewer_in_disposable_postgres(
+    local_environment, monkeypatch,
+):
+    dsn = os.getenv("AGO_TEST_POSTGRES_DSN")
+    if not dsn or not local_ops.local_database(dsn):
+        pytest.skip("Migrated localhost disposable PostgreSQL test DSN required")
+    monkeypatch.setenv("AGO_POSTGRES_DSN", dsn)
+    monkeypatch.setenv("AGO_FOUNDER_SOLO_APPROVAL", "true")
+    assert local_ops.doctor().ready
+    unique = str(uuid4())[:12]
+    account = local_ops.provision_solo(
+        organization="AGO Solo Pilot " + unique,
+        founder_email="solo-" + unique + "@example.test",
+        founder_password="solo-founder-secret-123456",
+    )
+    assert account["reviewer_created"] is False
+    from psycopg.rows import dict_row
+    import psycopg
+    with psycopg.connect(dsn, row_factory=dict_row) as db:
+        rows = db.execute("""
+            SELECT u.id,u.active,r.role,e.kind FROM ago_users u
+            JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
+            JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
+            WHERE u.tenant_id=%s
+        """, (account["tenant_id"],)).fetchall()
+        assert len(rows)==1
+        assert rows[0]["role"]=="founder"
+        assert rows[0]["active"] is True
+        assert rows[0]["kind"]=="human"
+        assert str(rows[0]["id"])==account["founder_id"]

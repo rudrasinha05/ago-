@@ -151,6 +151,41 @@ def provision_pilot(
     }
 
 
+def provision_solo(
+    *, organization: str, founder_email: str, founder_password: str,
+    connector=None, verify_schema=schema_integrity,
+) -> dict[str, str]:
+    """Create exactly one human founder in a NEW localhost development tenant.
+
+    This never modifies existing companies and requires explicit solo mode.
+    """
+    if _stage() not in _LOCAL_STAGES:
+        raise PermissionError("Sole-founder bootstrap is local-only")
+    if os.getenv("AGO_FOUNDER_SOLO_APPROVAL", "").lower() != "true":
+        raise PermissionError("Explicit AGO_FOUNDER_SOLO_APPROVAL=true is required")
+    dsn = _dsn()
+    if not local_database(dsn):
+        raise PermissionError("Sole-founder setup requires localhost PostgreSQL")
+    if not organization.strip() or not founder_email.strip():
+        raise ValueError("Organization and founder email required")
+    if len(founder_password) < 12:
+        raise ValueError("Founder password must be at least 12 characters")
+    if not verify_schema(dsn):
+        raise RuntimeError("Explicitly apply reviewed migrations before first setup")
+    from psycopg.rows import dict_row
+    import psycopg
+    from ago.bootstrap import bootstrap
+
+    connect = connector or psycopg.connect
+    with connect(dsn, row_factory=dict_row, autocommit=True, connect_timeout=3) as db:
+        with db.transaction():
+            tenant_id, founder_id = bootstrap(
+                db, organization=organization.strip(),
+                email=founder_email.strip(), password=founder_password,
+            )
+    return {"tenant_id": tenant_id, "founder_id": founder_id,
+            "reviewer_created": False}
+
 
 def list_local_tenants(*, connector=None) -> list[dict[str, str]]:
     """Operator-only list of existing local organization IDs for browser sign-in.
@@ -306,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("doctor", help="Read-only environment and schema checks")
     sub.add_parser("tenants", help="Read-only existing local organization IDs")
     sub.add_parser("init", help="Create new organization, founder and reviewer")
+    sub.add_parser("init-solo", help="Create NEW localhost company with founder only (opt-in)")
     server = sub.add_parser("serve", help="Launch localhost Control Center")
     server.add_argument("--port", type=int, default=8000)
     monitor = sub.add_parser("monitor", help="Read-only local health probes and alert")
@@ -357,6 +393,25 @@ def main(argv: list[str] | None = None) -> int:
         diagnosis = doctor()
         if not diagnosis.ready:
             raise RuntimeError("Doctor must pass before creating a tenant")
+        if args.command == "init-solo":
+            if os.getenv("AGO_FOUNDER_SOLO_APPROVAL", "").lower() != "true":
+                raise PermissionError("Explicit local sole-founder option is required")
+            print("Creates ONE new localhost company with ONE human founder, no reviewer.")
+            print("Existing organization records will not be edited.")
+            organization = input("New organization name: ").strip()
+            founder_email = input("Founder email: ").strip()
+            founder_password = getpass.getpass("Founder password (min 12 chars): ")
+            confirm = input("Type CREATE_SOLO to confirm new tenant: ").strip()
+            if confirm != "CREATE_SOLO":
+                print("Cancelled; no tenant was created.")
+                return 2
+            created = provision_solo(
+                organization=organization, founder_email=founder_email,
+                founder_password=founder_password,
+            )
+            print(json.dumps(created, sort_keys=True))
+            print("Save tenant_id privately for browser login.")
+            return 0
         print("Creates ONE new local organization and TWO distinct human accounts.")
         print("No existing organization or user is overwritten.")
         organization = input("Organization name: ").strip()

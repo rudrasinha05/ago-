@@ -53,3 +53,7 @@ In explicit sole-founder local mode, Quality stage can nominate the active human
 ## Board denial as a bounded workflow hold
 
 A verifiable CEO/CTO local Ollama BOARD_RECOMMENDATION: DENY is recorded as nonbinding advisory evidence, but immediately stops further AI handoffs in that internal run. No CTO/PM/worker draft is fabricated after a CEO denial; no PM/worker is invoked after a CTO denial. The founder sees the objection and may choose a newly governed corrective action. Missing or ambiguous recommendations remain unverified rather than falsely authorized. No external release or GitHub side effect is authorized by this hold.
+
+## New company onboarding only
+
+For a **brand-new** empty local organization, AGO also offers a separate `init-solo` path. After setting the explicit environment flag and verifying local migrations, run `./scripts/ago.ps1 init-solo` to create exactly one authenticated human founder, without a fictional reviewer. Existing `init` still uses the legacy two-human model. **Never run `init-solo` for the current existing AGO organization**: it creates a separate tenant and does not migrate historical projects.

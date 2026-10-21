@@ -11,7 +11,7 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 run-approved-internal  # only previously approved local internal AI briefs
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
