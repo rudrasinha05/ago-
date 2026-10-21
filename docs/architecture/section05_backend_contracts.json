@@ -1302,6 +1302,19 @@
         }
       }
     },
+    "LocalCompanyChain": {
+      "module": "company_ollama_chain",
+      "methods": {
+        "assignments": {
+          "arguments": "self, *, tenant_id: str, actor_id: str, task",
+          "returns": "list[dict]"
+        },
+        "run": {
+          "arguments": "self, *, tenant_id: str, actor_id: str, task, provider",
+          "returns": "dict"
+        }
+      }
+    },
     "LoginThrottle": {
       "module": "login_security",
       "methods": {
