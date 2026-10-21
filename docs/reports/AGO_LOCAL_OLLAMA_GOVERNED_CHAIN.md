@@ -47,6 +47,9 @@ ollama list
 For a separately and manually started local Ollama server if not running:
 `ollama serve`. Keep `OLLAMA_HOST` restricted to `127.0.0.1:11434`.
 Verify: `Invoke-RestMethod http://127.0.0.1:11434/api/tags`.
+Run the built-in **read-only** readiness check from the repo root:
+`./scripts/ago-ollama-check.ps1 -Model qwen2.5:3b`.
+It never starts or downloads a model.
 AGO never executes `ollama serve`, `ollama pull` or OS startup tasks.
 
 Before starting AGO from the **same** founder-controlled PowerShell environment:
