@@ -285,7 +285,9 @@ jobs:
             sleep 1
           done
           test "$passed" = "1"
-          curl --retry 5 --retry-connrefused --retry-delay 1 -fsS -o /tmp/ago-console-smoke.html http://127.0.0.1:18765/console/
+          # Old Control Center no longer opens the duplicate People & departments UI.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18765/console/)" = "308"
+          curl --retry 5 --retry-connrefused --retry-delay 1 -fLsS -o /tmp/ago-console-smoke.html http://127.0.0.1:18765/console/
           grep -q 'login-form' /tmp/ago-console-smoke.html
           curl -fsS -o /tmp/ago-workspace-smoke.html http://127.0.0.1:18765/workspace/
           grep -q 'Organization ID' /tmp/ago-workspace-smoke.html
