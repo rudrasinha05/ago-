@@ -42,7 +42,7 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
       <ol>{report.unassigned_project_stages.slice(0,12).map((s,i)=><li key={s.project_title+'-'+s.stage+'-'+i}>
        <strong>{s.project_title} — {s.stage}</strong> · {s.responsible_manager_name} accountable
        <small>{s.deliverable}</small>
-       <small>{s.candidate_name?'Workload-aware suggestion: '+s.candidate_name+' ('+s.candidate_workload+' active/queued tasks)':'No qualified matching active staff; review HR request'}. No autonomous assignment has occurred.</small>
+       <small>{s.candidate_name?'Workload-aware suggestion: '+s.candidate_name+' ('+s.candidate_workload+' active/queued tasks)':'No qualified matching active staff; review HR request'}{s.founder_local_qa_candidate?' · Founder-only local QA candidate; requires separate AI delivery manager and actual reviewed evidence.':''}. No autonomous assignment has occurred.</small>
        <a href="#ago-project-portfolio">Inspect project record ↗</a>
       </li>)}</ol>
     </div>}

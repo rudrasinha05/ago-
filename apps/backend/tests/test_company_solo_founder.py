@@ -111,3 +111,43 @@ def test_solo_founder_is_actual_quality_stage_owner_without_fake_reviewer(case, 
                      founder)
     assert activated["assignee_id"] == info["founder_id"]
     assert activated["task_executed"] is False
+
+
+def test_legacy_unstaffed_quality_suggests_local_founder_without_fake_assignment(case, monkeypatch):
+    from uuid import uuid4
+    from test_enterprise_http_21_27 import department
+    client, headers, info = case
+    founder = headers["founder"]
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    monkeypatch.delenv("AGO_FOUNDER_SOLO_APPROVAL", raising=False)
+    info["db"].execute(
+        "UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s",
+        (info["tenant"], info["reviewer_id"]),
+    )
+    dept=department(client,founder)
+    pm=post(client,"/v1/organization/employees",founder,
+            {"department_id":dept,"name":"Delivery Manager AI","kind":"ai"})["id"]
+    response=client.put("/v1/organization/company/employees/"+pm+"/role",
+                        headers=founder,json={
+                          "role_title":"Project Manager",
+                          "core_responsibilities":"Oversee governed delivery",
+                          "extra_responsibilities":"Arrange authorized QA"})
+    assert response.status_code==200,response.text
+    project=post(client,"/v1/organization/company/projects/start",founder,
+                 {"brief":"Build a local product with reviewed software QA and honest evidence",
+                  "operation_key":str(uuid4())})
+    quality=next(s for s in project["stages"] if s["stage"]=="quality")
+    assert quality["suggested_assignee_id"] is None
+    monkeypatch.setenv("AGO_FOUNDER_SOLO_APPROVAL","true")
+    report=client.get("/v1/organization/company/management/workload",headers=founder)
+    assert report.status_code==200,report.text
+    vacancy=next(v for v in report.json()["unassigned_project_stages"]
+                 if v["stage"]=="quality" and v["project_id"]==project["id"])
+    assert vacancy["candidate_id"] == info["founder_id"]
+    assert vacancy["founder_local_qa_candidate"] is True
+    assert report.json()["staffing_decisions_executed"] == 0
+    saved=info["db"].execute("""
+      SELECT suggested_assignee_id FROM ago_founder_intake_stages
+      WHERE tenant_id=%s AND intake_id=%s AND stage='quality'
+    """,(info["tenant"],project["id"])).fetchone()
+    assert saved["suggested_assignee_id"] is None
