@@ -145,6 +145,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
            <details className="ago-ai-chain">
             <summary>Ollama CEO → CTO → PM → employee · {st.founder_agent_result.roles_completed}/4 recorded local AI passes · Human QA pending</summary>
             <p>Board recommendations (nonbinding): {(st.founder_agent_result.board_recommendations||[]).map(v=>v.seat+': '+v.recommendation.toUpperCase()).join(' · ')||'No verified Board recommendation recorded'} — Founder makes the actual decision.</p>
+            {st.founder_agent_result.board_blocked&&<p role="status"><strong>Board objection recorded — internal handoff paused after {st.founder_agent_result.blocked_by_board_seat||'Board'}.</strong> Downstream AI roles did not execute in this run. Founder must examine the objection and authorize an appropriately reviewed next action; this is not an automatic project rejection or release.</p>}
             <ol>{(st.founder_agent_result.handoffs||[]).map(h=><li key={h.role}>
               <strong>{h.role.toUpperCase()} · {h.employee_name}</strong>
               <small>Employee record: {h.employee_id} · {h.human_qa_approved?'QA passed':'Independent QA required'}</small>

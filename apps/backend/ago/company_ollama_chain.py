@@ -28,6 +28,7 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
     brief=str(project["brief"])[:1500]
     handoffs=[]
     board_advice=[]
+    blocked_seat=None
     previous=""
     for (role,_,goal),person in zip(ROLE_STAGES,participants,strict=True):
         if role!=person["role"]:
@@ -54,13 +55,16 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
         bounded=output[:950]
         if role in ("ceo", "cto"):
             vote = board_recommendation(bounded)
+            board_seat="Strategy & Vision" if role=="ceo" else "Technology Oversight"
             board_advice.append({
-                "seat": "Strategy & Vision" if role == "ceo" else "Technology Oversight",
+                "seat": board_seat,
                 "employee_id": person["employee_id"],
                 "recommendation": vote,
                 "verifiable_model_output": vote != "unverified",
                 "binding_authorization": False,
             })
+            if vote=="deny":
+                blocked_seat=board_seat
         handoffs.append({
             "role":role,"employee_id":person["employee_id"],
             "employee_name":person["employee_name"],
@@ -68,6 +72,10 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
             "human_qa_approved":False,
         })
         previous=bounded
+        # Do not send a rejected proposal to the next AI role; retain the
+        # actual objection as a recorded draft for founder resolution.
+        if blocked_seat:
+            break
     return {
         "kind":"local_company_governed_handoff",
         "project_id":str(project["intake_id"]),
@@ -75,8 +83,12 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
         "handoffs":handoffs,
         "board_recommendations":board_advice,
         "board_recommendations_binding":False,
+        "board_blocked":bool(blocked_seat),
+        "blocked_by_board_seat":blocked_seat,
+        "requires_founder_resolution":bool(blocked_seat),
         "roles_completed":len(handoffs),
-        "execution_scope":"four sequential internal model-only drafting passes",
+        "execution_scope":("AI drafting paused on Board DENY" if blocked_seat
+                           else "four sequential internal model-only drafting passes"),
         "provider_mode":"ollama_local",
         "requires_human_qa":True,
         "task_execution_authorized":True,

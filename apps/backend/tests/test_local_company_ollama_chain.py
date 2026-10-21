@@ -122,6 +122,11 @@ def test_board_approve_deny_are_verifiable_but_never_authorize_execution():
                                  provider=StructuredBoardModel())
     assert [v["recommendation"] for v in result["board_recommendations"]] == [
         "approve", "deny"]
+    assert result["board_blocked"] is True
+    assert result["blocked_by_board_seat"] == "Technology Oversight"
+    assert result["requires_founder_resolution"] is True
+    assert result["roles_completed"] == 2
+    assert [h["role"] for h in result["handoffs"]]==["ceo","cto"]
     assert all(v["verifiable_model_output"] for v in result["board_recommendations"])
     assert all(v["binding_authorization"] is False for v in result["board_recommendations"])
     assert result["github_commits_created"] is False
@@ -137,6 +142,28 @@ def test_board_approve_deny_are_verifiable_but_never_authorize_execution():
                                provider=LateVerdictModel())
     assert all(v["recommendation"]=="unverified" for v in late["board_recommendations"])
 
+
+
+def test_ceo_deny_stops_handoff_before_cto_pm_and_worker():
+    db = ApprovedProjectDb()
+    class DenyingCEO:
+        def __init__(self): self.calls=0
+        def generate(self, prompt):
+            self.calls+=1
+            return "BOARD_RECOMMENDATION: DENY\\nRISKS: Founder must revise the scope"
+    model=DenyingCEO()
+    assignments=CompanyOllamaChainQueries(db).assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task())
+    result=run_four_role_chain(task=db.task(), participants=assignments,
+                               provider=model)
+    assert model.calls==1
+    assert result["board_blocked"] is True
+    assert result["blocked_by_board_seat"]=="Strategy & Vision"
+    assert result["roles_completed"]==1
+    assert result["handoffs"][0]["role"]=="ceo"
+    assert result["board_recommendations_binding"] is False
+    assert result["requires_human_qa"] is True
+    assert result["project_released"] is False
 
 
 @pytest.mark.parametrize("changes",[

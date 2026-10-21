@@ -49,3 +49,7 @@ Board voting, trusted AI approval evidence, end-to-end engineering and real GitH
 ## QA ownership when the founder is the only human
 
 In explicit sole-founder local mode, Quality stage can nominate the active human founder only if a different actual employee is the accountable delivery manager. The founder can review an AI worker's actual finished task under existing qa:review and author/reviewer separation, without a fake reviewer identity. The model's Board advisory is never an automatically passed QA verdict. Founder-as-delivery-manager still leaves a Quality staffing conflict visible.
+
+## Board denial as a bounded workflow hold
+
+A verifiable CEO/CTO local Ollama BOARD_RECOMMENDATION: DENY is recorded as nonbinding advisory evidence, but immediately stops further AI handoffs in that internal run. No CTO/PM/worker draft is fabricated after a CEO denial; no PM/worker is invoked after a CTO denial. The founder sees the objection and may choose a newly governed corrective action. Missing or ambiguous recommendations remain unverified rather than falsely authorized. No external release or GitHub side effect is authorized by this hold.
