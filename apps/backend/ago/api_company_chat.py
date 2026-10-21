@@ -235,6 +235,7 @@ def approval_inbox(limit: int = Query(default=100,ge=1,le=100),
 def management_workload(actor=Depends(authenticated), repositories=Depends(repository_scope)):
     allowed(repositories,actor,'organization:read')
     allowed(repositories,actor,'task:read')
+    allowed(repositories,actor,'approval:founder')
     return repositories.resolve(CompanyChatPort).management_workload(actor.tenant_id)
 
 @router.get('/opportunities')
@@ -242,6 +243,7 @@ def opportunity_radar(limit: int = Query(default=30,ge=1,le=100),
                       actor=Depends(authenticated), repositories=Depends(repository_scope)):
     allowed(repositories,actor,'organization:read')
     allowed(repositories,actor,'brain:read')
+    allowed(repositories,actor,'approval:founder')
     return repositories.resolve(CompanyChatPort).opportunity_radar(actor.tenant_id,limit)
 
 
@@ -259,6 +261,7 @@ def market_intelligence(limit: int = Query(default=100,ge=1,le=200),
                         repositories=Depends(repository_scope)):
     allowed(repositories,actor,'organization:read')
     allowed(repositories,actor,'brain:read')
+    allowed(repositories,actor,'approval:founder')
     try:
         return repositories.resolve(CompanyChatPort).market_intelligence(actor.tenant_id,limit)
     except (ValueError,PermissionError) as exc:
