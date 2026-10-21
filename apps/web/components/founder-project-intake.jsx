@@ -49,6 +49,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
       '### '+x.position+'. '+x.stage,
       x.deliverable,
       'Suggested employee: '+(x.suggested_assignee_name||'Not assigned'),
+      'Independently approved employee: '+(x.approved_assignee_name||'Not delegated'),
       'Executing employee: '+(x.executing_employee||'None'),
       'Task: '+(x.task_id||'Not materialized')+' | Status: '+(x.task_status||'Not started'),
       'Agent run: '+(x.agent_run_status||'No run')+' | Failure code: '+(x.agent_failure_code||'None'),
@@ -126,6 +127,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
          <h4>{projectDetail.title}</h4>
          <p><b>Status:</b> {projectDetail.status_label} · <b>Strategy:</b> {projectDetail.plan_status} · <b>Delivery health:</b> {projectDetail.project_health}</p>
          <p><b>Evidence-backed QA completion:</b> {projectDetail.qa_passed_stages}/{projectDetail.stage_count} stages · {projectDetail.completion_percent}% · {projectDetail.running_stages} running · {projectDetail.failed_stages} failed · {projectDetail.unassigned_stages} staffing gaps.</p>
+         <p><b>Independently approved workforce assignments:</b> {projectDetail.reviewed_delegations_count??0}/{projectDetail.stage_count}. Suggestions are not approved assignments; assignments do not execute tasks.</p>
          <button type="button" onClick={exportProjectReport}>Export current evidence report (.md)</button>
          <p><b>Founder requirement:</b> {projectDetail.brief}</p>
          <p><b>Accountable manager:</b> {projectDetail.accountable_manager_name}</p>
@@ -136,6 +138,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
           <small>{st.deliverable}</small>
           <small>Suggested: {st.suggested_assignee_name||'Employee needed'} · Executing: {st.executing_employee||'No governed task started'}</small>
           <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no independent verdict'}</small>
+          <small>Delegated stage worker: {st.approved_assignee_name||'Awaiting independent personnel review'} {st.delegated_at?'· applied '+new Date(st.delegated_at).toLocaleString():''}</small>
           <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
           {st.qa_evidence&&<details><summary>Independent QA evidence</summary><p>{st.qa_evidence}</p></details>}
          </li>)}</ol>
