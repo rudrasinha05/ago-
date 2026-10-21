@@ -128,3 +128,27 @@ reported as passed by mocked CI.
 self-directed code editing, PR creation, human replacement, continuous
 background operation, paid marketing or market-ready product publishing.
 Those capabilities need their own separate approved task/tools/QA evidence.
+
+## Founder-requested future model upgrade backlog (deferred)
+
+Decision: The founder has installed and GPU-tested `qwen2.5-coder:1.5b`
+(100% GPU reported by local `ollama ps`) and explicitly requested that a
+stronger model be evaluated **later**, not installed or activated now.
+Keep `AGO_LLM_MODEL=qwen2.5-coder:1.5b` for the immediate AGO live end-to-end
+test. Do not silently pull, switch, preload or download a model.
+
+Future evaluation candidates, subject to founder approval:
+- `qwen2.5-coder:3b` for developer/programming tasks.
+- `qwen2.5:3b` for general reasoning by Board/management.
+
+Before switching, compare real approved AGO sample tasks: useful output
+accuracy, JSON/schema compliance, Board recommendation parsing, fail-closed
+behavior, response latency, GPU offload and GPU VRAM/RAM usage. On the 4 GB
+GTX 1650 a 3B model may partly run on CPU; 100% GPU fit is NOT guaranteed.
+Only promote a candidate when the founder accepts measured trade-offs. The
+current AGO model setting is a global local model tag; different models
+per role require a separately approved implementation. No cloud fallback or
+paid API should activate automatically.
+
+Status: BACKLOG / NOT STARTED. This note is a decision record, not an
+installation or performance benchmark.
