@@ -363,48 +363,33 @@ def preview_database_allowed(dsn: str) -> bool:
     """
     if local_database(dsn):
         return True
-    # Hostname, database and username are exact allowlists; opt-in alone
-    # cannot change the worker into a generic cloud database client.
+    if os.getenv("AGO_MARKET_PREVIEW_CONTAINER") != "true":
+        return False
     try:
         parsed = urlsplit(dsn)
-        if parsed.scheme not in ("postgresql", "postgres"):
-            return False
-        if parsed.port not in (None, 5432) or parsed.query or parsed.fragment:
-            return False
-        if not parsed.password:
-            return False
-        docker_preview = (
-            os.getenv("AGO_MARKET_PREVIEW_CONTAINER") == "true"
-            and parsed.hostname == "postgres"
-            and parsed.username == "ago_preview"
-            and parsed.path == "/ago_preview"
-        )
-        railway_preview = (
-            os.getenv("AGO_MARKET_RAILWAY_PREVIEW") == "true"
-            and parsed.hostname == "postgres.railway.internal"
-            and parsed.username == "postgres"
-            and parsed.path == "/railway"
-        )
-        return docker_preview or railway_preview
+        return (parsed.scheme in ("postgresql", "postgres")
+                and parsed.hostname == "postgres"
+                and parsed.port in (None, 5432)
+                and parsed.username == "ago_preview"
+                and parsed.path == "/ago_preview"
+                and not parsed.fragment)
     except ValueError:
         return False
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="AGO bounded personal preview market signals")
-    parser.add_argument("--tenant-id", default=os.getenv("AGO_MARKET_TENANT_ID"), required=False)
+    parser = argparse.ArgumentParser(description="AGO continuous market signals (local only)")
+    parser.add_argument("--tenant-id", required=True)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval-seconds", type=int, default=3600)
     args = parser.parse_args(argv)
-    if not args.tenant_id:
-        parser.error("Existing preview tenant UUID is required via --tenant-id or AGO_MARKET_TENANT_ID")
     tenant_id = str(UUID(args.tenant_id))
     if not 900 <= args.interval_seconds <= 86400:
         parser.error("Market research interval must be between 900 and 86400 seconds")
     dsn = os.getenv("AGO_POSTGRES_DSN", "")
     if (os.getenv("AGO_ENVIRONMENT", "development") not in ("development", "test", "testing")
             or not preview_database_allowed(dsn)):
-        parser.error("Only local development/test or explicitly approved private preview PostgreSQL is supported")
+        parser.error("Only local development/test or explicitly opted-in isolated Docker preview PostgreSQL is supported")
     return watch(dsn, tenant_id, args.once, args.interval_seconds)
 
 
