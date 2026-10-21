@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-from ago.company_engineering import verify_persisted_candidate, stage_candidate
+from ago.company_engineering import stage_candidate, verify_persisted_candidate
 
 
 def inspect(path: Path) -> dict:
@@ -18,11 +18,11 @@ def inspect(path: Path) -> dict:
         raise ValueError("Small regular local JSON file required")
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict):
-        raise ValueError("AGO run result must be a JSON object")
+        raise TypeError("AGO run result must be a JSON object")
     # Supports a copied agent run receipt or a direct review candidate.
     result = document.get("result", document)
     if not isinstance(result, dict):
-        raise ValueError("AGO run result must contain one object")
+        raise TypeError("AGO run result must contain one object")
     if "result" in document and result.get("board_review_cleared") is not True:
         raise PermissionError("Source staging requires the complete approving AI Board record")
     value = result.get("engineering_candidate", result)
@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
             report["mode"] = "files_staged_for_human_review"
         print(json.dumps(report, sort_keys=True))
         return 0
-    except (ValueError, PermissionError, FileExistsError, OSError, KeyError):
+    except (ValueError, TypeError, PermissionError, FileExistsError, OSError, KeyError):
         # Avoid leaking raw untrusted code, credentials or local paths.
         print(json.dumps({"ok": False, "error": "candidate_review_failed"}))
         return 2
