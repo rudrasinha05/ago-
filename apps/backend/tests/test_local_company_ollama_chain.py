@@ -11,6 +11,7 @@ import pytest
 import ago.model_handlers as handlers
 from ago.company_ollama_chain import LocalCompanyChain
 from ago.credits import CreditBudget
+from ago.repository_ports import LocalCompanyChainPort
 
 
 def uid():
@@ -136,8 +137,11 @@ def test_opt_in_registers_handoff_under_existing_approved_task_action(monkeypatc
             charges.append(details)
     class Repos:
         def resolve(self,port):
-            assert port is CreditBudget
-            return Credits()
+            if port is CreditBudget:
+                return Credits()
+            if port is LocalCompanyChainPort:
+                return LocalCompanyChain(db)
+            raise AssertionError("Unexpected repository port")
     monkeypatch.setenv("AGO_LLM_PROVIDER","ollama_local")
     monkeypatch.setenv("AGO_ENABLE_LOCAL_MODELS","true")
     monkeypatch.setenv("AGO_LOCAL_COMPANY_CHAIN","true")
