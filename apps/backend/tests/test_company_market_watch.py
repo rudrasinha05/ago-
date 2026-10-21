@@ -91,3 +91,19 @@ def test_openalex_and_crossref_metadata_do_not_copy_abstracts():
     rows2 = market.parse_metadata(json.dumps(crossref).encode(),"crossref-metadata","research")
     assert len(rows2)==1 and rows2[0]["excerpt"]==""
     assert rows2[0]["source_url"]=="https://doi.org/10.2000/test"
+
+
+def test_market_worker_database_scope_denies_arbitrary_remote_and_production(monkeypatch):
+    local="postgresql://operator:test@localhost:5432/ago_test"
+    isolated="postgresql://ago_preview:secret@postgres:5432/ago_preview"
+    arbitrary="postgresql://ago_preview:secret@cloud.example.net:5432/ago_preview"
+    monkeypatch.delenv("AGO_MARKET_PREVIEW_CONTAINER", raising=False)
+    assert market.preview_database_allowed(local) is True
+    assert market.preview_database_allowed(isolated) is False
+    monkeypatch.setenv("AGO_MARKET_PREVIEW_CONTAINER","true")
+    assert market.preview_database_allowed(isolated) is True
+    assert market.preview_database_allowed(arbitrary) is False
+    assert market.preview_database_allowed(
+        "postgresql://ago_preview:secret@postgres:5432/company_prod") is False
+    assert market.preview_database_allowed(
+        "postgresql://unreviewed:secret@postgres:5432/ago_preview") is False
