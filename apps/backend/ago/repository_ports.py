@@ -16,6 +16,7 @@ from ago.behavior_store import BehaviorStore as _BehaviorStore
 from ago.analytics_store import AnalyticsStore as _AnalyticsStore
 from ago.integration_store import IntegrationStore as _IntegrationStore
 from ago.company_chat import CompanyChat as _CompanyChat
+from ago.document_vault import DocumentVault as _DocumentVault
 from ago.access import AccessDecision
 from ago.access import AccessService as _AccessService
 from ago.agent_runtime import AgentRuntime as _AgentRuntime
@@ -1037,6 +1038,18 @@ class IntegrationStorePort(Protocol):
 
 
 @runtime_checkable
+class DocumentVaultPort(Protocol):
+    def create(self, tenant: str, actor: str, project: str, title: str,
+               body: str, classification: str) -> dict: ...
+    def list(self, tenant: str, actor: str, project: str) -> list[dict]: ...
+    def read(self, tenant: str, actor: str, document: str) -> dict: ...
+    def revise(self, tenant: str, actor: str, document: str, body: str) -> dict: ...
+    def change_access(self, tenant: str, actor: str, document: str,
+                      grantee: str, event: str, rationale: str) -> dict: ...
+    def audit(self, tenant: str, actor: str, document: str) -> list[dict]: ...
+
+
+@runtime_checkable
 class CompanyChatPort(Protocol):
     def channel(self, tenant: Any, channel: Any) -> Any: ...
     def list(self, tenant: Any, channel: Any, before: Any, limit: Any, reader_id: str | None = None) -> Any: ...
@@ -1065,6 +1078,7 @@ class CompanyChatPort(Protocol):
 
 REPOSITORY_BINDINGS = {
     CompanyChatPort: _CompanyChat,
+    DocumentVaultPort: _DocumentVault,
     ReviewedChangesPort: _ReviewedChanges,
     EnterpriseGraphPort: _EnterpriseGraph,
     BehaviorStorePort: _BehaviorStore,
