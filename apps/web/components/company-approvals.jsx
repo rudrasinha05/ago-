@@ -135,7 +135,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
          required maxLength={3000} rows={3} placeholder="Explain the reviewed scope and your decision"/>
        <div className="approval-actions"><button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(true)}>Approve</button>
         <button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(false)}>Deny</button></div>
-      </>:<p>Only the authenticated founder can approve or deny this request. You can still inspect its details.</p>}
+      </>:<p>{selected.requires_founder_decision?'Only an authenticated active human founder can decide this strategic request.':'This operational request requires a different authorized human reviewer; the requester cannot self-approve.'} You can still inspect its details.</p>}
     </div>}
     {error&&<p role="alert">{error}</p>}
    </section>
@@ -158,7 +158,7 @@ export function ApprovalTopAlerts({api,me,onView,enabled=true}) {
     const known=new Set(data.map(a=>a.id));
     const arrived=needs.find(a=>prior.current===null||!prior.current.has(a.id));
     setPending(needs.length);
-    if(arrived)setNotice({id:arrived.id,requester:arrived.requester_name,title:subject(arrived)});
+    if(arrived)setNotice({id:arrived.id,requester:arrived.requester_name,title:subject(arrived),strategic:arrived.requires_founder_decision});
     prior.current=known;
    }catch{if(live)setPending(0);}
   }
@@ -171,7 +171,7 @@ export function ApprovalTopAlerts({api,me,onView,enabled=true}) {
    Approvals {pending>0&&<span aria-label={pending+' approvals need your review'}>{pending}</span>}
   </button>
   {notice&&<div className="approval-top-notice" role="status">
-   <strong>Founder approval needed</strong>
+   <strong>{notice.strategic?'Founder approval needed':'Independent review needed'}</strong>
    <p>{notice.requester||'Employee'} requests: {notice.title}</p>
    <button type="button" onClick={()=>{setNotice(null);onView?.();}}>View details</button>
    <button type="button" onClick={()=>setNotice(null)} aria-label="Dismiss approval popup">×</button>
