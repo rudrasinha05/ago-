@@ -340,8 +340,10 @@ def test_full_board_charges_seven_virtual_attempts(monkeypatch):
         def charge(self,**kwargs): charged.append(kwargs)
     class Repos:
         def resolve(self,port):
-            if port is CreditBudget: return Credits()
-            if port is CompanyOllamaChainQueries: return CompanyOllamaChainQueries(db)
+            if port is CreditBudget:
+                return Credits()
+            if port is CompanyOllamaChainQueries:
+                return CompanyOllamaChainQueries(db)
             raise AssertionError("Unexpected port")
     monkeypatch.setenv("AGO_LLM_PROVIDER","ollama_local")
     monkeypatch.setenv("AGO_ENABLE_LOCAL_MODELS","true")
