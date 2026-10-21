@@ -676,6 +676,18 @@
       "ago_tool_run_evidence",
       "ago_tool_runs"
     ],
-    "workflows": []
+    "workflows": [],
+    "document_vault": [
+      "ago_company_document_access_audit",
+      "ago_company_document_acl_events",
+      "ago_company_document_revisions",
+      "ago_company_documents",
+      "ago_employees",
+      "ago_founder_intakes",
+      "ago_founder_project_lead",
+      "ago_project_stage_delegation_activations",
+      "ago_user_roles",
+      "ago_users"
+    ]
   }
 }
