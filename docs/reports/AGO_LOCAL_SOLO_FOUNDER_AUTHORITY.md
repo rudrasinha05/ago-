@@ -165,3 +165,25 @@ for the generated project or production release is implied.
 **Scope:** initial bounded Python software candidate; arbitrary Android/web
 projects, automated CI-on-candidate and automatic draft PR creation from
 that candidate remain unimplemented. No replacement for human code review.
+
+
+### Reviewable GitHub commit-operation draft (no GitHub write)
+
+After source inspection, identify the **existing** approved AGO GitHub project
+UUID and its real, current, reviewed 40-digit develop SHA. Generate a new
+random UUID for the separately governed operation. The exported candidate
+can be staged along with an exact IntegrationStore-compatible JSON operation:
+
+    python scripts/ago_engineering_candidate.py --input candidate.json --output candidate-review --github-project-id <EXISTING_AGO_GITHUB_PROJECT_UUID> --github-operation-id <NEW_OPERATION_UUID> --github-expected-sha <40_CHARACTER_DEVELOP_SHA> --github-message "Reviewed bounded source candidate" --apply --confirm WRITE_REVIEWED_CANDIDATE
+
+This creates a new local file
+`candidate-review/AGO_UNSUBMITTED_GITHUB_OPERATION.json`
+with exact fields: id, project_id, operation=commit_files and payload
+(expected_sha, message, files). It is merely a founder-inspectable DRAFT.
+Do not confuse a syntactically validated source candidate with a tested,
+reviewed and authorized GitHub change. The existing IntegrationStore review,
+approval, project repository binding, current-head comparison, network
+credential and durable dispatch audit must ALL still pass. This offline tool
+never requests a token, executes code, calls the network or posts the draft
+automatically. A draft PR is a separate reviewed GitHub operation; merging or
+public release is not included.
