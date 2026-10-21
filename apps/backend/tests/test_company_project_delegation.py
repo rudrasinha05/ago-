@@ -83,5 +83,7 @@ def test_worker_scope_and_project_isolation_are_denied(case):
          expected=404)
     post(client,BASE+"/projects/"+str(uuid4())+"/delegations",founder,
          {"stage":"implementation","assignee_id":researcher},expected=404)
-    assert client.get(path,headers=headers["reviewer"]).status_code==200
+    # Reviewer approval power does not confer company-wide read access.
+    assert client.get(path,headers=headers["reviewer"]).status_code==403
+    assert client.get(path,headers=founder).status_code==200
     assert client.get(path).status_code==401
