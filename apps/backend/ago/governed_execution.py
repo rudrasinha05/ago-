@@ -24,12 +24,19 @@ class GovernanceGate:
     ):
         if principal.tenant_id != tenant_id:
             raise PermissionError("Cross-tenant decision denied")
-        if not self.security.permitted(principal, "approval:decide", tenant_id):
-            raise PermissionError("Only authenticated founder may authorize approvals")
+        strategic = self.approvals.requires_founder_decision(
+            request_id=request_id, tenant_id=tenant_id
+        )
+        permission = "approval:founder" if strategic else "approval:decide"
+        if not self.security.permitted(principal, permission, tenant_id):
+            raise PermissionError(
+                "Only the active founder may authorize strategic approvals"
+                if strategic else "Independent operational review permission required"
+            )
         return self.approvals.decide(
             request_id=request_id, tenant_id=tenant_id,
             reviewer_id=principal.subject, approve=approve,
-            reason=reason, authorized=True,
+            reason=reason, authorized=True, founder_only=strategic,
         )
 
     def authorize_task(self, task: GovernedTask, *, principal: Principal) -> GovernedTask:
