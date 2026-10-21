@@ -15,6 +15,7 @@ from ago.api_insights import router as insights_router
 from ago.api_knowledge import router as knowledge_router
 from ago.api_m2 import router as m2_router
 from ago.api_company_chat import router as company_chat_router
+from ago.api_documents import router as documents_router
 from ago.api_meta import router as meta_router
 from ago.api_operations import router as operations_router
 from ago.api_tools import router as tools_router
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(integration_router)
     app.include_router(m2_router)
     app.include_router(company_chat_router)
+    app.include_router(documents_router)
     app.include_router(brain_router)
     app.include_router(agents_router)
     app.include_router(insights_router)
