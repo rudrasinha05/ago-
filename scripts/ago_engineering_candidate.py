@@ -10,7 +10,11 @@ import json
 import sys
 from pathlib import Path
 
-from ago.company_engineering import stage_candidate, verify_persisted_candidate
+from ago.company_engineering import (
+    draft_github_commit_operation,
+    stage_candidate,
+    verify_persisted_candidate,
+)
 
 
 def inspect(path: Path) -> dict:
@@ -35,6 +39,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm", default="")
+    parser.add_argument("--github-project-id")
+    parser.add_argument("--github-operation-id")
+    parser.add_argument("--github-expected-sha")
+    parser.add_argument("--github-message")
     args = parser.parse_args(argv)
     try:
         candidate = inspect(args.input)
@@ -46,10 +54,32 @@ def main(argv: list[str] | None = None) -> int:
             "git_committed": False,
             "mode": "dry_run",
         }
+        github_options = (
+            args.github_project_id, args.github_operation_id,
+            args.github_expected_sha, args.github_message,
+        )
+        draft = None
+        if any(github_options):
+            if not all(github_options):
+                raise ValueError("All four exact GitHub draft operation options required")
+            draft = draft_github_commit_operation(
+                candidate,
+                project_id=args.github_project_id,
+                operation_id=args.github_operation_id,
+                expected_sha=args.github_expected_sha,
+                message=args.github_message,
+            )
+            report["github_draft_ready"] = True
+            report["github_submitted"] = False
         if args.apply:
             if args.confirm != "WRITE_REVIEWED_CANDIDATE":
                 raise PermissionError("Explicit review destination confirmation required")
             stage_candidate(candidate, args.output)
+            if draft:
+                with (args.output / "AGO_UNSUBMITTED_GITHUB_OPERATION.json").open(
+                    "x", encoding="utf-8"
+                ) as stream:
+                    json.dump(draft, stream, indent=2, sort_keys=True)
             report["mode"] = "files_staged_for_human_review"
         print(json.dumps(report, sort_keys=True))
         return 0
