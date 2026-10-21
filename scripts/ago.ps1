@@ -109,6 +109,14 @@ try {
         # Research is NEVER implicitly started by setting a tenant variable.
         # To run research, the founder launches 'market-watch' separately.
         Write-Host "AGO local server only. Market watcher is not auto-started."
+        $VisualRoute = Join-Path $BackendPath "ago\frontend\organization\index.html"
+        if (Test-Path -LiteralPath $VisualRoute -PathType Leaf) {
+            Write-Host "Visual Company Map: http://127.0.0.1:$Port/workspace/organization/"
+        }
+        else {
+            Write-Host "Company Map React frontend is not packaged. From repo root use .\\scripts\\ago-visual.ps1"
+            Write-Host "The basic /console/ is NOT the circular Company Map."
+        }
         & python -m ago.local_ops serve --port $Port
     }
     else {
