@@ -97,7 +97,7 @@ def test_confidential_registry_denies_unassigned_company_readers(case):
         "operation_key":str(uuid4())})
     # Reviewer is granted ordinary organization/brain read in this disposable
     # tenant to prove *per-project* access is checked independently.
-    for permission in ("organization:read","brain:read"):
+    for permission in ("organization:read","brain:read","task:read","messages:read"):
         info["db"].execute("""
             INSERT INTO ago_role_permissions(tenant_id,role,permission)
             VALUES (%s,'reviewer',%s) ON CONFLICT DO NOTHING
@@ -108,6 +108,14 @@ def test_confidential_registry_denies_unassigned_company_readers(case):
     assert client.get(BASE+"/projects/"+project["id"],headers=reviewer).status_code==404
     assert client.get(BASE+"/projects/"+project["id"]+"/delegations",
                       headers=reviewer).status_code==404
+    # Founder project event is not visible in company-wide chat to anyone
+    # with generic message permissions.
+    history=client.get(BASE+"/chat",headers=reviewer)
+    assert history.status_code==200,history.text
+    assert all(row["kind"]!="project" for row in history.json()["items"])
+    activity=client.get(BASE+"/activity",headers=reviewer)
+    assert activity.status_code==200,activity.text
+    assert all(row.get("project_name")!=project["title"] for row in activity.json())
     founder_list=client.get(BASE+"/projects",headers=founder)
     assert any(x["id"]==project["id"] for x in founder_list.json())
     assert client.get(BASE+"/projects/"+project["id"],headers=founder).status_code==200
