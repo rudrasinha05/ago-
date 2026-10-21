@@ -194,7 +194,7 @@ class CompanyChat:
                    AND r.role='founder' AND u.active AND e.kind='human')
              ))
         )
-      ORDER BY t.updated_at DESC''', (tenant_id,reader_id,reader_id,reader_id,reader_id)).fetchall()
+      ORDER BY t.updated_at DESC''', (tenant_id,reader_id,reader_id,reader_id,reader_id,reader_id)).fetchall()
 
     def staff(self, actor, department_id, manager_id, name, requirement, operation_key):
         db = self.db
