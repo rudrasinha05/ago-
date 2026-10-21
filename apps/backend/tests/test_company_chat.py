@@ -254,7 +254,7 @@ def test_founder_one_prompt_creates_durable_draft_and_never_dispatches(case):
 
 def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(case):
     client,headers,info=case
-    founder=headers['founder']
+    founder,reviewer=headers['founder'],headers['reviewer']
     dep=department(client,founder)
     worker=employee(client,founder,dep)
     intake_payload={
@@ -288,7 +288,9 @@ def test_founder_intake_seeds_only_allowlisted_internal_brief_when_ai_staffed(ca
     post(client,'/v1/tasks/'+task_id+'/approval',founder,
          {'approval_id':task_approval['request_id']})
     post(client,'/v1/governance/approvals/'+task_approval['request_id']+'/decision',
-         founder,{'approve':True,'reason':'Founder approved task authorization'})
+         founder,{'approve':True,'reason':'Operational self-approval forbidden'},expected=403)
+    post(client,'/v1/governance/approvals/'+task_approval['request_id']+'/decision',
+         reviewer,{'approve':True,'reason':'Independent reviewer approved task scope'})
     agent_run=post(client,'/v1/agents/tasks/'+task_id+'/run',founder)
     packet=agent_run['result']
     assert packet['kind']=='founder_scope_packet'
@@ -515,7 +517,7 @@ def test_idle_company_opportunities_are_tenant_scoped_audited_and_idempotent(cas
 
 def test_opportunities_do_not_interrupt_running_delivery_and_founder_escalates(case):
     client,headers,info=case
-    founder=headers['founder']
+    founder,reviewer=headers['founder'],headers['reviewer']
     first=post(client,BASE+'/opportunities/scan',founder,{})
     assert first['created']==3
     ideas=client.get(BASE+'/opportunities',headers=founder).json()
@@ -531,7 +533,9 @@ def test_opportunities_do_not_interrupt_running_delivery_and_founder_escalates(c
     post(client,'/v1/tasks/'+task['id']+'/approval',founder,
          {'approval_id':approval['request_id']})
     post(client,'/v1/governance/approvals/'+approval['request_id']+'/decision',founder,
-         {'approve':True,'reason':'Founder authorized this delivery task'})
+         {'approve':True,'reason':'Self-approval of operations forbidden'},expected=403)
+    post(client,'/v1/governance/approvals/'+approval['request_id']+'/decision',reviewer,
+         {'approve':True,'reason':'Independent review of delivery task'})
     post(client,'/v1/tasks/'+task['id']+'/start',founder)
     scanned=post(client,BASE+'/opportunities/scan',founder,{})
     assert scanned['created']==0 and scanned['reason']=='delivery_running'
