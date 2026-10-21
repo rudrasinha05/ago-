@@ -126,6 +126,29 @@ class DocumentVault:
                 self._audit(tenant,str(row["id"]),actor,"list")
         return visible
 
+    def eligible_members(self, tenant: str, actor: str, project: str) -> list[dict]:
+        """Return eligible active human project members for an AGO access picker."""
+        self._identifiers(tenant,actor,project)
+        if not self._founder(tenant,actor):
+            raise PermissionError("Only founder can inspect document access candidates")
+        self._project_owned(tenant,project,actor)
+        return [dict(row) for row in self.db.execute("""
+            SELECT e.id,e.name,e.role_title
+            FROM ago_employees e
+            JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id
+            WHERE e.tenant_id=%s AND e.kind='human' AND u.active
+              AND e.id<>%s
+              AND (EXISTS(
+                SELECT 1 FROM ago_founder_project_lead l
+                WHERE l.tenant_id=e.tenant_id AND l.intake_id=%s
+                  AND l.accountable_manager_id=e.id)
+              OR EXISTS(
+                SELECT 1 FROM ago_project_stage_delegation_activations d
+                WHERE d.tenant_id=e.tenant_id AND d.intake_id=%s
+                  AND d.assignee_id=e.id))
+            ORDER BY e.name,e.id
+        """,(tenant,actor,project,project)).fetchall()]
+
     def read(self, tenant: str, actor: str, document: str) -> dict:
         self._identifiers(tenant,actor,document)
         doc=self._document(tenant,document)
