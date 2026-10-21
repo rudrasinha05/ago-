@@ -87,6 +87,8 @@ def test_solo_founder_is_actual_quality_stage_owner_without_fake_reviewer(case, 
                              "core_responsibilities":"Accountable approved project delivery",
                              "extra_responsibilities":"Record QA and manager reporting"})
     assert profile.status_code==200,profile.text
+    post(client, "/v1/organization/employees", founder,
+         {"department_id":dept,"name":"Research Analyst","kind":"ai"})
     project = post(client, "/v1/organization/company/projects/start", founder,
                    {"brief":"Deliver secure AI company software with real QA and tracked tasks",
                     "operation_key":str(uuid4())})
