@@ -25,7 +25,10 @@ Founder final project release and security controls are unchanged. This is a fun
 From your existing AGO repo PowerShell terminal:
 
     cd C:\Users\rudra\Projects\ago-
-    .\scripts\ago-sync.ps1
+    git status --short       # confirm no pending edits first
+    git switch develop
+    git pull --ff-only origin develop
+    # ago-sync.ps1 arrives with this pull; use it for LATER updates only.
     # Only after an authorized local database backup, apply new migration 060:
     .\scripts\ago.ps1 migrate    # explicitly type MIGRATE when prompted
     $env:AGO_FOUNDER_SOLO_APPROVAL = 'true'
