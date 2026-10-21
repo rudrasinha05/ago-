@@ -699,10 +699,13 @@ class CompanyChat:
                    q.created_at AS qa_reviewed_at,ar.status AS agent_run_status,
                    ar.failure_code AS agent_failure_code,ar.started_at AS agent_started_at,
                    ar.finished_at AS agent_finished_at,
+                   CASE WHEN i.founder_id=%s THEN ar.result ELSE NULL END
+                       AS founder_agent_result,
                    assigned.assignee_id AS approved_assignee_id,
                    delegated.name AS approved_assignee_name,
                    assigned.applied_at AS delegated_at
             FROM ago_founder_intake_stages s
+            JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id AND i.id=s.intake_id
             LEFT JOIN ago_employees e ON e.tenant_id=s.tenant_id
               AND e.id=s.suggested_assignee_id
             LEFT JOIN ago_plan_steps step ON step.tenant_id=s.tenant_id
@@ -717,7 +720,7 @@ class CompanyChat:
             LEFT JOIN ago_employees delegated
               ON delegated.tenant_id=assigned.tenant_id AND delegated.id=assigned.assignee_id
             WHERE s.tenant_id=%s AND s.intake_id=%s ORDER BY s.position
-        """,(tenant_id,project_id)).fetchall()
+        """,(reader_id,tenant_id,project_id)).fetchall()
         result = dict(row)
         result['stages'] = [dict(stage) for stage in stages]
         completed = sum(s['qa_verdict']=='pass' for s in stages)
