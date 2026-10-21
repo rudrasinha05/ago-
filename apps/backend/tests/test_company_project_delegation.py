@@ -116,6 +116,10 @@ def test_confidential_registry_denies_unassigned_company_readers(case):
     activity=client.get(BASE+"/activity",headers=reviewer)
     assert activity.status_code==200,activity.text
     assert all(row.get("project_name")!=project["title"] for row in activity.json())
+    # An aggregate dashboard or a linked source can reveal hidden project names
+    # unless separately restricted to the active human founder.
+    for confidential in ("/management/workload","/market-intelligence","/opportunities"):
+        assert client.get(BASE+confidential,headers=reviewer).status_code==403
     founder_list=client.get(BASE+"/projects",headers=founder)
     assert any(x["id"]==project["id"] for x in founder_list.json())
     assert client.get(BASE+"/projects/"+project["id"],headers=founder).status_code==200
