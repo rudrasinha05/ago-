@@ -6,6 +6,7 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 init
 .\scripts\ago.ps1 serve
 .\scripts\ago.ps1 migrate
+.\scripts\ago.ps1 market-watch  # opt-in in a separate terminal, Ctrl+C stops
 #>
 param(
     [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch", "company-pulse")]
@@ -76,31 +77,11 @@ try {
         exit $LASTEXITCODE
     }
     if ($Action -eq "serve") {
-        $RadarProcess = $null
-        if ($env:AGO_MARKET_TENANT_ID) {
-            # Start-Job does NOT reliably inherit AGO_POSTGRES_DSN and other
-            # environment variables. A child process inherits the configured
-            # environment without exposing credentials on the command line.
-            # Never log a DSN or paste tokens into -ArgumentList.
-            & python -c "import sys,uuid;uuid.UUID(sys.argv[1])" $env:AGO_MARKET_TENANT_ID
-            if ($LASTEXITCODE -ne 0) { throw "AGO_MARKET_TENANT_ID must be a UUID." }
-            $RadarProcess = Start-Process -FilePath $Python.Source `
-              -WorkingDirectory $BackendPath `
-              -ArgumentList @('../../scripts/company_market_watch.py','--tenant-id',$env:AGO_MARKET_TENANT_ID,'--interval-seconds','3600') `
-              -PassThru -NoNewWindow
-            Write-Host ("Local market watcher started (PID " + $RadarProcess.Id + ").")
-        }
-        try {
-            & python -m ago.local_ops serve --port $Port
-        }
-        finally {
-            if ($RadarProcess) {
-                $RadarProcess.Refresh()
-                if (-not $RadarProcess.HasExited) {
-                    Stop-Process -Id $RadarProcess.Id -Force -ErrorAction SilentlyContinue
-                }
-            }
-        }
+        # Founder starts this foreground server and decides when to shut it down.
+        # Research is NEVER implicitly started by setting a tenant variable.
+        # To run research, the founder launches 'market-watch' separately.
+        Write-Host "AGO local server only. Market watcher is not auto-started."
+        & python -m ago.local_ops serve --port $Port
     }
     else {
         & python -m ago.local_ops $Action
