@@ -37,7 +37,15 @@
 .brain-dot.dormant{background:#70879e;box-shadow:none}
 .brain-hologram{position:relative;display:grid;place-items:center;min-height:310px;overflow:hidden;isolation:isolate;background:radial-gradient(ellipse at center,#274da040,transparent 70%)}
 .brain-hologram:before{content:"";position:absolute;inset:0;background:linear-gradient(transparent 96%,#39a9e41c 97%);background-size:100% 16px;pointer-events:none}
-.brain-svg{width:min(92%,510px);height:295px;position:relative;z-index:2;filter:drop-shadow(0 0 20px #385eff);animation:agoBrainFloat 5s ease-in-out infinite}
+.brain-volume{--brain-rotation:0deg;position:relative;z-index:2;width:min(92%,510px);transform-style:preserve-3d;transform:perspective(900px) rotateY(var(--brain-rotation)) rotateX(-8deg);transition:transform .38s ease;filter:drop-shadow(0 0 26px #385eff);will-change:transform}
+.brain-volume:before,.brain-volume:after{content:"";position:absolute;left:18%;right:16%;top:17%;bottom:16%;border:2px solid #64cefc45;border-radius:48%;transform:translateZ(-30px) scale(.92);box-shadow:0 0 25px #655aff55;pointer-events:none}
+.brain-volume:after{transform:translateZ(17px) scale(.98);border-color:#d889ff35;box-shadow:0 0 26px #a24eff55}
+.brain-volume-active{filter:drop-shadow(0 0 27px #ff3f8999)}
+.brain-svg{width:100%;height:295px;display:block;position:relative;z-index:2;transform:translateZ(8px);animation:agoBrainFloat 5s ease-in-out infinite}
+.brain-rotate-controls{position:absolute;z-index:6;bottom:53px;display:flex;gap:7px;align-items:center}
+.brain-rotate-controls button{border:1px solid #3879c9;color:#e6eaff;background:#0c2655eb;border-radius:8px;padding:5px 11px;font-size:11px;min-height:31px}
+.brain-rotate-controls button:focus-visible{outline:2px solid #e5c1ff}
+@media(prefers-reduced-motion:reduce){.brain-volume,.brain-svg{animation:none;transition:none}}
 .brain-orbit{position:absolute;width:65%;height:33%;border:2px solid #437dff80;border-radius:50%;box-shadow:0 0 18px #336fff77;transform:rotate(-15deg);animation:agoOrbit 8s ease-in-out infinite alternate}
 .orbit-two{width:72%;height:37%;border-color:#b848e079;transform:rotate(17deg);animation-direction:alternate-reverse}
 .brain-label{position:absolute;z-index:4;padding:7px 13px;border:1px solid #347ef4;border-radius:9px;background:#071c47e8;color:#bce6ff;box-shadow:0 0 13px #157ae244;font-size:11px;font-weight:700}
