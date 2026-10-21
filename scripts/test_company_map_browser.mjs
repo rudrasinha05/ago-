@@ -71,7 +71,7 @@ try{
     }else result=companyDocs.map(({body:ignore,revision:ignore2,...rest})=>rest);
   }
   else if(path.startsWith('/v1/organization/company/documents/')){
-    const pieces=path.split('/'),documentId=pieces[6],doc=companyDocs.find(d=>d.id===documentId);
+    const pieces=path.split('/'),documentId=pieces[5],doc=companyDocs.find(d=>d.id===documentId);
     if(!doc)throw new Error('Unexpected document fixture ID '+documentId);
     if(path.endsWith('/permissions')){
       docAccess.push({...body,document_id:doc.id});result={document_id:doc.id,grantee_id:body.grantee_id,action:body.event,effective:body.event==='grant'};
