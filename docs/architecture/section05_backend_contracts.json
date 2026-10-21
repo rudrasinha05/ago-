@@ -1781,7 +1781,7 @@
           "returns": "dict"
         },
         "projects": {
-          "arguments": "self, tenant_id: str, limit: int=30, offset: int=0",
+          "arguments": "self, tenant_id: str, limit: int=30, offset: int=0, reader_id: str | None=None",
           "returns": "list[dict]"
         },
         "approval_inbox": {
@@ -1805,7 +1805,7 @@
           "returns": "dict"
         },
         "project_details": {
-          "arguments": "self, tenant_id: str, project_id: str",
+          "arguments": "self, tenant_id: str, project_id: str, reader_id: str | None=None",
           "returns": "dict"
         },
         "approved_signal_project": {
@@ -1821,7 +1821,7 @@
           "returns": "dict"
         },
         "project_delegations": {
-          "arguments": "self, tenant_id: str, project_id: str",
+          "arguments": "self, tenant_id: str, project_id: str, reader_id: str | None=None",
           "returns": "list[dict]"
         }
       }
