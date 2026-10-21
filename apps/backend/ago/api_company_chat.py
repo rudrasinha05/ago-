@@ -25,7 +25,7 @@ def timeline(channel: str = 'global', before: int | None = Query(default=None, g
     allowed(repositories, actor, 'task:read')
     allowed(repositories, actor, 'messages:read')
     try:
-        return repositories.resolve(CompanyChatPort).list(actor.tenant_id, channel, before, limit)
+        return repositories.resolve(CompanyChatPort).list(actor.tenant_id, channel, before, limit, reader_id=actor.subject)
     except ValueError as exc:
         translate_error(exc)
 
@@ -47,7 +47,7 @@ def activity(actor=Depends(authenticated), repositories=Depends(repository_scope
     allowed(repositories, actor, 'brain:read')
     allowed(repositories, actor, 'organization:read')
     allowed(repositories, actor, 'task:read')
-    return repositories.resolve(CompanyChatPort).activity(actor.tenant_id)
+    return repositories.resolve(CompanyChatPort).activity(actor.tenant_id, reader_id=actor.subject)
 
     
 @router.get('/notifications')
