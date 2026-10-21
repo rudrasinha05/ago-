@@ -855,7 +855,7 @@
           "returns": "ApprovalRequest"
         },
         "decide": {
-          "arguments": "self, *, request_id: str, tenant_id: str, reviewer_id: str, approve: bool, reason: str, authorized: bool=False",
+          "arguments": "self, *, request_id: str, tenant_id: str, reviewer_id: str, approve: bool, reason: str, authorized: bool=False, founder_only: bool=False",
           "returns": "ApprovalRequest"
         },
         "list_requests": {
@@ -885,6 +885,10 @@
         "constitution_command": {
           "arguments": "self, *, actor: Principal, command: str, data: dict",
           "returns": "dict"
+        },
+        "requires_founder_decision": {
+          "arguments": "self, *, request_id: str, tenant_id: str",
+          "returns": "bool"
         }
       }
     },
