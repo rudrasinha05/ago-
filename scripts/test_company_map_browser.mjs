@@ -21,6 +21,7 @@ const departments=[{id:department,name:'Engineering'}];
 let tasks=[{id:id(6),action:'research:brief',assignee_id:developer,status:'running',project_name:'Orchestration research'}];
 let messages=[], calls=[];
 let appointments=[],roles={},reports=[],founderProjects=[],approvalRecords=[],asReviewer=false;
+let companyDocs=[],docAccess=[],docAudit=[];
 let workEvents=[{id:1,employee_id:developer,task_id:id(6),body:'research:brief → running',created_at:new Date().toISOString()}];
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try{
@@ -51,6 +52,36 @@ try{
     founderProjects.unshift({...result,staffing_gaps:4});
   }
   else if(path.endsWith('/company/projects'))result=founderProjects;
+  else if(path==='/v1/organization/company/projects/'+id(20)){
+    result={...founderProjects[0],brief:founderBriefSnapshot||founderProjects[0]?.title,
+      qa_passed_stages:0,stage_count:5,completion_percent:0,
+      running_stages:0,failed_stages:0,unassigned_stages:4,
+      reviewed_delegations_count:0,project_health:'staffing_required',
+      status_label:'under_process',revenue_record_status:'no_verified_evidence'};
+  }
+  else if(path==='/v1/organization/company/projects/'+id(20)+'/documents/eligible'){
+    result=[{id:id(35),name:'QA Reviewer',role_title:'Project Reviewer'}];
+  }
+  else if(path==='/v1/organization/company/projects/'+id(20)+'/documents'){
+    if(req.method()==='POST'){
+      const doc={id:id(40+companyDocs.length),project_id:id(20),title:body.title,
+        classification:body.classification,created_by:founder,revision:1,body:body.body};
+      companyDocs.push(doc);docAudit.push({document_id:doc.id,action:'revise',actor_id:founder,occurred_at:new Date().toISOString()});
+      result=doc;
+    }else result=companyDocs.map(({body:ignore,revision:ignore2,...rest})=>rest);
+  }
+  else if(path.startsWith('/v1/organization/company/documents/')){
+    const pieces=path.split('/'),documentId=pieces[6],doc=companyDocs.find(d=>d.id===documentId);
+    if(!doc)throw new Error('Unexpected document fixture ID '+documentId);
+    if(path.endsWith('/permissions')){
+      docAccess.push({...body,document_id:doc.id});result={document_id:doc.id,grantee_id:body.grantee_id,action:body.event,effective:body.event==='grant'};
+      docAudit.push({document_id:doc.id,actor_id:founder,action:body.event,occurred_at:new Date().toISOString()});
+    }else if(path.endsWith('/revisions')){
+      doc.revision+=1;doc.body=body.body;result={id:doc.id,revision:doc.revision};
+      docAudit.push({document_id:doc.id,actor_id:founder,action:'revise',occurred_at:new Date().toISOString()});
+    }else if(path.endsWith('/audit'))result=docAudit.filter(x=>x.document_id===doc.id);
+    else result={...doc};
+  }
   else if(path.endsWith('/company/management/workload'))result={
     employees:employees.map(e=>({...e,running:e.id===developer?1:0,queued:0,failed:0,
       completed:0,projects_accountable:e.id===cto?founderProjects.length:0})),
@@ -108,6 +139,30 @@ try{
  assert.equal(founderProjects.length,1);
  assert.equal(founderProjects[0].automatic_execution,false);
  assert.equal(founderProjects[0].stages.length,5);
+ // UI regression: founder manages per-document ACL inside AGO; no GitHub calls.
+ await page.getByRole('button',{name:/Inspect full project/}).first().click();
+ const vault=page.locator('.ago-document-vault');
+ await vault.getByRole('heading',{name:'Confidential documents · AGO local vault'}).waitFor();
+ await vault.getByLabel('Title',{exact:true}).fill('Review-only API plan');
+ await vault.getByLabel('Content',{exact:true}).fill('Sensitive local engineering notes');
+ await vault.getByLabel('Classification').selectOption('project_restricted');
+ await vault.getByRole('button',{name:'Save locally'}).click();
+ await vault.getByText('Document saved to AGO local PostgreSQL.').waitFor();
+ assert.equal(companyDocs.length,1);
+ await vault.getByLabel('Employee').selectOption(id(35));
+ await vault.getByLabel('Reason for the permission change').fill('Independent QA needs explicit access');
+ await vault.getByRole('button',{name:'Grant read access'}).click();
+ assert.equal(docAccess.at(-1).event,'grant');
+ await vault.getByLabel('Employee').selectOption(id(35));
+ await vault.getByLabel('Reason for the permission change').fill('QA scope review is complete now');
+ await vault.getByRole('button',{name:'Revoke access'}).click();
+ assert.equal(docAccess.at(-1).event,'revoke');
+ await vault.getByLabel('Document content / next revision').fill('Updated local requirements');
+ await vault.getByRole('button',{name:'Save new revision'}).click();
+ assert.equal(companyDocs[0].revision,2);
+ assert.equal(companyDocs[0].body,'Updated local requirements');
+ assert.equal(calls.some(c=>c.path.includes('github')&&c.body?.body?.includes('Sensitive local')),false);
+
  await page.getByText('Accountable delivery owner: CTO',{exact:false}).waitFor();
  await page.getByRole('heading',{name:'Management ownership and workforce utilization'}).waitFor();
  await page.getByRole('button',{name:'Inspect employee workload'}).click();
