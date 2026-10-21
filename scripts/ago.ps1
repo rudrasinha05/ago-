@@ -8,9 +8,10 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 migrate
 .\scripts\ago.ps1 market-watch  # opt-in in a separate terminal, Ctrl+C stops
 .\scripts\ago.ps1 safe-reconcile  # manual stale-run recovery, no replay
+.\scripts\ago.ps1 run-approved-internal  # only previously approved local internal AI briefs
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile")]
+    [ValidateSet("doctor", "tenants", "init", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -68,6 +69,18 @@ try {
             throw "Specify the existing AGO_MARKET_TENANT_ID for a tenant-scoped read-only pulse."
         }
         & python ../../scripts/company_readiness_audit.py --tenant-id $env:AGO_MARKET_TENANT_ID
+        exit $LASTEXITCODE
+    }
+    if ($Action -eq "run-approved-internal") {
+        Write-Host "Dry run of signed, founder-controlled, approved internal brief tasks."
+        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $Confirmation = Read-Host "Run up to 3 individually approved internal tasks? Type EXECUTE_APPROVED_INTERNAL_TASKS"
+        if ($Confirmation -cne "EXECUTE_APPROVED_INTERNAL_TASKS") {
+            Write-Host "Execution cancelled. No tasks dispatched."
+            exit 2
+        }
+        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
         exit $LASTEXITCODE
     }
     if ($Action -eq "safe-reconcile") {
