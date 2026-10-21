@@ -36,6 +36,11 @@ class CompanyOllamaChainQueries:
         if row is None or row["plan_status"]!="active":
             raise PermissionError("Founder-owned ACTIVE plan and linked discovery task required")
         full_board=os.getenv("AGO_LOCAL_FULL_BOARD_REVIEW", "").lower()=="true"
+        if (os.getenv("AGO_LOCAL_ENGINEERING_CANDIDATES")=="true"
+                and not full_board):
+            raise PermissionError(
+                "Engineering generation needs five real reviewed Board seats"
+            )
         if full_board and os.getenv("AGO_ENVIRONMENT","development").lower() not in (
             "development", "test", "testing"
         ):
