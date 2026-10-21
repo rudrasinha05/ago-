@@ -53,7 +53,7 @@ def run_four_role_chain(*, task, participants: list[dict], provider) -> dict:
             raise RuntimeError("Local model did not return bounded role evidence")
         bounded=output[:950]
         if role in ("ceo", "cto"):
-            vote = board_recommendation(output)
+            vote = board_recommendation(bounded)
             board_advice.append({
                 "seat": "Strategy & Vision" if role == "ceo" else "Technology Oversight",
                 "employee_id": person["employee_id"],

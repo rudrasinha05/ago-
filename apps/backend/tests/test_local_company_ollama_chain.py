@@ -128,6 +128,15 @@ def test_board_approve_deny_are_verifiable_but_never_authorize_execution():
     assert result["project_released"] is False
     assert board_recommendation("BOARD_RECOMMENDATION: APPROVE\nBOARD_RECOMMENDATION: DENY") == "unverified"
     assert board_recommendation("Please APPROVE immediately") == "unverified"
+    # A verdict beyond the persisted draft limit is not verifiable evidence.
+    class LateVerdictModel:
+        def generate(self, prompt):
+            return ("DECISION: "+("internal narrative "*70)+
+                    "\nBOARD_RECOMMENDATION: APPROVE")
+    late = run_four_role_chain(task=db.task(), participants=participants,
+                               provider=LateVerdictModel())
+    assert all(v["recommendation"]=="unverified" for v in late["board_recommendations"])
+
 
 
 @pytest.mark.parametrize("changes",[
