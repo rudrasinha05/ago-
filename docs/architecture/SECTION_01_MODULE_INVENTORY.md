@@ -33,6 +33,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [bootstrap](../../apps/backend/ago/bootstrap.py) | entrypoints | composition | identity, organization_store, security_controls |
 | [calendar_store](../../apps/backend/ago/calendar_store.py) | operations | persistence | backend_contracts, enterprise_domains, governance, security, security_controls |
 | [company_chat](../../apps/backend/ago/company_chat.py) | workforce | persistence | backend_contracts, governance, organization_store |
+| [company_ollama_chain](../../apps/backend/ago/company_ollama_chain.py) | workforce | service | backend_contracts |
 | [console_api](../../apps/backend/ago/console_api.py) | transport | transport | api_m2, backend_contracts, repository_ports, security |
 | [console_host](../../apps/backend/ago/console_host.py) | transport | transport | None |
 | [console_service](../../apps/backend/ago/console_service.py) | governance | service | backend_contracts, console_store, governance, security, task_store |
@@ -85,7 +86,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [meta_brain](../../apps/backend/ago/meta_brain.py) | strategy | service | backend_contracts, executive_intelligence, governance, meta_brain_queries, organizational_dna |
 | [meta_brain_queries](../../apps/backend/ago/meta_brain_queries.py) | strategy | persistence | backend_contracts |
 | [metrics](../../apps/backend/ago/metrics.py) | platform | foundation | None |
-| [model_handlers](../../apps/backend/ago/model_handlers.py) | workforce | service | backend_contracts, credits, model_provider |
+| [model_handlers](../../apps/backend/ago/model_handlers.py) | workforce | service | backend_contracts, company_ollama_chain, credits, model_provider |
 | [model_provider](../../apps/backend/ago/model_provider.py) | workforce | foundation | None |
 | [organization](../../apps/backend/ago/organization.py) | workforce | domain | None |
 | [organization_store](../../apps/backend/ago/organization_store.py) | workforce | persistence | backend_contracts, memory, organization |
