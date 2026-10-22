@@ -16,6 +16,11 @@ def package():
     destination = ROOT/'apps/backend/ago/frontend'
     if not (source/'index.html').is_file():
         raise SystemExit('Build @ago/web before packaging frontend')
+    # Delete only the retired, repo-owned M9 static bundle. This also clears
+    # leftover untracked files from older local installations on Windows.
+    retired = ROOT/'apps/backend/ago/console'
+    if retired.is_dir():
+        shutil.rmtree(retired)
     # Destination is exclusively reproducible generated release output.
     if destination.exists():
         shutil.rmtree(destination)
