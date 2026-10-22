@@ -1,4 +1,6 @@
-# AGO M11 — Pilot Browser Acceptance Operator Guide
+# AGO M11 — Pilot Browser Acceptance Operator Guide (historical)
+
+> **Current UI:** The retired `/console/` frontend is no longer shipped. All new real-browser pilots target `/workspace/organization/` and the Next.js workspaces.
 
 M11 is a **live-browser validation and usability hardening** milestone for the
 existing M9 Control Center on top of the CI-verified M10 release candidate.

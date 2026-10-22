@@ -65,11 +65,11 @@ Selecting a dashboard cannot broaden backend visibility; denied datasets remain
 explicitly unavailable. Human users without employee task assignments see an
 honest empty personal queue.
 
-Canonical JS source is in packages/sdk and packages/ui. The Python console assets
-are generated compatibility copies via `scripts/sync_console_adapters.py`;
-Section 6 CI prohibits drift, browser persistence and iframe embedding. Section 4
-explicitly permits the reviewed web/UI-to-SDK package edges. Existing console
-unit/live-browser acceptance remains mandatory.
+Canonical JS source is in `packages/sdk` and `packages/ui`, used directly by
+`apps/web`. The duplicate Python M9 console bundle and adapter generator have
+been removed. Section 6 CI prohibits reintroducing the old assets, browser
+persistence and iframe embedding. Section 4 explicitly permits the reviewed
+web/UI-to-SDK package edges. Next.js unit/live-browser acceptance is mandatory.
 
 ## Security headers and export packaging
 
@@ -79,8 +79,9 @@ Next. CSP script-src allows self and those reviewed static hashes, never inline
 arbitrary JavaScript or eval. connect-src self, frame-ancestors none, nosniff,
 DENY, no-referrer and private/no-store apply to frontend paths and assets.
 Style-src permits inline style attributes used by reviewed meter renderers;
-this does not permit inline script. Original `/console/` keeps its existing
-strict CSP. Runtime paths use Starlette StaticFiles path containment, validated
+this does not permit inline script. The former `/console/` is only a 308
+redirect to Company Map and serves no static assets. Runtime paths use
+Starlette StaticFiles path containment, validated
 by encoded traversal and unknown-route tests. No user-writable HTML is hosted.
 
 ## Verification and operation
@@ -93,7 +94,6 @@ npm test
 npm run build
 python scripts/package_frontend.py
 python scripts/check_frontend_architecture.py
-python scripts/sync_console_adapters.py --check
 python scripts/smoke_workspace_exports.py
 ```
 
@@ -112,7 +112,7 @@ and signed sessions, persisted goals, restricted reviewer, mobile dashboards and
 a complete two-human plan approval, task approval, execution and independent QA.
 Physical Windows/mobile UAT and expert assistive-technology audit are not claimed.
 
-Rollback reverts this section as one unit and rebuilds the prior image. No SQL
-migration/rollback is needed. The established `/console/` stays available as a
-compatible operational interface; never revert authorization/governance to work
-around a frontend error. Acceptance details live in SECTION06_FINAL_ACCEPTANCE.md.
+Release changes rebuild and verify the canonical Next.js export without SQL
+migration. `/console/` is a legacy bookmark redirect only; the old UI is not a
+fallback or supported rollback target. Never bypass authorization/governance
+for a frontend error. Acceptance details live in SECTION06_FINAL_ACCEPTANCE.md.

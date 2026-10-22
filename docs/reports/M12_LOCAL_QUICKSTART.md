@@ -13,11 +13,12 @@ approval and per-task QA. Paid AI/network features remain disabled by default.
 - **Backend:** `apps/backend/ago/` — signed login, governance, goals,
   departments/employees, guarded AI runs, independent QA, knowledge, credits,
   internal calendar, deterministic snapshots and registered read-only tools.
-- **Web frontend:** `apps/backend/ago/console/index.html` + `app.js`,
-  `views.js`, `actions.js`, `styles.css`. Same-origin at
-  `http://127.0.0.1:8000/console/`. Eight workspaces: Overview, Strategy,
-  Governance, Organization, Knowledge, Operations & Tools, Calendar,
-  Digital Twin. No separate Node/Vite frontend dev server needed.
+- **Web frontend:** `apps/web` is the only Next.js frontend; `scripts/ago-visual.ps1`
+  builds it and `scripts/package_frontend.py` packages the generated static export
+  into `apps/backend/ago/frontend`. Same origin at
+  `http://127.0.0.1:8000/workspace/organization/`. Eight workspaces: Overview,
+  Strategy, Governance, Organization/Company Map, Knowledge, Operations & Tools,
+  Calendar, Digital Twin. The retired `/console/` frontend assets were deleted.
 - **Database:** current PostgreSQL and 18 ordered, checksum-verified migrations
   in `deploy/sql/` (001–018). The local setup never resets existing tables.
 - **Operator CLI:** `apps/backend/ago/local_ops.py` and convenience
@@ -135,7 +136,7 @@ provider tools or paid models are automatically enabled.
 
 Open:
 
-- **Main console:** http://127.0.0.1:8000/console/
+- **Main Company Map:** http://127.0.0.1:8000/workspace/organization/
 - **Liveness:** http://127.0.0.1:8000/health/live
 - **Readiness:** http://127.0.0.1:8000/health/ready
 - **Developer API docs (local only):** http://127.0.0.1:8000/docs
@@ -161,7 +162,7 @@ python -m pytest -q --basetemp="C:\ago-pytest-temp"
 Pure frontend JS tests require optional Node.js 22+:
 
 ```powershell
-node --test tests_web/console.test.mjs
+node --test tests_web/workspace_compat.test.mjs
 ```
 
 Browser pilot tests require the optional Playwright Python package and its

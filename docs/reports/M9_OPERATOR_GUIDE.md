@@ -1,4 +1,6 @@
-# AGO M9 — Organizational Control Center operator guide
+# AGO M9 — Organizational Control Center operator guide (historical)
+
+> **Retired frontend:** The M9 `/console/assets/` frontend described below was permanently removed from the current `develop` code. Use `./scripts/ago-visual.ps1` and `/workspace/organization/` instead. `/console/` only redirects. The following is retained as a historical milestone record.
 
 ## Scope and security
 

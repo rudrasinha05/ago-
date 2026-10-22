@@ -134,7 +134,7 @@ From `apps/backend` after setting your own **localhost** `AGO_POSTGRES_DSN` and 
 python -m ago.local_ops doctor    # Read-only environment/schema check
 python -m ago.local_ops tenants   # Find your existing organization login UUID
 python -m ago.local_ops init      # ONLY for a brand-new organization, explicit consent
-python -m ago.local_ops serve     # Open http://127.0.0.1:8000/console/
+python -m ago.local_ops serve     # Open packaged Next.js at http://127.0.0.1:8000/workspace/organization/
 ```
 
 From repo root you can instead run `.\\scripts\\ago.ps1 doctor`, `tenants`, `init`, or `serve`. Session secrets are never written to files and paid model/external tools are not enabled automatically. Review the [full Windows quickstart](docs/reports/M12_LOCAL_QUICKSTART.md) before changing a database.
@@ -155,7 +155,7 @@ python -m pytest -q
 python -m uvicorn ago.main:app --reload
 ```
 
-Open the AGO Control Center at **`http://127.0.0.1:8000/console/`** after starting Uvicorn and signing in with an existing tenant UUID and credentials. No npm is needed to serve the web console. Optional JavaScript tests use `node --test tests_web/console.test.mjs` (Node 22+).
+**Current UI:** from repo root run `./scripts/ago-visual.ps1` in PowerShell to build, package and launch the *only* AGO frontend, then open **`http://127.0.0.1:8000/workspace/organization/`**. The old `/console/` bundle has been deleted; old bookmarks redirect to this Company Map. Use Node 22+ for the Next.js build. UI adapter tests: from `apps/backend`, `node --test tests_web/workspace_compat.test.mjs`.
 
 API documentation: `http://127.0.0.1:8000/docs`. The M3–M9 APIs are under `/v1/brain`, `/v1/agents`, `/v1/insights`, `/v1/operations`, `/v1/knowledge`, `/v1/council`, `/v1/meta`, `/v1/tools` and `/v1/console`.
 
