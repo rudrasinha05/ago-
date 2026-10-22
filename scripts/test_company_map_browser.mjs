@@ -31,7 +31,7 @@ try{
   const req=route.request(),url=new URL(req.url()),path=url.pathname,body=req.postDataJSON();let result=[];
   calls.push({path,method:req.method(),body});
   if(path==='/v1/sessions')result={access_token:'fixture-session'};
-  else if(path==='/v1/console/me')result=asReviewer?{id:id(31),tenant_id:tenant,display_name:'Reviewer',roles:['reviewer'],permissions:['approval:read','approval:decide']}:{id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read','brain:manage','approval:read','approval:decide']};
+  else if(path==='/v1/console/me')result=asReviewer?{id:id(31),tenant_id:tenant,display_name:'Reviewer',roles:['member'],permissions:['approval:read']}:{id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read','brain:manage','approval:read','approval:decide']};
   else if(path==='/v1/organization/departments')result=departments;
   else if(path==='/v1/organization/employees')result=employees;
   else if(path.endsWith('/company/activity'))result=tasks;
@@ -90,7 +90,7 @@ try{
   else if(path.endsWith('/company/approvals'))result=approvalRecords;
   else if(path.startsWith('/v1/governance/approvals/')&&path.endsWith('/decision')){
    const record=approvalRecords.find(a=>path.includes(a.id));assert.ok(record);
-   if(record.requires_founder_decision&&asReviewer)
+   if(asReviewer)
     return route.fulfill({status:403,json:{detail:'Strategic decisions require a human founder'}});
    if(!record.requires_founder_decision&&record.requester_id===(asReviewer?id(31):founder))
     return route.fulfill({status:403,json:{detail:'Independent human review required'}});
@@ -269,62 +269,49 @@ try{
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Mobile must not overflow horizontally');
  await page.screenshot({path:'tests/frontend/artifacts/ago-company-command-mobile.png',fullPage:true});
  assert.deepEqual(errors,[]);
- // Set up pending strategic and operational requests for two distinct people.
+ // Founder-alone approval policy: unprivileged logins can inspect, not decide.
  approvalRecords.push({id:id(37),requester_id:founder,requester_name:'Founder',
-   requester_role:'Founder',action:'tool:review:'+id(6),status:'pending',
-   approval_type:'governance_action',requires_founder_decision:false,
-   review_routing:'Independent active human reviewer; no self-review',
-   next_action:'A reviewed, bounded internal operation',created_at:new Date().toISOString()});
- approvalRecords.push({id:id(38),requester_id:id(31),requester_name:'Reviewer',
-   requester_role:'Reviewer',action:'tool:review:'+id(7),status:'pending',
-   approval_type:'governance_action',requires_founder_decision:false,
-   review_routing:'Independent active human reviewer; no self-review',
-   next_action:'A different human must review this request',created_at:new Date().toISOString()});
- // Restore desktop viewport after the mobile screenshot; desktop navigation is collapsed on phones.
+  requester_role:'Founder',action:'tool:review:'+id(6),status:'pending',
+  approval_type:'governance_action',requires_founder_decision:false,
+  review_routing:'Founder-only human decision',
+  next_action:'Founder's own reviewed decision',created_at:new Date().toISOString()});
+ approvalRecords.push({id:id(38),requester_id:developer,requester_name:'Developer',
+  requester_role:'Engineer',action:'tool:review:'+id(7),status:'pending',
+  approval_type:'governance_action',requires_founder_decision:false,
+  review_routing:'Founder-only human decision',
+  next_action:'CEO handles scoped project work, Founder holds exceptional decisions',
+  created_at:new Date().toISOString()});
  await page.setViewportSize({width:1700,height:1100});
- // Single visual Company Map approval inbox remains reachable by independent reviewer.
- asReviewer=true;
+ asReviewer=true; // ordinary read-only company member, not a reviewer
  await page.goto(base+'/workspace/organization/');
  await page.getByLabel('Organization ID').fill(tenant);
- await page.getByLabel('Work email').fill('reviewer@example.test');
- await page.getByLabel('Password',{exact:true}).fill('test-reviewer-password');
+ await page.getByLabel('Work email').fill('member@example.test');
+ await page.getByLabel('Password',{exact:true}).fill('test-member-password');
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
- await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor();
- const entries=page.locator('#company-approval-inbox .approval-entry');
- const approvalDialog=page.getByRole('dialog',{name:'Approval details'});
- await entries.filter({hasText:founderProjects[0].title}).getByRole('button',{name:'View approval details'}).click();
- assert.match(await approvalDialog.innerText(),/Only an authenticated active human founder/);
- assert.equal(await approvalDialog.getByRole('button',{name:'Approve',exact:true}).count(),0);
- await approvalDialog.getByRole('button',{name:'Close approval details'}).click();
- await entries.filter({hasText:'tool:review:'+id(7)}).getByRole('button',{name:'View approval details'}).click();
- assert.match(await approvalDialog.innerText(),/requires a different authorized human reviewer/);
- assert.equal(await approvalDialog.getByRole('button',{name:'Approve',exact:true}).count(),0);
- await approvalDialog.getByRole('button',{name:'Close approval details'}).click();
- // The header on other workspaces must describe the independent lane.
- await page.locator('#primary-nav').getByRole('link',{name:'Overview'}).click();
- await page.locator('.approval-top-notice').getByText('Operational approval needed').waitFor({timeout:15000});
- await page.locator('#primary-nav').getByRole('link',{name:'Organization'}).click();
- await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor();
- await page.locator('#company-approval-inbox .approval-entry').filter({hasText:'tool:review:'+id(6)})
-   .getByRole('button',{name:'View approval details'}).click();
- await approvalDialog.getByLabel('Mandatory decision reason').fill('Reviewed bounded operation as an independent human');
- await approvalDialog.getByRole('button',{name:'Approve',exact:true}).click();
- await approvalDialog.waitFor({state:'detached'});
- assert.equal(approvalRecords[1].status,'approved');
- assert.equal(approvalRecords[1].reviewer_id,id(31));
- assert.equal(approvalRecords[0].status,'pending');
+ await page.locator('#company-approval-inbox').getByText('0 need my review',{exact:false}).waitFor();
+ const readOnly=page.locator('#company-approval-inbox .approval-entry');
+ await readOnly.first().getByRole('button',{name:'View approval details'}).click();
+ const modal=page.getByRole('dialog',{name:'Approval details'});
+ assert.equal(await modal.getByRole('button',{name:'Approve',exact:true}).count(),0);
+ await modal.getByRole('button',{name:'Close approval details'}).click();
  asReviewer=false;
- await page.goto(base+'/workspace/organization/');
- await login();
- await page.locator('#company-approval-inbox .approval-entry').filter({hasText:founderProjects[0].title})
-   .getByRole('button',{name:'View approval details'}).click();
+ await page.goto(base+'/workspace/organization/');await login();
+ await page.locator('#company-approval-inbox').getByText('3 need my review',{exact:false}).waitFor();
+ const entries=page.locator('#company-approval-inbox .approval-entry');
  const founderDialog=page.getByRole('dialog',{name:'Approval details'});
- await founderDialog.getByLabel('Mandatory decision reason').fill('Founder approves documented scope');
+ await entries.filter({hasText:'tool:review:'+id(7)})
+   .getByRole('button',{name:'View approval details'}).click();
+ await founderDialog.getByLabel('Mandatory decision reason').fill('Founder denies unlinked operational request');
+ await founderDialog.getByRole('button',{name:'Deny',exact:true}).click();
+ await founderDialog.waitFor({state:'detached'});
+ assert.equal(approvalRecords[2].status,'rejected');
+ await entries.filter({hasText:founderProjects[0].title})
+   .getByRole('button',{name:'View approval details'}).click();
+ await founderDialog.getByLabel('Mandatory decision reason').fill('Founder approves this single complete project scope');
  await founderDialog.getByRole('button',{name:'Approve',exact:true}).click();
  await founderDialog.waitFor({state:'detached'});
  assert.equal(approvalRecords[0].status,'approved');
  assert.equal(approvalRecords[0].reviewer_id,founder);
- assert.ok(calls.some(c=>c.path.includes('/governance/approvals/')&&c.path.endsWith('/decision')&&c.body.approve===true));
  assert.deepEqual(errors,[]);
- console.log('PASS: company map, founder strategy and independent operational approval lanes, employee access, notification, mobile and WCAG; mocked API');
+ console.log('PASS: single Founder decision, no third-party reviewers, employee notifications and WCAG; mocked API');
 }finally{await browser.close();server.close();}
