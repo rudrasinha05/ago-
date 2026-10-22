@@ -261,6 +261,7 @@
     "POST /v1/organization/company/documents/{document_id}/revisions": "dfc89eb198b0f4a9b55b36338fe2b55adae8adb1ebea6d42889478775fa80a06",
     "POST /v1/organization/company/market-intelligence/{signal_id}/project": "7d20581509947ba979925b3e957f3f21c944f64c534721509dcbbc493f11dbb6",
     "POST /v1/organization/company/opportunities/scan": "6dcd073b53697b03b5c7fd7a79f5b4c0b7e3210f128dc7a40f744aa8e241b711",
+    "POST /v1/organization/company/projects/{project_id}/ceo/reconcile": "629dc99c12925b39b8e61eb4d1a4cc324fca5d3e4a7e239663be95c893efdb02",
     "POST /v1/organization/company/projects/{project_id}/delegations": "085397c80734554a0118518b2a9148b894721aabc64851ea825d49a461ce4075",
     "POST /v1/organization/company/projects/{project_id}/delegations/{proposal_id}/activate": "e01e6689c3b81dcecda105fd9b4019f31950f5a3fee7c2abcfeef54cfe7a5e1e",
     "POST /v1/organization/company/projects/{project_id}/documents": "d20f73c6806b7904e1bb6289a48d13fef1c6d0d38d10079def844ec00fa9f17f",
@@ -301,6 +302,7 @@
     "POST /v1/tools/enrollments/{enrollment_id}/reconcile": "f876fd2df5cf5fa909e316bd9393d06de83e0b6b7730bcf8ef0ff1cc79ef0f5a",
     "POST /v1/tools/runs/recover-stale": "28f01e3c031785f079749274d10ae1a1ee6e37ddbfc7b8dfb68e2c883ed8bce6",
     "POST /v1/tools/tasks/{task_id}/run": "dd47e08b423ec283e80a04dfd8a7909a17e90234d311035dcb254a9cdbcff02d",
+    "PUT /v1/organization/company/employees/{employee_id}/manager": "0181556702d8acf8d5f5d8a49829952af1265ced23c901897661b7b7d845491c",
     "PUT /v1/organization/company/employees/{employee_id}/role": "2e63f9d19d5edd1b6ceb2ab161109d07f64ff2f5555e2110542abace8c11b794"
   },
   "schemas": {
@@ -417,6 +419,7 @@
     "ReasonInput": "5d74a136b088e2ed05449e3028637688eca65d1e42bb1c2f18be302f4c81a45b",
     "RedeemInput": "317e86388553fa0ad03c68d997b443a1174797715988fda80fa96918be4d31e0",
     "ReplayInput": "1e218096f3c075c8881d52ee131e4bc9c52a18b71489aa6d8f99c25a83a3bc0a",
+    "ReportingManagerInput": "0f297f969e69b03ce298d24a2380498ce593bef925ddf198f9aa4547a72bdd31",
     "ReportInput": "79937a99c13413437ca55b0986762f0e95824c794620439c585e4e10a4099c33",
     "RoleProfileInput": "d63c8276e177fd3ad2b34a9c6bb729db297dd06afdd3845949e371fbfb526c9c",
     "RSVPInput": "2c9885f2336e1053fe58f45ee0a3c9df7d8063156e0db5f84c4799afabc0a0ea",
