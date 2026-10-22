@@ -303,10 +303,17 @@ jobs:
           RUN_STATUS: ${{ job.status }}
         run: |
           if [ "$RUN_STATUS" = "success" ]; then STATE=success; else STATE=failure; fi
-          gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
+          for attempt in 1 2 3; do
+            if gh api "repos/${{ github.repository }}/statuses/$SHA" --method POST \
             -f state="$STATE" -f context="ago/m10/nonroot-image=$RUN_STATUS" \
             -f description="M10 Docker runtime image and isolated HTTP smoke $RUN_STATUS" \
-            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"; then break; fi
+            if [ "$attempt" = 3 ]; then
+              echo "::warning::Commit-status API unavailable; the actual image smoke outcome is recorded by this job."
+            else
+              sleep 2
+            fi
+          done
 
   disaster-recovery-drill:
     name: M10 PostgreSQL Backup & Restore
