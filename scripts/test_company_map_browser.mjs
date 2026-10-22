@@ -322,6 +322,27 @@ try{
  assert.equal(approvalRecords[0].reviewer_id,founder);
  assert.equal(calls.filter(c=>c.path.endsWith('/ceo/reconcile')&&c.method==='POST').length,1,
   'Exact Founder project approval hands off once to CEO');
+ // The inbox must keep its own Founder decision receipt visible after refresh.
+ // This is an exceptional Founder authorization with no project handoff,
+ // distinct from the previously verified once-only CEO project reconciliation.
+ const exceptional={...approvalRecords[0],id:id(99),plan_id:null,founder_intake_id:null,
+  plan_title:null,action:'founder:exception:'+id(99),approval_type:'governance_action',
+  requires_founder_decision:true,status:'pending',reviewer_id:null,reason:null};
+ approvalRecords.push(exceptional);
+ await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor({timeout:16000});
+ await page.locator('#company-approval-inbox .approval-entry')
+  .filter({hasText:exceptional.action})
+  .getByRole('button',{name:'View approval details'}).click();
+ await founderDialog.getByLabel('Mandatory decision reason').fill('Founder approves recorded exceptional request');
+ await founderDialog.getByRole('button',{name:'Approve',exact:true}).click();
+ await page.getByRole('status',{name:'Founder decision result'})
+  .getByText('Founder approved request.',{exact:true}).waitFor();
+ assert.equal(exceptional.status,'approved');
+ await page.locator('#company-approval-inbox').getByText('0 need my review',{exact:false}).waitFor();
+ assert.equal(await page.getByRole('status',{name:'Founder decision result'}).count(),1,
+  'Founder decision result must survive notification refresh until dismissed');
+ await page.getByRole('button',{name:'Dismiss Founder decision result'}).click();
+ assert.equal(await page.getByRole('status',{name:'Founder decision result'}).count(),0);
  assert.deepEqual(errors,[]);
- console.log('PASS: single Founder decision, no third-party reviewers, employee notifications and WCAG; mocked API');
+ console.log('PASS: single Founder decision, CEO handoff, lasting receipt, employee notifications and WCAG; mocked API');
 }finally{await browser.close();server.close();}
