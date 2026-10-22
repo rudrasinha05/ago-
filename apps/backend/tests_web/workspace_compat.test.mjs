@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import {
   SessionClient, ApiError, escapeHTML, uuid, validateProfile, fitnessDelta,
   shortId, dateText, formatRisk, statusTone,
-} from "../ago/console/core.js";
-import { renderPage, PAGES } from "../ago/console/views.js";
+} from "../../../packages/sdk/session.js";
+import { renderPage, PAGES } from "../../../packages/ui/compat/views.js";
 
 const TENANT = "12345678-1234-4234-8234-1234567890ab";
 const ok = data => ({ ok: true, status: 200, json: async () => data });
@@ -257,7 +257,7 @@ test("Strategy activation waits for an independently approved real DB plan statu
 });
 
 test("financial source review exposes exact text without mutating immutable evidence", async () => {
-  const {evidencePreview}=await import('../ago/console/actions.js');
+  const {evidencePreview}=await import('../../../packages/ui/compat/actions.js');
   const raw='<img src=x onerror=alert(1)> Invoice INR 100';
   const source={kind:'financial_document',digest:'a'.repeat(64),payload:{content_base64:btoa(raw),document_digest:'b'.repeat(64)}};
   const preview=evidencePreview(source);
@@ -272,7 +272,7 @@ test("financial source review exposes exact text without mutating immutable evid
 });
 
 test("quality and outcome source previews decode nested copies without changing evidence", async () => {
-  const {evidencePreview}=await import('../ago/console/actions.js');
+  const {evidencePreview}=await import('../../../packages/ui/compat/actions.js');
   const bytes=btoa('<script>untrusted actual output</script>');
   const source={kind:'quality_sample',payload:{content_base64:bytes,intent:{content_base64:bytes}}};
   const preview=evidencePreview({details:source});
@@ -293,7 +293,7 @@ test("measurement tables expose unknowns and escape supplied metric names", () =
 });
 
 test('constitution shows immutable authority and escapes amendment and incident evidence', async () => {
-  const {renderGovernance}=await import('../ago/console/views.js');
+  const {renderGovernance}=await import('../../../packages/ui/compat/views.js');
   const constitution={active:{revision:2,blocked_contexts:['tools']},laws:{human:'Human leadership remains final authority'},
     proposals:[{id:'11111111-1111-4111-8111-111111111111',specification:{title:'<script>amend()</script>',blocked_contexts:['tools']}}],
     emergencies:[{id:'22222222-2222-4222-8222-222222222222',reason:'<img src=x onerror=attack()>',active:true,retrospective_review_pending:true,blocked_contexts:['tools']}],emergency_reviews:[]};
@@ -308,7 +308,7 @@ test('constitution shows immutable authority and escapes amendment and incident 
 });
 
 test('governed calendar exposes exact review and availability while escaping untrusted sources', async () => {
-  const {renderCalendar} = await import('../ago/console/views.js');
+  const {renderCalendar} = await import('../../../packages/ui/compat/views.js');
   const source = {revision:1,domains:{maintenance:'architecture'},policies:[{scope_kind:'company',timezone:'<img src=x>',start:'09:00',end:'18:00',weekdays:[0],holidays:['2026-12-25'],quiet_start:'22:00',quiet_end:'07:00',max_continuous_minutes:480,rest_minutes:10,require_supervisor:true}],windows:[],links:[],signals:[],proposals:[{id:'reviewed-id',actor_id:'founder-id',status:'approved',command:'policy',rationale:'<script>evil</script>'}]};
   const data={events:{status:'ok',data:[]},calendarGovernance:{status:'ok',data:source}};
   const html=renderCalendar(data,{me:{id:'founder-id',roles:['founder'],permissions:['calendar:read','calendar:write']}});

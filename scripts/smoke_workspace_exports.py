@@ -26,8 +26,8 @@ for app, title in [('web', 'AGO Workspace'), ('admin', 'AGO Administration'),
                                   'tools', 'calendar', 'twin']:
                         assert (folder/route/'index.html').is_file(), route
                 else:
-                    assert 'Open existing Control Center' in html
-                    assert 'http://127.0.0.1:8000/console/' in html
+                    assert 'Open Company Map' in html
+                    assert 'http://127.0.0.1:8000/workspace/organization/' in html
             print(f'{app}: real exported homepage served and verified')
         finally:
             server.shutdown()

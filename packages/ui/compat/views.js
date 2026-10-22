@@ -11,7 +11,7 @@ export const PAGES = Object.freeze({
     description: "From goals to plans, and from approved plans to governed tasks." },
   governance: { title: "Governance", heading: "Governance & oversight", eyebrow: "HUMAN IN CONTROL",
     description: "Independent decisions, protected task lifecycles and executive council motions." },
-  organization: { title: "Organization", heading: "People & departments", eyebrow: "ORGANIZATIONAL STRUCTURE",
+  organization: { title: "Organization", heading: "Company map", eyebrow: "ORGANIZATIONAL STRUCTURE",
     description: "A single view of your departments, human operators and AI employees." },
   knowledge: { title: "Knowledge", heading: "Institutional knowledge", eyebrow: "EVIDENCE & MEMORY",
     description: "Trustworthy provenance starts with independent human verification." },
@@ -236,42 +236,6 @@ export function renderGovernance(data, state) {
     panel("Council motions",unavailable(data,"motions",table(
       ["Motion","Status","Votes","Action"],councilRows,empty("No motions recorded"),
     ))));
-}
-export function renderOrganization(data, state) {
-  const depts = list(data,"departments"), people = resource(data,"employees");
-  const rows = depts.map(x => {
-    const team = (people && Array.isArray(people[x.id])) ? people[x.id] : [];
-    return '<div class="list-row"><span class="row-icon">' + icon("network") +
-      '</span><div class="row-main"><strong>' + maybe(x.name) +
-      '</strong><small>' + num(team.length) + ' team members · ' +
-      safe(shortId(x.id)) + '</small></div><span class="chip">' +
-      num(team.filter(y => y.kind==="ai").length) + ' AI</span></div>';
-  });
-  const allPeople = people && typeof people === "object" ? Object.values(people).flat() : [];
-  const peopleRows = allPeople.map(x => '<div class="person-card panel"><span class="avatar">' +
-    safe(String(x.name||"A").slice(0,2).toUpperCase()) +
-    '</span><div><strong>' + maybe(x.name) +
-    '</strong><small>Department ' + safe(shortId(x.department_id)) +
-    '</small></div>' + badge(x.kind) + '</div>').join("");
-  return layout("organization",
-    capability(state,"organization:manage") ?
-      action("Add department","new-department") + action("Add AI employee","new-ai","","primary") : "",
-    '<div class="metric-grid">' +
-    metric("Departments",resource(data,"departments") ? num(depts.length) : "—",
-      "Tenant-defined structure","network",true) +
-    metric("Total personnel",people ? num(allPeople.length) : "—",
-      "Human + AI employee records","layers") +
-    metric("AI employees",people ? num(allPeople.filter(x=>x.kind==="ai").length) : "—",
-      "Registered virtual workers","brain") +
-    metric("Human personnel",people ? num(allPeople.filter(x=>x.kind==="human").length) : "—",
-      "Human organizational roles","shield") +
-    '</div>' + section("Department structure") +
-    panel("Departments",unavailable(data,"departments",rows.join("") ||
-      empty("No departments found"))) +
-    section("Personnel directory") +
-    (people ? '<div class="pair-grid">' + (peopleRows ||
-      '<div class="panel">' + empty("No employees found") + "</div>") + "</div>"
-      : unavailable(data,"employees",empty("No personnel available"))));
 }
 export function renderKnowledge(data, state) {
   const verified = list(data,"verified"), pending = list(data,"pending");
@@ -625,7 +589,7 @@ export function renderTwin(data, state) {
 export function renderPage(page,data,state) {
   const fn = {
     overview:renderOverview,strategy:renderStrategy,governance:renderGovernance,
-    organization:renderOrganization,knowledge:renderKnowledge,
+    knowledge:renderKnowledge,
     tools:renderTools,calendar:renderCalendar,twin:renderTwin,
   }[page];
   if (!fn) return '<div class="error-card">Unknown workspace</div>';

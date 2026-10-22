@@ -31,7 +31,7 @@ RUN groupadd --gid 10001 ago && \
 COPY --from=build /wheels /tmp/wheels
 RUN python -m pip install --no-cache-dir '/tmp/wheels/'*.whl 'psycopg[binary]>=3.2,<4' 'fastembed==0.7.4' 'redis==6.4.0' && \
     rm -rf /tmp/wheels && \
-    python -c 'from importlib.resources import files; p=files("ago").joinpath("console","index.html"); assert p.is_file(); assert files("ago").joinpath("frontend","index.html").is_file()'
+    python -c 'from importlib.resources import files; assert not files("ago").joinpath("console").is_dir(); assert files("ago").joinpath("frontend","index.html").is_file(); assert files("ago").joinpath("frontend","organization","index.html").is_file()'
 COPY --chown=ago:ago deploy/sql/ /app/deploy/sql/
 # Read-only research observer; runtime retains no GitHub, browser or advertising token.
 COPY --chown=ago:ago scripts/company_market_watch.py /app/scripts/company_market_watch.py

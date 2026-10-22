@@ -1,83 +1,47 @@
-"""Serve the first-party M9 organizational console on the existing API origin.
+"""Serve only the packaged Next.js Company Map on the existing API origin.
 
-The console is public static shell code; all business data is served exclusively
-by existing signed-session and tenant-RBAC-protected /v1 APIs.
+The retired M9 console bundle is no longer mounted or shipped. Old /console
+bookmarks redirect to the single Company Map; no feature flag can restore it.
 """
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-ASSETS = Path(__file__).resolve().parent / "console"
 FRONTEND = Path(__file__).resolve().parent / "frontend"
-CONSOLE_CSP = (
-    "default-src 'none'; script-src 'self'; style-src 'self'; "
-    "img-src 'self' data:; connect-src 'self'; font-src 'self'; "
-    "object-src 'none'; base-uri 'none'; form-action 'self'; "
-    "frame-ancestors 'none'"
-)
-
-
-def _legacy_console_for_tests() -> bool:
-    # M9 browser-regression mode; never available for normal founder launch.
-    return (
-        os.getenv("AGO_LEGACY_CONSOLE_TEST_MODE") == "true"
-        and os.getenv("AGO_ENVIRONMENT", "development") in ("development", "test", "testing")
-    )
+COMPANY_MAP = "/workspace/organization/"
 
 
 def register_console(app: FastAPI) -> None:
-    """Install public shells; all private data still requires authorized APIs."""
+    """Install one static shell; all private /v1 data remains authorized."""
     if (FRONTEND / "index.html").is_file():
         app.mount("/workspace", StaticFiles(directory=FRONTEND, html=True), name="workspace")
-    if _legacy_console_for_tests():
-        app.mount(
-            "/console/assets",
-            StaticFiles(directory=ASSETS, check_dir=True),
-            name="console-assets",
-        )
 
     @app.get("/console", include_in_schema=False)
-    def redirect_console():
-        return RedirectResponse(
-            url="/console/" if _legacy_console_for_tests() else "/workspace/organization/",
-            status_code=308,
-        )
-
     @app.get("/console/", include_in_schema=False)
-    def console_home():
-        if _legacy_console_for_tests():
-            return FileResponse(ASSETS / "index.html", media_type="text/html")
-        return RedirectResponse(url="/workspace/organization/", status_code=308)
+    def redirect_retired_console():
+        return RedirectResponse(url=COMPANY_MAP, status_code=308)
 
 
 def console_headers(path: str) -> dict[str, str]:
-    if path == "/workspace" or path.startswith("/workspace/"):
+    is_workspace = path == "/workspace" or path.startswith("/workspace/")
+    if not (is_workspace or path == "/console" or path.startswith("/console/")):
+        return {}
+    hashes = []
+    if is_workspace:
         hashes_file = FRONTEND / "csp.json"
         hashes = json.loads(hashes_file.read_text()) if hashes_file.is_file() else []
-        return {
-            "Content-Security-Policy": (
-                "default-src 'none'; script-src 'self' " + " ".join(hashes) + "; "
-                "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-                "connect-src 'self'; font-src 'self'; object-src 'none'; "
-                "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
-            ),
-            "X-Content-Type-Options": "nosniff",
-            "X-Frame-Options": "DENY",
-            "Referrer-Policy": "no-referrer",
-            "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-            "Cache-Control": "no-store, private",
-            "Cross-Origin-Resource-Policy": "same-origin",
-        }
-    if not (path == "/console" or path.startswith("/console/")):
-        return {}
     return {
-        "Content-Security-Policy": CONSOLE_CSP,
+        "Content-Security-Policy": (
+            "default-src 'none'; script-src 'self' " + " ".join(hashes) + "; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            "connect-src 'self'; font-src 'self'; object-src 'none'; "
+            "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        ),
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "no-referrer",

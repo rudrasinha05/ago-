@@ -105,8 +105,7 @@ try {
         exit $LASTEXITCODE
     }
     if ($Action -eq "serve") {
-        # Always show the one visual map in normal founder operations.
-        Remove-Item Env:AGO_LEGACY_CONSOLE_TEST_MODE -ErrorAction SilentlyContinue
+        # The retired M9 frontend no longer exists in the application package.
         # Founder starts this foreground server and decides when to shut it down.
         # Research is NEVER implicitly started by setting a tenant variable.
         # To run research, the founder launches 'market-watch' separately.

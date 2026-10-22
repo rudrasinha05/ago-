@@ -3,7 +3,7 @@
 Build, package, and launch AGO's actual founder Company Map in one terminal.
 .DESCRIPTION
 The detailed circular Company Map / Company Brain is the Next.js app under
-apps/web, NOT the older /console/ admin interface. This helper reuses the session AGO_POSTGRES_DSN or securely prompts for the
+apps/web; the retired M9 console code is no longer shipped. This helper reuses the session AGO_POSTGRES_DSN or securely prompts for the
 existing local ago_test password in a fresh terminal. It never changes database contents,
 perform migrations, create tenants or download Ollama models.
 .EXAMPLE
@@ -15,8 +15,6 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-# A normal founder launch must NEVER open the hidden M9 regression frontend.
-Remove-Item Env:AGO_LEGACY_CONSOLE_TEST_MODE -ErrorAction SilentlyContinue
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $backend = Join-Path $root "apps\backend"
 $web = Join-Path $root "apps\web"

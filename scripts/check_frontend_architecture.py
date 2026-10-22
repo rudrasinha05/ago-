@@ -9,16 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def check(root=ROOT):
     errors = []
-    mappings = {
-        'packages/sdk/session.js':'core.js',
-        'packages/ui/compat/views.js':'views.js',
-        'packages/ui/compat/actions.js':'actions.js',
-        'packages/ui/workspace.css':'styles.css',
-    }
-    for source, destination in mappings.items():
-        actual = (root/source).read_text().replace('"@ago/sdk/session"', '"./core.js"')
-        if actual != (root/'apps/backend/ago/console'/destination).read_text():
-            errors.append('canonical-adapter-drift:'+destination)
+    if (root/"apps/backend/ago/console").exists():
+        errors.append("retired-console-frontend-reintroduced")
+    host = (root/"apps/backend/ago/console_host.py").read_text()
+    if "AGO_LEGACY_CONSOLE_TEST_MODE" in host or "ASSETS" in host:
+        errors.append("retired-console-route-reintroduced")
     for folder in ['apps/web/app', 'apps/web/components', 'packages/sdk', 'packages/ui']:
         for path in (root/folder).rglob('*'):
             if path.suffix not in {'.js', '.jsx', '.mjs'}:
