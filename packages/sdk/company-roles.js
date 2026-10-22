@@ -144,7 +144,8 @@ export function buildLeadershipPlan(employees,profiles,board,founderId){
   const existing=ai.find(e=>e.id===assigned.get(x.seat)&&!used.has(e.id));
   const options=ai.filter(e=>!used.has(e.id)).map(e=>({e,score:x.match.test([e.name,e.role_title,current.get(e.id)?.role_title].filter(Boolean).join(' '))?10:0}))
    .sort((a,b)=>b.score-a.score||String(a.e.id).localeCompare(String(b.e.id)));
-  const candidate=existing||options[0]?.e||null;
+  // Do not promote an unrelated engineer merely to fill a title; keep vacancy visible.
+  const candidate=existing||(options[0]?.score>0?options[0].e:null);
   if(candidate)used.add(candidate.id);
   return {seat:x.seat,title:x.title,work:x.work,employee_id:candidate?.id||null,
    employee_name:candidate?.name||'Vacant — founder must hire an AI employee',existing:!!existing};
