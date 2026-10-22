@@ -149,7 +149,7 @@ test('hypothetical thresholds reach simulation without applying live policy',asy
 
 test('red routed task follows founder, department and employee and opens actual worker',async({page})=>{
  const {errors}=await fixtures(page);
- await page.route('**/v1/organization/employees',route=>route.fulfill({status:200,json:[
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
   {id:user,name:'Test member',department_id:department,kind:'human'},
   {id:other,name:'Delivery specialist',department_id:department,kind:'ai'}
  ]}));
