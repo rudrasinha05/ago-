@@ -278,7 +278,7 @@ try{
   requester_role:'Founder',action:'tool:review:'+id(6),status:'pending',
   approval_type:'governance_action',requires_founder_decision:false,
   review_routing:'Founder-only human decision',
-  next_action:'Founder's own reviewed decision',created_at:new Date().toISOString()});
+  next_action:"Founder's own reviewed decision",created_at:new Date().toISOString()});
  approvalRecords.push({id:id(38),requester_id:developer,requester_name:'Developer',
   requester_role:'Engineer',action:'tool:review:'+id(7),status:'pending',
   approval_type:'governance_action',requires_founder_decision:false,
