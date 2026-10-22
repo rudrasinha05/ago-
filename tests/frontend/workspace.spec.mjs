@@ -56,6 +56,40 @@ test('eight routes, responsive layout and WCAG AA scans',async({page})=>{
   await expect(page.locator('#screen')).toContainText('Simulation only.');expect(errors).toEqual([]);
   expect(await page.evaluate(()=>window.xss)).toBeUndefined();
 });
+test('Control Center redirects to authenticated Company Map and internal links preserve session',async({page})=>{
+  const {errors}=await fixtures(page);
+  for(const oldEntry of ['/console','/console/']){
+    await page.goto(oldEntry);
+    await expect(page).toHaveURL(/\\/workspace\\/organization\\/$/);
+    await expect(page.locator('#login-form')).toBeVisible();
+  }
+  await page.getByLabel('Organization ID').fill(tenant);
+  await page.getByLabel('Work email').fill('fixture@example.test');
+  await page.getByLabel('Password',{exact:true}).fill('fixture-only-password');
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Company map',exact:true})).toBeVisible();
+  await expect(page.locator('.company-command')).toBeVisible();
+  await expect(page.getByText('People & departments',{exact:true})).toHaveCount(0);
+  // Only advertise fragments that exist for this signed-in role.
+  const nav=page.getByRole('navigation',{name:'Company control center sections'});
+  const links=nav.locator('a[href^="#"]');
+  for(let i=0;i<await links.count();i++){
+    const fragment=await links.nth(i).getAttribute('href');
+    await expect(page.locator(fragment)).toHaveCount(1);
+    await links.nth(i).click();
+    await expect.poll(()=>new URL(page.url()).hash).toBe(fragment);
+  }
+  await expect(nav.locator('a[href="#ago-workforce"]')).toHaveCount(0);
+  await expect(nav.locator('a[href="#ago-opportunities"]')).toHaveCount(0);
+  // This cross-workspace link MUST be an SPA navigation: a full reload loses tab-memory auth.
+  await page.getByRole('link',{name:'View GitHub operations and CI'}).click();
+  await expect(page).toHaveURL(/\\/workspace\\/tools\\/$/);
+  await expect(page.getByRole('button',{name:'Sign out',exact:true})).toBeVisible();
+  await expect(page.locator('#login-form')).toHaveCount(0);
+  await navigate(page,'Organization');
+  await expect(page.getByRole('heading',{name:'Company map',exact:true})).toBeVisible();
+  expect(errors).toEqual([]);
+});
 test('dashboards use personal and department assignments; denial is explicit',async({page})=>{
   await fixtures(page);await login(page);
   await page.getByRole('button',{name:'Employee dashboard',exact:true}).click();

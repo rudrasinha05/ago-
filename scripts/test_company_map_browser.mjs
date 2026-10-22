@@ -126,6 +126,17 @@ try{
  assert.equal(await page.locator('a[href="/tools/"]').count(),0,'No links bypass the /workspace basePath');
  assert.ok(await page.locator('.command-delivery a[href="/workspace/tools/"]').count()>=1,
    'GitHub/Tools links must target the real workspace route');
+ for(const link of await page.locator('.company-cockpit-nav a[href^="#"]').all()){
+   const destination=await link.getAttribute('href');
+   assert.equal(await page.locator(destination).count(),1,'Company section exists: '+destination);
+ }
+ // Navigate via the real GitHub/Tools link: authentication must survive SPA navigation.
+ await page.getByRole('link',{name:'View GitHub operations and CI'}).click();
+ await page.locator('#screen .workspace-view').waitFor();
+ assert.equal(new URL(page.url()).pathname,'/workspace/tools/');
+ assert.equal(await page.locator('#login-form').count(),0,'Tools link must not lose tab-memory sign-in');
+ await page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:'Organization',exact:true}).click();
+ await page.getByRole('heading',{name:'Company map',exact:true}).waitFor();
  await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
  await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
  assert.match(await page.locator('.employee-inspector').innerText(),/Busy/);

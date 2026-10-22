@@ -41,7 +41,11 @@ def test_raw_company_links_respect_the_next_basepath():
     # Next Link is basePath-aware, native <a> is NOT.
     root = ROOT
     company = (root / "apps/web/components/company-map.jsx").read_text(encoding="utf-8")
-    assert 'href="/tools/"' not in company
-    assert company.count('href="/workspace/tools/"') == 2
+    # Next Link keeps session in tab memory; native anchors would reload and sign out.
+    assert "import Link from 'next/link';" in company
+    assert company.count('<Link href="/tools/"') == 2
+    assert '<a href="/tools/"' not in company
+    assert '<a href="/workspace/tools/"' not in company
+    assert "founderView&&<a href=\"#ago-project-portfolio\"" in company
+    assert "includes('task:read')&&<a href=\"#ago-workforce\"" in company
     assert 'href="#company-approval-inbox"' in company
-    assert 'href="#ago-project-portfolio"' in company

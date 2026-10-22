@@ -1,4 +1,5 @@
 "use client";
+import Link from 'next/link';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {resource} from '@ago/sdk/session';
 import {employeeStatus,companyLayout,activeRouteKeys,employeeProjects} from '@ago/sdk/company';
@@ -201,9 +202,9 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <nav className="company-cockpit-nav" aria-label="Company control center sections">
       <a href="#ago-unified-cockpit">Company Brain</a>
       <a href="#company-approval-inbox">Founder Approvals</a>
-      <a href="#ago-opportunities">Business Opportunities</a>
-       <a href="#ago-project-portfolio">Project Portfolio</a>
-      <a href="#ago-workforce">Workforce</a>
+      {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business Opportunities</a>}
+      {founderView&&<a href="#ago-project-portfolio">Project Portfolio</a>}
+      {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
       <a href="#ago-company-org-map">Organization & Chat</a>
     </nav>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
@@ -266,7 +267,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
            <p><a href="#company-approval-inbox">Open Approval Inbox for the full request and decision details ↑</a></p>
            <h4>Assigned tasks {status.tasks.length>0&&'('+status.tasks.length+')'}</h4>{status.tasks.length?status.tasks.slice(0,12).map(t=><div key={t.id}><strong>{t.action}</strong><p>{t.status} · {t.project_name||'No linked project plan'}</p></div>):<p>{tasks===null?'Activity could not be verified.':'No assigned tasks.'}</p>}
            <h4>Latest work events</h4>{(eventData?.recent||[]).filter(e=>e.employee_id===selected).slice(0,5).map(e=><div key={e.id}><small>#{e.id} · {time(e.created_at)}</small><p>{e.body}</p></div>)}
-           <p><a href="/workspace/tools/">GitHub projects, reviewed operations and delivery evidence →</a></p>
+           <p><Link href="/tools/">GitHub projects, reviewed operations and delivery evidence →</Link></p>
         </section>}
         <div className="company-feed" ref={feed}>{before&&<button onClick={older} disabled={loading}>Load earlier messages</button>}{loading&&<p>Loading timeline…</p>}{!loading&&!messages.length&&<p className="chat-empty">Start the conversation. Task updates will appear here as work changes.</p>}{threads.roots.map(m=>renderMessage(m))}</div>
         <form className="company-compose" onSubmit={send}>{reply&&<div className="replying-banner"><span>↳ Replying to <strong>{reply.author_name}</strong>: {reply.body.slice(0,65)}</span> <button type="button" onClick={()=>setReply(null)}>Cancel reply</button></div>}<label htmlFor="company-message">Message {title}</label><textarea id="company-message" placeholder="Write your idea, question or project brief…" value={draft} maxLength={20000} rows={3} onChange={e=>setDraft(e.target.value)} required/><div><small>Unlimited conversation history · 20,000 characters/message</small><button className="btn primary" disabled={sending||!draft.trim()}>{sending?'Saving…':'Send'}</button></div><small>Sending saves a message. AI replies and task execution require a connected runtime.</small></form>
@@ -276,7 +277,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <div className="command-delivery"><section><h3>Delivery accountability</h3><p>All employees own tested, documented, market-ready deliverables. No 'published' status without evidence, independent QA and required approval.</p></section><section><h3>Reporting & founder control</h3><p>Staff raise questions and module reports to their immediate manager. Founder starts projects, approves consequential steps and can interrupt or revise the scope.</p></section><section><h3>GitHub project workspace</h3>
       {githubState===null?<p>Project status unavailable or access denied. Configure approved GitHub access under Operations & Tools.</p>:!githubState.length?<p>No approved GitHub project currently linked. Connect a reviewed project before claiming code is synced.</p>:
         <ul className="github-live-list">{githubState.map(p=><li key={p.id}><strong>{p.repository}</strong><small>{p.status?(p.status.status||p.status.state||'Status checked'):'Live status unavailable'}</small></li>)}</ul>}
-      <p>Commits, PRs, documentation and CI still require evidence and approval. Repository changes are never inferred from dashboard animations.</p><a href="/workspace/tools/">View GitHub operations and CI →</a></section></div>
+      <p>Commits, PRs, documentation and CI still require evidence and approval. Repository changes are never inferred from dashboard animations.</p><Link href="/tools/">View GitHub operations and CI →</Link></section></div>
     {error&&<p role="alert" className="company-error">{error}</p>}
     {staffing&&<div className="staffing-backdrop"><section onKeyDown={e=>{if(e.key==='Escape')setStaffing(false);if(e.key==='Tab'){const controls=[...e.currentTarget.querySelectorAll('input,select,textarea,button')].filter(x=>!x.disabled);const first=controls[0],last=controls.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}} role="dialog" aria-modal="true" aria-labelledby="staff-title" className="staffing-dialog"><h2 id="staff-title">Add a role your project needs</h2>{error&&<p role="alert">{error}</p>}<form onSubmit={hire}><label>Role name<input name="name" required maxLength={150} autoFocus placeholder="e.g. Research Scientist"/></label><label htmlFor="staff-department">Department</label><select id="staff-department" value={department} onChange={e=>setDepartment(e.target.value)} required><option value="">Choose department</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><label htmlFor="staff-manager">Reports to</label><select id="staff-manager" name="manager" key={department}><option value="">Department root · connected to founder</option>{employees.filter(e=>e.department_id===department).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><label>Why is this role needed?<textarea name="requirement" minLength={10} maxLength={3000} required placeholder="Describe the project requirement and expected work."/></label><p>This creates an AI profile and records the requirement. Model access and execution permissions are configured separately.</p><button className="btn" disabled={sending||!department}>Create role</button><button type="button" className="btn" onClick={()=>setStaffing(false)}>Cancel</button></form></section></div>}
   </section>;
