@@ -7,7 +7,6 @@ from dataclasses import asdict
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.organization_store import OrganizationStore
 from ago.governance import ApprovalRepository
-from ago.repository_ports import TaskStorePort
 
 
 class CompanyChat:
@@ -348,18 +347,12 @@ class CompanyChat:
                 if str(task['assignee_id'])==str(board['id']):
                     blocked.append(str(task['id']))
                     continue
+                # Task submission remains owned by ConsoleService/TaskStore.
+                # The initiating workflow first requests exact task approval.
                 if task['status']=='proposed':
-                    request=self.repositories.resolve(ApprovalRepository).propose(
-                        tenant_id=actor.tenant_id,action=action,
-                        requester_id=actor.subject
-                    )
-                    self.repositories.resolve(TaskStorePort).request_approval(
-                        task_id=str(task['id']),tenant_id=actor.tenant_id,
-                        approval_id=request.request_id
-                    )
-                    approval_id=request.request_id
-                else:
-                    approval_id=str(task['approval_id']) if task['approval_id'] else None
+                    blocked.append(str(task['id']))
+                    continue
+                approval_id=str(task['approval_id']) if task['approval_id'] else None
                 if not approval_id:
                     blocked.append(str(task['id']))
                     continue
