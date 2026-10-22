@@ -17,7 +17,7 @@ from ago.agent_handlers import BUILTIN_HANDLERS
 from ago.workflows import GovernedTask, TaskStatus
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
-from test_m7_http_postgres import case as case, post, decide  # noqa: E402
+from test_m7_http_postgres import case as case, post  # noqa: E402
 from test_section29_constitution import emergency  # noqa: E402
 
 
@@ -59,7 +59,15 @@ def test_native_graph_and_actual_ago_boundary_same_local_operation(case, conditi
     request = post(client, "/v1/governance/approvals", f, {"action":"internal:brief"})
     post(client, f"/v1/tasks/{task['id']}/approval", f, {"approval_id":request["request_id"]})
     if condition != "missing_approval":
-        decide(client, r, request["request_id"])
+        # A separate unprivileged human must never inherit Founder authority.
+        approval_path = f"/v1/governance/approvals/{request['request_id']}/decision"
+        post(client, approval_path, r, {
+            "approve": True, "reason": "Attempted non-Founder approval",
+        }, expected=403)
+        approved = post(client, approval_path, f, {
+            "approve": True, "reason": "Founder authorizes this single local task",
+        })
+        assert approved["reviewer_id"] == info["founder_id"]
     if condition == "contained":
         emergency(client, f, ["tasks","agents"])
     if condition == "foreign":
