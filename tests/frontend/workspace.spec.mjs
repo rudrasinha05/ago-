@@ -159,7 +159,9 @@ test('red routed task follows founder, department and employee and opens actual 
  await login(page);await navigate(page,'Organization');
  await expect(page.locator('.company-world line.edge-live')).toHaveCount(2);
  await expect(page.locator('.company-world line.edge-pending')).toHaveCount(0);
- await page.locator('.company-world line.edge-live').last().click();
+ await page.getByRole('button',{name:'Fit all'}).click();
+ await expect(page.locator('.company-world circle.route-hit-target.running')).toHaveCount(2);
+ await page.locator('.company-world circle.route-hit-target.running').last().click();
  await expect(page.locator('.employee-inspector')).toContainText('Delivery specialist');
  await expect(page.locator('.employee-inspector')).toContainText('Real reviewed project');
  expect(errors).toEqual([]);

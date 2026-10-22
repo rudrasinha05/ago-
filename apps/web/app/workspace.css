@@ -241,6 +241,9 @@
 .company-world svg line[data-route-target]{pointer-events:stroke;cursor:pointer;outline:none}
 .company-world svg line[data-route-target]:hover,.company-world svg line[data-route-target]:focus-visible{stroke-width:13;filter:drop-shadow(0 0 12px #ff6688)}
 .legend-pending{color:#ffa2b4;font-weight:bold}
+.company-world svg .route-hit-target{pointer-events:all;cursor:pointer;fill:#c7375666;stroke:#ff6280;stroke-width:5;filter:drop-shadow(0 0 8px #ff4366)}
+.company-world svg .route-hit-target.pending{fill:#d05a7b2b;stroke:#ff728d;stroke-width:3;stroke-dasharray:6 5}
+.company-world svg .route-hit-target:hover,.company-world svg .route-hit-target:focus-visible{stroke:#faffff;stroke-width:8;fill:#ea3b74ba;outline:none}
 .company-role-planner{margin:22px 0;padding:20px;background:#101f38;border:1px solid #415b78;border-radius:14px;color:#e5efff}
 .company-role-planner h3{margin:0 0 8px}.company-role-planner p,.company-role-planner small{color:#c1d3e6}
 .company-role-planner button{background:#214d71;color:#fff;border:1px solid #5b9ec8;padding:8px 14px;border-radius:8px;margin:7px 10px 8px 0}
