@@ -167,6 +167,10 @@
         "requires_founder_decision": {
           "arguments": "self, *, request_id: str, tenant_id: str",
           "returns": "bool"
+        },
+        "approve_ceo_project_task": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, ceo_id: str, project_id: str, task_id: str, approval_id: str, action: str, reason: str",
+          "returns": "dict"
         }
       }
     },
@@ -354,6 +358,14 @@
         "project_delegations": {
           "arguments": "self, tenant_id: str, project_id: str, reader_id: str | None=None",
           "returns": "list[dict]"
+        },
+        "ceo_reconcile": {
+          "arguments": "self, actor, project_id: str",
+          "returns": "dict"
+        },
+        "set_reporting_manager": {
+          "arguments": "self, actor, employee_id: str, manager_id: str | None",
+          "returns": "dict"
         }
       }
     },
