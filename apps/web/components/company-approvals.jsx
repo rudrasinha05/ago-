@@ -60,7 +60,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
   try{
    const result=await decideFounderScope(api,selected,approve,reason);
    setHandoffNotice(result.notice);
-   close();await refresh();await onReviewed?.();
+   close();await refresh();setToast(null);await onReviewed?.();
   }catch(e){setError(e.message);}finally{setBusy(false);}
  }
  if(!readable)return <section id="company-approval-inbox" className="approval-inbox" aria-label="Approvals inbox">
