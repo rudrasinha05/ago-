@@ -14,7 +14,8 @@
       "types": "./platform.d.ts",
       "default": "./platform.js"
     },
-    "./company": "./company.js"
+    "./company": "./company.js",
+    "./company-roles": "./company-roles.js"
   },
   "dependencies": {
     "@ago/shared": "0.1.0"
