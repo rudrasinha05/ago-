@@ -246,6 +246,95 @@ class ApprovalRepository:
             return {"approval_id":approval_id,"status":"approved",
                     "ceo_id":ceo_id,"task_id":task_id,"ai_decision":True}
 
+    def approve_ceo_project_stage(
+        self, *, tenant_id: str, founder_id: str, ceo_id: str,
+        project_id: str, proposal_id: str, approval_id: str, reason: str,
+    ) -> dict:
+        """CEO may affirm only an AI worker already named in Founder-approved scope.
+
+        No generic AI login, approvals permission, hiring or arbitrary assignment.
+        This method is callable only from the signed Founder reconciliation service.
+        """
+        for value in (tenant_id, founder_id, ceo_id, project_id,
+                      proposal_id, approval_id):
+            UUID(value)
+        with self.connection.transaction():
+            row=self.connection.execute("""
+                SELECT d.stage,d.assignee_id,d.requester_id,
+                    a.status AS review_status,a.action AS review_action,
+                    i.founder_id,p.status AS plan_status,
+                    pa.status AS founder_approval,pa.reviewer_id AS founder_decider,
+                    s.suggested_assignee_id,e.kind AS worker_kind,
+                    lead.accountable_manager_id,step.assignee_id AS planned_worker
+                FROM ago_project_stage_delegation_proposals d
+                JOIN ago_approval_requests a
+                  ON a.tenant_id=d.tenant_id AND a.id=d.approval_id
+                JOIN ago_founder_intakes i
+                  ON i.tenant_id=d.tenant_id AND i.id=d.intake_id
+                JOIN ago_strategy_plans p
+                  ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                JOIN ago_approval_requests pa
+                  ON pa.tenant_id=p.tenant_id AND pa.id=p.approval_id
+                JOIN ago_founder_intake_stages s
+                  ON s.tenant_id=i.tenant_id AND s.intake_id=i.id
+                    AND s.stage=d.stage
+                JOIN ago_employees e
+                  ON e.tenant_id=d.tenant_id AND e.id=d.assignee_id
+                JOIN ago_company_board_appointments b
+                  ON b.tenant_id=d.tenant_id AND b.seat='Strategy & Vision'
+                    AND b.employee_id=%s
+                JOIN ago_employees executive
+                  ON executive.tenant_id=b.tenant_id AND executive.id=b.employee_id
+                    AND executive.kind='ai'
+                LEFT JOIN ago_founder_project_lead lead
+                  ON lead.tenant_id=i.tenant_id AND lead.intake_id=i.id
+                LEFT JOIN ago_plan_steps step
+                  ON step.tenant_id=s.tenant_id AND step.id=s.plan_step_id
+                WHERE d.tenant_id=%s AND d.id=%s AND d.intake_id=%s
+                  AND d.approval_id=%s FOR UPDATE OF d,a
+            """,(ceo_id,tenant_id,proposal_id,project_id,approval_id)).fetchone()
+            if (row is None or str(row["founder_id"])!=founder_id
+                    or str(row["requester_id"])!=founder_id
+                    or row["plan_status"]!="active"
+                    or row["founder_approval"]!="approved"
+                    or str(row["founder_decider"])!=founder_id
+                    or row["review_status"]!="pending"
+                    or row["review_action"]!="company:stage-delegation:"+proposal_id
+                    or row["worker_kind"]!="ai"
+                    or str(row["suggested_assignee_id"])!=str(row["assignee_id"])
+                    or (row["planned_worker"] is not None and
+                        str(row["planned_worker"])!=str(row["assignee_id"]))
+                    or (row["stage"]=="quality" and row["accountable_manager_id"]
+                        is not None and str(row["accountable_manager_id"])==
+                        str(row["assignee_id"]))):
+                raise PermissionError("CEO stage staffing outside Founder-approved scope denied")
+            if row["stage"]=="quality":
+                implementation=self.connection.execute("""
+                    SELECT suggested_assignee_id
+                    FROM ago_founder_intake_stages
+                    WHERE tenant_id=%s AND intake_id=%s
+                      AND stage='implementation'
+                """,(tenant_id,project_id)).fetchone()
+                if (implementation and implementation["suggested_assignee_id"] is not None
+                        and str(implementation["suggested_assignee_id"])==
+                        str(row["assignee_id"])):
+                    raise PermissionError("Same AI worker cannot implement and verify quality")
+            changed=self.connection.execute("""
+                UPDATE ago_approval_requests SET status='approved',
+                  reviewer_id=%s, reason=%s, decided_at=now()
+                WHERE tenant_id=%s AND id=%s AND status='pending' RETURNING id
+            """,(ceo_id,reason,tenant_id,approval_id)).fetchone()
+            if not changed:
+                raise PermissionError("Approval changed during CEO review")
+            self.connection.execute("""
+                INSERT INTO ago_approval_audit
+                  (request_id,tenant_id,actor_id,event,reason)
+                VALUES (%s,%s,%s,'approved',%s)
+            """,(approval_id,tenant_id,ceo_id,reason))
+            return {"approval_id":approval_id,"ceo_id":ceo_id,
+                    "stage":row["stage"],"status":"approved",
+                    "ai_decision":True,"execution_authorized":False}
+
     def list_requests(self, *, tenant_id: str, limit: int = 100) -> list[dict]:
         if not 1 <= limit <= 100:
             raise ValueError("Invalid approval list limit")
