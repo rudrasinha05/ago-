@@ -1,8 +1,8 @@
-"""M9 same-origin browser entry, security headers, and authenticated session contract."""
+"""Retired frontend redirects and authenticated AGO console API contracts."""
 from __future__ import annotations
 
 import os
-from importlib.resources import files
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -12,73 +12,41 @@ from ago import api_m2
 from ago.main import create_app
 
 
-def test_public_console_is_static_only_with_strict_headers():
+def test_retired_console_redirect_and_assets_not_served():
     with TestClient(create_app()) as client:
-        entry = client.get("/console/", follow_redirects=False)
-        assert entry.status_code == 200
-        assert entry.headers["content-type"].startswith("text/html")
-        assert 'script-src \'self\'' in entry.headers["content-security-policy"]
-        assert "frame-ancestors 'none'" in entry.headers["content-security-policy"]
-        assert "connect-src 'self'" in entry.headers["content-security-policy"]
-        assert "unsafe-inline" not in entry.headers["content-security-policy"]
-        assert entry.headers["x-frame-options"] == "DENY"
-        assert entry.headers["x-content-type-options"] == "nosniff"
-        assert entry.headers["referrer-policy"] == "no-referrer"
-        assert "no-store" in entry.headers["cache-control"]
-        assert "access-control-allow-origin" not in entry.headers
-        assert "login-form" in entry.text
-        assert 'src="/console/assets/app.js"' in entry.text
-        assert 'href="/console/assets/styles.css"' in entry.text
-        assert "No tokens are stored" in entry.text
-
-
-def test_console_redirect_and_assets_are_first_party_and_no_store():
-    with TestClient(create_app()) as client:
-        redirect = client.get("/console", follow_redirects=False)
-        assert redirect.status_code == 308
-        assert redirect.headers["location"] == "/console/"
-        assert "no-store" in redirect.headers["cache-control"]
-        for asset in ("app.js", "actions.js", "views.js", "core.js", "styles.css"):
-            response = client.get("/console/assets/" + asset)
-            assert response.status_code == 200, (asset, response.text[:250])
-            assert "no-store" in response.headers["cache-control"]
+        for path in ("/console", "/console/"):
+            response = client.get(path, follow_redirects=False)
+            assert response.status_code == 308
+            assert response.headers["location"] == "/workspace/organization/"
             assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
-            assert len(response.content) > 200
-        assert client.get("/console/assets/missing.js").status_code == 404
+            assert response.headers["x-frame-options"] == "DENY"
+            assert "no-store" in response.headers["cache-control"]
+        for name in ("app.js", "actions.js", "views.js", "core.js", "styles.css"):
+            assert client.get("/console/assets/" + name).status_code == 404
 
 
-def test_auth_protected_endpoints_remain_closed_when_static_console_is_public():
+def test_deleted_frontend_unavailable_even_under_historic_flag(monkeypatch):
+    monkeypatch.setenv("AGO_LEGACY_CONSOLE_TEST_MODE", "true")
+    with TestClient(create_app()) as client:
+        assert client.get("/console/", follow_redirects=False).status_code == 308
+        assert client.get("/console/assets/app.js").status_code == 404
+
+
+def test_protected_apis_remain_closed_without_authentication():
     app = create_app()
     app.dependency_overrides[api_m2.db_connection] = lambda: object()
     with TestClient(app) as client:
-        assert client.get("/console/").status_code == 200
+        assert client.get("/console/", follow_redirects=False).status_code == 308
         assert client.get("/v1/console/me").status_code == 401
         assert client.post("/v1/console/logout").status_code == 401
         assert client.get("/v1/insights/scorecard").status_code == 401
         assert client.get("/v1/meta/brief").status_code == 401
 
 
-def test_console_assets_ship_in_python_package_and_do_not_persist_tokens():
-    root = files("ago").joinpath("console")
-    for name in ("index.html","app.js","actions.js","views.js",
-                 "styles.css","core.js","package.json"):
-        assert root.joinpath(name).is_file(), name
-    script = root.joinpath("app.js").read_text(encoding="utf-8")
-    core = root.joinpath("core.js").read_text(encoding="utf-8")
-    assert "localStorage" not in script + core
-    assert "sessionStorage" not in script + core
-    assert "document.cookie" not in script + core
-    assert '"/v1/console/logout"' in script
-    assert '"/v1/console/me"' in script
-    assert "credentials: \"omit\"" in core
-    assert "same-origin" in core
-
-
-@pytest.fixture(autouse=True)
-def historic_console_mode(monkeypatch):
-    # Old M9 page retained only to regress-test its old behavior.
-    monkeypatch.setenv("AGO_LEGACY_CONSOLE_TEST_MODE", "true")
-    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+def test_no_old_console_source_or_bundled_assets():
+    root = Path(__file__).resolve().parents[3]
+    assert not (root / "apps/backend/ago/console").exists()
+    assert (root / "apps/web/components/company-map.jsx").is_file()
 
 
 @pytest.fixture
