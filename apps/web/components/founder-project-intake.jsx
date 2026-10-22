@@ -10,6 +10,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
  const [moreBusy,setMoreBusy]=useState(false),[hasMore,setHasMore]=useState(false),[projectError,setProjectError]=useState('');
  const [created,setCreated]=useState(null);
  const [busy,setBusy]=useState(false),[reviewBusy,setReviewBusy]=useState(false),[error,setError]=useState('');
+ const [ceoBusy,setCeoBusy]=useState(false),[ceoNotice,setCeoNotice]=useState('');
  const retry=useRef(null);
  const isFounder=me.roles?.includes('founder')&&me.permissions?.includes('brain:manage');
  const refresh=useCallback(async()=>{
@@ -27,6 +28,28 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
   setSelectedProject(project.id);setProjectDetail(null);setProjectError('');
   try{const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(project.id));setProjectDetail(result);}
   catch(e){setProjectError(e.message||'Project details are unavailable.');}
+ }
+ async function resumeCeo(){
+  if(!projectDetail||ceoBusy||projectDetail.plan_status!=='active')return;
+  setCeoBusy(true);setProjectError('');setCeoNotice('');
+  let requested=0;
+  try{
+   for(const stage of projectDetail.stages||[]){
+    if(stage.task_id&&stage.task_status==='proposed'&&
+      ['internal:brief','research:brief','project:plan'].includes(stage.task_action)){
+     await api.request('/v1/console/tasks/'+encodeURIComponent(stage.task_id)+'/request-approval',{method:'POST'});
+     requested++;
+    }
+   }
+   const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(projectDetail.id)+'/ceo/reconcile',{method:'POST'});
+   setCeoNotice('CEO '+result.ceo_name+' verified '+result.verified_task_count+
+     ' internal task(s). '+requested+' new approval requests. No execution or external action started.');
+   setProjectDetail(await api.request('/v1/organization/company/projects/'+encodeURIComponent(projectDetail.id)));
+   await onChanged?.();
+  }catch(e){
+   setProjectError('CEO handoff incomplete after '+requested+' requests: '+(e.message||'Blocked')+
+    '. Inspect CEO appointment and approval state; do not reapprove Founder scope.');
+  }finally{setCeoBusy(false);}
  }
  function exportEngineeringCandidate(run){
   if(!run?.board_review_cleared||!run.engineering_candidate)return;
@@ -70,12 +93,12 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
       'Executing employee: '+(x.executing_employee||'None'),
       'Task: '+(x.task_id||'Not materialized')+' | Status: '+(x.task_status||'Not started'),
       'Agent run: '+(x.agent_run_status||'No run')+' | Failure code: '+(x.agent_failure_code||'None'),
-      'Independent QA: '+(x.qa_verdict||'Not reviewed'),
+      'CEO-led QA evidence: '+(x.qa_verdict||'Not reviewed'),
       'QA evidence: '+(x.qa_evidence||'Not attached'),
       ''
     ]),
     '## Acceptance gates','',
-    'Independent QA must pass for actual implementation deliverables.',
+    'Verified QA evidence must pass for actual implementation deliverables.',
     'Release and financial evidence must be verified separately.',
   ];
   const blob=new Blob([lines.join('\n')],{type:'text/markdown;charset=utf-8'});
@@ -143,8 +166,14 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
         {!projectDetail?<p>Loading live project details…</p>:<>
          <h4>{projectDetail.title}</h4>
          <p><b>Status:</b> {projectDetail.status_label} · <b>Strategy:</b> {projectDetail.plan_status} · <b>Delivery health:</b> {projectDetail.project_health}</p>
+         {projectDetail.plan_status==='active'&&<div className="project-ceo-handoff">
+          <button type="button" disabled={ceoBusy} onClick={resumeCeo}>
+           {ceoBusy?'Checking the approved scope…':'Resume CEO verification (no new Founder approval)'}
+          </button>
+          {ceoNotice&&<p role="status">{ceoNotice}</p>}
+         </div>}
          <p><b>Evidence-backed QA completion:</b> {projectDetail.qa_passed_stages}/{projectDetail.stage_count} stages · {projectDetail.completion_percent}% · {projectDetail.running_stages} running · {projectDetail.failed_stages} failed · {projectDetail.unassigned_stages} staffing gaps.</p>
-         <p><b>Independently approved workforce assignments:</b> {projectDetail.reviewed_delegations_count??0}/{projectDetail.stage_count}. Suggestions are not approved assignments; assignments do not execute tasks.</p>
+         <p><b>Reviewed workforce assignments:</b> {projectDetail.reviewed_delegations_count??0}/{projectDetail.stage_count}. Suggestions are not approved assignments; assignments do not execute tasks.</p>
          <button type="button" onClick={exportProjectReport}>Export current evidence report (.md)</button>
          <p><b>Founder requirement:</b> {projectDetail.brief}</p>
          <p><b>Accountable manager:</b> {projectDetail.accountable_manager_name}</p>
@@ -154,12 +183,12 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
           <strong>{st.position}. {st.stage}</strong>
           <small>{st.deliverable}</small>
           <small>Suggested: {st.suggested_assignee_name||'Employee needed'} · Executing: {st.executing_employee||'No governed task started'}</small>
-          <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no independent verdict'}</small>
+          <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no QA verdict'}</small>
           <small>Delegated stage worker: {st.approved_assignee_name||'Awaiting authorized personnel decision'} {st.delegated_at?'· applied '+new Date(st.delegated_at).toLocaleString():''}</small>
           <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
           {st.founder_agent_result?.kind==='local_company_governed_handoff'&&
            <details className="ago-ai-chain">
-            <summary>Ollama Board → PM → employee · {st.founder_agent_result.roles_completed}/{st.founder_agent_result.roles_expected||4} recorded AI passes · Human QA pending</summary>
+            <summary>Ollama Board → PM → employee · {st.founder_agent_result.roles_completed}/{st.founder_agent_result.roles_expected||4} recorded AI passes · Quality verification pending</summary>
             <p>Board recommendations (nonbinding): {(st.founder_agent_result.board_recommendations||[]).map(v=>v.seat+': '+v.recommendation.toUpperCase()).join(' · ')||'No verified Board recommendation recorded'} — Founder makes the actual decision.</p>
             {st.founder_agent_result.board_blocked&&<p role="status"><strong>Board {st.founder_agent_result.board_block_reason==='unverified'?'decision unverified':'objection recorded'} — internal handoff paused after {st.founder_agent_result.blocked_by_board_seat||'Board'}.</strong> Downstream AI roles did not execute in this run. Founder must examine the objection and authorize an appropriately reviewed next action; this is not an automatic project rejection or release.</p>}
             {st.founder_agent_result.board_review_mode==='full_five_seat'&&<p>Five-seat governance review: {st.founder_agent_result.board_review_cleared?'All five AI Board recommendations recorded APPROVE; founder authority and CEO-led QA are still required.':'Board review incomplete or stopped — never an automatic approval.'}</p>}
@@ -177,7 +206,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
              </li>)}</ol>
             <p>These are AI-generated review drafts, not executed GitHub changes or a published release.</p>
            </details>}
-          {st.qa_evidence&&<details><summary>Independent QA evidence</summary><p>{st.qa_evidence}</p></details>}
+          {st.qa_evidence&&<details><summary>QA evidence</summary><p>{st.qa_evidence}</p></details>}
          </li>)}</ol>
          <ProjectStageRouting api={api} project={projectDetail} employees={employees} profiles={profiles} onUpdated={onChanged}/>
           <CompanyDocumentVault api={api} project={projectDetail}/>
