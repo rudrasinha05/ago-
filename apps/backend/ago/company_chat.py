@@ -1077,8 +1077,10 @@ class CompanyChat:
         UUID(assignee_id)
         if stage not in ('discovery','architecture','implementation','quality','release'):
             raise ValueError('Unknown delivery stage')
-        if 'founder' not in actor.roles:
-            raise PermissionError('Human founder must authorize personnel proposals')
+        if 'founder' not in actor.roles or not founder_solo_eligible(
+            self.db, actor.tenant_id, actor.subject
+        ):
+            raise PermissionError('Only the authenticated active Founder may propose staffing')
         with self.db.transaction():
             project=self.db.execute("""
                 SELECT i.id,i.plan_id,p.status,l.accountable_manager_id
@@ -1135,9 +1137,7 @@ class CompanyChat:
             if prior:
                 return {'proposal_id':str(prior['id']),
                         'approval_id':str(prior['approval_id']),
-                        'status':('pending_founder_decision' if founder_solo_eligible(
-                            self.db, actor.tenant_id, actor.subject
-                        ) else 'pending_independent_review'),'reused':True,
+                        'status':'pending_founder_decision','reused':True,
                         'task_executed':False}
             proposal_id=str(uuid4())
             approval=self.repositories.resolve(ApprovalRepository).propose(
@@ -1152,9 +1152,7 @@ class CompanyChat:
             """,(proposal_id,actor.tenant_id,project_id,stage,
                  assignee_id,actor.subject,approval.request_id))
         return {'proposal_id':proposal_id,'approval_id':approval.request_id,
-                'status':('pending_founder_decision' if founder_solo_eligible(
-                    self.db, actor.tenant_id, actor.subject
-                ) else 'pending_independent_review'),'stage':stage,
+                'status':'pending_founder_decision','stage':stage,
                 'worker_name':worker['name'],'reused':False,'task_executed':False}
 
     def activate_stage_delegation(self, actor, project_id: str,
