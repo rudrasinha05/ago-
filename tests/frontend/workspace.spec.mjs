@@ -166,3 +166,70 @@ test('red routed task follows founder, department and employee and opens actual 
  await expect(page.locator('.employee-inspector')).toContainText('Real reviewed project');
  expect(errors).toEqual([]);
 });
+
+test('founder can create first real governed task then separately approve and dispatch once',async({page})=>{
+ const {errors}=await fixtures(page);
+ const rights=['brain:read','organization:read','task:read','task:create','approval:request','approval:read','approval:decide','agent:dispatch','task:execute'];
+ const realTaskId='30000000-0000-4000-8000-000000000011';
+ const approvalId='30000000-0000-4000-8000-000000000012';
+ const tasks=[],approvals=[];
+ let dispatched=0,proposed=0;
+ await page.route('**/v1/console/me',route=>route.fulfill({status:200,json:{
+   id:user,tenant_id:tenant,display_name:'Founder',roles:['founder'],permissions:rights
+ }}));
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Founder',department_id:department,kind:'human'},
+  {id:other,name:'Research specialist',department_id:department,kind:'ai'}
+ ]}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:tasks}));
+ await page.route('**/v1/organization/company/approvals',route=>route.fulfill({status:200,json:approvals}));
+ await page.route('**/v1/tasks',route=>{
+  if(route.request().method()!=='POST')return route.fulfill({status:200,json:tasks});
+  proposed++;
+  const body=route.request().postDataJSON();
+  expect(body).toEqual({action:'internal:brief',assignee_id:other});
+  const task={id:realTaskId,action:body.action,assignee_id:body.assignee_id,status:'proposed'};
+  tasks.push(task);
+  return route.fulfill({status:200,json:task});
+ });
+ await page.route('**/v1/console/tasks/*/request-approval',route=>{
+  expect(route.request().method()).toBe('POST');
+  tasks[0].status='waiting_approval';tasks[0].approval_id=approvalId;
+  approvals.push({id:approvalId,action:'internal:brief',status:'pending',requester_id:user,requester_name:'Founder',
+   task_id:realTaskId,task_action:'internal:brief',task_assignee_name:'Research specialist',
+   approval_type:'task_execution',founder_solo_mode:true,review_routing:'Explicit local founder review'});
+  return route.fulfill({status:200,json:{approval_id:approvalId,status:'waiting_approval'}});
+ });
+ await page.route('**/v1/governance/approvals/*/decision',route=>{
+  expect(route.request().postDataJSON()).toMatchObject({approve:true});
+  approvals[0].status='approved';
+  return route.fulfill({status:200,json:{status:'approved'}});
+ });
+ await page.route('**/v1/agents/tasks/*/run',route=>{
+  dispatched++;
+  tasks[0].status='completed';
+  return route.fulfill({status:200,json:{task_id:realTaskId,status:'completed'}});
+ });
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('button',{name:'Set up first task'}).click();
+ await expect(page.getByLabel('First approved AI work setup')).toBeVisible();
+ await expect(page.getByLabel('AI employee')).toHaveValue(other);
+ await expect(page.getByLabel('First-run task type')).toHaveValue('internal:brief');
+ await page.getByRole('button',{name:'Create proposed task (no execution)'}).click();
+ await expect(page.getByText('Proposed task recorded:',{exact:false})).toContainText(realTaskId);
+ await expect(page.getByRole('button',{name:'Request approval',exact:true})).toBeVisible();
+ expect(proposed).toBe(1);expect(dispatched).toBe(0);
+ await page.getByRole('button',{name:'Request approval',exact:true}).click();
+ await expect.poll(()=>approvals.length).toBe(1);
+ expect(dispatched).toBe(0);
+ await page.locator('#company-approval-inbox').getByRole('button',{name:'View approval details'}).click();
+ await page.getByLabel('Mandatory decision reason').fill('Authorized local isolated brief validation');
+ await page.getByRole('button',{name:'Approve',exact:true}).click();
+ await expect.poll(()=>approvals[0].status).toBe('approved');
+ await expect(page.getByRole('button',{name:'Run approved AI'})).toBeVisible();
+ expect(dispatched).toBe(0);
+ await page.getByRole('button',{name:'Run approved AI'}).click();
+ await expect.poll(()=>dispatched).toBe(1);
+ await expect(page.locator('#ago-execution-desk')).toContainText('Needs QA');
+ expect(errors).toEqual([]);
+});
