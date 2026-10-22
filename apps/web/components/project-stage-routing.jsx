@@ -6,7 +6,7 @@ export function ProjectStageRouting({api,project,employees,profiles,onUpdated}){
  const [delegations,setDelegations]=useState([]),[choices,setChoices]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const base=ROOT+encodeURIComponent(project.id)+'/delegations';
  const titleFor=id=>profiles.find(p=>p.id===id)?.role_title||employees.find(e=>e.id===id)?.role_title||'Unconfigured role';
- const candidates=stage=>employees.filter(e=>stage.stage==='quality'?(e.kind==='human'&&e.id!==project.accountable_manager_id):(e.kind==='ai'&&(!stage.plan_step_id||!stage.suggested_assignee_id||e.id===stage.suggested_assignee_id)));
+ const candidates=stage=>employees.filter(e=>e.kind==='ai'&&(!stage.plan_step_id||!stage.suggested_assignee_id||e.id===stage.suggested_assignee_id)&&!(stage.stage==='quality'&&e.id===project.accountable_manager_id));
  const suggested=useMemo(()=>{
   const result={};
   for(const stage of project.stages||[]){
@@ -45,7 +45,7 @@ export function ProjectStageRouting({api,project,employees,profiles,onUpdated}){
  }
  return <section className="project-stage-routing" aria-label="Project stage specialist assignments">
   <h5>Assign a real team to each delivery stage</h5>
-  <p>Propose Discovery, Architecture, Implementation, independent Quality, and Release specialists. AI workers handle delivery proposals; Quality requires a different authorized human reviewer. Approval and activation never run AI or grant extra privileges.</p>
+  <p>Propose Discovery, Architecture, Implementation, Quality and Release AI specialists. The CEO is accountable for quality evidence and approved project delivery; QA workers do not approve their own work. Assignments do not run AI or grant new privileges.</p>
   <button type="button" onClick={proposeAll} disabled={busy}>{busy?'Submitting…':'Propose eligible specialists for open stages'}</button>
   <button type="button" disabled={busy} onClick={()=>refresh().catch(e=>setError(e.message))}>Refresh approvals</button>
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
@@ -63,6 +63,6 @@ export function ProjectStageRouting({api,project,employees,profiles,onUpdated}){
     {approved&&<button type="button" disabled={busy||project.plan_status!=='active'} onClick={()=>activate(stage.stage,approved.id)}>Activate reviewed assignment</button>}
    </article>;
   })}</div>
-  <p>Stage assignment is not proof of a running task, independent QA pass, GitHub commit, or market-ready release.</p>
+  <p>Stage assignment is not proof of a running task, verified quality evidence, GitHub commit, or market-ready release.</p>
  </section>;
 }

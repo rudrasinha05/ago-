@@ -104,7 +104,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
  }
   return <section className="founder-project-intake" aria-label="Start founder project">
   <div><h3>Start a governed project</h3>
-    <p>Founder → Company Brain → accountable executive (CEO/COO/CTO/manager if actually configured; otherwise founder escalation) → suggested team. Higher management owns delivery, workers own execution. Approve/Deny is reserved for the founder; independent QA remains a separate check.</p></div>
+    <p>Founder → Company Brain → accountable executive (CEO/COO/CTO/manager if actually configured; otherwise founder escalation) → suggested team. Higher management owns delivery, workers own execution. Approve/Deny is reserved for the founder; CEO-led QA remains a separate check.</p></div>
   <form onSubmit={start}>
     <label>Founder project brief<textarea value={brief} onChange={e=>setBrief(e.target.value)}
       minLength={20} maxLength={12000} required
@@ -129,7 +129,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
   </div>}
   <div id="ago-project-portfolio" className="founder-project-portfolio">
    <h3>All company projects · Recent founder projects</h3>
-   <p>Click any project to inspect full brief, current plan, assigned specialists, task state, independent QA and commercial evidence. A project with no verified release is under process, not automatically complete.</p>
+   <p>Click any project to inspect full brief, current plan, assigned specialists, task state, CEO-led QA and commercial evidence. A project with no verified release is under process, not automatically complete.</p>
    {projects===null?<small>Project history unavailable</small>:!projects.length?<small>No approved or draft founder projects recorded yet.</small>:
     <div className="project-portfolio-grid">{projects.map(p=><article key={p.id} className="project-portfolio-card">
       <button type="button" className="project-portfolio-open" aria-expanded={selectedProject===p.id} onClick={()=>inspectProject(p)}>
@@ -162,17 +162,17 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
             <summary>Ollama Board → PM → employee · {st.founder_agent_result.roles_completed}/{st.founder_agent_result.roles_expected||4} recorded AI passes · Human QA pending</summary>
             <p>Board recommendations (nonbinding): {(st.founder_agent_result.board_recommendations||[]).map(v=>v.seat+': '+v.recommendation.toUpperCase()).join(' · ')||'No verified Board recommendation recorded'} — Founder makes the actual decision.</p>
             {st.founder_agent_result.board_blocked&&<p role="status"><strong>Board {st.founder_agent_result.board_block_reason==='unverified'?'decision unverified':'objection recorded'} — internal handoff paused after {st.founder_agent_result.blocked_by_board_seat||'Board'}.</strong> Downstream AI roles did not execute in this run. Founder must examine the objection and authorize an appropriately reviewed next action; this is not an automatic project rejection or release.</p>}
-            {st.founder_agent_result.board_review_mode==='full_five_seat'&&<p>Five-seat governance review: {st.founder_agent_result.board_review_cleared?'All five AI Board recommendations recorded APPROVE; founder authority and independent QA are still required.':'Board review incomplete or stopped — never an automatic approval.'}</p>}
+            {st.founder_agent_result.board_review_mode==='full_five_seat'&&<p>Five-seat governance review: {st.founder_agent_result.board_review_cleared?'All five AI Board recommendations recorded APPROVE; founder authority and CEO-led QA are still required.':'Board review incomplete or stopped — never an automatic approval.'}</p>}
             {st.founder_agent_result.engineering_candidate&&<section className="ago-engineering-review" aria-label="Uncommitted engineering candidate">
               <h5>Generated source candidate — not built, tested or committed</h5>
               <button type="button" onClick={()=>exportEngineeringCandidate(st.founder_agent_result)}>Export exact files for local Founder review</button>
               <p>Proposal checksum: <code>{st.founder_agent_result.engineering_candidate.candidate_sha256}</code></p>
               <ul>{st.founder_agent_result.engineering_candidate.file_evidence.map(f=><li key={f.path}><code>{f.path}</code> · {f.bytes} bytes · syntax {f.python_syntax_checked?'checked':'not checked'} · <code>{f.sha256.slice(0,12)}</code></li>)}</ul>
-              <p>Founder must inspect source, run independent tests and approve a separate GitHub operation. No auto-commit.</p>
+              <p>Founder must inspect source, run verified tests and approve a separate GitHub operation. No auto-commit.</p>
             </section>}
             <ol>{(st.founder_agent_result.handoffs||[]).map(h=><li key={h.role}>
               <strong>{h.role.toUpperCase()} · {h.employee_name}</strong>
-              <small>Employee record: {h.employee_id} · {h.human_qa_approved?'QA passed':'Independent QA required'}</small>
+              <small>Employee record: {h.employee_id} · {h.human_qa_approved?'QA passed':'CEO quality verification required'}</small>
               <p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{h.draft}</p>
              </li>)}</ol>
             <p>These are AI-generated review drafts, not executed GitHub changes or a published release.</p>

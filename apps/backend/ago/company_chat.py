@@ -987,29 +987,15 @@ class CompanyChat:
             if position is None:
                 raise LookupError('Requested stage not found')
             worker=self.db.execute("""
-                SELECT e.id,e.name,e.kind,e.role_title,e.manager_id,
-                  EXISTS(
-                     SELECT 1 FROM ago_users u JOIN ago_user_roles r
-                      ON r.tenant_id=u.tenant_id AND r.user_id=u.id
-                     WHERE u.tenant_id=e.tenant_id AND u.id=e.id AND u.active
-                       AND r.role='reviewer'
-                  ) AS reviewer_active
-                FROM ago_employees e
-                WHERE e.tenant_id=%s AND e.id=%s
+                SELECT id,name,kind,role_title,manager_id
+                FROM ago_employees WHERE tenant_id=%s AND id=%s
             """,(actor.tenant_id,assignee_id)).fetchone()
             if worker is None:
                 raise LookupError('Selected worker not in this company')
-            if stage=='quality':
-                solo_qa = (
-                    str(worker['id']) == actor.subject
-                    and founder_solo_eligible(self.db, actor.tenant_id, actor.subject)
-                )
-                if (worker['kind']!='human' or
-                        not (worker['reviewer_active'] or solo_qa) or
-                        str(worker['id'])==str(project['accountable_manager_id'])):
-                    raise PermissionError('QA needs an authorized human separate from the delivery manager')
-            elif worker['kind']!='ai':
-                raise PermissionError('Delivery execution stages must select AI workers')
+            if worker['kind']!='ai':
+                raise PermissionError('CEO delivery stages require an existing AI specialist')
+            if stage=='quality' and str(worker['id'])==str(project['accountable_manager_id']):
+                raise PermissionError('QA stage specialist must not be the delivery manager')
             if position['plan_step_id']:
                 planned=self.db.execute("""
                    SELECT assignee_id FROM ago_plan_steps
@@ -1250,9 +1236,9 @@ class CompanyChat:
             item["review_routing"] = (
                 "Founder only — active authenticated human founder"
                 if strategic else
-                "Founder-only local authority — no separate active human approver"
+                "Founder controls human decisions; CEO verifies bounded approved-project tasks"
                 if solo else
-                "Independent active human reviewer with approval:decide; requester cannot self-approve"
+                "Founder alone decides extraordinary approval requests; CEO verifies routine tasks within an approved project"
             )
             item["next_action"] = (
                 "Founder approval permits market validation and a governed project plan. No autonomous sales, email campaigns, ad spend or release is authorized."
@@ -1321,42 +1307,23 @@ class CompanyChat:
             'discovery':('research','analyst','product'),
             'architecture':('architect','technical lead','cto'),
             'implementation':('developer','engineer','programmer'),
-            'quality':('reviewer','quality','qa','tester'),
+            'quality':('quality','qa','tester'),
             'release':('devops','release','operations','delivery'),
         }
         candidate_rows = self.db.execute("""
-            SELECT e.id,e.name,e.kind,e.role_title,
-                   EXISTS(SELECT 1 FROM ago_user_roles r JOIN ago_users u
-                     ON u.tenant_id=r.tenant_id AND u.id=r.user_id AND u.active
-                     WHERE r.tenant_id=e.tenant_id AND r.user_id=e.id
-                       AND r.role='reviewer') AS active_reviewer,
-                   EXISTS(SELECT 1 FROM ago_user_roles r JOIN ago_users u
-                     ON u.tenant_id=r.tenant_id AND u.id=r.user_id AND u.active
-                     WHERE r.tenant_id=e.tenant_id AND r.user_id=e.id
-                       AND r.role='founder') AS active_founder
-            FROM ago_employees e WHERE e.tenant_id=%s
+            SELECT id,name,kind,role_title FROM ago_employees WHERE tenant_id=%s
         """,(tenant_id,)).fetchall()
         work_index={str(e['id']):e for e in counts}
-        # Previously unstaffed projects can suggest the genuine human founder
-        # as local QA, never execute staffing or impersonate an approver.
-        solo_quality_ids = {
-            str(e['id']) for e in candidate_rows
-            if e['kind']=='human' and e.get('active_founder')
-            and founder_solo_eligible(self.db, tenant_id, str(e['id']))
-        }
         proposed = []
         for v in vacancies:
             target=dict(v)
             terms=skill_map.get(v['stage'],())
             matches=[
-                e for e in candidate_rows
-                if (
-                    (e['kind']=='human'
-                     and str(e['id'])!=str(v['accountable_manager_id'])
-                     and (e['active_reviewer'] or str(e['id']) in solo_quality_ids))
-                    if v['stage']=='quality' else e['kind']=='ai'
-                ) and (v['stage']=='quality' or any(term in
-                 (e['name']+' '+(e['role_title'] or '')).lower() for term in terms))
+                e for e in candidate_rows if e['kind']=='ai'
+                and any(term in (e['name']+' '+(e['role_title'] or '')).lower()
+                        for term in terms)
+                and not (v['stage']=='quality'
+                         and str(e['id'])==str(v['accountable_manager_id']))
             ]
             matches.sort(key=lambda e:(
                 int(work_index[str(e['id'])]['running'])+int(work_index[str(e['id'])]['queued']),
@@ -1368,9 +1335,7 @@ class CompanyChat:
                 int(work_index[str(top['id'])]['running'])+int(work_index[str(top['id'])]['queued'])
                 if top else None)
             target['recommendation']='qualified_existing_worker' if top else 'review_staffing_gap'
-            target['founder_local_qa_candidate']=bool(
-                top and v['stage']=='quality' and str(top['id']) in solo_quality_ids
-            )
+            target['founder_local_qa_candidate']=False
             proposed.append(target)
         return {
             'employees':counts,
