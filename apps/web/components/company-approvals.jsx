@@ -88,6 +88,10 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
     <button type="button" onClick={()=>{const match=rows?.find(x=>x.id===toast.id);if(match)open(match);}}>View details</button>
     <button type="button" onClick={()=>setToast(null)} aria-label="Dismiss approval notification">×</button>
   </div>}
+  {handoffNotice&&<div className="approval-toast" role="status" aria-label="Founder decision result">
+    <strong>Founder decision outcome</strong><p>{handoffNotice}</p>
+    <button type="button" onClick={()=>setHandoffNotice('')} aria-label="Dismiss Founder decision result">Dismiss</button>
+  </div>}
   {selected&&<div className="approval-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)close();}}>
    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="approval-detail-title" className="approval-dialog">
     <header><div><small>{typeLabel[selected.approval_type]}</small><h2 id="approval-detail-title">Approval details</h2></div>
