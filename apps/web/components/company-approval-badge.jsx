@@ -1,0 +1,38 @@
+"use client";
+import {useState} from 'react';
+export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone}){
+ const [open,setOpen]=useState(false),[busy,setBusy]=useState(''),[error,setError]=useState('');
+ const pending=(approvals||[]).filter(a=>a.status==='pending'&&
+  (a.requester_id===employee.id||a.task_assignee_id===employee.id));
+ const count=updates+pending.length;
+ if(!count)return null;
+ const founder=me.roles?.includes('founder')&&me.permissions?.includes('approval:founder');
+ async function decide(request,approve){
+  if(!founder||busy)return;
+  setBusy(request.id);setError('');
+  try{
+   await api.request('/v1/governance/approvals/'+encodeURIComponent(request.id)+'/decision',{
+    method:'POST',body:{approve,reason:'Founder '+(approve?'approved':'denied')+
+      ' exact action '+request.action+' in employee map notification.'}
+   });
+   await onDone?.();
+  }catch(e){setError(e.message||'Decision was not recorded');}
+  finally{setBusy('');}
+ }
+ return <div className="employee-approval-zone" onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}
+  onFocus={()=>setOpen(true)} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOpen(false)}}>
+  <button className="employee-approval-counter" type="button" aria-label={count+' notifications for '+employee.name}
+   aria-expanded={open} onClick={()=>setOpen(v=>!v)}>{count}</button>
+  {open&&<section className="employee-approval-flyout" aria-label={employee.name+' notification actions'}>
+   <strong>{employee.name} · {count} update(s)</strong>
+   {!!updates&&<p>{updates} recorded work updates. Select the employee for details.</p>}
+   {!pending.length&&<p>No pending Founder decisions.</p>}
+   {pending.map(a=><article key={a.id}><p><b>{a.action}</b> · pending</p>
+    {founder?<div className="employee-approval-actions"><button type="button" disabled={!!busy}
+      onClick={()=>decide(a,true)}>Approve</button><button type="button" disabled={!!busy}
+      onClick={()=>decide(a,false)}>Deny</button></div>:<p>Founder or CEO-scoped project verification required.</p>}
+   </article>)}
+   {error&&<p role="alert">{error}</p>}
+  </section>}
+ </div>;
+}
