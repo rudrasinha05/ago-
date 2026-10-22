@@ -67,20 +67,16 @@ def test_old_console_urls_default_to_one_visual_company_map(monkeypatch):
         assert client.get("/v1/console/me").status_code == 401
 
 
-def test_legacy_console_only_runs_in_explicit_local_test_mode(monkeypatch):
+def test_deleted_console_cannot_return_even_if_legacy_flag_set(monkeypatch):
     from fastapi.testclient import TestClient
     from ago.main import create_app
     monkeypatch.setenv("AGO_ENVIRONMENT", "development")
     monkeypatch.setenv("AGO_LEGACY_CONSOLE_TEST_MODE", "true")
     with TestClient(create_app()) as client:
         response = client.get("/console/", follow_redirects=False)
-        assert response.status_code == 200
-        assert 'src="/console/assets/app.js"' in response.text
-    # The route decision also fails closed in a production *stage*,
-    # independently of production secret providers/bootstrap.
-    from ago.console_host import _legacy_console_for_tests
-    monkeypatch.setenv("AGO_ENVIRONMENT", "production")
-    assert _legacy_console_for_tests() is False
+        assert response.status_code == 308
+        assert response.headers["location"] == "/workspace/organization/"
+        assert client.get("/console/assets/app.js").status_code == 404
 
 
 def test_legacy_console_redirect_follows_through_to_real_visual_frontend(monkeypatch):
@@ -111,4 +107,4 @@ def test_normal_founder_launch_forces_single_visual_frontend():
     root = Path(__file__).resolve().parents[3]
     for relative in ("scripts/ago-visual.ps1", "scripts/ago.ps1"):
         source = (root / relative).read_text(encoding="utf-8")
-        assert "Remove-Item Env:AGO_LEGACY_CONSOLE_TEST_MODE -ErrorAction SilentlyContinue" in source
+        assert "AGO_LEGACY_CONSOLE_TEST_MODE" not in source
