@@ -592,7 +592,7 @@ class CompanyChat:
                 def executive_rank(e):
                     title = (e['role_title'] or '').strip().lower()
                     name = e['name'].strip().lower()
-                    if title in {'ceo','chief executive officer'} or name == 'ceo':
+                    if title in {'ceo','chief executive officer'} or 'chief executive officer' in title or name == 'ceo':
                         return 0
                     if title in {'coo','chief operating officer'} or name == 'coo':
                         return 1

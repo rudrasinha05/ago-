@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {departmentBlueprint,buildCompanyRolePlan} from '../company-roles.js';
+import {departmentBlueprint,buildCompanyRolePlan,buildLeadershipPlan} from '../company-roles.js';
 test('department expertise gives distinct software, security, QA, commercial and people work',()=>{
  for(const name of ['Engineering','Cyber Security','Quality Assurance','Growth & Sales','Finance','People Operations','Research','Platform']){
   const b=departmentBlueprint(name);assert.notEqual(b.name,'Unclassified Department',name);
@@ -30,4 +30,12 @@ test('46 real members are all covered across unknown and classified teams with s
  assert.equal(first.length,46);
  assert.deepEqual(first,buildCompanyRolePlan([...people].reverse(),deps,[],'founder'));
  assert.ok(first.some(x=>x.department==='Team 3'));
+});
+
+test('CEO CTO CFO CISO CQO seats use real distinct AI members',()=>{
+ const staff=['CEO','CTO','Finance','Security','Quality'].map((name,i)=>({id:String(i),name,kind:'ai'}));
+ const rows=buildLeadershipPlan([{id:'owner',name:'Founder',kind:'human'},...staff],[],[],'owner');
+ assert.deepEqual(rows.map(x=>x.employee_id),['0','1','2','3','4']);
+ assert.equal(new Set(rows.map(x=>x.employee_id)).size,5);
+ assert.deepEqual(buildLeadershipPlan([staff[0]],[],[],'owner').filter(x=>!x.employee_id).length,4);
 });

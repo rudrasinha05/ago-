@@ -116,9 +116,37 @@ export function buildCompanyRolePlan(employees,departments,profiles,founderId){
    const meaningfulTitle=currentTitle&&currentTitle!==employee.name&&currentTitle.toLowerCase()!=='not assigned';
    const role_title=meaningfulTitle?currentTitle:specialization.title;
    const core_responsibilities='Work area: '+specialization.area+'. Core duties: '+specialization.focus+'. Expected deliverable: '+specialization.deliverable+'. Report progress and blockers to recorded manager.';
-   const extra_responsibilities='Proposed expertise focus (not a verified skill assessment): '+specialization.focus+'. Cross-team collaboration, quality evidence, documentation, security/privacy and reproducible handoffs. Project execution requires a separately approved task, actual tools and independent QA.';
+   const extra_responsibilities='Proposed expertise focus (not a verified skill assessment): '+specialization.focus+'. Cross-team collaboration, quality evidence, documentation, security/privacy and reproducible handoffs. Project execution requires a separately approved task, actual tools and CEO-led quality verification.';
    result.push({id:employee.id,name:employee.name,kind:employee.kind,department:department?.name||'Department not recorded',manager_id:employee.manager_id||null,role_title:keep?current.role_title:role_title,core_responsibilities:keep?current.core_responsibilities:(String(current?.core_responsibilities||'').trim()||core_responsibilities),extra_responsibilities:keep?current.extra_responsibilities:(String(current?.extra_responsibilities||'').trim()||extra_responsibilities),status:keep?'configured':'proposed',focus:specialization.focus});
   });
  }
  return result.sort((a,b)=>a.department.localeCompare(b.department)||a.name.localeCompare(b.name));
+}
+
+const EXECUTIVES=[
+ {seat:'Strategy & Vision',title:'Chief Executive Officer (CEO)',match:/\bceo\b|chief executive|strategy|portfolio|business/i,
+  work:'Own every Founder-approved project: business roadmap, staffing, verified task delegation, project delivery and escalation. Never override the Founder scope.'},
+ {seat:'Technology Oversight',title:'Chief Technology Officer (CTO)',match:/\bcto\b|chief technology|engineering|architect|software|technical/i,
+  work:'Own architecture, secure code implementation, technical staffing, integrations, GitHub CI and error remediation; report to CEO.'},
+ {seat:'Finance & Budget',title:'Chief Financial Officer (CFO)',match:/\bcfo\b|finance|budget|account|cost/i,
+  work:'Maintain real cost evidence, ROI, virtual budgets and spending proposals; no payment authorization; report to CEO.'},
+ {seat:'Risk & Compliance',title:'Chief Information Security Officer (CISO)',match:/\bciso\b|security|cyber|risk|compliance/i,
+  work:'Verify security risks, privacy, compliance, access and incident evidence; report to CEO.'},
+ {seat:'Quality & Release',title:'Chief Quality Officer (CQO)',match:/\bcqo\b|quality|\bqa\b|tester|test|release/i,
+  work:'Own automated tests, acceptance criteria, regression reports and release blockers; report to CEO.'}
+];
+export function buildLeadershipPlan(employees,profiles,board,founderId){
+ const ai=(employees||[]).filter(e=>e.kind==='ai'&&e.id!==founderId);
+ const current=new Map((profiles||[]).map(p=>[p.id,p]));
+ const assigned=new Map((board||[]).map(b=>[b.seat,String(b.employee_id)]));
+ const used=new Set();
+ return EXECUTIVES.map(x=>{
+  const existing=ai.find(e=>e.id===assigned.get(x.seat)&&!used.has(e.id));
+  const options=ai.filter(e=>!used.has(e.id)).map(e=>({e,score:x.match.test([e.name,e.role_title,current.get(e.id)?.role_title].filter(Boolean).join(' '))?10:0}))
+   .sort((a,b)=>b.score-a.score||String(a.e.id).localeCompare(String(b.e.id)));
+  const candidate=existing||options[0]?.e||null;
+  if(candidate)used.add(candidate.id);
+  return {seat:x.seat,title:x.title,work:x.work,employee_id:candidate?.id||null,
+   employee_name:candidate?.name||'Vacant — founder must hire an AI employee',existing:!!existing};
+ });
 }
