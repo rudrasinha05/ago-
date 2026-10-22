@@ -249,3 +249,15 @@
 .company-role-planner th,.company-role-planner td{border-bottom:1px solid #40536d;padding:10px;text-align:left;vertical-align:top}
 .company-role-planner .role-table-wrap{max-height:450px;overflow:auto}
 .company-role-planner .role-status{font-weight:650;color:#f9d38d}
+
+/* Governed project stage assignment, visible without implying AI execution. */
+.project-stage-routing{margin:14px 0;padding:14px;border:1px solid #3d719d;background:#142b43;border-radius:12px}
+.project-stage-routing h5{font-size:14px;color:#d8eaff}
+.project-stage-routing p,.project-stage-routing small{font-size:12px;color:#c4d6ea}
+.project-stage-routing button{padding:7px 12px;margin:6px 6px 6px 0;border:1px solid #5d99c2;border-radius:7px;background:#21446a;color:#e7f5ff;cursor:pointer}
+.project-stage-routing button:disabled{opacity:.55;cursor:not-allowed}
+.project-stage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:9px}
+.project-stage-grid article{border:1px solid #416381;border-radius:9px;padding:10px;background:#13283e}
+.project-stage-grid label{display:block;margin-top:9px;font-size:12px;color:#bed5e9}
+.project-stage-grid select{width:100%;max-width:100%;margin-top:6px;font-size:12px}
+.project-stage-grid small{display:block;line-height:1.5;margin:8px 0}

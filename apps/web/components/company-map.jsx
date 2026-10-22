@@ -211,7 +211,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     </nav>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
     <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
-    <FounderProjectIntake api={api} me={me} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
+    <FounderProjectIntake api={api} me={me} employees={employees} profiles={governanceData?.employees||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
      <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
     <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>

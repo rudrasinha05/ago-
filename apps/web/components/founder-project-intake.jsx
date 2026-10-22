@@ -1,8 +1,9 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {CompanyDocumentVault} from './company-document-vault';
+import {ProjectStageRouting} from './project-stage-routing';
 
-export function FounderProjectIntake({api,me,onChanged}) {
+export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}) {
  const [brief,setBrief]=useState('');
  const [projects,setProjects]=useState(null);
  const [projectDetail,setProjectDetail]=useState(null),[selectedProject,setSelectedProject]=useState(null);
@@ -178,7 +179,8 @@ export function FounderProjectIntake({api,me,onChanged}) {
            </details>}
           {st.qa_evidence&&<details><summary>Independent QA evidence</summary><p>{st.qa_evidence}</p></details>}
          </li>)}</ol>
-         <CompanyDocumentVault api={api} project={projectDetail}/>
+         <ProjectStageRouting api={api} project={projectDetail} employees={employees} profiles={profiles} onUpdated={onChanged}/>
+          <CompanyDocumentVault api={api} project={projectDetail}/>
          <p>No external publication is claimed without a linked verified release. {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Promotion desk ↑</a>}</p>
         </>}
        </div>}
