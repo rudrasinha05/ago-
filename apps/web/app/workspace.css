@@ -291,3 +291,8 @@
 .company-first-run .first-run-created{padding:10px;margin:10px 0;border-left:3px solid #75ccff;background:#153957;overflow-wrap:anywhere}
 .company-first-run ol{font-size:12px;line-height:1.9;color:#c3d6eb}
 @media(max-width:650px){.company-first-run .first-run-form{grid-template-columns:1fr}}
+
+.company-executive-staffing{padding:15px;margin-top:13px;border:1px solid #4c6887;background:#101b30;border-radius:12px}
+.company-executive-staffing h4{color:#bfe6ff;font-size:17px;margin:0 0 8px}
+.company-executive-staffing strong,.company-executive-staffing small{display:block}
+.company-executive-staffing small{line-height:1.5}
