@@ -99,7 +99,7 @@ export function OpportunityRadar({api,me,onChanged}) {
        <small>Status: {d.stage} · {dated(d.created_at)}</small>
        <p>{d.draft_text}</p>
        {d.external_post_url&&safeUrl(d.external_post_url)&&<a href={safeUrl(d.external_post_url)} target="_blank" rel="noopener noreferrer">Verified external record ↗</a>}
-       {me.roles?.includes('founder')&&me.permissions?.includes('brain:manage')&&<p><a href="#ago-project-portfolio">Inspect linked project ↓</a></p>
+       {me.roles?.includes('founder')&&me.permissions?.includes('brain:manage')&&<p><a href="#ago-project-portfolio">Inspect linked project ↓</a></p>}
       </article>)}
    </div>}
    </>}
