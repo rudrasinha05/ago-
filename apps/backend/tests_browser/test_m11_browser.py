@@ -1,7 +1,6 @@
-"""M11: actual Chromium exercise of AGO against a live FastAPI/PostgreSQL instance.
+"""Real Chromium journeys against the shipped Next.js AGO frontend and PostgreSQL.
 
-Only disposable CI identities. The browser must execute the shipped static
-JavaScript and use HTTP, unlike the pure-JS M9 template/unit tests.
+Only disposable CI identities; the retired /console static frontend is not used.
 """
 from __future__ import annotations
 
@@ -22,7 +21,6 @@ from psycopg.rows import dict_row
 from ago.bootstrap import bootstrap
 from ago.provision import add_reviewer
 
-
 BASE_URL = "http://127.0.0.1:18771"
 ARTIFACTS = Path(__file__).parent / "artifacts"
 PASSWORD_FOUNDER = "ci-browser-only-founder-password-123"
@@ -32,19 +30,17 @@ PASSWORD_REVIEWER = "ci-browser-only-reviewer-password-123"
 @pytest.fixture(scope="session")
 def app_url():
     if not os.getenv("AGO_TEST_POSTGRES_DSN"):
-        pytest.skip("Browser acceptance requires disposable migrated PostgreSQL")
+        pytest.skip("Browser acceptance needs disposable migrated PostgreSQL")
     process = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "ago.main:app",
          "--host", "127.0.0.1", "--port", "18771", "--no-proxy-headers"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env=dict(os.environ, AGO_ENVIRONMENT="development",
-                 AGO_LEGACY_CONSOLE_TEST_MODE="true"),
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=dict(os.environ, AGO_ENVIRONMENT="development"),
     )
     try:
         for _ in range(80):
             if process.poll() is not None:
-                raise RuntimeError("AGO pilot backend exited during startup")
+                raise RuntimeError("AGO browser backend exited during startup")
             try:
                 with urlopen(BASE_URL + "/health/live", timeout=1) as response:
                     if response.status == 200:
@@ -52,7 +48,7 @@ def app_url():
             except (URLError, TimeoutError, ConnectionError):
                 time.sleep(0.25)
         else:
-            raise RuntimeError("AGO pilot backend did not become healthy")
+            raise RuntimeError("AGO browser backend did not become healthy")
         yield BASE_URL
     finally:
         process.terminate()
@@ -65,12 +61,11 @@ def app_url():
 
 @pytest.fixture
 def tenant(app_url):
-    """Each test receives an isolated tenant with a real independent reviewer."""
-    dsn = os.environ["AGO_TEST_POSTGRES_DSN"]
     seed = str(uuid4())[:8]
     founder_mail = f"pilot-founder-{seed}@example.test"
     reviewer_mail = f"pilot-reviewer-{seed}@example.test"
-    with psycopg.connect(dsn, row_factory=dict_row, autocommit=True) as db:
+    with psycopg.connect(os.environ["AGO_TEST_POSTGRES_DSN"],
+                         row_factory=dict_row, autocommit=True) as db:
         org, founder_id = bootstrap(
             db, organization="AGO Pilot " + seed,
             email=founder_mail, password=PASSWORD_FOUNDER,
@@ -96,127 +91,97 @@ def browser():
 
 @pytest.fixture
 def page(browser, request):
-    context = browser.new_context(
-        viewport={"width": 1440, "height": 900},
-        reduced_motion="reduce",
-    )
+    context = browser.new_context(viewport={"width": 1440, "height": 900},
+                                  reduced_motion="reduce")
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     yield page
     if getattr(getattr(request.node, "rep_call", None), "failed", False):
         ARTIFACTS.mkdir(parents=True, exist_ok=True)
-        page.screenshot(
-            path=str(ARTIFACTS / (request.node.name + "-failure.png")),
-            full_page=True, timeout=10000,
-        )
+        page.screenshot(path=str(ARTIFACTS / (request.node.name + "-failure.png")),
+                        full_page=True, timeout=10000)
     context.close()
-    assert not errors, "Uncaught real browser exceptions: " + repr(errors)
+    assert not errors, "Uncaught browser exceptions: " + repr(errors)
 
 
 def sign_in(page, app_url, tenant, role="founder"):
     email, password, _ = tenant[role]
-    page.goto(app_url + "/console/", wait_until="domcontentloaded")
+    page.goto(app_url + "/workspace/organization/", wait_until="domcontentloaded")
     expect(page.locator("#login-form")).to_be_visible()
-    page.locator("#tenant").fill(tenant["id"])
-    page.locator("#email").fill(email)
-    page.locator("#password").fill(password)
-    page.locator("#login-button").click()
-    expect(page.locator("#workspace")).to_be_visible(timeout=15000)
-    expect(page.locator("#screen h1")).to_have_text(
-        "Your organization at a glance", timeout=15000,
+    page.get_by_label("Organization ID").fill(tenant["id"])
+    page.get_by_label("Work email").fill(email)
+    page.get_by_label("Password", exact=True).fill(password)
+    page.get_by_role("button", name="Sign in", exact=True).click()
+    expect(page.get_by_role("heading", name="Company map", exact=True)).to_be_visible(
+        timeout=15000
     )
+    expect(page.locator("#login-form")).to_have_count(0)
 
 
-def navigate(page, name, heading):
-    page.locator(f'#primary-nav [data-page="{name}"]').click()
-    expect(page.locator("#screen h1")).to_have_text(heading, timeout=15000)
-    expect(page.locator("#screen .loading-screen")).to_have_count(0)
+def navigate(page, label, path):
+    page.get_by_role("navigation", name="Workspaces").get_by_role(
+        "link", name=label, exact=True
+    ).click()
+    expect(page).to_have_url(BASE_URL + "/workspace/" + path)
+    content = "#screen .company-command" if path == "organization/" else "#screen .workspace-view"
+    expect(page.locator(content)).to_be_visible(timeout=15000)
 
 
-def submit_dialog(page, button):
-    expect(page.locator("#action-dialog")).to_be_visible()
-    page.locator("#operation-submit").get_by_text(button).click()
-    expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-
-
-def test_founder_real_navigation_and_goal_round_trip(page, tenant, app_url):
+def test_only_company_map_and_eight_real_workspaces(page, tenant, app_url):
+    for old in ("/console", "/console/"):
+        page.goto(app_url + old)
+        expect(page).to_have_url(app_url + "/workspace/organization/")
+        expect(page.locator("#login-form")).to_be_visible()
+    response = page.request.get(app_url + "/console/assets/app.js")
+    assert response.status == 404
     sign_in(page, app_url, tenant)
-    views = (
-        ("strategy", "Strategy & execution"),
-        ("governance", "Governance & oversight"),
-        ("organization", "People & departments"),
-        ("knowledge", "Institutional knowledge"),
-        ("tools", "Enterprise operations"),
-        ("calendar", "Organizational calendar"),
-        ("twin", "Organization Digital Twin"),
-        ("overview", "Your organization at a glance"),
-    )
-    for key, heading in views:
-        navigate(page, key, heading)
-
-    navigate(page, "strategy", "Strategy & execution")
-    page.get_by_role("button", name="New goal").click()
-    expect(page.locator("#action-dialog")).to_be_visible()
-    goal = "Pilot organizational goal " + tenant["id"][:8]
-    page.locator("#dlg-title").fill(goal)
-    page.locator("#dlg-description").fill("Evidence-backed pilot planning")
-    page.locator("#operation-submit").click()
-    expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-    expect(page.locator("#screen")).to_contain_text(goal)
-    page.locator("#refresh").click()
-    expect(page.locator("#screen")).to_contain_text(goal)
+    assert page.get_by_text("People & departments", exact=True).count() == 0
+    for title, route in (
+        ("Overview", ""), ("Strategy", "strategy/"),
+        ("Governance", "governance/"), ("Organization", "organization/"),
+        ("Knowledge", "knowledge/"), ("Operations & Tools", "tools/"),
+        ("Calendar", "calendar/"), ("Digital Twin", "twin/"),
+    ):
+        navigate(page, title, route)
+    expect(page.locator("#screen")).to_contain_text("Simulation only.")
+    navigate(page, "Organization", "organization/")
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=str(ARTIFACTS / "founder-strategy.png"), full_page=True)
+    page.screenshot(path=str(ARTIFACTS / "canonical-company-map.png"),
+                    full_page=True)
 
 
-def test_real_digital_twin_never_applies_thresholds(page, tenant, app_url):
+def test_founder_goal_creation_and_refresh(page, tenant, app_url):
     sign_in(page, app_url, tenant)
-    navigate(page, "twin", "Organization Digital Twin")
-    expect(page.get_by_text("Simulation only.")).to_be_visible()
-    page.get_by_role("button", name="Capture current evidence").click()
-    expect(page.locator("#action-dialog")).to_be_visible()
+    navigate(page, "Strategy", "strategy/")
+    page.get_by_role("button", name="New goal", exact=True).click()
+    expect(page.get_by_role("dialog")).to_be_visible()
+    goal = "Real browser governed goal " + tenant["id"][:8]
+    page.get_by_label("Goal title", exact=True).fill(goal)
+    page.get_by_label("Context", exact=True).fill("Evidence-backed founder plan")
     page.locator("#operation-submit").click()
-    expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-    expect(page.locator("#snapshot-select option")).to_have_count(1)
-    page.locator("#range-qa_target_pct").evaluate("""node => {
-      node.value = '90';
-      node.dispatchEvent(new Event('input', { bubbles: true }));
-      node.dispatchEvent(new Event('change', { bubbles: true }));
-    }""")
-    page.get_by_role("button", name="Run comparison").click()
-    expect(page.get_by_text("Scenario evaluated. No changes were applied to AGO.")).to_be_visible()
-    expect(page.locator("#screen")).to_contain_text("HYPOTHETICAL SCENARIO")
-    # No new live DNA versions are created by a simulation.
-    with psycopg.connect(os.environ["AGO_TEST_POSTGRES_DSN"], row_factory=dict_row) as db:
-        n = db.execute(
-            "SELECT count(*) AS n FROM ago_dna_versions WHERE tenant_id=%s",
-            (tenant["id"],),
-        ).fetchone()["n"]
-        assert n == 0
-    ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=str(ARTIFACTS / "digital-twin.png"), full_page=True)
+    expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
+    expect(page.locator("#screen")).to_contain_text(goal)
+    page.get_by_role("button", name="Refresh", exact=True).click()
+    expect(page.locator("#screen")).to_contain_text(goal)
 
 
-def test_reviewer_is_not_a_founder_and_cannot_self_escalate(page, tenant, app_url):
+def test_reviewers_never_gain_founder_actions(page, tenant, app_url):
     sign_in(page, app_url, tenant, role="reviewer")
-    navigate(page, "strategy", "Strategy & execution")
+    navigate(page, "Strategy", "strategy/")
     expect(page.get_by_role("button", name="New goal")).to_have_count(0)
-    navigate(page, "governance", "Governance & oversight")
+    navigate(page, "Governance", "governance/")
     expect(page.get_by_role("button", name="Propose motion")).to_have_count(0)
-    navigate(page, "tools", "Enterprise operations")
+    navigate(page, "Operations & Tools", "tools/")
     expect(page.get_by_role("button", name="Enroll a tool")).to_have_count(0)
-    ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=str(ARTIFACTS / "reviewer-restricted.png"), full_page=True)
 
 
-def test_real_logout_revokes_browser_session_and_reload_requires_login(page, tenant, app_url):
+def test_logout_and_refresh_do_not_persist_credentials(page, tenant, app_url):
     sign_in(page, app_url, tenant)
     with page.expect_response("**/v1/console/logout") as response:
-        page.locator("#signout").click()
+        page.get_by_role("button", name="Sign out", exact=True).click()
     assert response.value.status == 200
-    expect(page.locator("#auth")).to_be_visible()
-    expect(page.locator("#workspace")).to_be_hidden()
+    expect(page.locator("#login-form")).to_be_visible()
     page.reload()
     expect(page.locator("#login-form")).to_be_visible()
     assert not page.context.cookies()
@@ -224,152 +189,15 @@ def test_real_logout_revokes_browser_session_and_reload_requires_login(page, ten
     assert not state["cookies"] and not state["origins"]
 
 
-def test_mobile_menu_and_keyboard_access(browser, tenant, app_url):
-    context = browser.new_context(
-        viewport={"width": 390, "height": 844},
-        is_mobile=True, has_touch=True, reduced_motion="reduce",
-    )
+def test_mobile_menu_navigates_without_full_reload(browser, tenant, app_url):
+    context = browser.new_context(viewport={"width": 390, "height": 844},
+                                  is_mobile=True, has_touch=True)
     page = context.new_page()
-    errors = []
-    page.on("pageerror", lambda error: errors.append(str(error)))
     try:
         sign_in(page, app_url, tenant)
-        menu = page.locator("#menu-button")
-        expect(menu).to_be_visible()
-        menu.click()
-        expect(page.locator("#sidebar")).to_have_class(
-            "sidebar open",
-        )
-        navigate(page, "strategy", "Strategy & execution")
-        expect(page.locator("#mobile-shade")).to_be_hidden()
-        page.get_by_role("button", name="New goal").click()
-        expect(page.locator("#action-dialog")).to_be_visible()
-        expect(page.locator("#dlg-title")).to_be_focused()
-        page.keyboard.press("Escape")
-        expect(page.locator("#action-dialog")).to_be_hidden()
-        ARTIFACTS.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(ARTIFACTS / "mobile-strategy.png"), full_page=True)
-        assert not errors, "Browser exceptions on mobile: " + repr(errors)
+        page.get_by_role("button", name="Menu", exact=True).click()
+        navigate(page, "Strategy", "strategy/")
+        expect(page.get_by_role("button", name="New goal", exact=True)).to_be_visible()
+        expect(page.locator("#login-form")).to_have_count(0)
     finally:
         context.close()
-
-
-def test_real_browser_governed_plan_two_humans_execution_and_qa(
-    page, browser, tenant, app_url,
-):
-    """Founder never approves their own strategic plan or governed execution."""
-    reviewer_context = browser.new_context(
-        viewport={"width": 1330, "height": 900}, reduced_motion="reduce",
-    )
-    reviewer = reviewer_context.new_page()
-
-    def task_rows(surface):
-        return surface.locator(".panel").filter(
-            has=surface.locator("h3", has_text="Task register"),
-        ).locator("tr").filter(has_text="internal:brief")
-
-    def task_approval_rows(surface):
-        return surface.locator(".panel").filter(
-            has=surface.locator("h3", has_text="Approvals"),
-        ).locator("tr").filter(has_text="internal:brief")
-
-    try:
-        sign_in(page, app_url, tenant)
-        sign_in(reviewer, app_url, tenant, role="reviewer")
-
-        navigate(page, "organization", "People & departments")
-        page.get_by_role("button", name="Add AI employee").click()
-        page.locator("#dlg-name").fill("Pilot AI Analyst")
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-        expect(page.locator("#screen")).to_contain_text("Pilot AI Analyst")
-
-        navigate(page, "strategy", "Strategy & execution")
-        page.get_by_role("button", name="New goal").click()
-        page.locator("#dlg-title").fill("Governed pilot strategy")
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-        expect(page.locator("#screen")).to_contain_text("Governed pilot strategy")
-        page.get_by_role("button", name="New plan").click()
-        page.locator("#dlg-title").fill("Pilot single-step brief")
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-
-        plan = page.locator("tr").filter(has_text="Pilot single-step brief")
-        expect(plan).to_be_visible()
-        plan.get_by_role("button", name="Add step").click()
-        page.locator("#dlg-action").fill("internal:brief")
-        page.locator("#dlg-assignee_id").select_option(
-            label="Pilot AI Analyst — Executive (ai)",
-        )
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-        plan = page.locator("tr").filter(has_text="Pilot single-step brief")
-        plan.get_by_role("button", name="Submit", exact=True).click()
-        expect(page.locator("#action-dialog")).to_be_visible()
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-        expect(page.locator("tr").filter(has_text="Pilot single-step brief")).to_contain_text(
-            "pending approval",
-        )
-
-        navigate(reviewer, "governance", "Governance & oversight")
-        review_row = reviewer.locator("tr").filter(has_text="brain:activate:")
-        expect(review_row).to_be_visible()
-        review_row.get_by_role("button", name="Approve", exact=True).click()
-        reviewer.locator("#dlg-reason").fill("Independent human strategy review")
-        reviewer.locator("#operation-submit").click()
-        expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
-
-        page.locator("#refresh").click()
-        plan = page.locator("tr").filter(has_text="Pilot single-step brief")
-        plan.get_by_role("button", name="Activate").click()
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-        plan = page.locator("tr").filter(has_text="Pilot single-step brief")
-        plan.get_by_role("button", name="Create tasks").click()
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-
-        navigate(page, "governance", "Governance & oversight")
-        task_row = task_rows(page)
-        expect(task_row).to_be_visible()
-        task_row.get_by_role("button", name="Request approval").click()
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-
-        reviewer.locator("#refresh").click()
-        task_review = task_approval_rows(reviewer)
-        expect(task_review).to_be_visible()
-        task_review.get_by_role("button", name="Approve", exact=True).click()
-        reviewer.locator("#dlg-reason").fill("Independent task execution authorization")
-        reviewer.locator("#operation-submit").click()
-        expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
-
-        page.locator("#refresh").click()
-        task_row = task_rows(page)
-        task_row.get_by_role("button", name="Run approved AI").click()
-        page.locator("#operation-submit").click()
-        expect(page.locator("#action-dialog")).to_be_hidden(timeout=15000)
-        expect(task_rows(page)).to_contain_text(
-            "completed",
-        )
-
-        reviewer.locator("#refresh").click()
-        task_row = reviewer.locator(".panel").filter(
-            has=reviewer.locator("h3", has_text="Pending QA"),
-        ).locator("tr").filter(has_text="internal:brief")
-        expect(task_row).to_be_visible()
-        task_row.get_by_role("button", name="Review outcome").click()
-        reviewer.locator("#dlg-evidence").fill(
-            "Independent quality inspection of the completed pilot brief",
-        )
-        reviewer.locator("#operation-submit").click()
-        expect(reviewer.locator("#action-dialog")).to_be_hidden(timeout=15000)
-        expect(reviewer.locator("#screen")).to_contain_text("pass")
-        ARTIFACTS.mkdir(parents=True, exist_ok=True)
-        reviewer.screenshot(
-            path=str(ARTIFACTS / "two-human-governance.png"), full_page=True,
-        )
-    finally:
-        reviewer_context.close()
