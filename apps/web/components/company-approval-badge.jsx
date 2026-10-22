@@ -6,7 +6,7 @@ export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone
  const pending=(approvals||[]).filter(a=>a.status==='pending'&&
   (a.requester_id===employee.id||a.task_assignee_id===employee.id));
  const count=updates+pending.length;
- if(!count)return null;
+ if(!count&&!notice&&!error)return null;
  const founder=me.roles?.includes('founder');
  async function decide(request,approve){
   if(!founder||!request.requires_founder_decision||busy)return;
@@ -15,6 +15,7 @@ export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone
    const result=await decideFounderScope(api,request,approve,
     'Founder '+(approve?'approved':'denied')+' exact scope '+request.action+' from employee notification.');
    setNotice(result.notice);
+   setOpen(true);
    await onDone?.();
   }catch(e){setError(e.message||'Decision was not recorded');}
   finally{setBusy('');}
@@ -32,7 +33,7 @@ export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone
       onClick={()=>decide(a,true)}>Approve</button><button type="button" disabled={!!busy}
       onClick={()=>decide(a,false)}>Deny</button></div>:<p>CEO verifies routine work within the Founder-approved scope.</p>}
    </article>)}
-   {notice&&<p role="status">{notice}</p>}
+   {notice&&<div role="status"><p>{notice}</p><button type="button" onClick={()=>{setNotice('');setOpen(false);}}>Dismiss confirmation</button></div>}
    {error&&<p role="alert">{error}</p>}
   </section>}
  </div>;
