@@ -54,6 +54,43 @@ def founder_login(base: str, tenant: str, email: str, password: str, *, opener=u
     return token
 
 
+def inspection_summary(records: list[dict], approvals: list[dict]) -> dict:
+    """Explain eligibility without exposing project briefs or authentication data."""
+    approved = {str(a.get("id")): a for a in approvals
+                if a.get("status")=="approved"}
+    waiting = [t for t in records if t.get("status")=="waiting_approval"
+               and t.get("action")=="internal:brief"]
+    eligible = sum(1 for t in waiting
+                   if (a:=approved.get(str(t.get("approval_id"))))
+                   and a.get("action")==t.get("action"))
+    proposed = sum(t.get("action")=="internal:brief" and
+                   t.get("status")=="proposed" for t in records)
+    research = sum(t.get("action")=="research:brief" and
+                   t.get("status")=="waiting_approval" and
+                   (a:=approved.get(str(t.get("approval_id")))) is not None
+                   and a.get("action")==t.get("action") for t in records)
+    return {
+        "recorded_tasks": len(records),
+        "internal_proposed_needing_request": proposed,
+        "internal_waiting_for_review": max(0,len(waiting)-eligible),
+        "internal_eligible_now": eligible,
+        "research_approved_for_separate_execution": research,
+        "suggested_next_step": (
+            "Use Company Map > Execution Desk > First AI employee run to create a proposed task"
+            if not records else
+            "Request approval for proposed internal:brief task(s) in Execution Desk"
+            if proposed else
+            "Have an authorized human review pending internal:brief task approval(s)"
+            if len(waiting)>eligible else
+            "Approved research:brief must run separately in Execution Desk with configured Ollama"
+            if research and not eligible else
+            "Eligible internal tasks can run after explicit founder confirmation"
+            if eligible else
+            "No matching approved internal:brief tasks; inspect Company Map Execution Desk"
+        )
+    }
+
+
 def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, apply: bool,
           confirm: str | None) -> dict:
     if not 1<=limit<=10:
@@ -86,10 +123,13 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
             if result.get("status")!="completed" or result.get("task_id")!=task_id:
                 raise RuntimeError("AGO did not confirm an exact completed task")
             completed.append(task_id)
-    return {"mode":"founder_approved_single_batch" if apply else "dry_run",
+    result={"mode":"founder_approved_single_batch" if apply else "dry_run",
             "eligible_task_ids":ids,"completed_task_ids":completed,
             "external_actions_authorized":False,
             "task_count":len(completed),"next_step":"Independent human QA required"}
+    if not apply:
+        result["eligibility"]=inspection_summary(records,approvals)
+    return result
 
 
 

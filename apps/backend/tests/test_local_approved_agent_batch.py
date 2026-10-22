@@ -150,3 +150,31 @@ def test_founder_signin_is_interactive_without_cli_secrets_or_persistence():
         module.founder_login("http://external.org:8000",tenant,"founder@example.test","private",opener=opener)
     with pytest.raises(ValueError):
         module.founder_login("http://127.0.0.1:8000","not-uuid","founder@example.test","private",opener=opener)
+
+
+def test_empty_batch_explains_exact_next_step_without_fake_execution():
+    result=module.batch([],[],lambda _:None,limit=3,apply=False,confirm=None)
+    assert result["eligible_task_ids"]==[]
+    assert result["eligibility"]["recorded_tasks"]==0
+    assert "First AI employee run" in result["eligibility"]["suggested_next_step"]
+
+
+def test_batch_diagnostic_distinguishes_pending_and_real_model_tasks():
+    p=str(uuid4())
+    r=str(uuid4())
+    tasks=[
+      {"id":p,"action":"internal:brief","status":"proposed"},
+      {"id":r,"action":"research:brief","status":"waiting_approval","approval_id":"x"},
+    ]
+    approvals=[{"id":"x","action":"research:brief","status":"approved"}]
+    diagnostic=module.inspection_summary(tasks,approvals)
+    assert diagnostic["internal_proposed_needing_request"]==1
+    assert diagnostic["research_approved_for_separate_execution"]==1
+    tasks[0]["status"]="waiting_approval"
+    tasks[0]["approval_id"]="a"
+    diagnostic=module.inspection_summary(tasks,approvals)
+    assert diagnostic["internal_waiting_for_review"]==1
+    approvals.append({"id":"a","action":"internal:brief","status":"approved"})
+    diagnostic=module.inspection_summary(tasks,approvals)
+    assert diagnostic["internal_eligible_now"]==1
+    assert diagnostic["internal_waiting_for_review"]==0
