@@ -127,3 +127,23 @@ def test_watch_fails_closed_on_unknown_outcome_and_limits():
     assert calls==[task_id]
     with pytest.raises(ValueError):
         module.watch(lambda:(row,receipts),bad_dispatch,minutes=100,max_tasks=2,interval=10,confirm=module.CONFIRM)
+
+
+def test_founder_signin_is_interactive_without_cli_secrets_or_persistence():
+    from io import BytesIO
+    import json
+    class Response(BytesIO): pass
+    recorded=[]
+    def opener(request,timeout):
+        recorded.append((request.full_url,request.get_method(),json.loads(request.data),timeout))
+        return Response(b'{"access_token":"test-local-founder-token"}')
+    tenant=str(uuid4())
+    token=module.founder_login("http://127.0.0.1:8000",tenant,"founder@example.test","private-pass",opener=opener)
+    assert token=="test-local-founder-token"
+    assert recorded[0][0]=="http://127.0.0.1:8000/v1/sessions"
+    assert recorded[0][1]=="POST" and recorded[0][3]==15
+    assert recorded[0][2]["tenant_id"]==tenant
+    with pytest.raises(ValueError):
+        module.founder_login("http://external.org:8000",tenant,"founder@example.test","private",opener=opener)
+    with pytest.raises(ValueError):
+        module.founder_login("http://127.0.0.1:8000","not-uuid","founder@example.test","private",opener=opener)
