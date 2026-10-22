@@ -174,11 +174,11 @@ jobs:
           npm ci --no-audit --no-fund
           npm run build --workspace @ago/web
           python scripts/package_frontend.py
-      - name: Verify console assets in packaged wheel
+      - name: Verify wheel contains only canonical Next.js frontend
         id: wheel
         run: |
           python -m pip wheel . --no-deps -w /tmp/ago-wheels
-          python -c 'from pathlib import Path; import zipfile; w=next(Path("/tmp/ago-wheels").glob("ago_backend-*.whl")); z=zipfile.ZipFile(w); a={"index.html","styles.css","core.js","views.js","actions.js","app.js"}; assert {"ago/console/"+p for p in a} | {"ago/architecture_policy.json", "ago/frontend/index.html", "ago/frontend/csp.json", "ago/frontend/strategy/index.html"} <= set(z.namelist()), "Missing packaged console or architecture contract"'
+          python -c 'from pathlib import Path; import zipfile; w=next(Path("/tmp/ago-wheels").glob("ago_backend-*.whl")); z=zipfile.ZipFile(w); names=set(z.namelist()); expected={"ago/architecture_policy.json", "ago/frontend/index.html", "ago/frontend/csp.json", "ago/frontend/strategy/index.html", "ago/frontend/organization/index.html"}; assert expected <= names, "Missing Next.js assets"; assert not any(n.startswith("ago/console/") for n in names), "Old console present"'
       - name: Enforce Section 14 module architecture and export dependency graph
         id: architecture
         run: python -m ago.architecture_guard check --json --dot section14-dependency-graph.dot
@@ -216,11 +216,11 @@ jobs:
           python -m ago.local_ops tenants
       - name: Lint
         id: lint
-        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py ../../scripts/check_domain_contexts.py ../../scripts/check_monorepo.py ../../scripts/smoke_workspace_exports.py ../../scripts/check_backend_architecture.py ../../scripts/check_frontend_architecture.py ../../scripts/package_frontend.py ../../scripts/sync_console_adapters.py
-      - name: Validate first-party console JS and UI unit tests
+        run: python -m ruff check ago tests tests_browser ../../scripts/check_system_architecture.py ../../scripts/check_component_diagrams.py ../../scripts/check_domain_contexts.py ../../scripts/check_monorepo.py ../../scripts/smoke_workspace_exports.py ../../scripts/check_backend_architecture.py ../../scripts/check_frontend_architecture.py ../../scripts/package_frontend.py
+      - name: Validate canonical workspace JavaScript and unit tests
         id: javascript
         run: |
-          for file in ago/console/{core,views,actions,app}.js; do node --check "$file"; done
+          for file in ../../packages/sdk/session.js ../../packages/ui/compat/{views,actions}.js; do node --check "$file"; done
           node --test tests_web/*.test.mjs
       - name: Run unit and PostgreSQL integration tests
         id: tests
@@ -412,6 +412,15 @@ jobs:
           python -m pip install -e ".[dev,postgres]"
           python -m pip install "playwright==1.55.0"
           python -m playwright install --with-deps chromium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build and package Company Map for real Chromium journeys
+        run: |
+          cd ../..
+          npm ci --no-audit --no-fund
+          npm run build --workspace @ago/web
+          python scripts/package_frontend.py
       - name: Apply verified SQL migrations
         run: python -m ago.event_runtime migrate
       - name: Execute complete independent Chromium journeys
