@@ -57,6 +57,7 @@ on:
       - "deploy/sql/055_continuous_market_intelligence.sql"
       - "deploy/sql/056_approved_market_project_lineage.sql"
       - "deploy/sql/058_governed_project_stage_delegation.sql"
+      - "deploy/sql/063_founder_ceo_ai_quality_stage.sql"
       - ".github/workflows/company-growth-contract.yml"
 jobs:
   growth:
