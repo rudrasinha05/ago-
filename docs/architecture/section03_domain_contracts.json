@@ -22,12 +22,12 @@
       "consistency": "Each request commits owned operation; no implicit cross-request unit of work"
     },
     "governance": {
-      "purpose": "Identity, human authorization, council and independent QA",
+      "purpose": "Founder sovereignty, strictly scoped CEO operational verification, identity and evidence-based quality",
       "aggregates": "User/session/RBAC; ApprovalRequest; council proposal; Review",
       "value_objects": "Principal; Risk; Decision; Verdict; scoped identity",
       "repositories": "identity; login_security; governance; council_store; quality_store; security_controls",
-      "services": "GovernanceGate; approval/QA decision coordination",
-      "invariants": "Independent approver, tenant scope, active human, append-only audit, no caller authority flag",
+      "services": "GovernanceGate; founder decisions; CEO project-scope approval verification",
+      "invariants": "Only active human Founder can make human decisions; AI CEO verifies exact Founder-approved active-project tasks within an allowlist; immutable audit, tenant scope and no implicit tool/finance/publication grants",
       "published_language": "Approval IDs/status; decision reasons; QA verdict/evidence; signed sessions",
       "consistency": "Approval/review plus audit atomic in database transaction; recheck before execution"
     },
@@ -481,6 +481,7 @@
       "ago_approval_audit",
       "ago_approval_requests",
       "ago_architecture_changes",
+      "ago_company_board_appointments",
       "ago_constitution_adoptions",
       "ago_constitution_emergencies",
       "ago_constitution_emergency_closures",
@@ -488,6 +489,8 @@
       "ago_constitution_proposals",
       "ago_employees",
       "ago_founder_intakes",
+      "ago_governed_tasks",
+      "ago_plan_steps",
       "ago_role_permissions",
       "ago_strategy_plans",
       "ago_tenants",
