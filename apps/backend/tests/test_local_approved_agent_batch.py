@@ -85,3 +85,45 @@ def test_local_batch_separates_fast_metadata_reads_and_long_bounded_agent_runs()
     assert module.request_timeout("GET","/v1/organization/company/approvals")==15
     assert module.request_timeout("POST","/v1/agents/tasks/abc/run")==270
     assert module.request_timeout("POST","/v1/console/logout")==15
+
+
+def test_watch_only_performs_explicitly_confirmed_approved_work_and_never_replays():
+    one,two=str(uuid4()),str(uuid4())
+    state={"tasks":[{"id":one,"action":"internal:brief","status":"waiting_approval","approval_id":"a"},
+                    {"id":two,"action":"internal:brief","status":"waiting_approval","approval_id":"b"}]}
+    receipts=[{"id":"a","status":"approved","action":"internal:brief"},
+              {"id":"b","status":"pending","action":"internal:brief"}]
+    clock=[0.0]
+    calls=[]
+    def fetch():
+        if clock[0]>=20:receipts[1]["status"]="approved"
+        return state["tasks"],receipts
+    def dispatch(task_id):
+        calls.append(task_id)
+        # Simulate delayed persistence: still waiting on next poll, must not rerun.
+        return {"task_id":task_id,"status":"completed"}
+    def pause(seconds):clock[0]+=seconds
+    with pytest.raises(PermissionError):
+        module.watch(fetch,dispatch,minutes=1,max_tasks=2,interval=10,confirm="no",clock=lambda:clock[0],pause=pause)
+    assert calls==[]
+    result=module.watch(fetch,dispatch,minutes=1,max_tasks=2,interval=10,
+                        confirm=module.CONFIRM,clock=lambda:clock[0],pause=pause)
+    assert result["completed_task_ids"]==[one,two]
+    assert calls==[one,two]
+    assert result["scheduled_service"] is False
+
+
+def test_watch_fails_closed_on_unknown_outcome_and_limits():
+    task_id=str(uuid4())
+    row=[{"id":task_id,"action":"internal:brief","status":"waiting_approval","approval_id":"a"}]
+    receipts=[{"id":"a","action":"internal:brief","status":"approved"}]
+    calls=[]
+    def bad_dispatch(value):
+        calls.append(value)
+        raise RuntimeError("timeout: outcome uncertain")
+    with pytest.raises(RuntimeError):
+        module.watch(lambda:(row,receipts),bad_dispatch,minutes=1,max_tasks=2,interval=10,
+                     confirm=module.CONFIRM)
+    assert calls==[task_id]
+    with pytest.raises(ValueError):
+        module.watch(lambda:(row,receipts),bad_dispatch,minutes=100,max_tasks=2,interval=10,confirm=module.CONFIRM)
