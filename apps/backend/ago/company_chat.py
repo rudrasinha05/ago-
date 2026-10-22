@@ -793,14 +793,29 @@ class CompanyChat:
                     ('release','Prepare GitHub review package and owner release decision',
                      ('devops','release','operations','delivery'), 'ai'),
                 )
+                implementation_worker = None
                 for index, (stage, deliverable, keywords, required_kind) in enumerate(stages,1):
                     if stage == 'discovery':
                         assignee = discovery
                     else:
+                        def eligible_for_stage(e):
+                            identity=(e['name']+' '+(e['role_title'] or '')).lower()
+                            if not any(keyword in identity for keyword in keywords):
+                                return False
+                            if stage=='implementation' and any(
+                                    keyword in identity for keyword in
+                                    ('quality','qa specialist','qa engineer','tester')):
+                                return False
+                            if stage=='quality' and (
+                                    str(e['id'])==str(leader['id']) or
+                                    (implementation_worker is not None and
+                                     str(e['id'])==str(implementation_worker['id']))):
+                                return False
+                            return True
                         assignee = next((e for e in available_ai
-                                         if any(keyword in
-                                                (e['name']+' '+(e['role_title'] or '')).lower()
-                                                for keyword in keywords)),None)
+                                         if eligible_for_stage(e)),None)
+                    if stage=='implementation':
+                        implementation_worker=assignee
                     self.db.execute("""
                         INSERT INTO ago_founder_intake_stages
                         (tenant_id,intake_id,plan_id,position,stage,deliverable,suggested_assignee_id,plan_step_id)
