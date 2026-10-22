@@ -15,6 +15,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# A normal founder launch must NEVER open the hidden M9 regression frontend.
+Remove-Item Env:AGO_LEGACY_CONSOLE_TEST_MODE -ErrorAction SilentlyContinue
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $backend = Join-Path $root "apps\backend"
 $web = Join-Path $root "apps\web"

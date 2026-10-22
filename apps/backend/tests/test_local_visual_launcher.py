@@ -105,3 +105,10 @@ def test_legacy_console_redirect_follows_through_to_real_visual_frontend(monkeyp
             response = client.get(address)
             assert response.status_code == 200, address
             assert "Work email" in response.text, address
+
+
+def test_normal_founder_launch_forces_single_visual_frontend():
+    root = Path(__file__).resolve().parents[3]
+    for relative in ("scripts/ago-visual.ps1", "scripts/ago.ps1"):
+        source = (root / relative).read_text(encoding="utf-8")
+        assert "Remove-Item Env:AGO_LEGACY_CONSOLE_TEST_MODE -ErrorAction SilentlyContinue" in source
