@@ -171,6 +171,18 @@ def founder_projects(limit: int = Query(default=50,ge=1,le=100),
         actor.tenant_id,limit,offset,reader_id=actor.subject)
 
 
+@router.post('/projects/{project_id}/ceo/reconcile')
+def ceo_reconcile(project_id: UUID, actor=Depends(authenticated),
+                  repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:manage')
+    allowed(repositories,actor,'brain:manage')
+    try:
+        return repositories.resolve(CompanyChatPort).ceo_reconcile(
+            actor,str(project_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
 @router.get('/projects/{project_id}')
 def founder_project_details(project_id: UUID,actor=Depends(authenticated),
                             repositories=Depends(repository_scope)):

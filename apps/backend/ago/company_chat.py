@@ -278,6 +278,131 @@ class CompanyChat:
             "event_type": "committed_work_event",
         }
 
+    def ceo_reconcile(self, actor, project_id: str) -> dict:
+        """Bounded CEO-operational authorization for ONE founder-approved project.
+
+        Executed only with a signed founder session. The CEO's identity comes from
+        the persisted board seat; no client-supplied AI actor or model text has
+        approval authority. Decisions are audited under the CEO employee ID;
+        the initiating founder is recorded in the reason.
+        """
+        from ago.governance import ApprovalRepository
+        from ago.task_store import TaskStore
+        from uuid import UUID
+        UUID(actor.tenant_id)
+        UUID(actor.subject)
+        UUID(project_id)
+        if 'founder' not in actor.roles or not founder_solo_eligible(
+            self.db, actor.tenant_id, actor.subject
+        ):
+            raise PermissionError('Only the authenticated founder can initiate CEO reconciliation')
+        with self.db.transaction():
+            company = self.db.execute(
+                "SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE",
+                (actor.tenant_id,)
+            ).fetchone()
+            if not company:
+                raise LookupError('Company unavailable')
+            board = self.db.execute("""
+                SELECT e.id,e.name,e.kind,e.role_title
+                FROM ago_company_board_appointments b
+                JOIN ago_employees e ON e.tenant_id=b.tenant_id
+                  AND e.id=b.employee_id
+                WHERE b.tenant_id=%s AND b.seat='Strategy & Vision'
+            """, (actor.tenant_id,)).fetchone()
+            if not board or board['kind']!='ai':
+                raise PermissionError('An actual appointed AI CEO is required')
+            project = self.db.execute("""
+                SELECT i.id,i.founder_id,p.id AS plan_id,p.status,p.approval_id,
+                       a.status AS founder_approval,a.reviewer_id AS founder_decider
+                FROM ago_founder_intakes i
+                JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                LEFT JOIN ago_approval_requests a
+                   ON a.tenant_id=p.tenant_id AND a.id=p.approval_id
+                WHERE i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
+            """, (actor.tenant_id,project_id)).fetchone()
+            if not project:
+                raise LookupError('Founder project unavailable')
+            if (str(project['founder_id'])!=actor.subject or project['status']!='active'
+                    or project['founder_approval']!='approved'
+                    or str(project['founder_decider'])!=actor.subject):
+                raise PermissionError('Exact Founder-approved ACTIVE project required')
+            rows = self.db.execute("""
+                SELECT t.id,t.action,t.assignee_id,t.status,t.approval_id,ps.position
+                FROM ago_plan_steps ps
+                JOIN ago_governed_tasks t ON t.tenant_id=ps.tenant_id
+                  AND t.id=ps.task_id
+                WHERE ps.tenant_id=%s AND ps.plan_id=%s
+                ORDER BY ps.position,t.id FOR UPDATE OF t
+            """, (actor.tenant_id,str(project['plan_id']))).fetchall()
+            checked=0
+            authorized=[]
+            blocked=[]
+            for task in rows:
+                action=task['action']
+                if task['status'] not in ('proposed','waiting_approval'):
+                    continue
+                if action not in ('internal:brief','research:brief','project:plan'):
+                    blocked.append(str(task['id']))
+                    continue
+                if str(task['assignee_id'])==str(board['id']):
+                    blocked.append(str(task['id']))
+                    continue
+                if task['status']=='proposed':
+                    request=self.repositories.resolve(ApprovalRepository).propose(
+                        tenant_id=actor.tenant_id,action=action,
+                        requester_id=actor.subject
+                    )
+                    self.repositories.resolve(TaskStore).request_approval(
+                        task_id=str(task['id']),tenant_id=actor.tenant_id,
+                        approval_id=request.request_id
+                    )
+                    approval_id=request.request_id
+                else:
+                    approval_id=str(task['approval_id']) if task['approval_id'] else None
+                if not approval_id:
+                    blocked.append(str(task['id']))
+                    continue
+                receipt=self.db.execute("""
+                    SELECT id,status,action,requester_id FROM ago_approval_requests
+                    WHERE tenant_id=%s AND id=%s FOR UPDATE
+                """,(actor.tenant_id,approval_id)).fetchone()
+                if not receipt or receipt['action']!=action:
+                    blocked.append(str(task['id']))
+                    continue
+                if receipt['status']!='pending':
+                    continue
+                # A non-hypothetical, rule-based CEO verification. Approval is
+                # project-scoped and NOT an assertion the LLM examined code.
+                reason=('CEO delegated scope check: approved project '+project_id+
+                        '; assigned task '+str(task['id'])+
+                        '; Founder session '+actor.subject+
+                        '; matching allowlisted internal action '+action)
+                self.db.execute("""
+                    UPDATE ago_approval_requests SET status='approved',
+                    reviewer_id=%s,reason=%s,decided_at=now()
+                    WHERE tenant_id=%s AND id=%s AND status='pending'
+                """,(str(board['id']),reason,actor.tenant_id,approval_id))
+                self.db.execute("""
+                    INSERT INTO ago_approval_audit
+                    (request_id,tenant_id,actor_id,event,reason)
+                    VALUES(%s,%s,%s,'approved',%s)
+                """,(approval_id,actor.tenant_id,str(board['id']),reason))
+                checked+=1
+                authorized.append(str(task['id']))
+            return {
+                'project_id':project_id,
+                'ceo_id':str(board['id']),
+                'ceo_name':board['name'],
+                'verified_task_count':checked,
+                'approved_task_ids':authorized,
+                'blocked_task_ids':blocked,
+                'tasks_executed':0,
+                'external_tools_authorized':False,
+                'evidence':'stored project scope, actual board CEO, immutable approval records',
+                'verification_kind':'deterministic_project_scope_gate',
+            }
+
     def governance(self, tenant_id: str) -> dict:
         """Read explicit appointments and employee accountability, not inferred job titles."""
         employees = self.db.execute("""
