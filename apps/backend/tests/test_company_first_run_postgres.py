@@ -2,7 +2,7 @@
 
 Test uses the disposable database fixture; never touches a founder's local tenant.
 """
-from test_m7_http_postgres import case, post
+from test_m7_http_postgres import case as case, post
 
 
 def test_first_governed_employee_task_requires_approval_and_independent_qa(case):
