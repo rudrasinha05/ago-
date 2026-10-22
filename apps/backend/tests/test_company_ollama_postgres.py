@@ -27,7 +27,7 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     import ago.model_handlers as model_handlers
 
     client,headers,info=case
-    founder,reviewer=headers["founder"],headers["reviewer"]
+    founder=headers["founder"]
     dept=department(client,founder)
 
     def ai(name, manager=None):
@@ -65,8 +65,8 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
                        {"action":"internal:brief"})
     post(client,"/v1/tasks/"+task_id+"/approval",founder,{
         "approval_id":task_approval["request_id"]})
-    post(client,"/v1/governance/approvals/"+task_approval["request_id"]+"/decision",
-         reviewer,{"approve":True,"reason":"Independent scoped task review"})
+    # Founder already approved this project's full strategy; CEO must check
+    # the task only after its real board seat is installed.
 
     CreditBudget(info["db"]).configure(tenant_id=info["tenant"],ceiling="20")
     calls=[]
@@ -129,6 +129,10 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     for seat,identity in seats:
         post(client,BASE+"/board/appoint",founder,{
             "seat":seat,"employee_id":identity})
+    reconciled=post(client,BASE+"/projects/"+project["id"]+"/ceo/reconcile",founder)
+    assert task_id in reconciled["approved_task_ids"]
+    assert reconciled["ceo_id"]==ceo
+    assert reconciled["tasks_executed"]==0
 
     response=post(client,"/v1/agents/tasks/"+task_id+"/run",founder)
     result=response["result"]

@@ -1,7 +1,7 @@
-"""Actual project worker assignment is independently reviewed and audit-visible.
+"""Actual project worker assignment is Founder-controlled, CEO-owned and audit-visible.
 
 All operations run on disposable local PostgreSQL using authenticated sessions.
-A founder's strategic approval cannot substitute for operational QA/review.
+Assignment records do not start AI tasks or certify QA.
 """
 from uuid import uuid4
 from test_m7_http_postgres import case as case, post
@@ -10,7 +10,7 @@ from test_enterprise_http_21_27 import department, employee
 BASE="/v1/organization/company"
 
 
-def test_local_project_stage_delegation_is_real_audited_and_requires_two_reviews(case):
+def test_local_project_stage_delegation_is_real_audited_and_uses_founder_control(case):
     client,headers,info=case
     founder,reviewer=headers["founder"],headers["reviewer"]
     dept=department(client,founder)
@@ -25,16 +25,17 @@ def test_local_project_stage_delegation_is_real_audited_and_requires_two_reviews
     post(client,path,reviewer,payload,expected=403)
     proposal=post(client,path,founder,payload)
     assert proposal["task_executed"] is False
-    assert proposal["status"]=="pending_independent_review"
+    assert proposal["status"]=="pending_founder_decision"
     again=post(client,path,founder,payload)
     assert again["reused"] is True
     assert again["proposal_id"]==proposal["proposal_id"]
     apply=path+"/"+proposal["proposal_id"]+"/activate"
     post(client,apply,founder,{},expected=403)  # Strategy not active
     self_review="/v1/governance/approvals/"+proposal["approval_id"]+"/decision"
-    post(client,self_review,founder,{"approve":True,"reason":"No self review"},expected=403)
-    decision=post(client,self_review,reviewer,
-                  {"approve":True,"reason":"Independent review of implementation team scope"})
+    post(client,self_review,reviewer,
+         {"approve":True,"reason":"Unprivileged account cannot approve"},expected=403)
+    decision=post(client,self_review,founder,
+                  {"approve":True,"reason":"Founder records scoped specialist assignment"})
     assert decision["status"]=="approved"
     post(client,apply,founder,{},expected=403)  # Approval alone cannot activate a draft strategy
 
@@ -78,7 +79,8 @@ def test_worker_scope_and_project_isolation_are_denied(case):
         "brief":"Develop auditable local governance and validated QA control reports",
         "operation_key":str(uuid4())})
     path=BASE+"/projects/"+project["id"]+"/delegations"
-    post(client,path,founder,{"stage":"quality","assignee_id":researcher},expected=403)
+    # Quality is a real AI specialist role, not a third-party human reviewer.
+    post(client,path,founder,{"stage":"quality","assignee_id":info["founder_id"]},expected=403)
     post(client,path,founder,{"stage":"implementation","assignee_id":str(uuid4())},
          expected=404)
     post(client,BASE+"/projects/"+str(uuid4())+"/delegations",founder,

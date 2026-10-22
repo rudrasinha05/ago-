@@ -1,11 +1,11 @@
-"""Founder first-run acceptance: real signed API, independent approval, AI task, QA.
+"""Founder first-run acceptance: real signed API, Founder consent, AI task and honest unreviewed QA.
 
 Test uses the disposable database fixture; never touches a founder's local tenant.
 """
 from test_m7_http_postgres import case as case, post
 
 
-def test_first_governed_employee_task_requires_approval_and_independent_qa(case):
+def test_first_governed_employee_task_requires_founder_consent_and_qa_evidence(case):
     client, headers, info = case
     founder = headers["founder"]
     reviewer = headers["reviewer"]
@@ -38,14 +38,12 @@ def test_first_governed_employee_task_requires_approval_and_independent_qa(case)
     assert approval["action"] == "internal:brief"
     assert approval["task_id"] == created["id"]
 
-    # The original requester cannot approve in a tenant with another human.
-    post(
-        client, f"/v1/governance/approvals/{requested['approval_id']}/decision",
-        founder, {"approve": True, "reason": "Cannot self-authorize"}, expected=403
-    )
+    # Standalone test tasks may still require direct Founder consent.
+    post(client, f"/v1/governance/approvals/{requested['approval_id']}/decision",
+         reviewer, {"approve": True, "reason": "No third-party approvals"}, expected=403)
     decided = post(
         client, f"/v1/governance/approvals/{requested['approval_id']}/decision",
-        reviewer, {"approve": True, "reason": "Independent first-run validation"}
+        founder, {"approve": True, "reason": "Founder permits isolated internal validation"}
     )
     assert decided["status"] == "approved"
 
@@ -55,20 +53,13 @@ def test_first_governed_employee_task_requires_approval_and_independent_qa(case)
     assert first["result"]["kind"] == "internal_brief"
     post(client, f"/v1/agents/tasks/{created['id']}/run", founder, expected=403)
 
-    qa_queue = client.get("/v1/console/qa-queue", headers=reviewer)
-    assert qa_queue.status_code == 200, qa_queue.text
-    assert any(item["id"] == created["id"] for item in qa_queue.json())
-    reviewed = post(client, f"/v1/tasks/{created['id']}/review", reviewer, {
-        "verdict": "pass", "evidence": "Verified stored internal brief and task provenance",
-    })
-    assert reviewed["verdict"] == "pass"
-    assert not any(
-        item["id"] == created["id"]
-        for item in client.get("/v1/console/qa-queue", headers=reviewer).json()
-    )
-    post(client, f"/v1/tasks/{created['id']}/review", reviewer, {
-        "verdict": "pass", "evidence": "Duplicate QA disallowed",
-    }, expected=409)
+    # No imaginary review occurs on task completion. A separate quality
+    # evidence gate stays pending until the CEO-backed QA flow is verified.
+    rows = info["db"].execute(
+        "SELECT COUNT(*) AS total FROM ago_task_reviews WHERE tenant_id=%s AND task_id=%s",
+        (info["tenant"], created["id"]),
+    ).fetchone()
+    assert rows["total"] == 0
 
     # All persistence belongs to the disposable authenticated test tenant.
     row = info["db"].execute(
