@@ -8,6 +8,7 @@ import {RoleEditor,UpwardReports} from './company-governance';
 import {FounderProjectIntake} from './founder-project-intake';
 import {CompanyApprovals} from './company-approvals';
 import {ManagementWorkload} from './company-management';
+import {CompanyExecutionDesk} from './company-execution-desk';
 import {CompanyRolePlanner} from './company-role-planner';
 import {OpportunityRadar} from './company-opportunities';
 const BASE='/v1/organization/company';
@@ -207,6 +208,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business Opportunities</a>}
       {founderView&&me.permissions?.includes('brain:manage')&&<a href="#ago-project-portfolio">Project Portfolio</a>}
       {founderView&&me.permissions?.includes('organization:manage')&&<a href="#ago-role-planner">Roles & Expertise</a>}
+       {me.permissions?.includes('task:read')&&<a href="#ago-execution-desk">Execution Desk</a>}
        {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
       <a href="#ago-company-org-map">Organization & Chat</a>
     </nav>
@@ -214,6 +216,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
     <FounderProjectIntake api={api} me={me} employees={employees} profiles={governanceData?.employees||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
+     <CompanyExecutionDesk api={api} me={me} tasks={tasks} approvals={approvalList} employees={employees} onChange={async()=>{await refreshActivity();await refreshEvents();setApprovalRefresh(v=>v+1);}} onEmployee={id=>choose('employee:'+id)}/>
      <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
     <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
     <div id="ago-company-org-map" className={"company-shell"+(fullscreen?" company-fullscreen":"")} aria-label="Organization map workspace">

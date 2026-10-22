@@ -15,7 +15,8 @@
       "default": "./platform.js"
     },
     "./company": "./company.js",
-    "./company-roles": "./company-roles.js"
+    "./company-roles": "./company-roles.js",
+    "./company-execution": "./company-execution.js"
   },
   "dependencies": {
     "@ago/shared": "0.1.0"
