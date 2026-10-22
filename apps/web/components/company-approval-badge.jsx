@@ -6,7 +6,7 @@ export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone
   (a.requester_id===employee.id||a.task_assignee_id===employee.id));
  const count=updates+pending.length;
  if(!count)return null;
- const founder=me.roles?.includes('founder')&&me.permissions?.includes('approval:founder');
+ const founder=me.roles?.includes('founder');
  async function decide(request,approve){
   if(!founder||busy)return;
   setBusy(request.id);setError('');
