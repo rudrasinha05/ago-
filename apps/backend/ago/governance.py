@@ -184,6 +184,69 @@ class ApprovalRepository:
             )
         return decided
 
+    def approve_ceo_project_task(
+        self, *, tenant_id: str, founder_id: str, ceo_id: str,
+        project_id: str, task_id: str, approval_id: str,
+        action: str, reason: str
+    ) -> dict:
+        """Governance-owned immutable CEO decision for ONE approved project task.
+
+        No generic AI principal receives token rights. The caller is the
+        authenticated founder's bounded reconcile endpoint. This method
+        independently rechecks the durable scope, board identity and state.
+        """
+        for value in (tenant_id, founder_id, ceo_id, project_id, task_id, approval_id):
+            UUID(value)
+        if action not in ("internal:brief", "research:brief", "project:plan"):
+            raise PermissionError("CEO cannot authorize unknown or high-risk actions")
+        with self.connection.transaction():
+            scope=self.connection.execute("""
+                SELECT t.action,t.status,t.approval_id,a.status AS review_status,
+                       a.action AS review_action,a.requester_id,a.reviewer_id,
+                       p.status AS plan_status,p.approval_id AS plan_approval,
+                       plan_review.status AS founder_approval,
+                       plan_review.reviewer_id AS founder_reviewer
+                FROM ago_governed_tasks t
+                JOIN ago_plan_steps ps ON ps.tenant_id=t.tenant_id AND ps.task_id=t.id
+                JOIN ago_founder_intakes i ON i.tenant_id=ps.tenant_id
+                  AND i.plan_id=ps.plan_id
+                JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                JOIN ago_approval_requests a ON a.tenant_id=t.tenant_id
+                  AND a.id=t.approval_id
+                JOIN ago_approval_requests plan_review ON
+                  plan_review.tenant_id=p.tenant_id AND plan_review.id=p.approval_id
+                JOIN ago_company_board_appointments seat ON
+                  seat.tenant_id=t.tenant_id AND seat.seat='Strategy & Vision'
+                JOIN ago_employees exec ON exec.tenant_id=seat.tenant_id
+                  AND exec.id=seat.employee_id AND exec.kind='ai'
+                WHERE t.tenant_id=%s AND t.id=%s AND i.id=%s
+                  AND i.founder_id=%s AND exec.id=%s
+                  AND a.id=%s FOR UPDATE OF t,a
+            """,(tenant_id,task_id,project_id,founder_id,ceo_id,approval_id)).fetchone()
+            if (scope is None or scope["action"]!=action
+                    or scope["review_action"]!=action
+                    or scope["review_status"]!="pending"
+                    or scope["plan_status"]!="active"
+                    or scope["founder_approval"]!="approved"
+                    or str(scope["founder_reviewer"])!=founder_id
+                    or scope["status"]!="waiting_approval"):
+                raise PermissionError("CEO authorization outside approved project scope denied")
+            changed=self.connection.execute("""
+                UPDATE ago_approval_requests SET status='approved',reviewer_id=%s,
+                  reason=%s,decided_at=now()
+                WHERE tenant_id=%s AND id=%s AND status='pending'
+                RETURNING id
+            """,(ceo_id,reason,tenant_id,approval_id)).fetchone()
+            if changed is None:
+                raise PermissionError("Approval changed during CEO verification")
+            self.connection.execute("""
+                INSERT INTO ago_approval_audit
+                (request_id,tenant_id,actor_id,event,reason)
+                VALUES (%s,%s,%s,'approved',%s)
+            """,(approval_id,tenant_id,ceo_id,reason))
+            return {"approval_id":approval_id,"status":"approved",
+                    "ceo_id":ceo_id,"task_id":task_id,"ai_decision":True}
+
     def list_requests(self, *, tenant_id: str, limit: int = 100) -> list[dict]:
         if not 1 <= limit <= 100:
             raise ValueError("Invalid approval list limit")

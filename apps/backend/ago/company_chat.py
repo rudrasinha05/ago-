@@ -7,6 +7,7 @@ from dataclasses import asdict
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.organization_store import OrganizationStore
 from ago.governance import ApprovalRepository
+from ago.repository_ports import TaskStorePort
 
 
 class CompanyChat:
@@ -287,7 +288,6 @@ class CompanyChat:
         the initiating founder is recorded in the reason.
         """
         from ago.governance import ApprovalRepository
-        from ago.task_store import TaskStore
         from uuid import UUID
         UUID(actor.tenant_id)
         UUID(actor.subject)
@@ -353,7 +353,7 @@ class CompanyChat:
                         tenant_id=actor.tenant_id,action=action,
                         requester_id=actor.subject
                     )
-                    self.repositories.resolve(TaskStore).request_approval(
+                    self.repositories.resolve(TaskStorePort).request_approval(
                         task_id=str(task['id']),tenant_id=actor.tenant_id,
                         approval_id=request.request_id
                     )
@@ -372,22 +372,16 @@ class CompanyChat:
                     continue
                 if receipt['status']!='pending':
                     continue
-                # A non-hypothetical, rule-based CEO verification. Approval is
-                # project-scoped and NOT an assertion the LLM examined code.
-                reason=('CEO delegated scope check: approved project '+project_id+
-                        '; assigned task '+str(task['id'])+
-                        '; Founder session '+actor.subject+
-                        '; matching allowlisted internal action '+action)
-                self.db.execute("""
-                    UPDATE ago_approval_requests SET status='approved',
-                    reviewer_id=%s,reason=%s,decided_at=now()
-                    WHERE tenant_id=%s AND id=%s AND status='pending'
-                """,(str(board['id']),reason,actor.tenant_id,approval_id))
-                self.db.execute("""
-                    INSERT INTO ago_approval_audit
-                    (request_id,tenant_id,actor_id,event,reason)
-                    VALUES(%s,%s,%s,'approved',%s)
-                """,(approval_id,actor.tenant_id,str(board['id']),reason))
+                # Approval storage belongs to Governance, which rechecks every
+                # record and board identity inside this same transaction.
+                reason=('CEO scope verified: approved project '+project_id+
+                        '; task '+str(task['id'])+'; Founder session '+actor.subject)
+                self.repositories.resolve(ApprovalRepository).approve_ceo_project_task(
+                    tenant_id=actor.tenant_id, founder_id=actor.subject,
+                    ceo_id=str(board['id']), project_id=project_id,
+                    task_id=str(task['id']), approval_id=approval_id, action=action,
+                    reason=reason,
+                )
                 checked+=1
                 authorized.append(str(task['id']))
             return {
