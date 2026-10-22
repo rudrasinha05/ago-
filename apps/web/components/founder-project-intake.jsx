@@ -179,7 +179,7 @@ export function FounderProjectIntake({api,me,onChanged}) {
           {st.qa_evidence&&<details><summary>Independent QA evidence</summary><p>{st.qa_evidence}</p></details>}
          </li>)}</ol>
          <CompanyDocumentVault api={api} project={projectDetail}/>
-         <p>No external publication is claimed without a linked verified release. <a href="#ago-opportunities">Promotion desk ↑</a></p>
+         <p>No external publication is claimed without a linked verified release. {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Promotion desk ↑</a>}</p>
         </>}
        </div>}
      </article>)}</div>}

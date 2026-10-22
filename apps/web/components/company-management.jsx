@@ -32,7 +32,9 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
      <h4>Company delivery idle — management attention required</h4>
      <p>No tracked employee has a running or queued governed task. This is a recorded
       workload gap, not proof that external commercial work is absent. Review
-      <a href="#ago-opportunities"> Company Opportunity Radar</a>, then
+      {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')
+       ? <a href="#ago-opportunities"> Company Opportunity Radar</a>
+       : <span> Company Opportunity Radar (not accessible to this role)</span>}, then
       <a href="#company-approval-inbox"> founder approvals</a>. Do not manufacture
       tasks or start unapproved customer outreach.</p>
     </div>}
@@ -43,7 +45,9 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
        <strong>{s.project_title} — {s.stage}</strong> · {s.responsible_manager_name} accountable
        <small>{s.deliverable}</small>
        <small>{s.candidate_name?'Workload-aware suggestion: '+s.candidate_name+' ('+s.candidate_workload+' active/queued tasks)':'No qualified matching active staff; review HR request'}{s.founder_local_qa_candidate?' · Founder-only local QA candidate; requires separate AI delivery manager and actual reviewed evidence.':''}. No autonomous assignment has occurred.</small>
-       <a href="#ago-project-portfolio">Inspect project record ↗</a>
+       {me.roles?.includes('founder')
+        ? <a href="#ago-project-portfolio">Inspect project record ↗</a>
+        : <small>Project detail is available to the founder.</small>}
       </li>)}</ol>
     </div>}
    <button type="button" onClick={()=>setExpanded(x=>!x)}>{expanded?'Hide':'Inspect'} employee workload</button>

@@ -80,7 +80,9 @@ export function OpportunityRadar({api,me,onChanged}) {
       <small>Relevance: {s.opportunity_score}/100 · {s.score_basis} · {s.potential_customer}</small>
       <small>Status: {s.review_status} · {s.evidence_level} {s.executive_owner_name?'· Accountable CEO: '+s.executive_owner_name:''}</small>
       {s.approval_status&&<small>Founder authorization: {s.approval_status} · Does not authorize product launch, sales or spending</small>}
-      {s.linked_project_id?<small><a href="#ago-project-portfolio">Linked governed draft project: {s.linked_project_id} ↗</a></small>:
+      {s.linked_project_id?<small>{me.roles?.includes('founder')
+       ? <a href="#ago-project-portfolio">Linked governed draft project: {s.linked_project_id} ↗</a>
+       : <>Linked governed draft project: {s.linked_project_id} · founder-only details</>}</small>:
        s.approval_status==='approved'&&canScan?<button type="button" disabled={Boolean(promoting)}
         onClick={()=>promote(s)}>{promoting===s.id?'Converting…':'Create governed project draft from approved research'}</button>:null}
       {safeUrl(s.source_url)&&<p><a href={safeUrl(s.source_url)} target="_blank" rel="noopener noreferrer">Open original evidence ↗</a></p>}
@@ -97,7 +99,7 @@ export function OpportunityRadar({api,me,onChanged}) {
        <small>Status: {d.stage} · {dated(d.created_at)}</small>
        <p>{d.draft_text}</p>
        {d.external_post_url&&safeUrl(d.external_post_url)&&<a href={safeUrl(d.external_post_url)} target="_blank" rel="noopener noreferrer">Verified external record ↗</a>}
-       <p><a href="#ago-project-portfolio">Inspect linked project ↓</a></p>
+       {me.roles?.includes('founder')&&<p><a href="#ago-project-portfolio">Inspect linked project ↓</a></p>
       </article>)}
    </div>}
    </>}
