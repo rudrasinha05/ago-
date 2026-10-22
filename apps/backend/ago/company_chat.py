@@ -287,7 +287,7 @@ class CompanyChat:
         the initiating founder is recorded in the reason.
         """
         from ago.governance import ApprovalRepository
-        from uuid import UUID
+        from uuid import UUID, uuid4
         UUID(actor.tenant_id)
         UUID(actor.subject)
         UUID(project_id)
@@ -377,11 +377,109 @@ class CompanyChat:
                 )
                 checked+=1
                 authorized.append(str(task['id']))
+            # Founder approves a FULL proposal once. The appointed CEO may
+            # adopt only the pre-recorded exact stage staffing suggestions.
+            # Extraordinary changes still require a new Founder scope decision.
+            approved_stages=[]
+            blocked_stages=[]
+            stage_rows=self.db.execute("""
+                SELECT s.stage,s.suggested_assignee_id,s.plan_step_id,
+                       step.assignee_id AS planned_worker
+                FROM ago_founder_intake_stages s
+                LEFT JOIN ago_plan_steps step
+                  ON step.tenant_id=s.tenant_id AND step.id=s.plan_step_id
+                WHERE s.tenant_id=%s AND s.intake_id=%s
+                ORDER BY CASE s.stage WHEN 'discovery' THEN 1
+                   WHEN 'architecture' THEN 2 WHEN 'implementation' THEN 3
+                   WHEN 'quality' THEN 4 ELSE 5 END
+            """,(actor.tenant_id,project_id)).fetchall()
+            implementation=next((s['suggested_assignee_id'] for s in stage_rows
+                                if s['stage']=='implementation'),None)
+            manager=self.db.execute("""
+                SELECT accountable_manager_id FROM ago_founder_project_lead
+                WHERE tenant_id=%s AND intake_id=%s
+            """,(actor.tenant_id,project_id)).fetchone()
+            manager_id=str(manager['accountable_manager_id']) if manager else None
+            for stage in stage_rows:
+                stage_name=stage['stage']
+                worker_id=(str(stage['suggested_assignee_id'])
+                           if stage['suggested_assignee_id'] else None)
+                if not worker_id or worker_id==str(board['id']):
+                    blocked_stages.append(stage_name)
+                    continue
+                if (stage['planned_worker'] is not None and
+                        str(stage['planned_worker'])!=worker_id):
+                    blocked_stages.append(stage_name)
+                    continue
+                if stage_name=='quality' and (
+                        worker_id==manager_id or
+                        (implementation is not None and
+                         worker_id==str(implementation))):
+                    blocked_stages.append(stage_name)
+                    continue
+                eligible=self.db.execute("""
+                    SELECT 1 FROM ago_employees
+                    WHERE tenant_id=%s AND id=%s AND kind='ai'
+                """,(actor.tenant_id,worker_id)).fetchone()
+                if not eligible:
+                    blocked_stages.append(stage_name)
+                    continue
+                activation=self.db.execute("""
+                    SELECT id FROM ago_project_stage_delegation_activations
+                    WHERE tenant_id=%s AND intake_id=%s AND stage=%s
+                """,(actor.tenant_id,project_id,stage_name)).fetchone()
+                if activation:
+                    continue
+                prior=self.db.execute("""
+                    SELECT id FROM ago_project_stage_delegation_proposals
+                    WHERE tenant_id=%s AND intake_id=%s AND stage=%s
+                """,(actor.tenant_id,project_id,stage_name)).fetchone()
+                if prior:
+                    # Never silently override a pending manual staffing request.
+                    blocked_stages.append(stage_name)
+                    continue
+                proposal_id=str(uuid4())
+                approval=self.repositories.resolve(ApprovalRepository).propose(
+                    tenant_id=actor.tenant_id, requester_id=actor.subject,
+                    action='company:stage-delegation:'+proposal_id,
+                )
+                self.db.execute("""
+                    INSERT INTO ago_project_stage_delegation_proposals
+                      (id,tenant_id,intake_id,stage,assignee_id,requester_id,approval_id)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                """,(proposal_id,actor.tenant_id,project_id,stage_name,
+                     worker_id,actor.subject,approval.request_id))
+                reason=('CEO verified original Founder-approved staffing scope for '+
+                        project_id+' stage '+stage_name+'; authorized Founder session '+
+                        actor.subject)
+                self.repositories.resolve(ApprovalRepository).approve_ceo_project_stage(
+                    tenant_id=actor.tenant_id, founder_id=actor.subject,
+                    ceo_id=str(board['id']), project_id=project_id,
+                    proposal_id=proposal_id, approval_id=approval.request_id,
+                    reason=reason,
+                )
+                self.db.execute("""
+                    INSERT INTO ago_project_stage_delegation_activations
+                      (id,tenant_id,proposal_id,intake_id,stage,assignee_id,applied_by)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                """,(str(uuid4()),actor.tenant_id,proposal_id,project_id,
+                     stage_name,worker_id,actor.subject))
+                self.db.execute("""
+                    INSERT INTO ago_company_chat
+                      (tenant_id,channel,author_id,author_name,body,kind,employee_id)
+                    VALUES (%s,'global',%s,'Company CEO',%s,'project',%s)
+                """,(actor.tenant_id,actor.subject,
+                     'Verified approved project stage '+stage_name+' assigned to '+
+                     worker_id+'; no model or external action launched.',worker_id))
+                approved_stages.append(stage_name)
             return {
                 'project_id':project_id,
                 'ceo_id':str(board['id']),
                 'ceo_name':board['name'],
                 'verified_task_count':checked,
+                'approved_stage_names':approved_stages,
+                'approved_stage_count':len(approved_stages),
+                'blocked_stage_names':blocked_stages,
                 'approved_task_ids':authorized,
                 'blocked_task_ids':blocked,
                 'tasks_executed':0,
