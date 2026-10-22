@@ -121,6 +121,11 @@ try{
  });
  async function login(){await page.getByLabel('Organization ID').fill(tenant);await page.getByLabel('Work email').fill('founder@example.test');await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByRole('heading',{name:'Company map',exact:true}).waitFor();}
  await page.goto(base+'/workspace/organization/');await login();
+ // The real visual page must have no path back to the retired legacy UI.
+ assert.equal(await page.locator('a[href="/console/"]').count(),0,'No duplicate Control Center link');
+ assert.equal(await page.locator('a[href="/tools/"]').count(),0,'No links bypass the /workspace basePath');
+ assert.ok(await page.locator('.command-delivery a[href="/workspace/tools/"]').count()>=1,
+   'GitHub/Tools links must target the real workspace route');
  await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
  await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
  assert.match(await page.locator('.employee-inspector').innerText(),/Busy/);
