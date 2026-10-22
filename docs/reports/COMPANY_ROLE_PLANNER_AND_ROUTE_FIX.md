@@ -1,0 +1,12 @@
+# AGO: Reporting links and founder-reviewed workforce specialization (2026-10-22)
+
+## Why the red link had not worked
+The old graph drew Founder → Department but routed department roots directly from Founder. The active-route walker could not follow a single graph chain; queued work also shared red styling with executing work. The revised drawing connects Founder → Department → root employee → actual manager-subordinate chain. Source-derived task statuses drive **red only while recorded as running**; pending/proposed shows amber; completed/failed and unverified tasks do not become "busy". Active/queued links can be clicked or keyboard activated to focus the authorized target conversation/inspector. A fast task can finish between 7-second polls and not display red; durable work-event notifications still record the transition. Browser animations do not keep agents working.
+
+## Company staff profiles
+The founder-only **Company Role & Expertise Planner** inspects the tenant's actual employee and department records and proposes specialties for every non-founder without completed duties. It covers executive, product, research, design, application, software, data, platform, security, QA, delivery, growth, finance, people, support and unclassified departments. Work area, deliverable and proposed expertise focus are persisted using the existing authorized PUT role API; no new employee, department, grant, board seat or approved task is invented. Already authored core responsibilities are left unchanged. The founder reviews the proposal table and explicitly applies missing profiles. A mid-batch error stops and is resumable because previous saved records will then be excluded.
+
+This is a **responsibility structure**, not a proof that a human/AI worker is technically capable of the designated skill, assigned a project, running a model, online or producing artifacts. Genuine always-on employee execution needs configured inference/tooling, reviewed tasks, runtime scheduling, QA, GitHub credentials and operator-controlled laptop uptime; not simulated 24/7 presence.
+
+## Regression
+Unit cases cover 46 distinct IDs with 12 realistic departments, preserved author-assigned profiles, unknown-department fallbacks, routing through founder/department/manager nodes, queued/running separation, no synthetic activity and terminal-task inactivity. Next.js CI build and browser acceptance are required before announcing functional completion. No SQL migration is required.
