@@ -457,14 +457,7 @@ class CompanyChat:
                     SELECT id,name,kind,role_title,department_id,manager_id FROM ago_employees
                     WHERE tenant_id=%s ORDER BY name,id
                 """, (actor.tenant_id,)).fetchall()
-                reviewer_rows = self.db.execute("""
-                    SELECT e.id FROM ago_employees e
-                    JOIN ago_user_roles ur ON ur.tenant_id=e.tenant_id AND ur.user_id=e.id
-                    JOIN ago_users u ON u.tenant_id=e.tenant_id AND u.id=e.id
-                    WHERE e.tenant_id=%s AND e.kind='human' AND u.active
-                      AND ur.role='reviewer'
-                """, (actor.tenant_id,)).fetchall()
-                reviewers = {str(r['id']) for r in reviewer_rows}
+                # CEO owns operations after founder approves the complete plan.
                 available_ai = [e for e in employees if e['kind']=='ai']
                 discovery = next((e for e in available_ai
                                   if any(term in (e['name']+' '+(e['role_title'] or '')).lower()
@@ -537,23 +530,14 @@ class CompanyChat:
                      ('architect','technical lead','cto'), 'ai'),
                     ('implementation','Implement approved code, tests and technical documentation',
                      ('developer','engineer','programmer'), 'ai'),
-                    ('quality','Record independent QA, failure evidence and release blockers',
-                     ('quality','qa','tester','reviewer'), 'reviewer'),
+                    ('quality','Record CEO-controlled QA evidence and release blockers',
+                     ('quality','qa','tester'), 'ai'),
                     ('release','Prepare GitHub review package and owner release decision',
                      ('devops','release','operations','delivery'), 'ai'),
                 )
                 for index, (stage, deliverable, keywords, required_kind) in enumerate(stages,1):
                     if stage == 'discovery':
                         assignee = discovery
-                    elif required_kind == 'reviewer':
-                        assignee = next((e for e in employees if str(e['id']) in reviewers),None)
-                        if assignee is None and founder_solo_eligible(
-                            self.db, actor.tenant_id, actor.subject
-                        ):
-                            assignee = next(
-                                (e for e in employees if str(e['id']) == actor.subject
-                                 and str(e['id']) != str(leader['id'])), None
-                            )
                     else:
                         assignee = next((e for e in available_ai
                                          if any(keyword in

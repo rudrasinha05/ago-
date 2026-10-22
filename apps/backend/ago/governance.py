@@ -17,32 +17,20 @@ from ago.governance_domain import Decision as Decision
 from ago.governance_domain import Risk as Risk
 
 def founder_solo_eligible(connection: DatabaseConnection, tenant_id: str, founder_id: str) -> bool:
-    """Opt-in local sole-human-founder policy; never a production authorization bypass.
+    """Compatibility name: verify actual ACTIVE human founder.
 
-    Both the request gateway and the locked persistence decision recheck this rule.
+    Other human accounts do not veto the founder's authority.
     """
-    if os.getenv("AGO_ENVIRONMENT", "development").lower() not in (
-        "development", "test", "testing"
-    ) or os.getenv("AGO_FOUNDER_SOLO_APPROVAL", "").lower() != "true":
-        return False
+    UUID(tenant_id)
+    UUID(founder_id)
     row = connection.execute("""
-        SELECT EXISTS (
-          SELECT 1 FROM ago_users u
-          JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
-          JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
-          WHERE u.tenant_id=%s AND u.id=%s AND u.active
-            AND r.role='founder' AND e.kind='human'
-        ) AS real_founder,
-        EXISTS (
-          SELECT 1 FROM ago_users u
-          JOIN ago_employees e ON e.tenant_id=u.tenant_id AND e.id=u.id
-          JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
-          JOIN ago_role_permissions p ON p.tenant_id=r.tenant_id AND p.role=r.role
-          WHERE u.tenant_id=%s AND u.id<>%s AND u.active AND e.kind='human'
-            AND p.permission='approval:decide'
-        ) AS another_human_reviewer
-    """, (tenant_id, founder_id, tenant_id, founder_id)).fetchone()
-    return bool(row and row["real_founder"] and not row["another_human_reviewer"])
+        SELECT 1 FROM ago_users u
+        JOIN ago_employees e ON e.id=u.id AND e.tenant_id=u.tenant_id
+        JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
+        WHERE u.tenant_id=%s AND u.id=%s AND u.active
+          AND e.kind='human' AND r.role='founder'
+    """, (tenant_id, founder_id)).fetchone()
+    return row is not None
 
 
 class ApprovalRepository:
@@ -79,7 +67,7 @@ class ApprovalRepository:
         return proposal
 
     def requires_founder_decision(self, *, request_id: str, tenant_id: str) -> bool:
-        """Founder exercises strategic authority; other approvals require independent review.
+        """Founder decides constitutional/exceptional actions; CEO handles scoped project work.
 
         The target is resolved exclusively from the durable approval record,
         NEVER from client-supplied role, reason or requested policy level.
@@ -141,10 +129,10 @@ class ApprovalRepository:
             )
             if scoped_founder != founder_only or (solo_founder and scoped_founder):
                 raise PermissionError("Approval authority does not match stored action scope")
-            if solo_founder and not self.founder_solo_eligible(
+            if not self.founder_solo_eligible(
                 tenant_id=tenant_id, founder_id=reviewer_id
             ):
-                raise PermissionError("Sole-founder local authorization no longer applies")
+                raise PermissionError("Only the active human founder can decide")
             current = ApprovalRequest(
                 request_id=str(row["id"]),
                 tenant_id=str(row["tenant_id"]),
@@ -173,15 +161,14 @@ class ApprovalRepository:
             ).fetchone()
             if founder_only and founder is None:
                 raise PermissionError("Strategic decisions require an active human founder")
-            # Operational changes must be independently reviewed, even when
-            # their requester is also the founder. A strategic founder decision
-            # can authorize a founder-submitted plan without forging a reviewer.
+            # This human endpoint accepts the founder only; project-scoped
+            # CEO decisions use a separate bounded, audited service.
             decided = current.decide(
                 reviewer_id=reviewer_id,
                 tenant_id=tenant_id,
                 approve=approve,
                 reason=reason,
-                founder_authorized=bool(founder and (founder_only or solo_founder)),
+                founder_authorized=bool(founder),
             )
             self.connection.execute(
                 """UPDATE ago_approval_requests

@@ -11,7 +11,7 @@ CONSTITUTION_LAWS = {
     "legality": "Uncertain legal or contractual authority escalates to humans.",
     "audit": "Material actions preserve actor, evidence, correlation and outcome records.",
     "least_privilege": "No AI may grant itself permissions, budget, autonomy or tool access.",
-    "independent_review": "High-impact work requires independent human approval and QA.",
+    "owner_authority": "Founder approves project scope once; only scoped audited CEO verification can authorize routine approved-project tasks.",
     "bounded_autonomy": "Delegated authority is explicit, scoped, monitored and revocable.",
     "data_stewardship": "Private data sharing requires classification, authority and provenance.",
     "transparency": "Material failures, uncertainty, risk and cost remain visible to governance.",
