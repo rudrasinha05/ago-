@@ -15,6 +15,13 @@ from urllib.request import Request, urlopen
 from uuid import UUID
 
 CONFIRM="EXECUTE_APPROVED_INTERNAL_TASKS"
+READ_TIMEOUT_SECONDS=15
+RUN_TIMEOUT_SECONDS=270  # Four bounded Ollama passes can take up to 4 x 60s.
+def request_timeout(method: str, endpoint: str) -> int:
+    return RUN_TIMEOUT_SECONDS if (method=="POST"
+        and endpoint.startswith("/v1/agents/tasks/")
+        and endpoint.endswith("/run")) else READ_TIMEOUT_SECONDS
+
 
 
 def local_url(base: str) -> str:
@@ -30,15 +37,20 @@ def local_url(base: str) -> str:
     return base.rstrip("/")
 
 
-def batch(records: list[dict], dispatch, *, limit: int, apply: bool,
+def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, apply: bool,
           confirm: str | None) -> dict:
     if not 1<=limit<=10:
         raise ValueError("No more than ten approved tasks in a batch")
     if apply and confirm!=CONFIRM:
         raise PermissionError("Founder confirmation required")
+    approved = {str(item.get('id')): item for item in approvals
+                if item.get('status') == 'approved'}
     ids=[]
     for task in records:
         if task.get("action")!="internal:brief" or task.get("status")!="waiting_approval":
+            continue
+        receipt=approved.get(str(task.get("approval_id")))
+        if not receipt or receipt.get("action")!=task.get("action"):
             continue
         try:
             task_id=str(UUID(str(task["id"])))
@@ -85,15 +97,16 @@ def main(argv=None) -> int:
         req=Request(base+endpoint,method=method,
                     headers={"Authorization":"Bearer "+token,
                              "Accept":"application/json"})
-        with urlopen(req,timeout=15) as response:
+        with urlopen(req,timeout=request_timeout(method,endpoint)) as response:
             result=json.load(response)
         return result
 
     try:
         records=request("GET","/v1/organization/company/activity")
-        if not isinstance(records,list):
-            raise TypeError("Authenticated task activity unavailable")
-        result=batch(records,lambda task_id:request(
+        approvals=request("GET","/v1/organization/company/approvals")
+        if not isinstance(records,list) or not isinstance(approvals,list):
+            raise TypeError("Authenticated task/approval evidence unavailable")
+        result=batch(records,approvals,lambda task_id:request(
             "POST","/v1/agents/tasks/"+task_id+"/run"),
             limit=args.limit,apply=args.apply,confirm=args.confirm)
     except (OSError, ValueError, PermissionError, TypeError, RuntimeError) as exc:
