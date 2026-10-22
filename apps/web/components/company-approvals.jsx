@@ -14,6 +14,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
  const [rows,setRows]=useState(null),[selected,setSelected]=useState(null);
  const [reason,setReason]=useState(''),[error,setError]=useState('');
  const [busy,setBusy]=useState(false),[toast,setToast]=useState(null);
+ const [handoffNotice,setHandoffNotice]=useState('');
  const [showAll,setShowAll]=useState(false);
  const previous=useRef(null),focusReturn=useRef(null),dialog=useRef(null);
  const readable=me.permissions?.includes('approval:read');
@@ -52,12 +53,36 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
  },[selected?.id]);
  function open(a){focusReturn.current=document.activeElement;setError('');setReason('');setSelected(a);setToast(null);}
  function close(){setSelected(null);setReason('');setError('');focusReturn.current?.focus?.();}
+ async function handoff(projectId,planId){
+   // An already-approved Founder plan requires no second Founder decision.
+   await api.request('/v1/brain/plans/'+encodeURIComponent(planId)+'/activate',{method:'POST'});
+   await api.request('/v1/brain/plans/'+encodeURIComponent(planId)+'/materialize',{method:'POST'});
+   const details=await api.request(BASE+'/projects/'+encodeURIComponent(projectId));
+   for(const stage of details.stages||[]){
+    if(stage.task_id&&stage.task_status==='proposed'&&
+       ['internal:brief','research:brief','project:plan'].includes(stage.task_action)){
+      await api.request('/v1/console/tasks/'+encodeURIComponent(stage.task_id)+'/request-approval',{method:'POST'});
+    }
+   }
+   return api.request(BASE+'/projects/'+encodeURIComponent(projectId)+'/ceo/reconcile',{method:'POST'});
+ }
  async function decide(approve){
   if(!selected||busy||!canDecide(selected,me)||!reason.trim())return;
-  setBusy(true);setError('');
+  setBusy(true);setError('');setHandoffNotice('');
   try{
    await api.request('/v1/governance/approvals/'+encodeURIComponent(selected.id)+'/decision',
     {method:'POST',body:{approve,reason:reason.trim()}});
+   if(approve&&selected.founder_intake_id&&selected.plan_id){
+    try{
+     const handoffResult=await handoff(selected.founder_intake_id,selected.plan_id);
+     setHandoffNotice('Founder scope authorized once. CEO '+handoffResult.ceo_name+
+      ' verified '+handoffResult.verified_task_count+' project task(s). No external work executed.');
+    }catch(e){
+     setHandoffNotice('Founder scope approval WAS recorded. CEO handoff still needs attention: '+
+      (e.message||'Review CEO board appointment and approved plan')+
+      '. Do not approve this project again; resume from Project Portfolio.');
+    }
+   }
    close();await refresh();await onReviewed?.();
   }catch(e){setError(e.message);}finally{setBusy(false);}
  }
