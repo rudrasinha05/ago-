@@ -26,7 +26,7 @@ const CATALOG=[
   duty('Web Application Engineer','Web implementation','Frontend state, routing, tests','Working responsive pages and unit tests'),
   duty('Mobile Application Engineer','Mobile applications','Android/mobile lifecycle, UX and API integration','Tested mobile modules'),
   duty('Accessibility & UI QA Engineer','Client quality','Keyboard, screen-reader and cross-device behavior','Browser and accessibility evidence')]},
- {pattern:/engineer|development|software|technology|backend|it/,name:'Software Engineering',roles:[
+ {pattern:/engineer|development|software|technology|backend|\bit\b/,name:'Software Engineering',roles:[
   duty('Engineering Manager','Technical delivery ownership','Architecture reviews, risk and team unblock','Technical plans and accountable handoffs'),
   duty('Backend API Engineer','Service implementation','FastAPI, endpoints, authorization and contracts','Tested typed APIs'),
   duty('Full-Stack Engineer','Feature implementation','Frontend/backend integration and debugging','End-to-end working modules'),
@@ -85,13 +85,14 @@ const FALLBACK=[
  duty('Project Support Specialist','Unclassified department','Tickets, support and internal handoffs','Work queue and blocker reports')];
 export function departmentBlueprint(name){
  const key=String(name||'').trim().toLowerCase();
- return CATALOG.find(entry=>entry.pattern.test(key))||{name:'Unclassified Department',roles:FALLBACK};
+ const priority=['Security & Governance','Quality Assurance','People Operations','Finance & Economics','Growth & Commercial','Platform & Reliability','Data & Intelligence','Research & Innovation','Design & UX','Application Engineering','Software Engineering','Product Management','Executive Office','Project Delivery'];
+ return CATALOG.filter(entry=>entry.pattern.test(key)).sort((a,b)=>priority.indexOf(a.name)-priority.indexOf(b.name))[0]||{name:'Unclassified Department',roles:FALLBACK};
 }
 export function hasVerifiedProfile(employee,profile){
  const title=String(profile?.role_title||'').trim();
  const core=String(profile?.core_responsibilities||'').trim();
  // An existing meaningful, founder-entered responsibility is never overwritten.
- return Boolean(core&&core.toLowerCase()!=='not configured');
+ return Boolean(title&&title!==employee.name&&title.toLowerCase()!=='not assigned'&&core&&core.toLowerCase()!=='not configured');
 }
 export function buildCompanyRolePlan(employees,departments,profiles,founderId){
  const byDepartment=new Map(departments.map(d=>[d.id,d]));
@@ -116,7 +117,7 @@ export function buildCompanyRolePlan(employees,departments,profiles,founderId){
    const role_title=meaningfulTitle?currentTitle:specialization.title;
    const core_responsibilities='Work area: '+specialization.area+'. Core duties: '+specialization.focus+'. Expected deliverable: '+specialization.deliverable+'. Report progress and blockers to recorded manager.';
    const extra_responsibilities='Proposed expertise focus (not a verified skill assessment): '+specialization.focus+'. Cross-team collaboration, quality evidence, documentation, security/privacy and reproducible handoffs. Project execution requires a separately approved task, actual tools and independent QA.';
-   result.push({id:employee.id,name:employee.name,kind:employee.kind,department:department?.name||'Department not recorded',manager_id:employee.manager_id||null,role_title:keep?current.role_title:role_title,core_responsibilities:keep?current.core_responsibilities:core_responsibilities,extra_responsibilities:keep?current.extra_responsibilities:extra_responsibilities,status:keep?'configured':'proposed',focus:specialization.focus});
+   result.push({id:employee.id,name:employee.name,kind:employee.kind,department:department?.name||'Department not recorded',manager_id:employee.manager_id||null,role_title:keep?current.role_title:role_title,core_responsibilities:keep?current.core_responsibilities:(String(current?.core_responsibilities||'').trim()||core_responsibilities),extra_responsibilities:keep?current.extra_responsibilities:(String(current?.extra_responsibilities||'').trim()||extra_responsibilities),status:keep?'configured':'proposed',focus:specialization.focus});
   });
  }
  return result.sort((a,b)=>a.department.localeCompare(b.department)||a.name.localeCompare(b.name));
