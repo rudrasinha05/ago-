@@ -96,7 +96,8 @@ def test_watch_only_performs_explicitly_confirmed_approved_work_and_never_replay
     clock=[0.0]
     calls=[]
     def fetch():
-        if clock[0]>=20:receipts[1]["status"]="approved"
+        if clock[0]>=20:
+            receipts[1]["status"]="approved"
         return state["tasks"],receipts
     def dispatch(task_id):
         calls.append(task_id)
