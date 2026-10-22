@@ -38,6 +38,22 @@ def local_url(base: str) -> str:
     return base.rstrip("/")
 
 
+def founder_login(base: str, tenant: str, email: str, password: str, *, opener=urlopen) -> str:
+    """Obtain a signed localhost session; no credentials are stored on disk."""
+    UUID(tenant)
+    if not email.strip() or not password or any(ch in email for ch in "\r\n"):
+        raise ValueError("Founder login credentials required")
+    payload=json.dumps({"tenant_id":tenant,"email":email.strip(),"password":password}).encode("utf-8")
+    req=Request(local_url(base)+"/v1/sessions",data=payload,method="POST",
+                headers={"Content-Type":"application/json","Accept":"application/json"})
+    with opener(req,timeout=READ_TIMEOUT_SECONDS) as response:
+        result=json.load(response)
+    token=result.get("access_token") if isinstance(result,dict) else None
+    if not isinstance(token,str) or not token or len(token)>4096 or any(ch in token for ch in "\r\n"):
+        raise PermissionError("AGO session response invalid")
+    return token
+
+
 def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, apply: bool,
           confirm: str | None) -> dict:
     if not 1<=limit<=10:
@@ -122,6 +138,7 @@ def main(argv=None) -> int:
     parser.add_argument("--limit",type=int,default=3)
     parser.add_argument("--apply",action="store_true")
     parser.add_argument("--confirm")
+    parser.add_argument("--login",action="store_true",help="Prompt for founder credentials instead of copying a browser token")
     parser.add_argument("--watch-minutes",type=int,default=0,help="0: one pass; 1..60: founder-started bounded polling of approved work")
     parser.add_argument("--interval-seconds",type=int,default=15,help="Watch polling interval: 10..120 seconds")
     args=parser.parse_args(argv)
@@ -135,8 +152,19 @@ def main(argv=None) -> int:
             raise ValueError("Invalid bounded watch limits")
     except (ValueError,PermissionError) as exc:
         parser.error(str(exc))
-    # getpass avoids tokens in process args, PowerShell history, stdout or files.
-    token=getpass.getpass("Founder AGO local access token (not echoed): ").strip()
+    # Credentials are entered interactively, not passed as command-line args.
+    if args.login:
+        try:
+            tenant=input("AGO organization ID: ").strip()
+            email=input("Founder work email: ").strip()
+            password=getpass.getpass("Founder password (hidden): ")
+            token=founder_login(base,tenant,email,password)
+            del password
+        except (ValueError,PermissionError,OSError) as exc:
+            print(json.dumps({"status":"login_failed","error_type":type(exc).__name__}))
+            return 2
+    else:
+        token=getpass.getpass("Founder AGO local access token (not echoed): ").strip()
     if not token or "\n" in token or "\r" in token or len(token)>4096:
         parser.error("Invalid local founder session token")
 
@@ -149,6 +177,9 @@ def main(argv=None) -> int:
         return result
 
     try:
+        principal=request("GET","/v1/console/me")
+        if not isinstance(principal,dict) or "founder" not in principal.get("roles",[]):
+            raise PermissionError("Active founder session required")
         def fetch():
             return (request("GET","/v1/organization/company/activity"),
                     request("GET","/v1/organization/company/approvals"))
@@ -163,6 +194,9 @@ def main(argv=None) -> int:
                 raise TypeError("Authenticated task/approval evidence unavailable")
             result=batch(records,approvals,dispatch,
                          limit=args.limit,apply=args.apply,confirm=args.confirm)
+    except KeyboardInterrupt:
+        print(json.dumps({"status":"stopped_by_founder","automated_replay":False}))
+        return 130
     except (OSError, ValueError, PermissionError, TypeError, RuntimeError) as exc:
         # Do not print tokens, endpoint messages, project content or traceback.
         print(json.dumps({"status":"stopped_without_retry",
