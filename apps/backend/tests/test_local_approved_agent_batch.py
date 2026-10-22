@@ -102,7 +102,8 @@ def test_watch_only_performs_explicitly_confirmed_approved_work_and_never_replay
         calls.append(task_id)
         # Simulate delayed persistence: still waiting on next poll, must not rerun.
         return {"task_id":task_id,"status":"completed"}
-    def pause(seconds):clock[0]+=seconds
+    def pause(seconds):
+        clock[0]+=seconds
     with pytest.raises(PermissionError):
         module.watch(fetch,dispatch,minutes=1,max_tasks=2,interval=10,confirm="no",clock=lambda:clock[0],pause=pause)
     assert calls==[]
@@ -132,7 +133,8 @@ def test_watch_fails_closed_on_unknown_outcome_and_limits():
 def test_founder_signin_is_interactive_without_cli_secrets_or_persistence():
     from io import BytesIO
     import json
-    class Response(BytesIO): pass
+    class Response(BytesIO):
+        pass
     recorded=[]
     def opener(request,timeout):
         recorded.append((request.full_url,request.get_method(),json.loads(request.data),timeout))
