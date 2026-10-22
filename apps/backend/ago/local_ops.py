@@ -220,7 +220,7 @@ def serve_local(*, port: int = 8000, run_server=None) -> None:
     import uvicorn
 
     runner = run_server or uvicorn.run
-    print(f"AGO Control Center: http://127.0.0.1:{port}/console/")
+    print(f"AGO Visual Company Map: http://127.0.0.1:{port}/workspace/organization/")
     print(f"Health: http://127.0.0.1:{port}/health/ready")
     runner("ago.main:app", host="127.0.0.1", port=port, reload=False)
 

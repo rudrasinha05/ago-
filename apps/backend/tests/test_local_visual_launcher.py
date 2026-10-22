@@ -20,7 +20,7 @@ def test_existing_ago_operator_labels_basic_and_visual_ui_separately():
     root = Path(__file__).resolve().parents[3]
     source = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
     assert "Visual Company Map:" in source
-    assert "The basic /console/ is NOT the circular Company Map." in source
+    assert "Old /console/ redirects to the visual Company Map; no duplicate UI." in source
 
 
 def test_visual_launcher_recovers_fresh_terminal_without_recreating_company():
@@ -76,7 +76,32 @@ def test_legacy_console_only_runs_in_explicit_local_test_mode(monkeypatch):
         response = client.get("/console/", follow_redirects=False)
         assert response.status_code == 200
         assert 'src="/console/assets/app.js"' in response.text
+    # The route decision also fails closed in a production *stage*,
+    # independently of production secret providers/bootstrap.
+    from ago.console_host import _legacy_console_for_tests
     monkeypatch.setenv("AGO_ENVIRONMENT", "production")
+    assert _legacy_console_for_tests() is False
+
+
+def test_legacy_console_redirect_follows_through_to_real_visual_frontend(monkeypatch):
+    from fastapi.testclient import TestClient
+    from ago.main import create_app
+    monkeypatch.delenv("AGO_LEGACY_CONSOLE_TEST_MODE", raising=False)
     with TestClient(create_app()) as client:
-        response = client.get("/console/", follow_redirects=False)
-        assert response.status_code == 308
+        if client.get("/workspace/organization/").status_code == 404:
+            import pytest
+            pytest.skip("Next.js static export not yet packaged by this test job")
+        for address in ("/console", "/console/"):
+            response = client.get(address, follow_redirects=True)
+            assert response.status_code == 200
+            assert response.url.path == "/workspace/organization/"
+            assert "Organization ID" in response.text
+            assert "People & departments" not in response.text
+        for address in (
+            "/workspace/", "/workspace/organization/", "/workspace/strategy/",
+            "/workspace/governance/", "/workspace/knowledge/", "/workspace/tools/",
+            "/workspace/calendar/", "/workspace/twin/",
+        ):
+            response = client.get(address)
+            assert response.status_code == 200, address
+            assert "Work email" in response.text, address
