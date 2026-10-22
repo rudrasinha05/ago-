@@ -92,8 +92,8 @@ try{
    const record=approvalRecords.find(a=>path.includes(a.id));assert.ok(record);
    if(asReviewer)
     return route.fulfill({status:403,json:{detail:'Strategic decisions require a human founder'}});
-   if(!record.requires_founder_decision&&record.requester_id===(asReviewer?id(31):founder))
-    return route.fulfill({status:403,json:{detail:'Independent human review required'}});
+   if(!record.requires_founder_decision)
+    return route.fulfill({status:403,json:{detail:'CEO handles scoped project tasks; no extra Founder decision'}});
    record.status=body.approve?'approved':'rejected';record.reason=body.reason;
    record.reviewer_id=asReviewer?id(31):founder;
    record.reviewer_name=asReviewer?'Reviewer':'Founder';
@@ -104,11 +104,15 @@ try{
     approvalRecords.push({id:id(24),requester_id:founder,requester_name:'Founder',
      requester_role:'Founder',action:'brain:activate:'+id(23),status:'pending',
      approval_type:'plan_review',requires_founder_decision:true,plan_title:founderProjects[0].title,
-     plan_id:id(23),goal_brief_excerpt:founderBriefSnapshot,
+     plan_id:id(23),founder_intake_id:id(20),goal_brief_excerpt:founderBriefSnapshot,
      created_at:new Date().toISOString(),
      review_routing:'Founder only — authenticated active human founder',
      next_action:'An approved plan requires separate activation and per-task approvals.'});
   }
+  else if(path==='/v1/brain/plans/'+id(23)+'/activate')result={status:'active'};
+  else if(path==='/v1/brain/plans/'+id(23)+'/materialize')result={task_ids:[]};
+  else if(path==='/v1/organization/company/projects/'+id(20)+'/ceo/reconcile')
+    result={ceo_name:'CEO',verified_task_count:0,approved_stage_count:0,tasks_executed:0};
   else if(path.endsWith('/company/governance'))result={board:appointments,employees:employees.map(e=>({...e,...(roles[e.id]||{})})),board_grants_authority:false};
   else if(path.endsWith('/company/board/appoint')){appointments=appointments.filter(a=>a.seat!==body.seat);appointments.push({seat:body.seat,employee_id:body.employee_id});result={...body,authority_granted:false};}
   else if(path.includes('/company/employees/')&&path.endsWith('/role')){const worker=path.split('/').at(-2);roles[worker]=body;result={id:worker,...body};}
@@ -296,22 +300,28 @@ try{
  await modal.getByRole('button',{name:'Close approval details'}).click();
  asReviewer=false;
  await page.goto(base+'/workspace/organization/');await login();
- await page.locator('#company-approval-inbox').getByText('3 need my review',{exact:false}).waitFor();
+ await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor();
  const entries=page.locator('#company-approval-inbox .approval-entry');
  const founderDialog=page.getByRole('dialog',{name:'Approval details'});
  await entries.filter({hasText:'tool:review:'+id(7)})
-   .getByRole('button',{name:'View approval details'}).click();
- await founderDialog.getByLabel('Mandatory decision reason').fill('Founder denies unlinked operational request');
- await founderDialog.getByRole('button',{name:'Deny',exact:true}).click();
- await founderDialog.waitFor({state:'detached'});
- assert.equal(approvalRecords[2].status,'rejected');
- await entries.filter({hasText:founderProjects[0].title})
-   .getByRole('button',{name:'View approval details'}).click();
- await founderDialog.getByLabel('Mandatory decision reason').fill('Founder approves this single complete project scope');
- await founderDialog.getByRole('button',{name:'Approve',exact:true}).click();
- await founderDialog.waitFor({state:'detached'});
+  .getByRole('button',{name:'View approval details'}).click();
+ assert.equal(await founderDialog.getByRole('button',{name:'Approve',exact:true}).count(),0,
+  'CEO-scoped operational work cannot demand a second Founder decision');
+ await founderDialog.getByRole('button',{name:'Close approval details'}).click();
+ const developerCard=page.locator('.map-node-wrap').filter({hasText:'Developer'}).first();
+ await developerCard.locator('.employee-approval-counter').click();
+ await developerCard.locator('.employee-approval-flyout')
+  .getByText('CEO verifies routine work',{exact:false}).waitFor();
+ assert.equal(await developerCard.locator('.employee-approval-flyout').getByRole('button',{name:'Approve'}).count(),0);
+ await page.locator('.map-founder .employee-approval-counter').click();
+ await page.locator('.map-founder .employee-approval-flyout')
+  .getByRole('button',{name:'Approve',exact:true}).click();
+ await page.locator('.map-founder .employee-approval-flyout')
+  .getByText('Founder approved once',{exact:false}).waitFor();
  assert.equal(approvalRecords[0].status,'approved');
  assert.equal(approvalRecords[0].reviewer_id,founder);
+ assert.equal(calls.filter(c=>c.path.endsWith('/ceo/reconcile')&&c.method==='POST').length,1,
+  'Exact Founder project approval hands off once to CEO');
  assert.deepEqual(errors,[]);
  console.log('PASS: single Founder decision, no third-party reviewers, employee notifications and WCAG; mocked API');
 }finally{await browser.close();server.close();}
