@@ -83,7 +83,7 @@ def test_serve_only_listens_on_loopback_and_ephemeral_secret_is_not_saved(
     ]
     assert len(os.environ["AGO_SESSION_SECRET"]) >= 48
     text = capsys.readouterr().out
-    assert "127.0.0.1:18765/console/" in text
+    assert "127.0.0.1:18765/workspace/organization/" in text
     assert os.environ["AGO_SESSION_SECRET"] not in text
 
 
@@ -291,7 +291,7 @@ def test_actual_local_launcher_serves_console_and_requires_no_public_bind(
             except (URLError, TimeoutError, ConnectionError):
                 time.sleep(0.2)
         else:
-            pytest.fail("AGO local operator launcher never served the console")
+            pytest.fail("AGO local operator launcher never served the visual Company Map")
     finally:
         process.terminate()
         try:
