@@ -146,3 +146,21 @@ test('hypothetical thresholds reach simulation without applying live policy',asy
   expect(calls.some(x=>x.method==='POST'&&x.path.includes('/dna'))).toBeFalsy();
   await accessibility(page);
 });
+
+test('red routed task follows founder, department and employee and opens actual worker',async({page})=>{
+ const {errors}=await fixtures(page);
+ await page.route('**/v1/organization/employees',route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},
+  {id:other,name:'Delivery specialist',department_id:department,kind:'ai'}
+ ]}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
+  {id:'20000000-0000-4000-8000-000000000020',assignee_id:other,action:'internal:brief',status:'running',project_name:'Real reviewed project'}
+ ]}));
+ await login(page);await navigate(page,'Organization');
+ await expect(page.locator('.company-world line.edge-live')).toHaveCount(2);
+ await expect(page.locator('.company-world line.edge-pending')).toHaveCount(0);
+ await page.locator('.company-world line.edge-live').last().click();
+ await expect(page.locator('.employee-inspector')).toContainText('Delivery specialist');
+ await expect(page.locator('.employee-inspector')).toContainText('Real reviewed project');
+ expect(errors).toEqual([]);
+});

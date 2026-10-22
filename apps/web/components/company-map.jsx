@@ -206,7 +206,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
       <a href="#company-approval-inbox">Founder Approvals</a>
       {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business Opportunities</a>}
       {founderView&&me.permissions?.includes('brain:manage')&&<a href="#ago-project-portfolio">Project Portfolio</a>}
-      {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
+      {founderView&&me.permissions?.includes('organization:manage')&&<a href="#ago-role-planner">Roles & Expertise</a>}
+       {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
       <a href="#ago-company-org-map">Organization & Chat</a>
     </nav>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
