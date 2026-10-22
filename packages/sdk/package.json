@@ -16,7 +16,8 @@
     },
     "./company": "./company.js",
     "./company-roles": "./company-roles.js",
-    "./company-execution": "./company-execution.js"
+    "./company-execution": "./company-execution.js",
+    "./company-first-run": "./company-first-run.js"
   },
   "dependencies": {
     "@ago/shared": "0.1.0"

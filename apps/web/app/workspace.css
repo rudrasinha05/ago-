@@ -280,3 +280,14 @@
 .execution-task-list a{color:#91e7ee;font-size:12px}
 .execution-task-list .execution-worker-link{border:0;background:none;padding:2px;color:#a4d9fa;text-align:left}
 @media(max-width:740px){.execution-task-list article{grid-template-columns:1fr}.execution-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* First internal employee run — no implicit permissions or auto-dispatch. */
+.company-first-run{margin:14px 0;padding:14px;border:1px solid #598caa;border-radius:11px;background:#142b46}
+.company-first-run header{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}
+.company-first-run h4{font-size:16px;margin:0}.company-first-run p{max-width:760px}
+.company-first-run .first-run-form{display:grid;grid-template-columns:minmax(130px,190px) minmax(190px,1fr);align-items:center;gap:10px}
+.company-first-run select{width:100%;min-width:0}
+.company-first-run .first-run-form p,.company-first-run .first-run-form button{grid-column:1/-1}
+.company-first-run .first-run-created{padding:10px;margin:10px 0;border-left:3px solid #75ccff;background:#153957;overflow-wrap:anywhere}
+.company-first-run ol{font-size:12px;line-height:1.9;color:#c3d6eb}
+@media(max-width:650px){.company-first-run .first-run-form{grid-template-columns:1fr}}

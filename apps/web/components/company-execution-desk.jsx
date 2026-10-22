@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import {useState} from 'react';
 import {executionSummary,nextTaskAction} from '@ago/sdk/company-execution';
+import {CompanyFirstRun} from './company-first-run';
 export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,onEmployee}){
  const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[showAll,setShowAll]=useState(false);
  const canView=me.permissions?.includes('task:read')&&me.permissions?.includes('organization:read');
@@ -33,6 +34,7 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
  return <section className="company-execution-desk" id="ago-execution-desk" aria-label="Governed AI task execution queue">
    <h3>Execution Desk · Approved company work</h3>
    <p>Real server-side task records only. Approval enables governed execution; no automatic model run, source commit, or release occurs from viewing this desk.</p>
+   <CompanyFirstRun api={api} me={me} employees={employees} tasks={tasks} onCreated={onChange}/>
    {summary===null?<p role="alert">Task activity unavailable. Execution is disabled until the authenticated server responds.</p>:<>
     <div className="execution-metrics">
       <span><strong>{summary.proposed}</strong>Needs task approval request</span>
