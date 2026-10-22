@@ -7,6 +7,7 @@ import {CommandBrain} from './command-brain';
 import {RoleEditor,UpwardReports} from './company-governance';
 import {FounderProjectIntake} from './founder-project-intake';
 import {CompanyApprovals} from './company-approvals';
+import {CompanyApprovalBadge} from './company-approval-badge';
 import {ManagementWorkload} from './company-management';
 import {CompanyExecutionDesk} from './company-execution-desk';
 import {CompanyRolePlanner} from './company-role-planner';
@@ -154,7 +155,21 @@ export function CompanyMap({api,me,data,onRefresh}) {
   useEffect(()=>{refreshGitHub();const timer=setInterval(refreshGitHub,45000);return()=>clearInterval(timer);},[refreshGitHub]);
   useEffect(()=>{if(!popup&&eventQueue.length){setPopup(eventQueue[0]);setEventQueue(old=>old.slice(1));}},[popup,eventQueue]);
   useEffect(()=>{if(!popup)return;const timer=setTimeout(()=>setPopup(null),6500);return()=>clearTimeout(timer);},[popup]);
-  function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));const node=layout.nodes.find(n=>n.key===key);if(node){setZoom(.85);setPan({x:(layout.center-node.x)*.85,y:(layout.center-node.y)*.85});}}
+  function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));const node=layout.nodes.find(n=>n.key===key);if(node){setZoom(.85);setPan(boundedPan((layout.center-node.x)*.85,(layout.center-node.y)*.85,.85));}}
+  function boundedPan(x,y,z=zoom){
+    const w=viewport.current?.clientWidth||700,h=viewport.current?.clientHeight||700;
+    const maxX=Math.max(0,(layout.size*z-w)/2)+30;
+    const maxY=Math.max(0,(layout.size*z-h)/2)+30;
+    return {x:Math.max(-maxX,Math.min(maxX,x)),y:Math.max(-maxY,Math.min(maxY,y))};
+  }
+  function zoomOn(next,cx=null,cy=null){
+    next=Math.max(.18,Math.min(1.65,next));
+    const rect=viewport.current?.getBoundingClientRect();
+    const dx=rect&&cx!==null?cx-rect.left-rect.width/2:0;
+    const dy=rect&&cy!==null?cy-rect.top-rect.height/2:0;
+    setPan(p=>boundedPan(dx-(dx-p.x)*next/zoom,dy-(dy-p.y)*next/zoom,next));
+    setZoom(next);
+  }
   function center(){setZoom(.42);setPan({x:0,y:0});}
   async function older(){const version=sequence.current;setLoading(true);try{
     const result=await api.request(BASE+'/chat?channel='+encodeURIComponent(channel)+'&before='+before);
@@ -228,8 +243,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
           return <details key={d.id} open><summary>{d.name}</summary><button onClick={()=>choose('department:'+d.id)} className={channel==='department:'+d.id?'chosen':''}>Open {d.name} chat</button><ul>{members.filter(e=>!members.some(x=>x.id===e.manager_id)).map(e=>branch(e))}</ul></details>;})}
         <p className="channel-note">Global chat is shared. Department and employee conversations are restricted to the founder and authorized members. AGO enforces access on every read and write.</p>
       </aside>
-      <div className="company-canvas" ref={viewport} onPointerDown={e=>{if(e.target.closest('button,textarea,input,a,form,[data-route-target]'))return;drag.current={x:e.clientX,y:e.clientY,startX:pan.x,startY:pan.y};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current)setPan({x:drag.current.startX+(e.clientX-drag.current.x),y:drag.current.startY+(e.clientY-drag.current.y)});}} onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}} onWheel={e=>{if(e.ctrlKey||e.target.closest('textarea'))return;setZoom(z=>Math.max(.08,Math.min(1.7,z-e.deltaY*.0007)));}}>
-        <div className="map-controls"><button aria-label="Zoom in" onClick={()=>setZoom(z=>Math.min(1.7,z+.1))}>+</button><button aria-label="Zoom out" onClick={()=>setZoom(z=>Math.max(.08,z-.1))}>−</button><button onClick={center}>Founder</button><button aria-label={fullscreen?"Exit full screen":"Full screen map"} aria-pressed={fullscreen} onClick={()=>setFullscreen(v=>!v)}>{fullscreen?"Exit full screen":"⛶ Full screen"}</button><button onClick={()=>{setZoom(Math.min((viewport.current?.clientWidth||600)/layout.size,(viewport.current?.clientHeight||700)/layout.size)*.9);setPan({x:0,y:0});}}>Fit all</button><span>{Math.round(zoom*100)}%</span></div>
+      <div className="company-canvas" ref={viewport} onPointerDown={e=>{if(e.target.closest('button,textarea,input,a,form,[data-route-target]'))return;drag.current={x:e.clientX,y:e.clientY,startX:pan.x,startY:pan.y};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current)setPan(boundedPan(drag.current.startX+(e.clientX-drag.current.x),drag.current.startY+(e.clientY-drag.current.y)));}} onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}} onWheel={e=>{if(e.ctrlKey||e.target.closest('textarea'))return;zoomOn(zoom-e.deltaY*.0007,e.clientX,e.clientY);}}>
+        <div className="map-controls"><button aria-label="Zoom in" onClick={()=>zoomOn(zoom+.1)}>+</button><button aria-label="Zoom out" onClick={()=>zoomOn(zoom-.1)}>−</button><button onClick={center}>Founder</button><button aria-label={fullscreen?"Exit full screen":"Full screen map"} aria-pressed={fullscreen} onClick={()=>setFullscreen(v=>!v)}>{fullscreen?"Exit full screen":"⛶ Full screen"}</button><button onClick={()=>{setZoom(Math.min((viewport.current?.clientWidth||600)/layout.size,(viewport.current?.clientHeight||700)/layout.size)*.9);setPan({x:0,y:0});}}>Fit all</button><span>{Math.round(zoom*100)}%</span></div>
         <div className="company-world" style={{width:layout.size,height:layout.size,transform:`translate(calc(-50% + ${pan.x}px),calc(-50% + ${pan.y}px)) scale(${zoom})`}}>
           <svg width={layout.size} height={layout.size} aria-label="Reporting links: bright red means running work; dashed red means pending assignment">{layout.edges.map((edge,i)=>{const a=points.get(edge.from),b=points.get(edge.to),key=edge.from+'>'+edge.to;const mode=routing.routes.has(key)?'running':routing.waitingRoutes.has(key)?'pending':null;const open=()=>choose(edge.to);return a&&b?<g key={i}><line className={mode==='running'?'edge-live':mode==='pending'?'edge-pending':''} x1={a.x} y1={a.y} x2={b.x} y2={b.y} data-route-target={mode?edge.to:undefined} onClick={mode?open:undefined}/>{mode&&<circle className={'route-hit-target '+mode} cx={(a.x+b.x)/2} cy={(a.y+b.y)/2} r={27} data-route-target={edge.to} role="button" tabIndex={0} aria-label={(mode==='running'?'Running route to ':'Pending route to ')+(b.name||'team')} onClick={open} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}}}/>}</g>:null;})}</svg>
           <form className="map-founder" style={{left:layout.center,top:layout.center,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><strong>♛ Founder · Human authority</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
@@ -237,7 +252,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
              const project=displayProjects(n.id);const eventCount=eventData?.by_employee?.[n.id]??0;
              const recordedRole=governanceData?.employees?.find(e=>e.id===n.id)?.role_title;
              const approvalCount=(approvalList||[]).filter(a=>a.requester_id===n.id&&a.status==='pending').length;
-             return <button key={n.key} aria-label={n.type==='employee'?n.name+', '+state.label+', '+eventCount+' recorded updates':n.name} className={'map-node '+n.type+(channel===n.key?' active':'')+(n.type==='employee'&&state.tone==='busy'?' working':'')+(routing.active.has(n.id)?' assigned':'')} style={{left:n.x,top:n.y}} onClick={()=>choose(n.key)}>
+             return <div key={n.key} className="map-node-wrap" style={{left:n.x,top:n.y}}><button type="button" aria-label={n.type==='employee'?n.name+', '+state.label+', '+eventCount+' recorded updates':n.name} className={'map-node '+n.type+(channel===n.key?' active':'')+(n.type==='employee'&&state.tone==='busy'?' working':'')+(routing.active.has(n.id)?' assigned':'')} onClick={()=>choose(n.key)}>
                {n.type==='employee'&&eventCount>0&&<span className="map-count" title="Recorded work events">{eventCount}</span>}
                <strong>{n.type==='employee'&&<span className={'presence '+state.tone}/>} {n.name}</strong>
                <small>{n.type==='department'?'Department':(n.kind==='ai'?'AI employee · ':'Human member · ')+state.label}</small>
@@ -246,7 +261,10 @@ export function CompanyMap({api,me,data,onRefresh}) {
                {n.type==='employee'&&<small className="map-project">Project: {project[0]||'No linked project'}{project.length>1?' +'+(project.length-1):''}</small>}
                {n.type==='employee'&&state.tasks.find(t=>t.status==='running')&&<small className="map-task">{state.tasks.find(t=>t.status==='running').action}</small>}
                {n.type==='employee'&&<span className="node-action">View work details ↗</span>}
-             </button>;})}
+             </button>
+              {n.type==='employee'&&<CompanyApprovalBadge employee={n} approvals={approvalList} updates={eventCount} api={api} me={me}
+                onDone={async()=>{setApprovalRefresh(v=>v+1);await refreshActivity();await refreshEvents();}}/>}
+             </div>;})}
         </div>
         <div className="map-legend"><span><i className="presence idle"/>Idle</span><span><i className="presence busy"/>Busy</span><span><i className="presence waiting"/>Waiting</span><span><i className="presence unknown"/>Unknown</span><span className="legend-live">━ Bright red: running (click line)</span><span className="legend-pending">┄ Red dashed: assigned / waiting</span><span>{liveTaskCount} running · {pendingTaskCount} waiting</span><small>{updated?'Checked '+updated.toLocaleTimeString():'Activity unavailable'}</small></div>
         {!employees.length&&<div className="map-empty">{grouped===null?'People data unavailable. Check your permissions or refresh.':'Add a role when your project needs one. It will appear in its department.'}</div>}
