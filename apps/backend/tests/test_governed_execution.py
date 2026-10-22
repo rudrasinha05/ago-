@@ -23,14 +23,17 @@ class FakeApprovals:
             raise PermissionError("Not approved")
 
     def requires_founder_decision(self, *, request_id, tenant_id):
-        return False  # Default fake request is an independently reviewed operation.
+        return False  # Default fake request is an ordinary governed operation.
+
+    def founder_solo_eligible(self, *, tenant_id, founder_id):
+        return tenant_id == "t" and founder_id == "founder"
 
     def decide(self, **kwargs):
         return kwargs
 
 
-def principal(tenant="t"):
-    return Principal("reviewer", tenant, ("manager",))
+def principal(tenant="t", role="manager"):
+    return Principal("founder" if role == "founder" else "reviewer", tenant, (role,))
 
 
 def waiting_task():
@@ -70,12 +73,22 @@ def test_decide_requires_rbac():
         )
 
 
-def test_decide_passes_authenticated_identity():
+def test_decide_denies_unprivileged_reviewer_despite_generic_permissions():
+    gate = GovernanceGate(FakeApprovals(), FakeSecurity())
+    with pytest.raises(PermissionError, match="active human founder"):
+        gate.decide(
+            principal=principal(), request_id="approval-1",
+            tenant_id="t", approve=True, reason="Unprivileged reviewer",
+        )
+
+
+def test_decide_passes_authenticated_founder_identity():
     gate = GovernanceGate(FakeApprovals(), FakeSecurity())
     result = gate.decide(
-        principal=principal(), request_id="approval-1",
-        tenant_id="t", approve=True, reason="reviewed",
+        principal=principal(role="founder"), request_id="approval-1",
+        tenant_id="t", approve=True, reason="Founder authorized work",
     )
-    assert result["reviewer_id"] == "reviewer"
+    assert result["reviewer_id"] == "founder"
     assert result["authorized"] is True
     assert result["founder_only"] is False
+    assert result["solo_founder"] is True
