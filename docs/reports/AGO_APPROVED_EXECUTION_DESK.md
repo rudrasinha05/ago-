@@ -8,3 +8,9 @@ The local batch script now reads actual tenant-authorized approval receipts and 
 
 ## Founder-operated bounded watch (next prioritized milestone)
 The existing `scripts/local_approved_agent_batch.py` supports `--watch-minutes 1..60` plus `--apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS`, `--limit 1..10` (maximum number of tasks in session) and `--interval-seconds 10..120`. Default without watch stays **read-only dry-run**. Each poll re-fetches signed tenant-scoped activity and matching approved receipts. Only exact allowlisted internal:brief tasks are eligible; each task ID is attempted once per session and dispatches sequentially. Any HTTP/auth/model error or unconfirmed result stops the session without replay. Ctrl+C stops; no unattended scheduler, Windows autostart, auto-research, continuous hidden worker or external publication. The watch does not authorize a new task, fund a credit budget, bypass independent human QA, or guarantee laptop availability. Example: `python scripts/local_approved_agent_batch.py --watch-minutes 30 --limit 3 --interval-seconds 15 --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS` (prompts for in-memory founder token).
+
+## Secure interactive PowerShell founder login
+The founder can inspect read-only eligible tasks without copying a browser JWT:
+`python scripts/local_approved_agent_batch.py --login`. For a manually initiated, maximum-30-minute bounded watch of at most three eligible tasks:
+`python scripts/local_approved_agent_batch.py --login --watch-minutes 30 --limit 3 --interval-seconds 15 --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS`.
+The command interactively requests organization UUID, email and hidden password, creates a localhost session in RAM, verifies the active founder role through `/v1/console/me`, and does not save passwords/JWTs. The command never starts Ollama, installs models, schedules a background service, writes to GitHub or bypasses task approval/QA. Ctrl+C stops it.
