@@ -62,7 +62,7 @@ def test_project_quality_stage_uses_real_ai_specialist_not_a_third_party(case):
     assert response.status_code == 200
     worker = employee(client, founder, dept)
     implementer = post(client, "/v1/organization/employees", founder, {
-        "department_id": dept, "name": "A Software Developer", "kind": "ai",
+        "department_id": dept, "name": "Software Developer", "kind": "ai",
     })["id"]
     qa = post(client, "/v1/organization/employees", founder, {
         "department_id": dept, "name": "Quality Engineer", "kind": "ai",
@@ -73,6 +73,9 @@ def test_project_quality_stage_uses_real_ai_specialist_not_a_third_party(case):
         "operation_key": str(uuid4()),
     })
     assert project["accountable_manager_id"] == pm
+    implementation_stage = next(s for s in project["stages"]
+                                if s["stage"] == "implementation")
+    assert implementation_stage["suggested_assignee_id"] == implementer
     stage = next(s for s in project["stages"] if s["stage"] == "quality")
     assert stage["suggested_assignee_id"] != info["founder_id"]
     endpoint = "/v1/organization/company/projects/" + project["id"] + "/delegations"
