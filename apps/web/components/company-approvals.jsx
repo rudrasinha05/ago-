@@ -6,7 +6,7 @@ const fmt=date=>date?new Date(date).toLocaleString():'Not recorded';
 const typeLabel={plan_review:'Strategy plan review',task_execution:'Governed task authorization',opportunity_review:'Business opportunity proposal',market_signal_review:'Internet market signal for founder review',governance_action:'Other governed action'};
 const subject=a=>a.market_signal_title||a.opportunity_title||a.plan_title||a.task_action||a.action;
 const isMine=(a,me)=>a.requester_id===me.id;
-const canDecide=(a,me)=>a.status==='pending'&&me.roles?.includes('founder')&&me.permissions?.includes('approval:founder');
+const canDecide=(a,me)=>a.status==='pending'&&me.roles?.includes('founder');
 // Presentation only: server re-verifies real human identity, exact authority,
 // independent reviewer rules and tenant-scoped immutable audit.
 
