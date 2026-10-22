@@ -77,6 +77,22 @@ def staff(data: StaffingInput, actor=Depends(authenticated), repositories=Depend
     except (ValueError, PermissionError) as exc:
         translate_error(exc)
 
+class ReportingManagerInput(StrictInput):
+    manager_id: UUID | None = None
+
+
+@router.put('/employees/{employee_id}/manager')
+def employee_manager(employee_id: UUID, data: ReportingManagerInput,
+                     actor=Depends(authenticated),
+                     repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:manage')
+    try:
+        return repositories.resolve(CompanyChatPort).set_reporting_manager(
+            actor,str(employee_id),str(data.manager_id) if data.manager_id else None)
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
 class RoleProfileInput(StrictInput):
     role_title: str = Field(min_length=1, max_length=150)
     core_responsibilities: str = Field(min_length=1, max_length=3000)

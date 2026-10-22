@@ -419,6 +419,54 @@ class CompanyChat:
                 "board": [dict(s) for s in seats],
                 "board_grants_authority": False}
 
+    def set_reporting_manager(self, actor, employee_id: str,
+                              manager_id: str | None) -> dict:
+        """Founder-only recorded hierarchy; no cycles or cross-tenant managers."""
+        UUID(employee_id)
+        if manager_id:
+            UUID(manager_id)
+        if 'founder' not in actor.roles:
+            raise PermissionError('Only the founder can change reporting lines')
+        if manager_id==employee_id:
+            raise ValueError('Employee cannot manage themselves')
+        with self.db.transaction():
+            self.db.execute(
+                'SELECT id FROM ago_tenants WHERE id=%s FOR UPDATE',
+                (actor.tenant_id,)
+            ).fetchone()
+            worker=self.db.execute(
+                'SELECT id,manager_id FROM ago_employees WHERE tenant_id=%s AND id=%s',
+                (actor.tenant_id,employee_id)
+            ).fetchone()
+            if worker is None:
+                raise LookupError('Employee not in this company')
+            if manager_id:
+                manager=self.db.execute(
+                    'SELECT id FROM ago_employees WHERE tenant_id=%s AND id=%s',
+                    (actor.tenant_id,manager_id)
+                ).fetchone()
+                if not manager:
+                    raise LookupError('Reporting manager not in this company')
+                chain=self.db.execute("""
+                    WITH RECURSIVE chain AS (
+                        SELECT id,manager_id,ARRAY[id] AS path
+                        FROM ago_employees WHERE tenant_id=%s AND id=%s
+                        UNION ALL
+                        SELECT boss.id,boss.manager_id,chain.path || boss.id
+                        FROM chain JOIN ago_employees boss
+                          ON boss.tenant_id=%s AND boss.id=chain.manager_id
+                        WHERE NOT boss.id=ANY(chain.path)
+                    )
+                    SELECT EXISTS(SELECT 1 FROM chain WHERE id=%s) AS circular
+                """,(actor.tenant_id,manager_id,actor.tenant_id,employee_id)).fetchone()
+                if chain and chain['circular']:
+                    raise PermissionError('Circular reporting chain rejected')
+            saved=self.db.execute("""
+                UPDATE ago_employees SET manager_id=%s WHERE tenant_id=%s AND id=%s
+                RETURNING id,manager_id
+            """,(manager_id,actor.tenant_id,employee_id)).fetchone()
+            return dict(saved)
+
     def profile(self, actor, employee_id: str, title: str, core: str, extra: str) -> dict:
         if "founder" not in actor.roles:
             raise PermissionError("Founder approval required to edit employee accountability")
