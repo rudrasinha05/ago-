@@ -235,3 +235,17 @@
 
 /* One canonical organization page: creation controls live beside the Company Map. */
 .company-heading-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.company-add-department{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#10273a;border:1px solid var(--map-border);border-radius:12px;padding:12px;margin-bottom:16px}.company-add-department label{font-size:13px}.company-add-department input{flex:1;min-width:160px;max-width:380px}
+
+/* A red connector is reserved for observed running work; amber is pending. */
+.company-world line.edge-pending{stroke:#edb452;stroke-width:7;stroke-dasharray:12 13;filter:drop-shadow(0 0 6px #ad7c28)}
+.company-world svg line[data-route-target]{pointer-events:stroke;cursor:pointer;outline:none}
+.company-world svg line[data-route-target]:hover,.company-world svg line[data-route-target]:focus-visible{stroke-width:13;filter:drop-shadow(0 0 12px #ff6688)}
+.legend-pending{color:#ffd088;font-weight:bold}
+.company-role-planner{margin:22px 0;padding:20px;background:#101f38;border:1px solid #415b78;border-radius:14px;color:#e5efff}
+.company-role-planner h3{margin:0 0 8px}.company-role-planner p,.company-role-planner small{color:#c1d3e6}
+.company-role-planner button{background:#214d71;color:#fff;border:1px solid #5b9ec8;padding:8px 14px;border-radius:8px;margin:7px 10px 8px 0}
+.company-role-planner button:disabled{opacity:.55;cursor:not-allowed}
+.company-role-planner table{width:100%;border-collapse:collapse;font-size:12px}
+.company-role-planner th,.company-role-planner td{border-bottom:1px solid #40536d;padding:10px;text-align:left;vertical-align:top}
+.company-role-planner .role-table-wrap{max-height:450px;overflow:auto}
+.company-role-planner .role-status{font-weight:650;color:#f9d38d}

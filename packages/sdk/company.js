@@ -23,7 +23,7 @@ export function companyLayout(departments, employees, founderId) {
   function place(e,start,span,depth){
     const angle=start+span/2, radius=inner+depth*step;
     raw.push({...e,key:'employee:'+e.id,type:'employee',angle,radius});
-    edges.push({from:byId.has(e.manager_id)&&!roots.includes(e)?'employee:'+e.manager_id:'founder',to:'employee:'+e.id});
+    edges.push({from:byId.has(e.manager_id)&&!roots.includes(e)?'employee:'+e.manager_id:(departments.some(d=>d.id===e.department_id)?'department:'+e.department_id:'founder'),to:'employee:'+e.id});
     let offset=start;for(const child of children.get(e.id)){const width=span*weight(child)/weight(e);place(child,offset,width,depth+1);offset+=width;}
   }
   for(const d of departments){
@@ -39,23 +39,29 @@ export function companyLayout(departments, employees, founderId) {
 
 /** Highlight the recorded assignment chain up to the founder, never invented routes. */
 export function activeRouteKeys(layout, employees, tasks) {
-  const routes=new Set(), active=new Set();
-  if(!Array.isArray(tasks))return {routes,active};
+  const routes=new Set(), waitingRoutes=new Set(), active=new Set(), running=new Set();
+  if(!Array.isArray(tasks))return {routes,waitingRoutes,active,running};
   const people=new Map(employees.map(e=>[e.id,e]));
   const valid=new Set(layout.edges.map(e=>e.from+'>'+e.to));
+  const incoming=new Map(layout.edges.map(e=>[e.to,e.from]));
   for(const task of tasks){
-    if(!['proposed','ready','waiting_approval','running'].includes(task.status))continue;
-    let id=task.assignee_id;const seen=new Set();
+    if(!['proposed','ready','waiting_approval','running'].includes(task.status)||!people.has(task.assignee_id))continue;
+    const isRunning=task.status==='running', target=isRunning?routes:waitingRoutes;
+    let id=task.assignee_id,seen=new Set();
     while(id&&people.has(id)&&!seen.has(id)){
-      seen.add(id);active.add(id);
-      const employee=people.get(id);
-      const from=employee.manager_id&&people.has(employee.manager_id)?'employee:'+employee.manager_id:'founder';
+      seen.add(id);active.add(id);if(isRunning)running.add(id);
+      const from=incoming.get('employee:'+id);
+      if(!from)break;
       const edge=from+'>employee:'+id;
-      if(valid.has(edge))routes.add(edge);
-      id=employee.manager_id&&people.has(employee.manager_id)?employee.manager_id:null;
+      if(valid.has(edge))target.add(edge);
+      if(from.startsWith('department:')){
+        const root='founder>'+from;if(valid.has(root))target.add(root);
+      }
+      id=from.startsWith('employee:')?from.slice(9):null;
     }
   }
-  return {routes,active};
+  for(const key of routes)waitingRoutes.delete(key);
+  return {routes,waitingRoutes,active,running};
 }
 export function employeeProjects(id,tasks){
   if(!Array.isArray(tasks))return [];
