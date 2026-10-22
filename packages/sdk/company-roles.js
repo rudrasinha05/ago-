@@ -92,7 +92,7 @@ export function hasVerifiedProfile(employee,profile){
  const title=String(profile?.role_title||'').trim();
  const core=String(profile?.core_responsibilities||'').trim();
  // An existing meaningful, founder-entered responsibility is never overwritten.
- return Boolean(title&&title!==employee.name&&title.toLowerCase()!=='not assigned'&&core&&core.toLowerCase()!=='not configured');
+ return Boolean(title&&title.toLowerCase()!=='not assigned'&&core&&core.toLowerCase()!=='not configured');
 }
 export function buildCompanyRolePlan(employees,departments,profiles,founderId){
  const byDepartment=new Map(departments.map(d=>[d.id,d]));

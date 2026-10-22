@@ -6,10 +6,11 @@ const BASE='/v1/organization/company';
 export function CompanyRolePlanner({api,me,employees,departments,profiles,onSaved}){
  const [expanded,setExpanded]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[failed,setFailed]=useState('');
  const eligible=me.roles?.includes('founder')&&me.permissions?.includes('organization:manage');
- const plan=useMemo(()=>buildCompanyRolePlan(employees,departments,profiles,me.id),[employees,departments,profiles,me.id]);
+ const profilesReady=Array.isArray(profiles);
+ const plan=useMemo(()=>profilesReady?buildCompanyRolePlan(employees,departments,profiles,me.id):[],[employees,departments,profiles,me.id,profilesReady]);
  const candidates=plan.filter(p=>p.status==='proposed');
  async function apply(){
-  if(busy||!eligible||!candidates.length)return;
+  if(busy||!eligible||!profilesReady||!candidates.length)return;
   setBusy(true);setFailed('');setMessage('');
   let saved=0;
   try{
@@ -29,9 +30,10 @@ export function CompanyRolePlanner({api,me,employees,departments,profiles,onSave
  return <section id="ago-role-planner" className="company-role-planner" aria-label="Company workforce expertise and roles">
   <h3>Company Role & Expertise Planner</h3>
   <p>Complete departmental coverage for the actual recorded workforce. Each employee has a proposed specialization, work area, deliverables and escalation expectations. Proposals are not evidence of existing skills or permission to start work.</p>
+  {!profilesReady&&<p role="alert">Employee accountability records are unavailable. Bulk assignment is disabled to protect existing role profiles.</p>}
   <p><strong>{plan.length}</strong> employees in the company · <strong>{plan.length-candidates.length}</strong> already profiled · <strong>{candidates.length}</strong> missing defined responsibilities</p>
   <button type="button" onClick={()=>setExpanded(v=>!v)} aria-expanded={expanded}>{expanded?'Hide all roles':'Inspect roles and expertise'}</button>
-  <button type="button" disabled={!candidates.length||busy} onClick={apply}>{busy?'Saving verified company records…':'Assign '+candidates.length+' missing role profiles'}</button>
+  <button type="button" disabled={!profilesReady||!candidates.length||busy} onClick={apply}>{busy?'Saving verified company records…':'Assign '+candidates.length+' missing role profiles'}</button>
   <small>Existing assigned responsibility profiles are preserved. This records duties only, not board seats, RBAC, verified competence, tasks or an always-on AI worker.</small>
   {message&&<p role="status">{message}</p>}{failed&&<p role="alert">{failed}</p>}
   {expanded&&<div className="role-table-wrap"><table><thead><tr><th>Employee</th><th>Department & reporting</th><th>Role / work area</th><th>Specialization focus</th><th>Record</th></tr></thead><tbody>
