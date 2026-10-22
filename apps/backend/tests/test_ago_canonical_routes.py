@@ -34,7 +34,8 @@ def test_visible_navigation_does_not_open_old_ui():
     assert "AGO Control Center: http" not in operator
     server = (root / "apps/backend/ago/console_host.py").read_text(encoding="utf-8")
     assert '"/workspace/organization/"' in server
-    assert 'if _legacy_console_for_tests():' in server
+    assert "AGO_LEGACY_CONSOLE_TEST_MODE" not in server
+    assert not (root / "apps/backend/ago/console").exists()
 
 
 def test_raw_company_links_respect_the_next_basepath():
