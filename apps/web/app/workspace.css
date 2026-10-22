@@ -309,3 +309,11 @@
 .employee-approval-actions button{padding:6px 9px;border-radius:6px;border:1px solid #a4c2dd;background:#235577;color:white}
 .employee-approval-actions button:last-child{background:#772b46}
 @media(prefers-reduced-motion:reduce){.map-node-wrap{transition:none}}
+
+.employee-approval-zone:has(.employee-approval-flyout){z-index:180}
+.employee-approval-flyout{width:min(340px,75vw);max-height:400px;transform-origin:top right;animation:ago-notification-open .17s ease-out;z-index:190}
+.employee-approval-actions{display:flex;gap:9px;flex-wrap:wrap}
+.employee-approval-actions button{padding:9px 13px;border-radius:9px;border:1px solid #f7809b;background:#82253a;color:#fff;font-weight:700}
+.employee-approval-actions button:first-child{background:#17644d;border-color:#56ce94}
+@keyframes ago-notification-open{from{opacity:.5;transform:scale(.78)}to{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.employee-approval-flyout{animation:none}}
