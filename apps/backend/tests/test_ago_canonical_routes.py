@@ -46,7 +46,7 @@ def test_raw_company_links_respect_the_next_basepath():
     assert company.count('<Link href="/tools/"') == 2
     assert '<a href="/tools/"' not in company
     assert '<a href="/workspace/tools/"' not in company
-    assert "founderView&&<a href=\"#ago-project-portfolio\"" in company
+    assert "founderView&&me.permissions?.includes('brain:manage')&&<a href=\"#ago-project-portfolio\"" in company
     assert "includes('task:read')&&<a href=\"#ago-workforce\"" in company
     assert 'href="#company-approval-inbox"' in company
 
@@ -56,8 +56,8 @@ def test_role_restricted_company_sections_do_not_advertise_missing_anchors():
     management = (root / "company-management.jsx").read_text(encoding="utf-8")
     opportunities = (root / "company-opportunities.jsx").read_text(encoding="utf-8")
     intake = (root / "founder-project-intake.jsx").read_text(encoding="utf-8")
-    assert "me.roles?.includes('founder')\n        ? <a href=\"#ago-project-portfolio\"" in management
+    assert "me.roles?.includes('founder')&&me.permissions?.includes('brain:manage')\n        ? <a href=\"#ago-project-portfolio\"" in management
     assert "me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')" in management
-    assert "me.roles?.includes('founder')\n       ? <a href=\"#ago-project-portfolio\"" in opportunities
-    assert "me.roles?.includes('founder')&&<p><a href=\"#ago-project-portfolio\"" in opportunities
+    assert "me.roles?.includes('founder')&&me.permissions?.includes('brain:manage')\n       ? <a href=\"#ago-project-portfolio\"" in opportunities
+    assert "me.roles?.includes('founder')&&me.permissions?.includes('brain:manage')&&<p><a href=\"#ago-project-portfolio\"" in opportunities
     assert "me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')" in intake

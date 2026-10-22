@@ -45,7 +45,7 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
        <strong>{s.project_title} — {s.stage}</strong> · {s.responsible_manager_name} accountable
        <small>{s.deliverable}</small>
        <small>{s.candidate_name?'Workload-aware suggestion: '+s.candidate_name+' ('+s.candidate_workload+' active/queued tasks)':'No qualified matching active staff; review HR request'}{s.founder_local_qa_candidate?' · Founder-only local QA candidate; requires separate AI delivery manager and actual reviewed evidence.':''}. No autonomous assignment has occurred.</small>
-       {me.roles?.includes('founder')
+       {me.roles?.includes('founder')&&me.permissions?.includes('brain:manage')
         ? <a href="#ago-project-portfolio">Inspect project record ↗</a>
         : <small>Project detail is available to the founder.</small>}
       </li>)}</ol>

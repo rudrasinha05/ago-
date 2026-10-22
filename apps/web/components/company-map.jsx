@@ -203,7 +203,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       <a href="#ago-unified-cockpit">Company Brain</a>
       <a href="#company-approval-inbox">Founder Approvals</a>
       {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business Opportunities</a>}
-      {founderView&&<a href="#ago-project-portfolio">Project Portfolio</a>}
+      {founderView&&me.permissions?.includes('brain:manage')&&<a href="#ago-project-portfolio">Project Portfolio</a>}
       {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
       <a href="#ago-company-org-map">Organization & Chat</a>
     </nav>
