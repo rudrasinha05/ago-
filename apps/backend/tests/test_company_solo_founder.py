@@ -61,9 +61,13 @@ def test_project_quality_stage_uses_real_ai_specialist_not_a_third_party(case):
                           })
     assert response.status_code == 200
     worker = employee(client, founder, dept)
+    implementer = post(client, "/v1/organization/employees", founder, {
+        "department_id": dept, "name": "Software Developer", "kind": "ai",
+    })["id"]
     qa = post(client, "/v1/organization/employees", founder, {
         "department_id": dept, "name": "Quality Engineer", "kind": "ai",
     })["id"]
+    assert implementer != qa
     project = post(client, "/v1/organization/company/projects/start", founder, {
         "brief": "Build testable local software with real QA specialist evidence and CEO reporting",
         "operation_key": str(uuid4()),
