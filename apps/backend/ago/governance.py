@@ -6,7 +6,6 @@ trusted, authenticated principals; never accept actor identity from untrusted in
 
 from __future__ import annotations
 
-import os
 from uuid import UUID
 
 from ago.approvals import ApprovalRequest, ApprovalStatus
