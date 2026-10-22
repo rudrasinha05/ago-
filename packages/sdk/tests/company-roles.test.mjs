@@ -39,3 +39,15 @@ test('CEO CTO CFO CISO CQO seats use real distinct AI members',()=>{
  assert.equal(new Set(rows.map(x=>x.employee_id)).size,5);
  assert.deepEqual(buildLeadershipPlan([staff[0]],[],[],'owner').filter(x=>!x.employee_id).length,4);
 });
+
+test('board uses recorded department expertise before inventing executive skills',()=>{
+ const deps=[{id:'executive',name:'Executive Office'},{id:'engineering',name:'Engineering'},
+  {id:'finance',name:'Finance'},{id:'security',name:'Cyber Security'},
+  {id:'quality',name:'Quality Assurance'}];
+ const people=deps.map((d,i)=>({id:'ai'+i,name:'Agent '+i,kind:'ai',department_id:d.id}));
+ const board=buildLeadershipPlan(people,[],[],'founder',deps);
+ assert.deepEqual(board.map(x=>x.employee_id),['ai0','ai1','ai2','ai3','ai4']);
+ assert.ok(board.every(x=>!x.existing));
+ const noEvidence=buildLeadershipPlan([{id:'g',kind:'ai',name:'Generic Agent',department_id:'unknown'}],[],[],'founder',deps);
+ assert.equal(noEvidence.filter(x=>!x.employee_id).length,5);
+});

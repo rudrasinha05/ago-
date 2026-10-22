@@ -9,7 +9,7 @@ export function CompanyRolePlanner({api,me,employees,departments,profiles,board=
  const profilesReady=Array.isArray(profiles);
  const plan=useMemo(()=>profilesReady?buildCompanyRolePlan(employees,departments,profiles,me.id):[],[employees,departments,profiles,me.id,profilesReady]);
  const candidates=plan.filter(p=>p.status==='proposed');
- const executivePlan=useMemo(()=>buildLeadershipPlan(employees,profiles,board,me.id),[employees,profiles,board,me.id]);
+ const executivePlan=useMemo(()=>buildLeadershipPlan(employees,profiles,board,me.id,departments),[employees,profiles,board,me.id,departments]);
  const [executiveBusy,setExecutiveBusy]=useState(false);
  async function apply(){
   if(busy||!eligible||!profilesReady||!candidates.length)return;

@@ -124,7 +124,7 @@ export function buildCompanyRolePlan(employees,departments,profiles,founderId){
 }
 
 const EXECUTIVES=[
- {seat:'Strategy & Vision',title:'Chief Executive Officer (CEO)',match:/\bceo\b|chief executive|strategy|portfolio|business/i,
+ {seat:'Strategy & Vision',title:'Chief Executive Officer (CEO)',match:/\bceo\b|chief executive|executive|strategy|portfolio|business/i,
   work:'Own every Founder-approved project: business roadmap, staffing, verified task delegation, project delivery and escalation. Never override the Founder scope.'},
  {seat:'Technology Oversight',title:'Chief Technology Officer (CTO)',match:/\bcto\b|chief technology|engineering|architect|software|technical/i,
   work:'Own architecture, secure code implementation, technical staffing, integrations, GitHub CI and error remediation; report to CEO.'},
@@ -135,15 +135,19 @@ const EXECUTIVES=[
  {seat:'Quality & Release',title:'Chief Quality Officer (CQO)',match:/\bcqo\b|quality|\bqa\b|tester|test|release/i,
   work:'Own automated tests, acceptance criteria, regression reports and release blockers; report to CEO.'}
 ];
-export function buildLeadershipPlan(employees,profiles,board,founderId){
+export function buildLeadershipPlan(employees,profiles,board,founderId,departments=[]){
  const ai=(employees||[]).filter(e=>e.kind==='ai'&&e.id!==founderId);
  const current=new Map((profiles||[]).map(p=>[p.id,p]));
+ const departmentsById=new Map((departments||[]).map(d=>[d.id,d.name]));
  const assigned=new Map((board||[]).map(b=>[b.seat,String(b.employee_id)]));
  const used=new Set();
  return EXECUTIVES.map(x=>{
   const existing=ai.find(e=>e.id===assigned.get(x.seat)&&!used.has(e.id));
-  const options=ai.filter(e=>!used.has(e.id)).map(e=>({e,score:x.match.test([e.name,e.role_title,current.get(e.id)?.role_title].filter(Boolean).join(' '))?10:0}))
-   .sort((a,b)=>b.score-a.score||String(a.e.id).localeCompare(String(b.e.id)));
+  const options=ai.filter(e=>!used.has(e.id)).map(e=>{
+   const personal=[e.name,e.role_title,current.get(e.id)?.role_title].filter(Boolean).join(' ');
+   const departmentName=departmentsById.get(e.department_id)||'';
+   return {e,score:x.match.test(personal)?20:x.match.test(departmentName)?7:0};
+  }).sort((a,b)=>b.score-a.score||String(a.e.id).localeCompare(String(b.e.id)));
   // Do not promote an unrelated engineer merely to fill a title; keep vacancy visible.
   const candidate=existing||(options[0]?.score>0?options[0].e:null);
   if(candidate)used.add(candidate.id);
