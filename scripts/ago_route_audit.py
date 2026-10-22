@@ -9,7 +9,7 @@ import argparse
 import json
 from urllib.error import HTTPError, URLError
 from urllib.request import (
-    build_opener, HTTPHandler, HTTPRedirectHandler, Request,
+    build_opener, HTTPHandler, HTTPRedirectHandler, ProxyHandler, Request,
 )
 
 EXPECTED_MAP = "/workspace/organization/"
@@ -38,7 +38,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 def audit(port: int = 8000) -> dict:
     # No browser session, no Authorization/cookies, no writes, no remote origin.
-    opener = build_opener(HTTPHandler(), NoRedirect())
+    opener = build_opener(ProxyHandler({}), HTTPHandler(), NoRedirect())
     results = []
     for path, code, location, marker in CHECKS:
         observed = None
