@@ -317,3 +317,9 @@
 .employee-approval-actions button:first-child{background:#17644d;border-color:#56ce94}
 @keyframes ago-notification-open{from{opacity:.5;transform:scale(.78)}to{opacity:1;transform:scale(1)}}
 @media(prefers-reduced-motion:reduce){.employee-approval-flyout{animation:none}}
+
+/* Keep employee notification counters and decision flyouts readable at any map zoom. */
+.employee-approval-zone{transform:scale(var(--employee-popup-zoom,1));transform-origin:top right}
+.employee-approval-counter{min-width:31px;min-height:31px;font-weight:800}
+.employee-approval-flyout{animation:ago-notification-open .17s ease-out}
+@media(prefers-reduced-motion:reduce){.employee-approval-flyout{animation:none}}

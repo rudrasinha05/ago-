@@ -262,7 +262,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
                {n.type==='employee'&&state.tasks.find(t=>t.status==='running')&&<small className="map-task">{state.tasks.find(t=>t.status==='running').action}</small>}
                {n.type==='employee'&&<span className="node-action">View work details ↗</span>}
              </button>
-              {n.type==='employee'&&<CompanyApprovalBadge employee={n} approvals={approvalList} updates={eventCount} api={api} me={me} onFocusEmployee={()=>{const z=.7;setZoom(z);setPan(boundedPan((layout.center-n.x)*z,(layout.center-n.y)*z,z));}}
+              {n.type==='employee'&&<CompanyApprovalBadge employee={n} approvals={approvalList} updates={eventCount} api={api} me={me} zoom={zoom}
                 onDone={async()=>{setApprovalRefresh(v=>v+1);await refreshActivity();await refreshEvents();}}/>}
              </div>;})}
         </div>

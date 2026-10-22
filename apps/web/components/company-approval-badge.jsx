@@ -1,7 +1,7 @@
 "use client";
 import {useState} from 'react';
 import {decideFounderScope} from './company-founder-decision';
-export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone,onFocusEmployee}){
+export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone,zoom=1}){
  const [open,setOpen]=useState(false),[busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const pending=(approvals||[]).filter(a=>a.status==='pending'&&
   (a.requester_id===employee.id||a.task_assignee_id===employee.id));
@@ -19,10 +19,10 @@ export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone
   }catch(e){setError(e.message||'Decision was not recorded');}
   finally{setBusy('');}
  }
- return <div className="employee-approval-zone" onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}
+ return <div className="employee-approval-zone" style={{'--employee-popup-zoom':Math.min(5,Math.max(.75,1/zoom))}} onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}
   onFocus={()=>setOpen(true)} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOpen(false)}}>
   <button className="employee-approval-counter" type="button" aria-label={count+' notifications for '+employee.name}
-   aria-expanded={open} onClick={()=>{setOpen(v=>!v);onFocusEmployee?.();}}>{count}</button>
+   aria-expanded={open} onClick={()=>setOpen(v=>!v)}>{count}</button>
   {open&&<section className="employee-approval-flyout" aria-label={employee.name+' notification actions'}>
    <strong>{employee.name} · {count} update(s)</strong>
    {!!updates&&<p>{updates} recorded work updates. Select the employee for details.</p>}
