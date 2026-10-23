@@ -5,19 +5,19 @@ from test_m7_http_postgres import case as case, post
 from test_enterprise_http_21_27 import department, employee
 
 
-def test_founder_alone_decides_human_approvals_and_no_member_can_hijack(case):
+def test_independent_operational_review_and_single_founder_project_scope(case):
     client, headers, info = case
     founder, outsider = headers["founder"], headers["reviewer"]
     req = post(client, "/v1/governance/approvals", founder,
                {"action": "internal:brief"})
     path = "/v1/governance/approvals/" + req["request_id"] + "/decision"
-    post(client, path, outsider,
-         {"approve": True, "reason": "Cannot review Founder work"}, expected=403)
-    decided = post(client, path, founder,
-                   {"approve": False, "reason": "Founder rejects unscheduled work"})
-    assert decided["status"] == "rejected"
-    assert decided["reviewer_id"] == info["founder_id"]
     post(client, path, founder,
+         {"approve": True, "reason": "Founder operational self-review forbidden"}, expected=403)
+    decided = post(client, path, outsider,
+                   {"approve": False, "reason": "Independent human rejects unscheduled work"})
+    assert decided["status"] == "rejected"
+    assert decided["reviewer_id"] == info["reviewer_id"]
+    post(client, path, outsider,
          {"approve": True, "reason": "Replay blocked"}, expected=400)
 
     dept = department(client, founder)
@@ -35,7 +35,9 @@ def test_founder_alone_decides_human_approvals_and_no_member_can_hijack(case):
     assert approved["status"] == "approved"
     inbox = client.get("/v1/organization/company/approvals", headers=founder)
     assert inbox.status_code == 200
-    assert all("Independent active human reviewer" not in a["review_routing"]
+    assert any(a["requires_founder_decision"] and a["plan_id"] == project["plan_id"]
+               for a in inbox.json())
+    assert any(not a["requires_founder_decision"]
                for a in inbox.json())
 
 
@@ -73,8 +75,8 @@ def test_ceo_can_verify_only_founder_approved_active_project_internal_task(case)
     approved_none = post(client, base + "/ceo/reconcile", founder)
     assert approved_none["approved_task_ids"] == []
     task = post(client, "/v1/console/tasks/" + task_id + "/request-approval", founder)
-    post(client, "/v1/governance/approvals/" + task["approval_id"] + "/decision",
-         outsider, {"approve": True, "reason": "No outside human decision"}, expected=403)
+    # Human reviewer role alone cannot impersonate an AI CEO board seat or
+    # execute its bounded project reconciliation.
     post(client, base + "/ceo/reconcile", outsider, expected=403)
     reconciled = post(client, base + "/ceo/reconcile", founder)
     assert reconciled["ceo_id"] == ceo
