@@ -43,7 +43,7 @@ def inspect(directory: str | Path) -> dict:
     expected = manifest.get("file_evidence")
     checks = manifest.get("acceptance_checks")
     if not isinstance(expected, list) or not isinstance(checks, list):
-        raise ValueError("Reviewed file evidence and acceptance criteria required")
+        raise TypeError("Reviewed file evidence and acceptance criteria required")
     files = []
     known = {"AGO_REVIEW_MANIFEST.json", "AGO_TEST_RECEIPT.json",
              "AGO_UNSUBMITTED_GITHUB_OPERATION.json"}
