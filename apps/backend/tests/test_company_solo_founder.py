@@ -20,8 +20,9 @@ def test_founder_can_approve_or_deny_without_other_human_or_legacy_flags(case, m
         proposal = post(client, "/v1/governance/approvals", founder,
                         {"action": "internal:brief"})
         path = "/v1/governance/approvals/" + proposal["request_id"] + "/decision"
+        # Disabled reviewer has an invalid signed session, not merely RBAC denial.
         post(client, path, outsider,
-             {"approve": decision, "reason": "No outside authorization"}, expected=403)
+             {"approve": decision, "reason": "Inactive reviewer cannot authenticate"}, expected=401)
         result = post(client, path, founder, {
             "approve": decision, "reason": "Founder controls company request"
         })
