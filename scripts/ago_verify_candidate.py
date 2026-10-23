@@ -17,6 +17,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from ago.company_engineering import reviewed_candidate
+from ago.github_adapter import validate_operation
 
 CONFIRM = "EXECUTE_LOCAL_ISOLATED_TESTS"
 IMAGE = "python:3.11-slim"
@@ -44,7 +45,8 @@ def inspect(directory: str | Path) -> dict:
     if not isinstance(expected, list) or not isinstance(checks, list):
         raise ValueError("Reviewed file evidence and acceptance criteria required")
     files = []
-    known = {"AGO_REVIEW_MANIFEST.json", "AGO_TEST_RECEIPT.json"}
+    known = {"AGO_REVIEW_MANIFEST.json", "AGO_TEST_RECEIPT.json",
+             "AGO_UNSUBMITTED_GITHUB_OPERATION.json"}
     for item in expected:
         path = item.get("path") if isinstance(item, dict) else None
         if not isinstance(path, str) or path.startswith("/") or ".." in path.split("/"):
@@ -67,6 +69,17 @@ def inspect(directory: str | Path) -> dict:
     if (candidate["candidate_sha256"] != manifest.get("candidate_sha256")
             or candidate["file_evidence"] != expected):
         raise PermissionError("Staged candidate/manifest integrity mismatch")
+    # The optional, review-only GitHub draft may accompany a staged candidate.
+    # Never accept a draft that contains different or additional source bytes.
+    github_path = root / "AGO_UNSUBMITTED_GITHUB_OPERATION.json"
+    if github_path.exists():
+        if github_path.is_symlink() or not github_path.is_file():
+            raise PermissionError("Invalid staged GitHub draft")
+        draft = json.loads(github_path.read_text(encoding="utf-8"))
+        validate_operation(draft)
+        if (draft["operation"] != "commit_files"
+                or draft["payload"]["files"] != candidate["files"]):
+            raise PermissionError("GitHub draft source differs from reviewed candidate")
     return {"candidate_sha256": candidate["candidate_sha256"],
             "files": [x["path"] for x in files], "acceptance_checks": checks,
             "tests_executed": False, "sandbox_verified": False}
