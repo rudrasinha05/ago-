@@ -1,41 +1,54 @@
-"""Fail-closed UI/operational regression check for the AGO Founder / CEO contract.
+"""Static fail-closed check: strategic Founder vs independent technical review.
 
-Historical immutable SQL migrations and archival documentation remain untouched.
-No independent human reviewer may reappear as a current approval instruction.
+Founder project scope is authorized once; the appointed CEO reconciles only
+recorded in-scope project tasks. Ordinary governance and independent QA require
+authenticated human review, not a model, fake token or second Founder approval.
 """
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / "apps" / "web"
-BACKEND = ROOT / "apps" / "backend" / "ago" / "company_chat.py"
-
-FORBIDDEN = (
-    "independent active human reviewer",
-    "active independent human reviewer",
-    "pending_independent_review",
-    "independent reviewer with approval",
-    "third-party reviewer approval",
-    "request approval from a reviewer",
-    "awaiting another human reviewer",
-)
+WEB = ROOT / "apps" / "web" / "components"
+BACKEND = ROOT / "apps" / "backend" / "ago"
 
 
 def inspect() -> list[str]:
     failures = []
-    for path in sorted(UI.rglob("*")):
-        if path.suffix not in {".jsx", ".js", ".tsx", ".ts"} or not path.is_file():
-            continue
-        text = path.read_text(encoding="utf-8").lower()
-        for term in FORBIDDEN:
-            if term in text:
-                failures.append(f"{path.relative_to(ROOT)}: {term}")
-    policy = BACKEND.read_text(encoding="utf-8")
-    if "pending_independent_review" in policy:
-        failures.append("company_chat: legacy reviewer fallback still active")
-    if "approve_ceo_project_stage" not in policy or "approve_ceo_project_task" not in policy:
-        failures.append("company_chat: CEO project-scoped task/staffing gate absent")
-    if "'pending_founder_decision'" not in policy:
-        failures.append("company_chat: Founder-owned staffing decision not exposed")
+    approvals = (WEB / "company-approvals.jsx").read_text(encoding="utf-8")
+    founder_action = (WEB / "company-founder-decision.js").read_text(encoding="utf-8")
+    badge = (WEB / "company-approval-badge.jsx").read_text(encoding="utf-8")
+    company = (BACKEND / "company_chat.py").read_text(encoding="utf-8")
+    gate = (BACKEND / "governed_execution.py").read_text(encoding="utf-8")
+    governance = (BACKEND / "governance.py").read_text(encoding="utf-8")
+    reviewer = (BACKEND / "provision.py").read_text(encoding="utf-8")
+
+    controls = {
+        "strategic Founder identity gate":
+            'approval:founder' in gate and 'if strategic:' in gate,
+        "independent human operational permission":
+            'approval:decide' in gate and
+            'Active independent reviewer permission required' in governance,
+        "stored exact stage scope":
+            'founder_project_stage' in governance,
+        "independent role provision with independent QA":
+            '"approval:decide"' in reviewer and '"qa:review"' in reviewer,
+        "conditional Founder inbox routing":
+            'a.requires_founder_decision' in approvals and
+            'a.requester_id!==me.id' in approvals and
+            'approval:decide' in approvals,
+        "Founder one-time project handoff":
+            'decideFounderScope(api,selected,approve,reason)' in approvals and
+            '/ceo/reconcile' in founder_action,
+        "human-only employee notification approval":
+            'founder&&a.requires_founder_decision' in badge,
+        "bounded CEO verification":
+            'approve_ceo_project_stage' in company and
+            'approve_ceo_project_task' in company,
+        "nonfictional stage proposal authorization":
+            "'pending_founder_decision'" in company,
+    }
+    for label, passed in controls.items():
+        if not passed:
+            failures.append("Missing secure authority boundary: " + label)
     return failures
 
 
@@ -43,4 +56,4 @@ if __name__ == "__main__":
     problems = inspect()
     if problems:
         raise SystemExit("Approval UI contract FAILED:\n" + "\n".join(problems))
-    print("PASS: no third-party human approval prompt or stale operational reviewer fallback")
+    print("PASS: Founder strategy, independent operational/QA review, bounded CEO work")
