@@ -91,7 +91,7 @@ export function CompanyRolePlanner({api,me,employees,departments,profiles,board=
   <section className="company-executive-staffing" aria-label="CEO and leadership staffing">
    <h4>Executive leadership · one accountable CEO</h4>
    <p>CEO receives operational accountability after the Founder approves full project scope. CTO, CFO, CISO and CQO report to CEO. Appointments here do not grant login credentials, payments or deployment privileges.</p>
-   <div className="role-table-wrap"><table><thead><tr><th>Board responsibility</th><th>Executive position</th><th>Actual candidate</th><th>Assignment</th></tr></thead><tbody>
+   <div className="role-table-wrap" role="region" aria-label="Scrollable executive role assignments" tabIndex={0}><table><thead><tr><th>Board responsibility</th><th>Executive position</th><th>Actual candidate</th><th>Assignment</th></tr></thead><tbody>
     {executivePlan.map(x=><tr key={x.seat}><td>{x.seat}</td><td><strong>{x.title}</strong><small>{x.work}</small></td><td>{x.employee_name}</td><td>{x.existing?'Recorded seat':'Founder review required'}</td></tr>)}
    </tbody></table></div>
    <button type="button" disabled={!profilesReady||!executivePlan[0]?.employee_id||executiveBusy||busy} onClick={establishHierarchy}>{executiveBusy?'Recording actual company roles…':'Apply workforce roles + CEO/CTO/Board hierarchy'}</button>
@@ -99,7 +99,7 @@ export function CompanyRolePlanner({api,me,employees,departments,profiles,board=
   </section>
   <small>Existing assigned responsibility profiles are preserved. This records duties only, not board seats, RBAC, verified competence, tasks or an always-on AI worker.</small>
   {message&&<p role="status">{message}</p>}{failed&&<p role="alert">{failed}</p>}
-  {expanded&&<div className="role-table-wrap"><table><thead><tr><th>Employee</th><th>Department & reporting</th><th>Role / work area</th><th>Specialization focus</th><th>Record</th></tr></thead><tbody>
+  {expanded&&<div className="role-table-wrap" role="region" aria-label="Scrollable employee expertise table" tabIndex={0}><table><thead><tr><th>Employee</th><th>Department & reporting</th><th>Role / work area</th><th>Specialization focus</th><th>Record</th></tr></thead><tbody>
    {plan.map(p=><tr key={p.id}><td>{p.name} <small>({p.kind})</small></td><td>{p.department}{p.manager_id&&<small> · manager recorded</small>}</td><td><b>{p.role_title}</b><small>{p.core_responsibilities}</small></td><td>{p.focus}</td><td className="role-status">{p.status==='configured'?'Existing profile retained':'Proposed profile'}</td></tr>)}
   </tbody></table></div>}
  </section>;
