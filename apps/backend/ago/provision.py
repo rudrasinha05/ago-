@@ -46,7 +46,7 @@ def add_reviewer(
         )
         security = SecurityControls(connection)
         for permission in (
-            "approval:read", "qa:read",
+            "approval:decide", "approval:read", "qa:review", "qa:read",
             "memory:read", "operations:respond", "operations:read",
             "calendar:read", "calendar:respond",
             "knowledge:review", "knowledge:read",
