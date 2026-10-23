@@ -157,7 +157,7 @@ def main(argv=None) -> int:
     try:
         result = verify(args.staged_directory, apply=args.apply,
                         confirm=args.confirm, timeout=args.timeout)
-    except (OSError, ValueError, RuntimeError, PermissionError) as exc:
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError, PermissionError) as exc:
         print(json.dumps({"status": "blocked", "reason": str(exc),
                           "tests_passed": False}), file=sys.stderr)
         return 2
