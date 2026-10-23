@@ -73,12 +73,27 @@ def test_decide_requires_rbac():
         )
 
 
-def test_decide_denies_unprivileged_reviewer_despite_generic_permissions():
+def test_decide_allows_independent_authorized_reviewer_for_operational_scope():
     gate = GovernanceGate(FakeApprovals(), FakeSecurity())
-    with pytest.raises(PermissionError, match="active human founder"):
+    result = gate.decide(
+        principal=principal(), request_id="approval-1",
+        tenant_id="t", approve=True, reason="Authorized independent review",
+    )
+    assert result["reviewer_id"] == "reviewer"
+    assert result["founder_only"] is False
+    assert result["solo_founder"] is False
+
+
+def test_decide_rejects_outsider_without_explicit_approval_rights():
+    class RoleSecurity(FakeSecurity):
+        def permitted(self, principal, permission, tenant_id):
+            return (super().permitted(principal, permission, tenant_id)
+                    and not (principal.subject == "reviewer" and permission == "approval:decide"))
+    gate = GovernanceGate(FakeApprovals(), RoleSecurity())
+    with pytest.raises(PermissionError, match="Independent operational"):
         gate.decide(
             principal=principal(), request_id="approval-1",
-            tenant_id="t", approve=True, reason="Unprivileged reviewer",
+            tenant_id="t", approve=True, reason="Outsider cannot review",
         )
 
 
