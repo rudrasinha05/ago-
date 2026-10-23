@@ -10,6 +10,12 @@ def test_founder_can_approve_or_deny_without_other_human_or_legacy_flags(case, m
     founder, outsider = headers["founder"], headers["reviewer"]
     monkeypatch.delenv("AGO_FOUNDER_SOLO_APPROVAL", raising=False)
     monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    # Only a genuinely sole active founder can self-authorize small internal
+    # validation. Deactivate the fixture's separate human reviewer first.
+    info["db"].execute(
+        "UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s",
+        (info["tenant"], info["reviewer_id"]),
+    )
     for decision in (True, False):
         proposal = post(client, "/v1/governance/approvals", founder,
                         {"action": "internal:brief"})
@@ -32,18 +38,19 @@ def test_founder_can_approve_or_deny_without_other_human_or_legacy_flags(case, m
     assert client.post(path, json={"approve": True, "reason": "Anonymous"}).status_code == 401
 
 
-def test_non_founder_cannot_gain_authority_from_old_reviewer_role(case):
+def test_human_reviewer_can_review_operations_but_cannot_take_founder_role(case):
     client, headers, info = case
-    founder, outsider = headers["founder"], headers["reviewer"]
+    founder, reviewer = headers["founder"], headers["reviewer"]
     req = post(client, "/v1/governance/approvals", founder,
                {"action": "tool:review:example"})
     path = "/v1/governance/approvals/" + req["request_id"] + "/decision"
-    post(client, path, outsider,
-         {"approve": True, "reason": "Reviewer role must not authorize"}, expected=403)
-    done = post(client, path, founder,
-                {"approve": True, "reason": "Authenticated active human Founder"})
+    post(client, path, founder,
+         {"approve": True, "reason": "Operational self review denied"}, expected=403)
+    done = post(client, path, reviewer,
+                {"approve": True, "reason": "Authenticated independent human review"})
     assert done["status"] == "approved"
-    assert done["reviewer_id"] == info["founder_id"]
+    assert done["reviewer_id"] == info["reviewer_id"]
+    assert done["reviewer_id"] != info["founder_id"]
 
 
 def test_project_quality_stage_uses_real_ai_specialist_not_a_third_party(case):
