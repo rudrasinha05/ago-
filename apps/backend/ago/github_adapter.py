@@ -173,6 +173,66 @@ def execute(project: dict, operation: dict, marker: str) -> dict:
     raise ValueError("Unsupported GitHub operation")
 
 
+
+def inspect_required_ci(project: dict, *, expected_sha: str,
+                        required_checks: tuple[str, ...]) -> dict:
+    """Observe exact develop-HEAD CI without changing GitHub or granting release.
+
+    A single green check does not establish a release. The project owner must
+    supply every required named check; missing, duplicate, failing, pending or
+    truncated provider evidence always blocks any positive verdict.
+    """
+    if not isinstance(expected_sha, str) or not re.fullmatch("[a-f0-9]{40}", expected_sha):
+        raise ValueError("Exact reviewed commit SHA required")
+    if (not isinstance(required_checks, tuple) or not 1 <= len(required_checks) <= 24
+            or any(not isinstance(x, str) or not 1 <= len(x) <= 120
+                   for x in required_checks)
+            or len(set(required_checks)) != len(required_checks)):
+        raise ValueError("Explicit unique required CI checks are mandatory")
+    name = repository_name(project["repository"])
+    root = "/repos/" + OWNER + "/" + name
+    remote = request("GET", root)
+    if (remote.get("owner", {}).get("login", "").lower() != OWNER
+            or remote.get("archived")
+            or remote.get("id") != project.get("repository_id")
+            or remote.get("private") != project.get("private")):
+        raise PermissionError("GitHub project identity changed since approval")
+    head = request("GET", root + "/git/ref/heads/develop")["object"]["sha"]
+    if not isinstance(head, str) or not re.fullmatch("[a-f0-9]{40}", head):
+        raise ValueError("GitHub develop reference is invalid")
+    if head != expected_sha:
+        raise PermissionError("Reviewed commit is no longer develop HEAD")
+    checks = request("GET", root + "/commits/" + expected_sha + "/check-runs?per_page=100")
+    statuses = request("GET", root + "/commits/" + expected_sha + "/status")
+    if (not isinstance(checks, dict) or not isinstance(statuses, dict)
+            or not isinstance(checks.get("check_runs"), list)
+            or not isinstance(statuses.get("statuses"), list)):
+        raise ValueError("GitHub CI evidence cannot be trusted")
+    runs = checks["check_runs"]
+    if checks.get("total_count", len(runs)) > len(runs):
+        raise PermissionError("CI checks were truncated; cannot certify readiness")
+    by_name = {check: [] for check in required_checks}
+    for run in runs:
+        name = run.get("name")
+        if name in by_name:
+            by_name[name].append(run.get("status") == "completed"
+                                 and run.get("conclusion") == "success")
+    for entry in statuses["statuses"]:
+        name = entry.get("context")
+        if name in by_name:
+            by_name[name].append(entry.get("state") == "success")
+    missing = [name for name, values in by_name.items() if not values]
+    blocked = [name for name, values in by_name.items()
+               if values and (len(values) > 1 or not all(values))]
+    verified = not missing and not blocked
+    return {"commit_sha": expected_sha, "develop_head": head,
+            "required_checks": list(required_checks),
+            "missing_checks": missing, "blocked_or_ambiguous_checks": blocked,
+            "ci_verified": verified, "merge_authorized": False,
+            "release_authorized": False,
+            "status": "required_ci_passed" if verified else "required_ci_incomplete"}
+
+
 def validate_operation(value: dict) -> None:
     schemas = {
         "create_repository": set(),
