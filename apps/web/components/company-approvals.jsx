@@ -7,9 +7,15 @@ const fmt=date=>date?new Date(date).toLocaleString():'Not recorded';
 const typeLabel={plan_review:'Strategy plan review',task_execution:'Governed task authorization',opportunity_review:'Business opportunity proposal',market_signal_review:'Internet market signal for founder review',governance_action:'Other governed action'};
 const subject=a=>a.market_signal_title||a.opportunity_title||a.plan_title||a.task_action||a.action;
 const isMine=(a,me)=>a.requester_id===me.id;
-const canDecide=(a,me)=>a.status==='pending'&&a.requires_founder_decision&&me.roles?.includes('founder');
+const canDecide=(a,me)=>a.status==='pending'&&(
+ a.requires_founder_decision
+  ? me.roles?.includes('founder')
+  : (a.requester_id!==me.id&&me.permissions?.includes('approval:decide')) ||
+    (a.founder_solo_mode&&me.roles?.includes('founder')&&
+     ['internal:brief','research:brief'].includes(a.action))
+);
 // Presentation only: server re-verifies real human identity, exact authority,
-// Founder-only strategic decisions, bounded CEO work and immutable audit.
+// Founder-only strategic scope, independently reviewed operations, bounded CEO work and immutable audit.
 
 export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onReviewed}) {
  const [rows,setRows]=useState(null),[selected,setSelected]=useState(null);
@@ -58,8 +64,14 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
   if(!selected||busy||!canDecide(selected,me)||!reason.trim())return;
   setBusy(true);setError('');setHandoffNotice('');
   try{
-   const result=await decideFounderScope(api,selected,approve,reason);
-   setHandoffNotice(result.notice);
+   if(selected.requires_founder_decision){
+    const result=await decideFounderScope(api,selected,approve,reason);
+    setHandoffNotice(result.notice);
+   }else{
+    await api.request('/v1/governance/approvals/'+encodeURIComponent(selected.id)+'/decision',
+     {method:'POST',body:{approve,reason:reason.trim()}});
+    setHandoffNotice('Independent operational decision recorded. Authorization and execution remain separate.');
+   }
    close();await refresh();setToast(null);await onReviewed?.();
   }catch(e){setError(e.message);}finally{setBusy(false);}
  }
@@ -72,7 +84,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
  return <section id="company-approval-inbox" className="approval-inbox" aria-label="Approvals inbox">
   <header className="approval-header">
    <div><h3>Approvals inbox <span className="approval-badge">{actionable.length} need my review</span></h3>
-    <p>{pending.length} pending requests company-wide · Founder controls strategy; CEO controls work within Founder-approved projects; Founder decides exceptional requests.</p></div>
+    <p>{pending.length} pending requests company-wide · Founder controls project strategy; CEO handles bounded approved project work; qualified independent humans review ordinary operations and QA.</p></div>
    <button type="button" onClick={()=>setShowAll(x=>!x)}>{showAll?'Show pending only':'Show history'}</button>
   </header>
   {rows===null?<p>Approval requests could not be loaded. Check permissions or connection.</p>:
@@ -80,7 +92,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
    <div className="approval-rows">{displayed.map(a=><article key={a.id} className="approval-entry">
     <div><strong>{subject(a)}</strong><small>{typeLabel[a.approval_type]} · {a.status} · Requested {fmt(a.created_at)}</small>
      <small>From: {a.requester_name} ({a.requester_role||'Role not recorded'})</small>
-     <small>{canDecide(a,me)?'Your decision is required':isMine(a,me)?'Awaiting an authorized decision':a.requires_founder_decision?'Awaiting founder decision':'Awaiting Founder / CEO verification'}</small></div>
+     <small>{canDecide(a,me)?'Your decision is required':isMine(a,me)?'Awaiting an authorized decision':a.requires_founder_decision?'Awaiting founder decision':'Awaiting qualified independent human review or scoped CEO reconciliation'}</small></div>
     <button type="button" onClick={()=>open(a)}>View approval details</button>
    </article>)}</div>}
   {toast&&<div className="approval-toast" role="status">
@@ -89,7 +101,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
     <button type="button" onClick={()=>setToast(null)} aria-label="Dismiss approval notification">×</button>
   </div>}
   {handoffNotice&&<div className="approval-toast" role="status" aria-label="Founder decision result">
-    <strong>Founder decision outcome</strong><p>{handoffNotice}</p>
+    <strong>Recorded decision outcome</strong><p>{handoffNotice}</p>
     <button type="button" onClick={()=>setHandoffNotice('')} aria-label="Dismiss Founder decision result">Dismiss</button>
   </div>}
   {selected&&<div className="approval-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)close();}}>
@@ -137,7 +149,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
          required maxLength={3000} rows={3} placeholder="Explain the reviewed scope and your decision"/>
        <div className="approval-actions"><button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(true)}>Approve</button>
         <button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(false)}>Deny</button></div>
-      </>:<p>{selected.requires_founder_decision?'Only an authenticated active human founder can decide this strategic request.':selected.founder_solo_mode?'Only the active founder can decide exceptional requests.':'Routine approved-project tasks belong to CEO verification; the founder decides other requests.'} You can still inspect its details.</p>}
+      </>:<p>{selected.requires_founder_decision?'Only an authenticated active human founder can decide this strategic request.':selected.founder_solo_mode?'The active Founder can decide this narrowly allowed standalone internal request.':'An independent authorized human reviews operations; CEO may verify only bounded, approved project tasks.'} You can still inspect its details.</p>}
     </div>}
     {error&&<p role="alert">{error}</p>}
    </section>
