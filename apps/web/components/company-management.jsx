@@ -8,7 +8,12 @@ export function ManagementWorkload({api,me,refreshSignal=0}) {
   let active=true;
   async function poll(){
    try{const data=await api.request('/v1/organization/company/management/workload');
-    if(active)setReport(data);
+    // A malformed/denied workforce payload is unknown evidence, not an empty
+    // or verified report. Never crash the rest of the founder's command center.
+    if(active)setReport(data && !Array.isArray(data) &&
+      Array.isArray(data.employees) && data.employees.every(e=>e && typeof e==='object') &&
+      (data.unassigned_project_stages===undefined ||
+       Array.isArray(data.unassigned_project_stages)) ? data : null);
    }catch{if(active)setReport(null);}
   }
   poll();const interval=setInterval(poll,13000);
