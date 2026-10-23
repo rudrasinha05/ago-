@@ -59,15 +59,16 @@ def test_native_graph_and_actual_ago_boundary_same_local_operation(case, conditi
     request = post(client, "/v1/governance/approvals", f, {"action":"internal:brief"})
     post(client, f"/v1/tasks/{task['id']}/approval", f, {"approval_id":request["request_id"]})
     if condition != "missing_approval":
-        # A separate unprivileged human must never inherit Founder authority.
+        # Ordinary task review is independent of its submitting Founder,
+        # while project strategy alone requires that Founder's authority.
         approval_path = f"/v1/governance/approvals/{request['request_id']}/decision"
-        post(client, approval_path, r, {
-            "approve": True, "reason": "Attempted non-Founder approval",
+        post(client, approval_path, f, {
+            "approve": True, "reason": "Operational self-review denied",
         }, expected=403)
-        approved = post(client, approval_path, f, {
-            "approve": True, "reason": "Founder authorizes this single local task",
+        approved = post(client, approval_path, r, {
+            "approve": True, "reason": "Independent reviewer authorizes exact task",
         })
-        assert approved["reviewer_id"] == info["founder_id"]
+        assert approved["reviewer_id"] == info["reviewer_id"]
     if condition == "contained":
         emergency(client, f, ["tasks","agents"])
     if condition == "foreign":
