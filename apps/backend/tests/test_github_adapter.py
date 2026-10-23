@@ -171,3 +171,100 @@ def test_existing_public_repository_reuse_is_explicit_and_identity_pinned(monkey
             {"operation": "create_issue", "payload": {"title": "x", "body": "y"}},
             "marker",
         )
+
+
+
+def test_required_ci_requires_every_named_pass_and_exact_develop_head(monkeypatch):
+    calls = []
+    def get(method, path, body=None):
+        calls.append((method, path))
+        assert method == "GET"
+        if path.endswith("/project"):
+            return {"owner": {"login": gh.OWNER}, "id": 42, "private": True}
+        if path.endswith("/git/ref/heads/develop"):
+            return {"object": {"sha": "a" * 40}}
+        if "/check-runs" in path:
+            return {"total_count": 2, "check_runs": [
+                {"name": "Backend QA", "status": "completed", "conclusion": "success"},
+                {"name": "Browser QA", "status": "completed", "conclusion": "success"},
+            ]}
+        if path.endswith("/status"):
+            return {"statuses": []}
+        raise AssertionError("Unexpected endpoint: " + path)
+    monkeypatch.setattr(gh, "request", get)
+    project = {"repository": "project", "repository_id": 42, "private": True}
+    state = gh.inspect_required_ci(project, expected_sha="a" * 40,
+                                   required_checks=("Backend QA", "Browser QA"))
+    assert state["ci_verified"] is True
+    assert state["release_authorized"] is False
+    assert state["merge_authorized"] is False
+    assert all(method == "GET" for method, path in calls)
+    partial = gh.inspect_required_ci(project, expected_sha="a" * 40,
+                                    required_checks=("Backend QA", "Missing security check"))
+    assert partial["ci_verified"] is False
+    assert partial["missing_checks"] == ["Missing security check"]
+
+
+def test_ci_gate_denies_stale_sha_malformed_requirements_and_foreign_project(monkeypatch):
+    calls = []
+    def request(method, path, body=None):
+        calls.append(path)
+        if path.endswith("/project"):
+            return {"owner": {"login": gh.OWNER}, "id": 42, "private": True}
+        if path.endswith("/git/ref/heads/develop"):
+            return {"object": {"sha": "b" * 40}}
+        raise AssertionError("No CI reads allowed for an out-of-date commit")
+    monkeypatch.setattr(gh, "request", request)
+    p = {"repository": "project", "repository_id": 42, "private": True}
+    for checks in ((), ("same", "same"), ("",), tuple(str(i) for i in range(25))):
+        with pytest.raises(ValueError):
+            gh.inspect_required_ci(p, expected_sha="a" * 40, required_checks=checks)
+    with pytest.raises(PermissionError, match="develop HEAD"):
+        gh.inspect_required_ci(p, expected_sha="a" * 40, required_checks=("Backend QA",))
+    assert not any("/check-runs" in x for x in calls)
+    with pytest.raises(PermissionError):
+        gh.inspect_required_ci({**p, "repository_id": 99},
+                                expected_sha="a" * 40, required_checks=("Backend QA",))
+
+
+@pytest.mark.parametrize("check_runs,statuses,total,reason", [
+    ([{"name": "Backend QA", "status": "in_progress", "conclusion": None}], [], 1, "pending"),
+    ([{"name": "Backend QA", "status": "completed", "conclusion": "failure"}], [], 1, "failed"),
+    ([{"name": "Backend QA", "status": "completed", "conclusion": "success"},
+      {"name": "Backend QA", "status": "completed", "conclusion": "failure"}], [], 2, "duplicate"),
+    ([{"name": "Backend QA", "status": "completed", "conclusion": "success"}],
+     [{"context": "Backend QA", "state": "failure"}], 1, "conflicting"),
+])
+def test_ci_gate_blocks_failed_pending_duplicate_or_conflicting_checks(
+        monkeypatch, check_runs, statuses, total, reason):
+    def get(method, path, body=None):
+        if path.endswith("/project"):
+            return {"owner": {"login": gh.OWNER}, "id": 42, "private": True}
+        if path.endswith("/git/ref/heads/develop"):
+            return {"object": {"sha": "a" * 40}}
+        if "/check-runs" in path:
+            return {"check_runs": check_runs, "total_count": total}
+        if path.endswith("/status"):
+            return {"statuses": statuses}
+        raise AssertionError("Unexpected path")
+    monkeypatch.setattr(gh, "request", get)
+    actual = gh.inspect_required_ci({"repository": "project", "repository_id": 42,
+                                    "private": True}, expected_sha="a" * 40,
+                                   required_checks=("Backend QA",))
+    assert actual["ci_verified"] is False, reason
+    assert actual["blocked_or_ambiguous_checks"] == ["Backend QA"]
+    assert actual["release_authorized"] is False
+
+
+def test_ci_gate_refuses_truncated_evidence(monkeypatch):
+    def get(method, path, body=None):
+        if path.endswith("/project"):
+            return {"owner": {"login": gh.OWNER}, "id": 42, "private": True}
+        if path.endswith("/git/ref/heads/develop"):
+            return {"object": {"sha": "a" * 40}}
+        return {"check_runs": [], "total_count": 101}
+    monkeypatch.setattr(gh, "request", get)
+    with pytest.raises(PermissionError, match="truncated"):
+        gh.inspect_required_ci({"repository": "project", "repository_id": 42,
+                                "private": True}, expected_sha="a" * 40,
+                               required_checks=("Required QA",))
