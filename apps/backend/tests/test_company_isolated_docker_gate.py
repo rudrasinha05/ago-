@@ -112,3 +112,23 @@ def test_tampering_unreviewed_content_and_links_are_denied(tmp_path):
     (directory / "src" / "mathlib.py").symlink_to(directory / "tests" / "test_mathlib.py")
     with pytest.raises(PermissionError):
         MODULE["verify"](directory)
+
+
+def test_reviewed_unsubmitted_github_draft_is_allowed_only_if_exact(tmp_path):
+    from uuid import uuid4
+    from ago.company_engineering import draft_github_commit_operation
+
+    directory, candidate = staged(tmp_path)
+    operation = draft_github_commit_operation(
+        candidate, project_id=str(uuid4()), operation_id=str(uuid4()),
+        expected_sha="a" * 40, message="Founder reviewed exact staged Python source"
+    )
+    draft_file = directory / "AGO_UNSUBMITTED_GITHUB_OPERATION.json"
+    draft_file.write_text(json.dumps(operation), encoding="utf-8")
+    inspection = MODULE["verify"](directory)
+    assert inspection["status"] == "inspection_only"
+    assert inspection["tests_executed"] is False
+    operation["payload"]["files"][0]["content"] = "def add(a,b): return 0\\n"
+    draft_file.write_text(json.dumps(operation), encoding="utf-8")
+    with pytest.raises(PermissionError, match="differs"):
+        MODULE["verify"](directory)
