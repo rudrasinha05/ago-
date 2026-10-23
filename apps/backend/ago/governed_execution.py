@@ -27,17 +27,21 @@ class GovernanceGate:
         strategic = self.approvals.requires_founder_decision(
             request_id=request_id, tenant_id=tenant_id
         )
-        if ("founder" not in principal.roles or not self.security.permitted(
-            principal, "approval:founder", tenant_id
-        ) or not self.approvals.founder_solo_eligible(
-            tenant_id=tenant_id, founder_id=principal.subject
-        )):
-            raise PermissionError("Only the active human founder can approve or deny")
+        # Human Founder controls strategy. An independently authorized,
+        # authenticated reviewer may decide ordinary operational requests.
+        # CEO-approved project tasks use a separate exact-scope service.
+        is_founder = ("founder" in principal.roles and
+                      self.security.permitted(principal, "approval:founder", tenant_id))
+        if strategic:
+            if not is_founder:
+                raise PermissionError("Only the active human Founder can approve strategic scope")
+        elif not self.security.permitted(principal, "approval:decide", tenant_id):
+            raise PermissionError("Independent operational approval permission required")
         return self.approvals.decide(
             request_id=request_id, tenant_id=tenant_id,
             reviewer_id=principal.subject, approve=approve,
             reason=reason, authorized=True, founder_only=strategic,
-            solo_founder=not strategic,
+            solo_founder=bool(is_founder and not strategic),
         )
 
     def authorize_task(self, task: GovernedTask, *, principal: Principal) -> GovernedTask:
