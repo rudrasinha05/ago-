@@ -169,7 +169,7 @@ test('red routed task follows founder, department and employee and opens actual 
 
 test('founder can create first real governed task then separately approve and dispatch once',async({page})=>{
  const {errors}=await fixtures(page);
- const rights=['brain:read','organization:read','task:read','task:create','approval:request','approval:read','approval:decide','agent:dispatch','task:execute'];
+ const rights=['brain:read','brain:manage','organization:read','organization:manage','task:read','task:create','approval:request','approval:read','approval:decide','approval:founder','agent:dispatch','task:execute'];
  const realTaskId='30000000-0000-4000-8000-000000000011';
  const approvalId='30000000-0000-4000-8000-000000000012';
  const tasks=[],approvals=[];
@@ -197,7 +197,7 @@ test('founder can create first real governed task then separately approve and di
   tasks[0].status='waiting_approval';tasks[0].approval_id=approvalId;
   approvals.push({id:approvalId,action:'internal:brief',status:'pending',requester_id:user,requester_name:'Founder',
    task_id:realTaskId,task_action:'internal:brief',task_assignee_name:'Research specialist',
-   approval_type:'task_execution',founder_solo_mode:true,review_routing:'Explicit local founder review'});
+   approval_type:'task_execution',founder_solo_mode:true,requires_founder_decision:true,review_routing:'Explicit local founder review'});
   return route.fulfill({status:200,json:{approval_id:approvalId,status:'waiting_approval'}});
  });
  await page.route('**/v1/governance/approvals/*/decision',route=>{
