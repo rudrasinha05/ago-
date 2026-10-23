@@ -262,6 +262,8 @@ def test_ci_gate_refuses_truncated_evidence(monkeypatch):
             return {"owner": {"login": gh.OWNER}, "id": 42, "private": True}
         if path.endswith("/git/ref/heads/develop"):
             return {"object": {"sha": "a" * 40}}
+        if path.endswith("/status"):
+            return {"statuses": []}
         return {"check_runs": [], "total_count": 101}
     monkeypatch.setattr(gh, "request", get)
     with pytest.raises(PermissionError, match="truncated"):
