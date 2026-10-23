@@ -37,6 +37,12 @@ def test_founder_can_approve_or_deny_without_other_human_or_legacy_flags(case, m
         """, (info["tenant"], proposal["request_id"], info["founder_id"],
               "approved" if decision else "rejected")).fetchone()
     assert client.post(path, json={"approve": True, "reason": "Anonymous"}).status_code == 401
+    monkeypatch.setenv("AGO_ENVIRONMENT", "production")
+    production = post(client, "/v1/governance/approvals", founder,
+                      {"action": "internal:brief"})
+    post(client, "/v1/governance/approvals/" + production["request_id"] + "/decision",
+         founder, {"approve": True, "reason": "Production self-review prohibited"},
+         expected=403)
 
 
 def test_human_reviewer_can_review_operations_but_cannot_take_founder_role(case):

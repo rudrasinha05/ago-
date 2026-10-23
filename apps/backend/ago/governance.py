@@ -181,7 +181,13 @@ class ApprovalRepository:
             founder_self = reviewer_id == str(row["requester_id"])
             sole_local = False
             if founder_self and not founder_only and solo_founder and founder:
-                if row["action"] in ("internal:brief", "research:brief"):
+                # Explicit development-only fallback; missing or production
+                # environment cannot turn one owner into a QA reviewer.
+                from os import getenv
+                local = getenv("AGO_ENVIRONMENT", "").lower() in (
+                    "development", "test", "testing"
+                )
+                if local and row["action"] in ("internal:brief", "research:brief"):
                     other = self.connection.execute("""
                         SELECT 1 FROM ago_users u
                         JOIN ago_employees e ON e.tenant_id=u.tenant_id
