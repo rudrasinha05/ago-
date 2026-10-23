@@ -197,7 +197,7 @@ test('founder can create first real governed task then separately approve and di
   tasks[0].status='waiting_approval';tasks[0].approval_id=approvalId;
   approvals.push({id:approvalId,action:'internal:brief',status:'pending',requester_id:user,requester_name:'Founder',
    task_id:realTaskId,task_action:'internal:brief',task_assignee_name:'Research specialist',
-   approval_type:'task_execution',founder_solo_mode:true,requires_founder_decision:true,review_routing:'Explicit local founder review'});
+   approval_type:'task_execution',founder_solo_mode:true,requires_founder_decision:false,review_routing:'Sole active Founder, local-only internal task'});
   return route.fulfill({status:200,json:{approval_id:approvalId,status:'waiting_approval'}});
  });
  await page.route('**/v1/governance/approvals/*/decision',route=>{
