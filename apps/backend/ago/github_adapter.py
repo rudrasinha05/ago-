@@ -182,9 +182,13 @@ def inspect_required_ci(project: dict, *, expected_sha: str,
     supply every required named check; missing, duplicate, failing, pending or
     truncated provider evidence always blocks any positive verdict.
     """
-    if not isinstance(expected_sha, str) or not re.fullmatch("[a-f0-9]{40}", expected_sha):
+    if not isinstance(expected_sha, str):
+        raise TypeError("Exact reviewed commit SHA must be text")
+    if not re.fullmatch("[a-f0-9]{40}", expected_sha):
         raise ValueError("Exact reviewed commit SHA required")
-    if (not isinstance(required_checks, tuple) or not 1 <= len(required_checks) <= 24
+    if not isinstance(required_checks, tuple):
+        raise TypeError("Required CI check names must be a tuple")
+    if (not 1 <= len(required_checks) <= 24
             or any(not isinstance(x, str) or not 1 <= len(x) <= 120
                    for x in required_checks)
             or len(set(required_checks)) != len(required_checks)):
@@ -204,10 +208,11 @@ def inspect_required_ci(project: dict, *, expected_sha: str,
         raise PermissionError("Reviewed commit is no longer develop HEAD")
     checks = request("GET", root + "/commits/" + expected_sha + "/check-runs?per_page=100")
     statuses = request("GET", root + "/commits/" + expected_sha + "/status")
-    if (not isinstance(checks, dict) or not isinstance(statuses, dict)
-            or not isinstance(checks.get("check_runs"), list)
+    if not isinstance(checks, dict) or not isinstance(statuses, dict):
+        raise TypeError("GitHub CI response must contain objects")
+    if (not isinstance(checks.get("check_runs"), list)
             or not isinstance(statuses.get("statuses"), list)):
-        raise ValueError("GitHub CI evidence cannot be trusted")
+        raise TypeError("GitHub CI evidence must contain lists")
     runs = checks["check_runs"]
     if checks.get("total_count", len(runs)) > len(runs):
         raise PermissionError("CI checks were truncated; cannot certify readiness")
