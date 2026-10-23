@@ -21,11 +21,12 @@ export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone
   finally{setBusy('');}
  }
  return <div className="employee-approval-zone" style={{'--employee-popup-zoom':Math.min(5,Math.max(.75,1/zoom))}} onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}
-  onFocus={()=>setOpen(true)} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOpen(false)}}>
+  onFocus={()=>setOpen(true)} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOpen(false)}} onKeyDown={e=>{if(e.key==='Escape'){setOpen(false);e.stopPropagation();}}}>
   <button className="employee-approval-counter" type="button" aria-label={count+' notifications for '+employee.name}
-   aria-expanded={open} onClick={()=>setOpen(v=>!v)}>{count}</button>
+   aria-expanded={open} onClick={()=>setOpen(true)}>{count}</button>
   {open&&<section className="employee-approval-flyout" aria-label={employee.name+' notification actions'}>
    <strong>{employee.name} · {count} update(s)</strong>
+   <button type="button" className="employee-approval-close" aria-label={'Close '+employee.name+' notifications'} onClick={()=>setOpen(false)}>×</button>
    {!!updates&&<p>{updates} recorded work updates. Select the employee for details.</p>}
    {!pending.length&&<p>No pending Founder decisions.</p>}
    {pending.map(a=><article key={a.id}><p><b>{a.action}</b> · pending</p>
