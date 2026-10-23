@@ -38,12 +38,13 @@ def test_first_governed_employee_task_requires_founder_consent_and_qa_evidence(c
     assert approval["action"] == "internal:brief"
     assert approval["task_id"] == created["id"]
 
-    # Standalone test tasks may still require direct Founder consent.
+    # A present, registered independent human reviewer must approve an
+    # ordinary task. The Founder's own submission cannot self-review it.
     post(client, f"/v1/governance/approvals/{requested['approval_id']}/decision",
-         reviewer, {"approve": True, "reason": "No third-party approvals"}, expected=403)
+         founder, {"approve": True, "reason": "No operational self-review"}, expected=403)
     decided = post(
         client, f"/v1/governance/approvals/{requested['approval_id']}/decision",
-        founder, {"approve": True, "reason": "Founder permits isolated internal validation"}
+        reviewer, {"approve": True, "reason": "Independent human permits internal validation"}
     )
     assert decided["status"] == "approved"
 
