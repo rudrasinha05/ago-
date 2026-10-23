@@ -1278,6 +1278,15 @@ class CompanyChat:
                    requester.role_title AS requester_role,
                    manager.name AS requester_manager_name,
                    COALESCE(reviewer.name,'Not yet decided') AS reviewer_name,
+                   EXISTS (
+                     SELECT 1 FROM ago_project_stage_delegation_proposals stage_d
+                     JOIN ago_founder_intakes stage_i
+                       ON stage_i.tenant_id=stage_d.tenant_id
+                       AND stage_i.id=stage_d.intake_id
+                     WHERE stage_d.tenant_id=a.tenant_id
+                       AND a.action=('company:stage-delegation:' || stage_d.id::text)
+                       AND a.requester_id=stage_i.founder_id
+                   ) AS founder_stage_scope,
                    p.id AS plan_id,p.title AS plan_title,
                    left(g.description,3000) AS goal_brief_excerpt,
                    i.id AS founder_intake_id,
@@ -1329,7 +1338,17 @@ class CompanyChat:
             ORDER BY (a.status='pending') DESC,a.created_at DESC,a.id DESC
             LIMIT %s
         """, (tenant_id,limit)).fetchall()
-        solo = bool(reader_id and founder_solo_eligible(self.db, tenant_id, reader_id))
+        active_founder = bool(reader_id and founder_solo_eligible(self.db, tenant_id, reader_id))
+        other_reviewer = self.db.execute("""
+            SELECT 1 FROM ago_users u
+            JOIN ago_employees e ON e.tenant_id=u.tenant_id
+              AND e.id=u.id AND e.kind='human'
+            JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
+            JOIN ago_role_permissions p ON p.tenant_id=r.tenant_id
+              AND p.role=r.role AND p.permission='approval:decide'
+            WHERE u.tenant_id=%s AND u.active AND u.id<>%s LIMIT 1
+        """, (tenant_id, reader_id)).fetchone() if active_founder else None
+        solo = active_founder and other_reviewer is None
         result = []
         for row in rows:
             item = dict(row)
@@ -1340,16 +1359,20 @@ class CompanyChat:
                 "task_execution" if item["task_id"] else "governance_action"
             )
             strategic = bool(
-                item["market_signal_id"] or item["opportunity_id"] or item["founder_intake_id"]
+                item["market_signal_id"] or item["opportunity_id"] or
+                item["founder_intake_id"] or item["founder_stage_scope"]
             )
             item["requires_founder_decision"] = strategic
-            item["founder_solo_mode"] = bool(solo and not strategic)
+            item["founder_solo_mode"] = bool(
+                solo and not strategic and
+                item["action"] in ("internal:brief", "research:brief")
+            )
             item["review_routing"] = (
-                "Founder only — active authenticated human founder"
+                "Authenticated human Founder only: original approved strategic project scope"
                 if strategic else
-                "Founder controls human decisions; CEO verifies bounded approved-project tasks"
-                if solo else
-                "Founder alone decides extraordinary approval requests; CEO verifies routine tasks within an approved project"
+                "Founder may decide only narrowly allowed standalone internal work when no independent human reviewer exists; CEO verifies bounded approved-project tasks"
+                if item["founder_solo_mode"] else
+                "Independent active human review of ordinary operations; CEO verifies bounded Founder-approved project tasks"
             )
             item["next_action"] = (
                 "Founder approval permits market validation and a governed project plan. No autonomous sales, email campaigns, ad spend or release is authorized."
