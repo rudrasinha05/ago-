@@ -1,0 +1,114 @@
+"""Offline mocked checks for AGO's explicit Docker candidate-test boundary.
+
+Mocks never execute model-generated source or require Docker on CI.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from runpy import run_path
+from types import SimpleNamespace
+
+import pytest
+
+from ago.company_engineering import reviewed_candidate, stage_candidate
+
+SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "ago_verify_candidate.py"
+MODULE = run_path(str(SCRIPT))
+
+
+def staged(tmp_path):
+    source = {
+        "files": [
+            {"path": "src/mathlib.py", "content": "def add(a, b):\n    return a + b\n"},
+            {"path": "tests/test_mathlib.py", "content":
+             "import unittest\nfrom src.mathlib import add\n"
+             "class AddTests(unittest.TestCase):\n"
+             "    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n"},
+        ],
+        "acceptance_checks": ["Check arithmetic in an isolated, reviewed test"],
+    }
+    directory = tmp_path / "staged"
+    candidate = reviewed_candidate(json.dumps(source))
+    stage_candidate(candidate, directory)
+    return directory, candidate
+
+
+def test_preview_is_read_only_and_requires_confirmation(tmp_path):
+    directory, candidate = staged(tmp_path)
+    preview = MODULE["verify"](directory)
+    assert preview["status"] == "inspection_only"
+    assert preview["candidate_sha256"] == candidate["candidate_sha256"]
+    assert preview["tests_executed"] is False
+    assert not (directory / "AGO_TEST_RECEIPT.json").exists()
+    with pytest.raises(PermissionError):
+        MODULE["verify"](directory, apply=True)
+    with pytest.raises(ValueError):
+        MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"], timeout=301)
+
+
+def test_docker_command_is_offline_unprivileged_and_read_only(tmp_path):
+    directory, _ = staged(tmp_path)
+    command = MODULE["docker_command"](directory, "ago-qa-" + "a" * 32)
+    for item in ("--network", "none", "--read-only", "--cap-drop=ALL",
+                 "--security-opt=no-new-privileges", "--pull=never",
+                 "--user=65534:65534", "--pids-limit=64"):
+        assert item in command
+    assert "dst=/work,readonly" in " ".join(command)
+    assert MODULE["IMAGE"] in command
+    with pytest.raises(ValueError):
+        MODULE["docker_command"](directory, "untrusted-name")
+
+
+def test_successful_test_evidence_does_not_imply_qa_or_release(tmp_path):
+    directory, candidate = staged(tmp_path)
+    commands = []
+    def execute(command, **opts):
+        commands.append(command)
+        assert opts["timeout"] == 90
+        return SimpleNamespace(returncode=0, stdout="AGO_UNITTEST_CASES=1\n",
+                               stderr="test_add ... ok\n")
+    record = MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"],
+                              runner=execute)
+    assert len(commands) == 1
+    assert record["candidate_sha256"] == candidate["candidate_sha256"]
+    assert record["unittest_cases"] == 1
+    assert record["tests_passed"] is True
+    assert record["git_committed"] is False
+    assert record["independent_qa_approved"] is False
+    assert record["release_ready"] is False
+    assert json.loads((directory / "AGO_TEST_RECEIPT.json").read_text()) == record
+    with pytest.raises(FileExistsError):
+        MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"], runner=execute)
+    assert len(commands) == 1
+
+
+@pytest.mark.parametrize("code,cases,passed", [
+    (1, "AGO_UNITTEST_CASES=2\n", False),
+    (0, "Unverified Docker output\n", False),
+    (0, "AGO_UNITTEST_CASES=0\n", False),
+])
+def test_failure_or_zero_tests_never_marks_candidate_passed(tmp_path, code, cases, passed):
+    directory, _ = staged(tmp_path)
+    def execute(_command, **kwargs):
+        return SimpleNamespace(returncode=code, stdout=cases, stderr="")
+    output = MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"],
+                              runner=execute)
+    assert output["tests_passed"] is passed
+    assert output["release_ready"] is False
+
+
+def test_tampering_unreviewed_content_and_links_are_denied(tmp_path):
+    directory, _ = staged(tmp_path)
+    (directory / "src" / "mathlib.py").write_text("def add(a,b): return 9\n")
+    with pytest.raises(PermissionError):
+        MODULE["verify"](directory)
+    directory, _ = staged(tmp_path / "fresh")
+    (directory / "src" / "extra.py").write_text("print('unknown')\n")
+    with pytest.raises(PermissionError):
+        MODULE["verify"](directory)
+    directory, _ = staged(tmp_path / "linked")
+    (directory / "src" / "mathlib.py").unlink()
+    (directory / "src" / "mathlib.py").symlink_to(directory / "tests" / "test_mathlib.py")
+    with pytest.raises(PermissionError):
+        MODULE["verify"](directory)
