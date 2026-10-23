@@ -8,6 +8,7 @@ from ago.experiments import ExperimentStore
 from ago.governance import ApprovalRepository
 from ago.organization_store import OrganizationStore
 from ago.scorecard import Scorecard
+from ago.security_controls import SecurityControls
 
 
 @pytest.fixture
@@ -32,6 +33,11 @@ def case():
                     "INSERT INTO ago_users(id,tenant_id,email,password_hash) VALUES (%s,%s,%s,%s)",
                     (person.id, tenant, f"evo{index}@example.test", "test-only"),
                 )
+            db.execute(
+                "INSERT INTO ago_user_roles(tenant_id,user_id,role) VALUES (%s,%s,'reviewer')",
+                (tenant, people[1].id),
+            )
+            SecurityControls(db).grant(tenant, "reviewer", "approval:decide")
             yield db, tenant, people
         finally:
             db.rollback()

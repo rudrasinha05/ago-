@@ -39,6 +39,11 @@ def case():
                 (tenant, user.id),
             )
             SecurityControls(db).grant(tenant, "operator", "task:execute")
+            db.execute(
+                "INSERT INTO ago_user_roles(tenant_id,user_id,role) VALUES (%s,%s,'reviewer')",
+                (tenant, reviewer.id),
+            )
+            SecurityControls(db).grant(tenant, "reviewer", "approval:decide")
             yield db, tenant, user, reviewer, agent
         finally:
             db.rollback()

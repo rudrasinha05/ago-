@@ -86,6 +86,11 @@ def test_approved_task_lifecycle_and_audit(db):
     )
     security = SecurityControls(db)
     security.grant(tenant_id, "operator", "task:execute")
+    db.execute(
+        "INSERT INTO ago_user_roles(tenant_id,user_id,role) VALUES (%s,%s,'reviewer')",
+        (tenant_id, reviewer.id),
+    )
+    security.grant(tenant_id, "reviewer", "approval:decide")
     principal = Principal(reviewer.id, tenant_id, ("operator",))
     approvals = ApprovalRepository(db)
     proposal = approvals.propose(
