@@ -81,7 +81,15 @@ class ApprovalRepository:
                        AND i.plan_id=p.id
                      WHERE p.tenant_id=a.tenant_id
                        AND a.action=('brain:activate:' || p.id::text)
-                   ) AS founder_project_plan
+                   ) AS founder_project_plan,
+                   EXISTS (
+                     SELECT 1 FROM ago_project_stage_delegation_proposals d
+                     JOIN ago_founder_intakes i ON i.tenant_id=d.tenant_id
+                       AND i.id=d.intake_id
+                     WHERE d.tenant_id=a.tenant_id
+                       AND a.action=('company:stage-delegation:' || d.id::text)
+                       AND a.requester_id=i.founder_id
+                   ) AS founder_project_stage
             FROM ago_approval_requests a WHERE a.tenant_id=%s AND a.id=%s
         """, (tenant_id, request_id)).fetchone()
         if row is None:
@@ -90,6 +98,7 @@ class ApprovalRepository:
         return (
             action.startswith(("company:market-signal:", "company:opportunity:"))
             or bool(row["founder_project_plan"])
+            or bool(row["founder_project_stage"])
         )
 
     def founder_solo_eligible(self, *, tenant_id: str, founder_id: str) -> bool:
@@ -128,10 +137,6 @@ class ApprovalRepository:
             )
             if scoped_founder != founder_only or (solo_founder and scoped_founder):
                 raise PermissionError("Approval authority does not match stored action scope")
-            if not self.founder_solo_eligible(
-                tenant_id=tenant_id, founder_id=reviewer_id
-            ):
-                raise PermissionError("Only the active human founder can decide")
             current = ApprovalRequest(
                 request_id=str(row["id"]),
                 tenant_id=str(row["tenant_id"]),
@@ -159,15 +164,43 @@ class ApprovalRepository:
                 (reviewer_id, tenant_id),
             ).fetchone()
             if founder_only and founder is None:
-                raise PermissionError("Strategic decisions require an active human founder")
-            # This human endpoint accepts the founder only; project-scoped
-            # CEO decisions use a separate bounded, audited service.
+                raise PermissionError("Strategic decisions require an active human Founder")
+            # Reviewer authorization is rechecked at the persistence boundary,
+            # not inferred from the API caller's 'authorized' boolean.
+            permitted = self.connection.execute("""
+                SELECT 1 FROM ago_user_roles r
+                JOIN ago_role_permissions p ON p.tenant_id=r.tenant_id
+                  AND p.role=r.role AND p.permission='approval:decide'
+                WHERE r.tenant_id=%s AND r.user_id=%s LIMIT 1
+            """, (tenant_id, reviewer_id)).fetchone() is not None
+            if not founder_only and not permitted:
+                raise PermissionError("Active independent reviewer permission required")
+            # Sole-Founder local internal validation is a very narrow fallback,
+            # never a replacement for constitutional/QA/calendar review. Even
+            # this fallback is forbidden while another real human approver exists.
+            founder_self = reviewer_id == str(row["requester_id"])
+            sole_local = False
+            if founder_self and not founder_only and solo_founder and founder:
+                if row["action"] in ("internal:brief", "research:brief"):
+                    other = self.connection.execute("""
+                        SELECT 1 FROM ago_users u
+                        JOIN ago_employees e ON e.tenant_id=u.tenant_id
+                          AND e.id=u.id AND e.kind='human'
+                        JOIN ago_user_roles r ON r.tenant_id=u.tenant_id
+                          AND r.user_id=u.id
+                        JOIN ago_role_permissions p ON p.tenant_id=r.tenant_id
+                          AND p.role=r.role AND p.permission='approval:decide'
+                        WHERE u.tenant_id=%s AND u.id<>%s AND u.active LIMIT 1
+                    """, (tenant_id, reviewer_id)).fetchone()
+                    sole_local = other is None
+                if not sole_local:
+                    raise PermissionError("Operational self-review requires a genuine sole-Founder local internal task")
             decided = current.decide(
                 reviewer_id=reviewer_id,
                 tenant_id=tenant_id,
                 approve=approve,
                 reason=reason,
-                founder_authorized=bool(founder),
+                founder_authorized=bool(founder_only and founder or sole_local),
             )
             self.connection.execute(
                 """UPDATE ago_approval_requests
