@@ -10,7 +10,7 @@ const isMine=(a,me)=>a.requester_id===me.id;
 const canDecide=(a,me)=>a.status==='pending'&&(
  a.requires_founder_decision
   ? me.roles?.includes('founder')
-  : (a.requester_id!==me.id&&me.permissions?.includes('approval:decide')) ||
+  : (a.requester_id!==me.id&&!me.roles?.includes('founder')&&me.permissions?.includes('approval:decide')) ||
     (a.founder_solo_mode&&me.roles?.includes('founder')&&
      ['internal:brief','research:brief'].includes(a.action))
 );
