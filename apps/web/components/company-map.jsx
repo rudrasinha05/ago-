@@ -117,14 +117,22 @@ export function CompanyMap({api,me,data,onRefresh}) {
   },[api,channel]);
   const refreshEvents=useCallback(async()=>{
     try{
-      const next=await api.request(BASE+'/notifications');
+      const previousId=lastEvent.current;
+      const path=BASE+'/notifications'+(previousId===null?'':'?after_id='+previousId);
+      const next=await api.request(path);
       if(!alive.current)return;
-      const high=next.recent?.[0]?.id||0;
-      if(lastEvent.current!==null){
-        const fresh=(next.recent||[]).filter(e=>e.id>lastEvent.current).reverse();
-        if(fresh.length)setEventQueue(old=>[...old,...fresh].slice(-100));
+      if(previousId!==null){
+        // API returns forward cursor pages, never drop old queued popups.
+        const fresh=(next.recent||[]).filter(e=>e.id>previousId);
+        if(fresh.length){
+          setEventQueue(old=>[...old,...fresh]);
+          lastEvent.current=fresh[fresh.length-1].id;
+        }
+      }else{
+        // Initial boot starts from the newest known persisted ID; historic
+        // events remain visible through the notification ledger and badges.
+        lastEvent.current=next.recent?.[0]?.id||0;
       }
-      lastEvent.current=Math.max(lastEvent.current||0,high);
       setEventData(next);
     }catch{if(alive.current)setEventData(null);}
   },[api]);

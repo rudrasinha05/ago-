@@ -51,10 +51,12 @@ def activity(actor=Depends(authenticated), repositories=Depends(repository_scope
 
     
 @router.get('/notifications')
-def notifications(actor=Depends(authenticated), repositories=Depends(repository_scope)):
+def notifications(after_id: int | None = Query(default=None,gt=0),
+                  actor=Depends(authenticated), repositories=Depends(repository_scope)):
     allowed(repositories, actor, 'organization:read')
     allowed(repositories, actor, 'task:read')
-    return repositories.resolve(CompanyChatPort).notifications(actor.tenant_id, reader_id=actor.subject)
+    return repositories.resolve(CompanyChatPort).notifications(
+        actor.tenant_id, reader_id=actor.subject, after_id=after_id)
 
 
 class StaffingInput(StrictInput):

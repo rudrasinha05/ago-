@@ -232,12 +232,20 @@ class CompanyChat:
                        (employee.id, actor.tenant_id, row['id']))
             return asdict(employee)
 
-    def notifications(self, tenant_id: str, reader_id: str | None = None) -> dict:
-        """Read only role-visible persisted events; no cross-project pop-up leaks."""
+    def notifications(self, tenant_id: str, reader_id: str | None = None,
+                      after_id: int | None = None) -> dict:
+        """Cursor through every actual event without leaking unrelated employees.
+
+        On first load (no cursor) return newest 100 descending as before.
+        Once the browser has a watermark, advance 100 events at a time in
+        ascending ID order. Each unconsumed page remains available next poll.
+        """
         UUID(tenant_id)
         if reader_id is None:
             raise PermissionError('Authenticated notification reader required')
         UUID(reader_id)
+        if after_id is not None and (type(after_id) is not int or after_id <= 0):
+            raise ValueError('Positive notification cursor required')
         founder=self.db.execute("""
             SELECT 1 FROM ago_users u JOIN ago_employees e
               ON e.tenant_id=u.tenant_id AND e.id=u.id AND e.kind='human'
@@ -245,37 +253,47 @@ class CompanyChat:
               AND r.role='founder'
             WHERE u.tenant_id=%s AND u.id=%s AND u.active
         """,(tenant_id,reader_id)).fetchone() is not None
+        kinds="('status','report','staffing','github','qa','docs','project')" if founder else (
+            "('status','report','staffing','github','qa','docs')")
+        visibility="" if founder else " AND employee_id=%s"
+        params=[tenant_id]
         if not founder:
-            scoped = self.db.execute("""
-                SELECT id,employee_id,task_id,body,kind,created_at
-                FROM ago_company_chat
+            params.append(reader_id)
+        cursor_filter=""
+        if after_id is not None:
+            cursor_filter=" AND id>%s"
+            params.append(after_id)
+        order="ASC" if after_id is not None else "DESC"
+        records=self.db.execute(f"""
+            SELECT id,employee_id,task_id,body,kind,created_at
+            FROM ago_company_chat
+            WHERE tenant_id=%s {visibility} AND kind IN {kinds}
+            {cursor_filter} ORDER BY id {order} LIMIT %s
+        """,tuple([*params,101 if after_id is not None else 100])).fetchall()
+        recent=list(records[:100])
+        if founder:
+            rows=self.db.execute("""
+                SELECT e.id AS employee_id, COUNT(c.id) AS event_count
+                FROM ago_employees e
+                LEFT JOIN ago_company_chat c ON c.tenant_id=e.tenant_id
+                  AND c.employee_id=e.id AND c.kind IN
+                  ('status','report','staffing','github','qa','docs','project')
+                WHERE e.tenant_id=%s
+                GROUP BY e.id ORDER BY e.id
+            """,(tenant_id,)).fetchall()
+            counts={str(row["employee_id"]):int(row["event_count"]) for row in rows}
+        else:
+            count=self.db.execute("""
+                SELECT COUNT(*) AS n FROM ago_company_chat
                 WHERE tenant_id=%s AND employee_id=%s
                   AND kind IN ('status','report','staffing','github','qa','docs')
-                ORDER BY id DESC LIMIT 100
-            """,(tenant_id,reader_id)).fetchall()
-            return {
-                'by_employee': {reader_id:len(scoped)},
-                'recent':[dict(row) for row in scoped],
-                'event_type':'committed_work_event',
-            }
-        rows = self.db.execute("""
-            SELECT e.id AS employee_id, COUNT(c.id) AS event_count
-            FROM ago_employees e
-            LEFT JOIN ago_company_chat c ON c.tenant_id=e.tenant_id
-              AND c.employee_id=e.id AND c.kind IN ('status','report','staffing','github','qa','docs','project')
-            WHERE e.tenant_id=%s
-            GROUP BY e.id ORDER BY e.id
-        """, (tenant_id,)).fetchall()
-        recent = self.db.execute("""
-            SELECT id, employee_id, task_id, body, kind, created_at
-            FROM ago_company_chat
-            WHERE tenant_id=%s AND kind IN ('status','report','staffing','github','qa','docs','project')
-            ORDER BY id DESC LIMIT 100
-        """, (tenant_id,)).fetchall()
+            """,(tenant_id,reader_id)).fetchone()
+            counts={reader_id:int(count["n"])}
         return {
-            "by_employee": {str(row["employee_id"]): int(row["event_count"]) for row in rows},
-            "recent": [dict(row) for row in recent],
-            "event_type": "committed_work_event",
+            "by_employee":counts,
+            "recent":[dict(row) for row in recent],
+            "has_more":len(records)>100,
+            "event_type":"committed_work_event",
         }
 
     def ceo_reconcile(self, actor, project_id: str) -> dict:
