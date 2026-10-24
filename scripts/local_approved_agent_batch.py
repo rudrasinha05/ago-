@@ -60,7 +60,7 @@ class DurableAttemptJournal:
 
 CONFIRM="EXECUTE_APPROVED_INTERNAL_TASKS"
 READ_TIMEOUT_SECONDS=15
-RUN_TIMEOUT_SECONDS=270  # Four bounded Ollama passes can take up to 4 x 60s.
+RUN_TIMEOUT_SECONDS=480  # Full seven-role local Board+PM+worker: <=7 x 60s plus dispatch overhead.
 def request_timeout(method: str, endpoint: str) -> int:
     return RUN_TIMEOUT_SECONDS if (method=="POST"
         and endpoint.startswith("/v1/agents/tasks/")

@@ -85,7 +85,7 @@ def test_batch_fails_closed_without_matching_independent_approval():
 def test_local_batch_separates_fast_metadata_reads_and_long_bounded_agent_runs():
     assert module.request_timeout("GET","/v1/organization/company/activity")==15
     assert module.request_timeout("GET","/v1/organization/company/approvals")==15
-    assert module.request_timeout("POST","/v1/agents/tasks/abc/run")==270
+    assert module.request_timeout("POST","/v1/agents/tasks/abc/run")==480
     assert module.request_timeout("POST","/v1/console/logout")==15
 
 
