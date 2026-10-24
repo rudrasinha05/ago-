@@ -33,22 +33,32 @@ CONFIRMS = {
 
 def ci_gate(status, sha, checks):
     if (not isinstance(checks, list) or not 1 <= len(checks) <= 24
-            or any(not isinstance(x, str) or not 1 <= len(x) <= 120 for x in checks)
+            or any(not isinstance(c, str) or not 1 <= len(c) <= 120 for c in checks)
             or len(set(checks)) != len(checks)):
-        raise ValueError("Unique named required CI checks must be specified")
+        raise ValueError("Unique exact GitHub CI check names required")
     if (not isinstance(status, dict) or status.get("develop_sha") != sha
             or status.get("repository_private") is not True
             or status.get("ci_truncated") is not False
-            or not isinstance(status.get("ci"), list)
-            or type(status.get("ci_total")) is not int
-            or status["ci_total"] != len(status["ci"])):
-        raise PermissionError("Exact private develop HEAD and full CI needed")
+            or status.get("ci_check_truncated") is not False
+            or status.get("ci_status_truncated") is not False
+            or not isinstance(status.get("ci_check_runs"), list)
+            or not isinstance(status.get("ci_statuses"), list)
+            or type(status.get("ci_check_total")) is not int
+            or status["ci_check_total"] != len(status["ci_check_runs"])):
+        raise PermissionError("Private exact HEAD and complete provider CI needed")
     for name in checks:
-        matches = [x for x in status["ci"]
-                   if isinstance(x, dict) and x.get("name") == name]
-        if (len(matches) != 1 or matches[0].get("status") != "completed"
-                or matches[0].get("conclusion") != "success"):
-            raise PermissionError("A required CI check is incomplete or ambiguous")
+        verdicts = [
+            c.get("status") == "completed" and c.get("conclusion") == "success"
+            for c in status["ci_check_runs"]
+            if isinstance(c, dict) and c.get("name") == name
+        ]
+        verdicts.extend(
+            c.get("state") == "success"
+            for c in status["ci_statuses"]
+            if isinstance(c, dict) and c.get("context") == name
+        )
+        if len(verdicts) != 1 or verdicts[0] is not True:
+            raise PermissionError("Required CI check missing, failed or ambiguous")
 
 
 def commit_proof(commit_draft, export, stage, qa, commit_proposal, checks,
