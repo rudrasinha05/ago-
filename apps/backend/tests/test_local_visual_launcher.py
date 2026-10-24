@@ -170,3 +170,12 @@ def test_opt_in_visual_engineering_uses_only_installed_ollama_and_reverts_flags(
     assert 'if ($env:AGO_ENABLE_PAID_MODELS -eq "true")' in script
     assert 'ollama pull' not in script
     assert 'Start-Process ollama' not in script
+
+
+def test_operator_has_separate_fail_closed_real_engineering_dispatch():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert '"run-approved-engineering"' in script
+    assert '$Coding = $Action -eq "run-approved-engineering"' in script
+    assert '$CodingCheck += "--require-engineering"' in script
+    assert '--login @CodingCheck --apply' in script

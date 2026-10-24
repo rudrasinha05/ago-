@@ -9,11 +9,12 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 market-watch  # opt-in in a separate terminal, Ctrl+C stops
 .\scripts\ago.ps1 safe-reconcile  # manual stale-run recovery, no replay
 .\scripts\ago.ps1 run-approved-internal  # only previously approved local internal AI briefs
+.\scripts\ago.ps1 run-approved-engineering  # refuse non-Ollama fallback; real 7-role AI coding
 .\scripts\ago.ps1 watch-approved-internal  # up to 60 minutes or 10 tasks; Ctrl+C stops
 .\scripts\ago.ps1 export-candidate  # exact completed Board-cleared AI run -> new local source review
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "watch-approved-internal", "export-candidate")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -73,10 +74,13 @@ try {
         & python ../../scripts/company_readiness_audit.py --tenant-id $env:AGO_MARKET_TENANT_ID
         exit $LASTEXITCODE
     }
-    if ($Action -in @("run-approved-internal", "watch-approved-internal")) {
+    if ($Action -in @("run-approved-internal", "run-approved-engineering", "watch-approved-internal")) {
         $Continuous = $Action -eq "watch-approved-internal"
+        $Coding = $Action -eq "run-approved-engineering"
+        $CodingCheck = @()
+        if ($Coding) { $CodingCheck += "--require-engineering" }
         Write-Host "Preview of authenticated, founder-approved internal brief tasks only."
-        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login
+        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login @CodingCheck
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         if ($Continuous) {
             Write-Host "Watch will poll for at most 60 minutes / 10 approved tasks, only while this terminal is open."
@@ -91,7 +95,7 @@ try {
             & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --watch-minutes 60 --limit 10 --interval-seconds 15 --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
         }
         else {
-            & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
+            & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login @CodingCheck --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
         }
         exit $LASTEXITCODE
     }

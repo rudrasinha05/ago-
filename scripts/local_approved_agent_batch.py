@@ -59,6 +59,23 @@ class DurableAttemptJournal:
 
 
 CONFIRM="EXECUTE_APPROVED_INTERNAL_TASKS"
+
+
+def require_engineering_capability(payload) -> None:
+    """Fail BEFORE any task POST if the server is only running a built-in stub."""
+    if (not isinstance(payload, dict)
+            or payload.get("kind") != "ago_local_engineering_capabilities"
+            or payload.get("engineering_enabled") is not True
+            or payload.get("provider_mode") != "ollama_local"
+            or payload.get("required_roles") != 7
+            or not isinstance(payload.get("model_tag"), str)
+            or not payload["model_tag"]
+            or payload.get("github_write_authorized") is not False
+            or payload.get("release_ready") is not False):
+        raise PermissionError(
+            "Real local coding is disabled on AGO server; launch -Engineering"
+        )
+
 READ_TIMEOUT_SECONDS=15
 RUN_TIMEOUT_SECONDS=480  # Full seven-role local Board+PM+worker: <=7 x 60s plus dispatch overhead.
 def request_timeout(method: str, endpoint: str) -> int:
@@ -249,6 +266,8 @@ def main(argv=None) -> int:
     parser.add_argument("--apply",action="store_true")
     parser.add_argument("--confirm")
     parser.add_argument("--login",action="store_true",help="Prompt for founder credentials instead of copying a browser token")
+    parser.add_argument("--require-engineering",action="store_true",
+                        help="Reject deterministic internal handlers when real Ollama coding is not opted in")
     parser.add_argument("--watch-minutes",type=int,default=0,help="0: one pass; 1..60: founder-started bounded polling of approved work")
     parser.add_argument("--attempt-journal",default=None,
                         help="Owner-local durable attempt directory; defaults to ~/.ago/approved_attempts")
@@ -292,6 +311,10 @@ def main(argv=None) -> int:
         principal=request("GET","/v1/console/me")
         if not isinstance(principal,dict) or "founder" not in principal.get("roles",[]):
             raise PermissionError("Active founder session required")
+        if args.require_engineering:
+            require_engineering_capability(
+                request("GET","/v1/agents/engineering-capabilities")
+            )
         def fetch():
             return (request("GET","/v1/organization/company/activity"),
                     request("GET","/v1/organization/company/approvals"))

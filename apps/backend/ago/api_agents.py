@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,42 @@ from ago.repository_ports import AgentRuntimePort
 from ago.security import Principal
 
 router = APIRouter(prefix="/v1/agents", tags=["M4 workforce"])
+
+
+def local_engineering_status() -> dict:
+    """Configuration truth only: never infer an active model or approved task."""
+    local = (
+        os.getenv("AGO_ENVIRONMENT", "development").lower()
+        in ("development", "test", "testing")
+        and os.getenv("AGO_LLM_PROVIDER") == "ollama_local"
+        and os.getenv("AGO_ENABLE_LOCAL_MODELS") == "true"
+        and os.getenv("AGO_LOCAL_COMPANY_CHAIN") == "true"
+        and os.getenv("AGO_LOCAL_FULL_BOARD_REVIEW") == "true"
+        and os.getenv("AGO_LOCAL_ENGINEERING_CANDIDATES") == "true"
+        and bool(os.getenv("AGO_LLM_MODEL"))
+        and os.getenv("AGO_ENABLE_PAID_MODELS") != "true"
+    )
+    return {
+        "kind": "ago_local_engineering_capabilities",
+        "engineering_enabled": local,
+        "provider_mode": "ollama_local" if local else "disabled",
+        "required_roles": 7,
+        "model_tag": os.getenv("AGO_LLM_MODEL") if local else None,
+        "model_inference_verified": False,
+        "board_or_task_approval_verified": False,
+        "github_write_authorized": False,
+        "release_ready": False,
+    }
+
+
+@router.get("/engineering-capabilities")
+def engineering_capabilities(
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    allowed(repositories, actor, "agent:read")
+    allowed(repositories, actor, "approval:founder")
+    return local_engineering_status()
 
 
 @router.get("/runs")

@@ -325,3 +325,35 @@ def test_safe_queue_resume_after_actual_separate_python_process_exit(tmp_path):
     assert result["completed_task_ids"] == [next_task]
     assert result["skipped_previously_attempted"] == [first_task]
     assert called == [next_task]
+
+
+def test_engineering_preflight_blocks_stub_or_untrusted_server_response():
+    valid = {
+        "kind": "ago_local_engineering_capabilities",
+        "engineering_enabled": True,
+        "provider_mode": "ollama_local", "required_roles": 7,
+        "model_tag": "qwen2.5-coder:1.5b",
+        "github_write_authorized": False, "release_ready": False,
+    }
+    module.require_engineering_capability(valid)
+    for key, value in (
+        ("engineering_enabled", False),
+        ("provider_mode", "paid"), ("required_roles", 4),
+        ("model_tag", ""), ("github_write_authorized", True),
+        ("release_ready", True),
+    ):
+        altered = {**valid, key: value}
+        with pytest.raises(PermissionError):
+            module.require_engineering_capability(altered)
+    for fake in (None, {}, [], "enabled", {"kind": "true"}):
+        with pytest.raises(PermissionError):
+            module.require_engineering_capability(fake)
+
+
+def test_operator_engineering_preflight_is_before_task_dispatch():
+    content = SCRIPT.read_text(encoding="utf-8")
+    assert '--require-engineering' in content
+    assert 'require_engineering_capability(' in content
+    assert content.index('require_engineering_capability(\n                request(') < content.index(
+        'dispatch=lambda task_id:request("POST"'
+    )
