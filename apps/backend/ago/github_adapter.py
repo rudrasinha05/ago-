@@ -289,16 +289,16 @@ def validate_operation(value: dict) -> None:
         # The destination is private, but even a private Git repository is
         # not a credential vault. Never export known token/key material.
         private_file = re.compile(
-            r"(?i)(?:^|/)(?:\\.env(?:\\.[^/]*)?|id_(?:rsa|ed25519)|"
-            r"[^/]*(?:credentials?|private[_-]?key|secrets?)[^/]*\\.(?:json|ya?ml|ini|txt)|"
-            r"[^/]*\\.(?:pem|p12|pfx|key|dump|backup|pgdump))$"
+            r"(?i)(?:^|/)(?:\.env(?:\.[^/]*)?|id_(?:rsa|ed25519)|"
+            r"[^/]*(?:credentials?|private[_-]?key|secrets?)[^/]*\.(?:json|ya?ml|ini|txt)|"
+            r"[^/]*\.(?:pem|p12|pfx|key|dump|backup|pgdump))$"
         )
         private_content = re.compile(
             r"-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
-            r"|\\bgithub_pat_[A-Za-z0-9_]{20,}"
-            r"|\\bgh[pousr]_[A-Za-z0-9]{30,}"
-            r"|\\bAKIA[A-Z0-9]{16}\\b"
-            r"|\\bsk-(?:proj-)?[A-Za-z0-9_-]{30,}"
+            r"|\bgithub_pat_[A-Za-z0-9_]{20,}"
+            r"|\bgh[pousr]_[A-Za-z0-9]{30,}"
+            r"|\bAKIA[A-Z0-9]{16}\b"
+            r"|\bsk-(?:proj-)?[A-Za-z0-9_-]{30,}"
         )
         if not isinstance(p["files"], list) or not 1 <= len(p["files"]) <= 20:
             raise ValueError("One to twenty reviewed files required")
