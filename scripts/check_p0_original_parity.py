@@ -58,6 +58,18 @@ def audit(root: Path = ROOT) -> dict:
             or "NOT CLAIMED" not in report):
         raise PermissionError("Historic blueprint divergence cannot be hidden")
 
+    # The current maintained Section documents must themselves preserve the
+    # original source facts, not leave them only in a historical side report.
+    sections = {
+        "docs/architecture/SECTION_15_ROADMAP.md": PHASES,
+        "docs/architecture/SECTION_17_PHASE_MINUS_ONE_NON_GOALS.md": NON_GOALS,
+        "docs/architecture/SECTION_18_REFERENCES.md": URLS,
+    }
+    for source, terms in sections.items():
+        text = (root / source).read_text(encoding="utf-8")
+        if HISTORICAL_SHA not in text or any(term not in text for term in terms):
+            raise PermissionError("Current Section documentation lost original source parity")
+
     data = json.loads((root / INDEX.relative_to(ROOT)).read_text(encoding="utf-8"))
     if data.get("schema") != "ago_architecture_34_source_parity_v1":
         raise ValueError("Unknown immutable section-audit schema")
