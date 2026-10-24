@@ -480,3 +480,29 @@ only with a real server-recorded succeeded dispatch and 40-digit GitHub
 commit SHA. Missing credentials, changed HEAD, rejected reviewer, timeout,
 prior dispatch or uncertain GitHub result must remain blocked. This commit
 operation does **not** create a PR, merge, deploy or declare product release.
+
+
+### Windows operator actions for approved application and real commit
+
+After a **different active human** has independently approved the exact AGO
+enterprise integration proposal, run **separately**:
+
+`.\scripts\ago.ps1 apply-github-proposal`
+
+Enter the original run UUID, private GitHub draft operation UUID and the
+reviewed **enterprise proposal UUID** returned at submission; provide the
+original passing Docker stage and human QA packet. Authenticate as Founder.
+The command performs a read-only verification before requesting explicit
+application approval. This step only applies the approved operation to AGO.
+
+To actually commit after that separate approval and application, run:
+
+`.\scripts\ago.ps1 execute-github-commit`
+
+Again provide the same original evidence. AGO reads its applied operation
+and the live GitHub `develop` HEAD, then prompts the Founder a **second time**
+before a single server-side approved GitHub commit attempt. Missing GitHub
+credentials, changed project identity/HEAD, rejected review or an earlier
+uncertain dispatch must block execution. The original source must not be
+uploaded to a public repository without a separate explicit repository
+visibility review. **No automatic pull request, merge or product release.**

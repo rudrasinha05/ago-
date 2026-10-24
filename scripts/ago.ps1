@@ -16,9 +16,11 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 review-tested-candidate  # authenticated independent human QA decision
 .\scripts\ago.ps1 prepare-github-draft  # human-QA-passed code -> private, unsubmitted GitHub draft
 .\scripts\ago.ps1 submit-github-proposal  # explicit Founder governance proposal, NOT a GitHub push
+.\scripts\ago.ps1 apply-github-proposal  # after independent human approval; AGO only
+.\scripts\ago.ps1 execute-github-commit  # after approved apply; explicit real GitHub commit
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate", "prepare-github-draft", "submit-github-proposal")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate", "prepare-github-draft", "submit-github-proposal", "apply-github-proposal", "execute-github-commit")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -265,6 +267,46 @@ try {
             exit 2
         }
         & python ../../scripts/ago_submit_github_proposal.py --local-url "http://127.0.0.1:$Port" --draft $DraftFile --export $ExportFile --staged-directory $Stage --qa-packet $Qa --apply --confirm SUBMIT_QA_VERIFIED_GITHUB_PROPOSAL
+        exit $LASTEXITCODE
+    }
+    if ($Action -in @("apply-github-proposal", "execute-github-commit")) {
+        $Execute = $Action -eq "execute-github-commit"
+        Write-Host "AGO performs each GitHub delivery phase only after independent approval."
+        $RunId = Read-Host "Exact original Board-cleared AGO run UUID"
+        $OperationId = Read-Host "Exact QA-verified GitHub draft operation UUID"
+        $ProposalId = Read-Host "Exact independently approved enterprise proposal UUID"
+        if ($RunId -notmatch '^[0-9a-fA-F-]{36}$' -or
+            $OperationId -notmatch '^[0-9a-fA-F-]{36}$' -or
+            $ProposalId -notmatch '^[0-9a-fA-F-]{36}$') {
+            throw "Three exact original run, operation and approval proposal UUIDs required."
+        }
+        $Export = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
+        $Draft = Join-Path $HOME (".ago\delivery_runs\github-draft-" + $OperationId + ".json")
+        $Stage = Read-Host "Original passing offline Docker stage"
+        $Qa = Read-Host "Original independent human QA packet"
+        if (-not (Test-Path -LiteralPath $Export -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $Draft -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $Stage -PathType Container) -or
+            -not (Test-Path -LiteralPath $Qa -PathType Leaf)) {
+            throw "Original Board, source, Docker and human QA evidence must be preserved."
+        }
+        $Phase = if ($Execute) { "execute" } else { "apply" }
+        $Confirmation = if ($Execute) { "EXECUTE_APPROVED_GITHUB_COMMIT" } else { "APPLY_INDEPENDENTLY_APPROVED_GITHUB_OPERATION" }
+        Write-Host "Read-only preflight: $Phase (no GitHub write without separate explicit confirmation)"
+        & python ../../scripts/ago_finalize_github_delivery.py --local-url "http://127.0.0.1:$Port" --action $Phase --draft $Draft --export $Export --staged-directory $Stage --qa-packet $Qa --proposal-id $ProposalId
+        if ($LASTEXITCODE -ne 0) {
+            throw "Signed source/independent approval preflight failed; no write requested."
+        }
+        if ($Execute) {
+            Write-Host "WARNING: Next confirmation can make a REAL private GitHub commit on develop."
+            Write-Host "No automatic PR, merge or release follows this operation."
+        }
+        $Accept = Read-Host "To authorize this EXACT step, type $Confirmation"
+        if ($Accept -cne $Confirmation) {
+            Write-Host "Cancelled. No mutating AGO request sent."
+            exit 2
+        }
+        & python ../../scripts/ago_finalize_github_delivery.py --local-url "http://127.0.0.1:$Port" --action $Phase --draft $Draft --export $Export --staged-directory $Stage --qa-packet $Qa --proposal-id $ProposalId --apply --confirm $Confirmation
         exit $LASTEXITCODE
     }
     if ($Action -eq "safe-reconcile") {

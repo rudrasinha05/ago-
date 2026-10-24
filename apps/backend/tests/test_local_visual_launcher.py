@@ -271,3 +271,20 @@ def test_qa_verified_github_proposal_operator_never_pushes_remote_code():
     assert 'Join-Path $HOME (".ago\\candidate_exports\\ago-run-" + $RunId + ".json")' in text
     assert "git push" not in text
     assert text.count("finally {") == 1
+
+
+def test_approved_github_delivery_operator_has_distinct_apply_and_execute_phases():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert script.count('if ($Action -in @("apply-github-proposal", "execute-github-commit"))') == 1
+    assert '--action $Phase' in script
+    assert '--proposal-id $ProposalId --apply --confirm $Confirmation' in script
+    assert "APPLY_INDEPENDENTLY_APPROVED_GITHUB_OPERATION" in script
+    assert "EXECUTE_APPROVED_GITHUB_COMMIT" in script
+    assert 'if ($LASTEXITCODE -ne 0)' in script
+    assert script.index('Read-Host "To authorize this EXACT step') < script.index(
+        '--proposal-id $ProposalId --apply --confirm $Confirmation'
+    )
+    assert "ago_finalize_github_delivery.py" in script
+    assert "REAL private GitHub commit on develop." in script
+    assert script.count("finally {") == 1
