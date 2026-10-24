@@ -72,11 +72,11 @@ def prepare(
     expected_candidate_sha256: str | None = None,
 ) -> dict:
     candidate, input_kind = inspect_local_input(input_path, repair_from)
-    if expected_candidate_sha256 is not None:
-        if (not isinstance(expected_candidate_sha256, str)
-                or re.fullmatch(r"[0-9a-f]{64}", expected_candidate_sha256) is None
-                or candidate["candidate_sha256"] != expected_candidate_sha256):
-            raise PermissionError("Source digest no longer matches Founder-reviewed candidate")
+    if (expected_candidate_sha256 is not None
+            and (not isinstance(expected_candidate_sha256, str)
+                 or re.fullmatch(r"[0-9a-f]{64}", expected_candidate_sha256) is None
+                 or candidate["candidate_sha256"] != expected_candidate_sha256)):
+        raise PermissionError("Source digest no longer matches Founder-reviewed candidate")
     if len(github_options) != 4:
         raise ValueError("Four exact GitHub draft fields required")
     draft = None
