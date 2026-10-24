@@ -1,0 +1,457 @@
+{
+  "schema": "ago_p0_p1_p2_48_task_delivery_v1",
+  "purpose": "Unfinished scope only, no asserted completion without evidence",
+  "baseline": "2026-10-24",
+  "verified_p0_ci_baseline": {
+    "sha": "d3ae4190c4ea3f08282826f511989d61b6742e37",
+    "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40098119324",
+    "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40098119322",
+    "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40098119293"
+  },
+  "status_semantics": {
+    "partial": "Some source/contract exists; acceptance not proved",
+    "pending": "Defined release acceptance not implemented/verified",
+    "completed": "Only after task-specific acceptance evidence"
+  },
+  "never_equate": [
+    "Synthetic AI Board to actual owner-local inference",
+    "Unsigned QA packet to independent human verdict",
+    "ChatGPT connector commit to AGO-origin GitHub operation",
+    "Passing component CI to arbitrary market-ready product",
+    "Owner-only actions to authorized automatic execution"
+  ],
+  "tasks": [
+    {
+      "id": 10,
+      "priority": "P0",
+      "title": "Local security architecture",
+      "status": "partial",
+      "acceptance": "Verify secrets, RBAC and data minimization across source, API, logs and backups",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 14,
+      "priority": "P0",
+      "title": "Module dependency rules",
+      "status": "partial",
+      "acceptance": "All architectural source/import checks and protection policies enforced",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 15,
+      "priority": "P0",
+      "title": "Original implementation roadmap parity",
+      "status": "partial",
+      "acceptance": "Original frozen plan traced to implemented modules and signed acceptance",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 17,
+      "priority": "P0",
+      "title": "Phase −1 non-goal reconciliation",
+      "status": "partial",
+      "acceptance": "Explicitly record deferred external/production work against original blueprint",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 18,
+      "priority": "P0",
+      "title": "Technology reference parity",
+      "status": "partial",
+      "acceptance": "Every original technology claim verified or identified as a scoped alternative",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 36,
+      "priority": "P0",
+      "title": "34-section implementation parity",
+      "status": "partial",
+      "acceptance": "All 34 original architecture deliverables matched to source and tested behavior",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 45,
+      "priority": "P0",
+      "title": "All-module integration",
+      "status": "partial",
+      "acceptance": "Same-SHA backend, database, browser and cross-module journey all green",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 120,
+      "priority": "P0",
+      "title": "Approval and authority compatibility",
+      "status": "partial",
+      "acceptance": "Founder, independent QA and bounded CEO authorization all pass integration",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 133,
+      "priority": "P0",
+      "title": "Confidential information leak prevention",
+      "status": "partial",
+      "acceptance": "Unauthorized tenant/project/employee access and export path tests fail closed",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 134,
+      "priority": "P0",
+      "title": "Project document and tool data isolation",
+      "status": "partial",
+      "acceptance": "Unapproved project worker cannot read private bodies via any public endpoint",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 156,
+      "priority": "P0",
+      "title": "Reports, search, tools, logs and backup redaction",
+      "status": "partial",
+      "acceptance": "No secret or founder brief can leak through persisted evidence or any export",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 158,
+      "priority": "P0",
+      "title": "Latest same-SHA complete CI",
+      "status": "partial",
+      "acceptance": "Entire nine-job architecture plus backend, lint and browser green at final head",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 19,
+      "priority": "P1",
+      "title": "Meta Brain real recommendation loop",
+      "status": "partial",
+      "acceptance": "Compute source-backed changes with independent review and actual outcome metrics",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 21,
+      "priority": "P1",
+      "title": "Organizational operating system execution",
+      "status": "partial",
+      "acceptance": "Approved task schedule, dispatch, lifecycle and concurrency reflect real work",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 22,
+      "priority": "P1",
+      "title": "Truthful AI employee state",
+      "status": "partial",
+      "acceptance": "Worker idle, running, blocked and failed statuses all derive from durable execution",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 23,
+      "priority": "P1",
+      "title": "Executable multi-level project planning",
+      "status": "partial",
+      "acceptance": "Founder goal delegated as authorized executable dependency-aware task graph",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 26,
+      "priority": "P1",
+      "title": "Governed autonomous evolution engine",
+      "status": "partial",
+      "acceptance": "Measured reviewed improvement proposal with rollback and no silent code writes",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 48,
+      "priority": "P1",
+      "title": "Large interactive 3D Company Brain",
+      "status": "pending",
+      "acceptance": "True interactive 3D scene linked to source-backed actual running tasks",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 58,
+      "priority": "P1",
+      "title": "CEO to CTO to PM to engineer delegation",
+      "status": "partial",
+      "acceptance": "Real identities, real scoped handoffs, independently authorized task starts",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 60,
+      "priority": "P1",
+      "title": "Controlled automatic staffing",
+      "status": "pending",
+      "acceptance": "Bounded CEO-chartered personnel proposal without duplicate roles or privilege escalation",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 61,
+      "priority": "P1",
+      "title": "Multi-agent real teamwork",
+      "status": "partial",
+      "acceptance": "Multiple distinct AI workers complete linked subtasks and report evidence",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 87,
+      "priority": "P1",
+      "title": "LLM-generated executable project plan",
+      "status": "partial",
+      "acceptance": "Real local model proposes viable milestones assessed and activated by Founder",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 119,
+      "priority": "P1",
+      "title": "Revocable CEO operational charter",
+      "status": "partial",
+      "acceptance": "Scoped capabilities, term, budgets, audit and immediate human revocation",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 123,
+      "priority": "P1",
+      "title": "Meta Brain measured improvements",
+      "status": "partial",
+      "acceptance": "Measured failed work feeds reviewed improvements with independent QA",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 125,
+      "priority": "P1",
+      "title": "Tenant-scoped enterprise tool execution",
+      "status": "partial",
+      "acceptance": "Approved safe tools execute under employee-specific scopes with audit trail",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 126,
+      "priority": "P1",
+      "title": "Active local worker monitoring",
+      "status": "partial",
+      "acceptance": "Live health and durable incident notifications with no fictitious activity",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 127,
+      "priority": "P1",
+      "title": "Model, task and resource budgets",
+      "status": "partial",
+      "acceptance": "CPU/memory/time/token ceilings with budget-exhaustion negative tests",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 128,
+      "priority": "P1",
+      "title": "Crash-safe failure reconciliation",
+      "status": "partial",
+      "acceptance": "Unknown external outcome never repeated; safe operator reconciliation documented",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 135,
+      "priority": "P1",
+      "title": "Real work driven Brain visualizations",
+      "status": "partial",
+      "acceptance": "Progress, red paths and worker highlights reflect actual signed work receipts",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 138,
+      "priority": "P1",
+      "title": "All employee task event popups",
+      "status": "partial",
+      "acceptance": "Each recorded work transition has durable counted event and accessible popup",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 139,
+      "priority": "P1",
+      "title": "Local Ollama multi-role governed chain",
+      "status": "partial",
+      "acceptance": "All seven full-Board/personnel roles run in authorized scoped sequence",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 140,
+      "priority": "P1",
+      "title": "Actual founder laptop local model verification",
+      "status": "pending",
+      "acceptance": "Owner Windows Ollama inference measured with model, device and identity evidence",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    },
+    {
+      "id": 152,
+      "priority": "P1",
+      "title": "Bounded continuous active employee work",
+      "status": "pending",
+      "acceptance": "Founder-started local process runs multiple approved tasks safely while powered on",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 154,
+      "priority": "P1",
+      "title": "Reliable interrupted execution recovery",
+      "status": "partial",
+      "acceptance": "Restarted worker resumes only safe queued work and does not duplicate unknown writes",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 92,
+      "priority": "P2",
+      "title": "AGO-owned governed GitHub CI operations",
+      "status": "partial",
+      "acceptance": "Tenant-authorized repo-scoped commit, draft PR and read-only exact SHA CI inspection",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 94,
+      "priority": "P2",
+      "title": "Independent full-project QA",
+      "status": "partial",
+      "acceptance": "Human reviewer validates complete requirements and real artifact test evidence",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 96,
+      "priority": "P2",
+      "title": "Complete usable software from approved brief",
+      "status": "pending",
+      "acceptance": "Real supported project generated, built and delivered from Founder request",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 97,
+      "priority": "P2",
+      "title": "Automatic bug diagnosis and safe repair",
+      "status": "pending",
+      "acceptance": "Failed isolated tests generate reviewed source-only repair without rewriting tests",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 98,
+      "priority": "P2",
+      "title": "Versioning, release and maintenance lifecycle",
+      "status": "pending",
+      "acceptance": "Reviewed local release, rollback instructions and tracked maintenance",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 129,
+      "priority": "P2",
+      "title": "Real founder laptop backup/restore drill",
+      "status": "partial",
+      "acceptance": "Safe owner-controlled backup, isolated restore and integrity report on real local DB",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    },
+    {
+      "id": 130,
+      "priority": "P2",
+      "title": "Complete real local acceptance",
+      "status": "pending",
+      "acceptance": "Signed-in Founder demonstration of all authorized core journeys on Windows",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    },
+    {
+      "id": 147,
+      "priority": "P2",
+      "title": "AGO GitHub repository-scoped credentials",
+      "status": "pending",
+      "acceptance": "Owner configures local token/binding privately, never sent to chat or model",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    },
+    {
+      "id": 148,
+      "priority": "P2",
+      "title": "True AGO-origin GitHub commit and draft PR",
+      "status": "pending",
+      "acceptance": "AGO backend executes independently approved write with matching durable receipt",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    },
+    {
+      "id": 149,
+      "priority": "P2",
+      "title": "Independent human PR/QA review",
+      "status": "pending",
+      "acceptance": "Distinct authenticated human acceptance of test and exact artifact/source SHA",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    },
+    {
+      "id": 150,
+      "priority": "P2",
+      "title": "Owner laptop signed-in browser and device QA",
+      "status": "pending",
+      "acceptance": "Live locally installed AGO passes Founder browser, data and permissions checks",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    },
+    {
+      "id": 155,
+      "priority": "P2",
+      "title": "Web, Android and full-stack supported adapters",
+      "status": "pending",
+      "acceptance": "Each supported output type has real build/test/install evidence; no universal claims",
+      "owner_local_or_external_evidence_required": false,
+      "completion_proved": false
+    },
+    {
+      "id": 159,
+      "priority": "P2",
+      "title": "Full independent final product QA",
+      "status": "pending",
+      "acceptance": "Complete artifact passes functional, security, accessibility and regression review",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    },
+    {
+      "id": 160,
+      "priority": "P2",
+      "title": "Founder-accepted usable project handover",
+      "status": "pending",
+      "acceptance": "Actual working local product, immutable acceptance and explicit owner release decision",
+      "owner_local_or_external_evidence_required": true,
+      "completion_proved": false
+    }
+  ]
+}
