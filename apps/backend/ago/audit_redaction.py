@@ -41,7 +41,7 @@ def audit_metadata_safe(value: object) -> dict[str, str]:
         if type(item) in (int, bool) and len(str(item)) <= 96:
             output[key] = str(item)
         elif (isinstance(item, str) and _SAFE_VALUE.fullmatch(item)
-              and not _DANGEROUS.search(item)):
+              and (item == "bad_credentials" or not _DANGEROUS.search(item))):
             output[key] = item
         else:
             output[key] = "[redacted]"
