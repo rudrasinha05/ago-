@@ -15,7 +15,7 @@ def test_all_original_22_p1_gates_traced_without_claiming_fake_live_completion()
     items=json.loads(LEDGER.read_text(encoding="utf-8"))["tasks"]
     current={task["id"]:task for task in items if task["priority"]=="P1"}
     assert set(current)==IDS
-    reported={int(item) for item in re.findall(r"^\\| #(\\d+) ",text,re.MULTILINE)}
+    reported={int(item) for item in re.findall(r"^[|] #([0-9]+) ",text,re.MULTILINE)}
     assert reported==IDS
     assert current[140]["completion_proved"] is False
     assert current[140]["owner_local_or_external_evidence_required"] is True
