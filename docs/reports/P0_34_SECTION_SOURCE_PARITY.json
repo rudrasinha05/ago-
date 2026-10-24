@@ -1,0 +1,250 @@
+{
+  "schema": "ago_architecture_34_source_parity_v1",
+  "source_report": "docs/reports/SECTIONS15_18_SOURCE_VERIFICATION.md",
+  "semantics": {
+    "tested_bounded": "Historic scoped implementation and tests; not external/local UAT",
+    "partially_implemented": "Relevant implementation exists; original full acceptance unproved",
+    "document_reconciled": "Historical blueprint reconciled; not software behavior accepted",
+    "design_only": "Architectural contract only; not functional acceptance"
+  },
+  "sections": [
+    {
+      "section": 1,
+      "title": "Overall System Architecture",
+      "spec": "docs/architecture/SECTION_01_OVERALL_SYSTEM_ARCHITECTURE.md",
+      "implementation": "apps/backend/ago/architecture_guard.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 2,
+      "title": "High Level Component Diagram",
+      "spec": "docs/architecture/SECTION_02_HIGH_LEVEL_COMPONENT_DIAGRAM.md",
+      "implementation": "apps/backend/ago/repository_ports.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 3,
+      "title": "Domain Driven Design",
+      "spec": "docs/architecture/SECTION_03_DOMAIN_DRIVEN_DESIGN.md",
+      "implementation": "apps/backend/ago/backend_contracts.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 4,
+      "title": "Monorepo Architecture",
+      "spec": "docs/architecture/SECTION_04_MONOREPO_ARCHITECTURE.md",
+      "implementation": "apps/backend/ago/api_m2.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 5,
+      "title": "Backend Architecture",
+      "spec": "docs/architecture/SECTION_05_BACKEND_ARCHITECTURE.md",
+      "implementation": "apps/backend/ago/backend_contracts.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 6,
+      "title": "Frontend Architecture",
+      "spec": "docs/architecture/SECTION_06_FRONTEND_ARCHITECTURE.md",
+      "implementation": "apps/web/components/company-map.jsx",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 7,
+      "title": "Database Architecture",
+      "spec": "docs/architecture/SECTION_07_DATABASE_ARCHITECTURE.md",
+      "implementation": "apps/backend/ago/backend_contracts.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 8,
+      "title": "Message Bus",
+      "spec": "docs/architecture/SECTION_08_MESSAGE_BUS.md",
+      "implementation": "apps/backend/ago/events.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 9,
+      "title": "Memory Architecture",
+      "spec": "docs/architecture/SECTION_09_MEMORY_ARCHITECTURE.md",
+      "implementation": "apps/backend/ago/semantic_memory_store.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 10,
+      "title": "Security Architecture",
+      "spec": "docs/architecture/SECTION_10_SECURITY_ARCHITECTURE.md",
+      "implementation": "apps/backend/ago/security_controls.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 11,
+      "title": "Local Deployment",
+      "spec": "docs/architecture/SECTION_11_LOCAL_DEPLOYMENT.md",
+      "implementation": "scripts/ago.ps1",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 12,
+      "title": "Architecture Decisions",
+      "spec": "docs/architecture/section12_decisions.json",
+      "implementation": "apps/backend/ago/architecture_guard.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 13,
+      "title": "Engineering Standards",
+      "spec": "docs/architecture/SECTION_13_ENGINEERING_STANDARDS.md",
+      "implementation": "scripts/check_engineering_quality.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 14,
+      "title": "Module Dependencies",
+      "spec": "docs/architecture/SECTION_14_MODULE_DEPENDENCY_RULES.md",
+      "implementation": "apps/backend/ago/architecture_guard.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 15,
+      "title": "Original Roadmap",
+      "spec": "docs/reports/SECTIONS15_18_SOURCE_VERIFICATION.md",
+      "implementation": "docs/architecture/SECTION_15_ROADMAP.md",
+      "status": "document_reconciled"
+    },
+    {
+      "section": 16,
+      "title": "Architecture Governance",
+      "spec": "docs/architecture/SECTION_16_ARCHITECTURE_GOVERNANCE.md",
+      "implementation": "apps/backend/ago/governance.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 17,
+      "title": "Phase Minus One Non Goals",
+      "spec": "docs/reports/SECTIONS15_18_SOURCE_VERIFICATION.md",
+      "implementation": "docs/architecture/SECTION_17_PHASE_MINUS_ONE_NON_GOALS.md",
+      "status": "document_reconciled"
+    },
+    {
+      "section": 18,
+      "title": "Technology References",
+      "spec": "docs/reports/SECTIONS15_18_SOURCE_VERIFICATION.md",
+      "implementation": "docs/architecture/SECTION_18_REFERENCES.md",
+      "status": "document_reconciled"
+    },
+    {
+      "section": 19,
+      "title": "Meta Brain",
+      "spec": "docs/architecture/SECTION_19_20_META_DNA.md",
+      "implementation": "apps/backend/ago/meta_brain.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 20,
+      "title": "Organizational DNA",
+      "spec": "docs/architecture/SECTION_19_20_META_DNA.md",
+      "implementation": "apps/backend/ago/organizational_dna.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 21,
+      "title": "Organizational Operating System",
+      "spec": "docs/architecture/SECTIONS_21_27_OPERATING_CONTRACTS.md",
+      "implementation": "apps/backend/ago/task_store.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 22,
+      "title": "Agent State",
+      "spec": "docs/architecture/SECTIONS_21_27_OPERATING_CONTRACTS.md",
+      "implementation": "apps/backend/ago/enterprise_store.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 23,
+      "title": "Multi-Level Planning",
+      "spec": "docs/architecture/SECTIONS_21_27_OPERATING_CONTRACTS.md",
+      "implementation": "apps/backend/ago/company_ollama_chain.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 24,
+      "title": "Organizational Economics",
+      "spec": "docs/architecture/SECTIONS_21_27_OPERATING_CONTRACTS.md",
+      "implementation": "apps/backend/ago/credits.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 25,
+      "title": "Internal Marketplace",
+      "spec": "docs/architecture/SECTIONS_21_27_OPERATING_CONTRACTS.md",
+      "implementation": "apps/backend/ago/tool_catalog.py",
+      "status": "design_only"
+    },
+    {
+      "section": 26,
+      "title": "Evolution Engine",
+      "spec": "docs/architecture/SECTIONS_21_27_OPERATING_CONTRACTS.md",
+      "implementation": "apps/backend/ago/meta_brain.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 27,
+      "title": "Digital Twin",
+      "spec": "docs/architecture/SECTIONS_21_27_OPERATING_CONTRACTS.md",
+      "implementation": "apps/backend/ago/simulation.py",
+      "status": "partially_implemented"
+    },
+    {
+      "section": 28,
+      "title": "Differentiators",
+      "spec": "docs/architecture/SECTION_28_DIFFERENTIATORS.md",
+      "implementation": "apps/backend/ago/architecture_guard.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 29,
+      "title": "Corporate Constitution",
+      "spec": "docs/reports/SECTION29_FINAL_ACCEPTANCE.md",
+      "implementation": "apps/backend/ago/governance_domain.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 30,
+      "title": "Organizational Calendar",
+      "spec": "docs/architecture/SECTION_30_ORGANIZATIONAL_CALENDAR.md",
+      "implementation": "apps/backend/ago/calendar_store.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 31,
+      "title": "Enterprise Graph",
+      "spec": "docs/reports/SECTIONS31_34_FINAL_ACCEPTANCE.md",
+      "implementation": "apps/backend/ago/graph_store.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 32,
+      "title": "Organizational Psychology",
+      "spec": "docs/reports/SECTIONS31_34_FINAL_ACCEPTANCE.md",
+      "implementation": "apps/backend/ago/behavior_store.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 33,
+      "title": "Analytics Engine",
+      "spec": "docs/reports/SECTIONS31_34_FINAL_ACCEPTANCE.md",
+      "implementation": "apps/backend/ago/analytics_store.py",
+      "status": "tested_bounded"
+    },
+    {
+      "section": 34,
+      "title": "Public API Platform",
+      "spec": "docs/architecture/SECTION34_GITHUB_LIFECYCLE.md",
+      "implementation": "apps/backend/ago/integration_store.py",
+      "status": "partially_implemented"
+    }
+  ]
+}
