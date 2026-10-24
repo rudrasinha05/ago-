@@ -149,6 +149,17 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
               if full_board else ["ceo","cto","pm","employee"])
     )
     assert result["roles_completed"]==expected_count and len(calls)==expected_count
+    # Exactly the calls attempted count against the virtual budget; a Risk
+    # veto must not pretend the remaining three employees spent model credits.
+    usage=info["db"].execute("""
+        SELECT operation_key,amount FROM ago_credit_usage
+        WHERE tenant_id=%s AND operation_key LIKE %s
+        ORDER BY operation_key
+    """,(info["tenant"],f"local-chain:{task_id}:role:%")).fetchall()
+    assert len(usage)==expected_count
+    assert all(str(u["amount"]) in ("1", "1.00") for u in usage)
+    assert len({u["operation_key"] for u in usage})==expected_count
+    assert float(CreditBudget(info["db"]).balance(tenant_id=info["tenant"])["consumed"])==expected_count
     assert result["roles_expected"]==(7 if full_board else 4)
     assert result["handoff_complete"] is not deny_risk
     assert result["board_review_cleared"] is (full_board and not deny_risk)

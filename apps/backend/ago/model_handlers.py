@@ -119,15 +119,27 @@ def optional_model_handlers(
             participants = repositories.resolve(CompanyOllamaChainQueries).assignments(
                 tenant_id=actor.tenant_id, actor_id=actor.subject, task=task,
             )
-            repositories.resolve(CreditBudget).charge(
-                tenant_id=actor.tenant_id,
-                actor_id=actor.subject,
-                operation_key=f"local-chain:{task.id}",
-                amount=str(len(participants)),
-                category="local_model_attempt",
-            )
+            # Budget real inference attempts, never charge seven fictional
+            # role calls when Risk/Compliance veto stops the Board after four.
+            # Charge BEFORE each localhost call; an attempted request still
+            # costs one virtual unit, even if the model times out or refuses.
+            class MeteredLocalProvider:
+                def __init__(self):
+                    self.attempts = 0
+
+                def generate(self, prompt):
+                    self.attempts += 1
+                    repositories.resolve(CreditBudget).charge(
+                        tenant_id=actor.tenant_id,
+                        actor_id=actor.subject,
+                        operation_key=f"local-chain:{task.id}:role:{self.attempts}",
+                        amount="1",
+                        category="local_model_attempt",
+                    )
+                    return provider.generate(prompt)
+
             return run_four_role_chain(
-                task=task, participants=participants, provider=provider,
+                task=task, participants=participants, provider=MeteredLocalProvider(),
                 engineering_candidates=engineering_enabled,
             )
 
