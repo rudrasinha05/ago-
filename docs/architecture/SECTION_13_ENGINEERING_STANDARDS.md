@@ -31,3 +31,26 @@ The public surface is /v1 REST/OpenAPI, versioned event envelopes, SDK helpers a
 For future distributable releases use MAJOR.MINOR.PATCH: additive compatible functionality increments minor, compatible fixes patch, breaking stable public surface major. During 0.y.z development breaking changes still require documented compatibility review and a minor increment; do not use pre-1.0 status to silently break clients. Deprecate before removal, name the replacement and retain at least one approved migration release. No scheduled removal without owner acceptance.
 
 The frozen OpenAPI contract tracks current routes/methods, request fields/types/required flags/constraints and response schemas; the gate rejects silent changes until explicit review updates the manifest. Legacy three-threshold DNA requests remain valid, and old snapshot digests use their original stored scoring profile/metrics. New charter/scope/provenance fields are additive. Event schema versions retain existing replay/idempotency requirements. A passing schema gate does not replace actual authentication and PostgreSQL contract tests.
+
+
+## Local AI engineering capability observation — 24 Oct 2026
+
+A reviewed, read-only, Founder-only API route
+`GET /v1/agents/engineering-capabilities` reports the AGO server's
+*configured* local coding mode, not real inference or business execution.
+It uses the same authenticated Founder authorization as sensitive agent run
+records (`agent:read` plus `approval:founder`). It returns only non-secret
+model tag and Boolean mode/status fields. Default, paid or production modes
+return disabled; no token, private project brief, prompt, QA verdict or
+GitHub credential is disclosed.
+
+`run-approved-engineering` consumes this capability check **before** any
+approved task dispatch, preventing an operator from misclassifying the
+deterministic internal fallback as a seven-role Ollama coding run. It does
+not grant approval or bypass the governed server's own task authorization.
+This new operation has been explicitly reviewed and pinned in
+`docs/architecture/section13_api_contract.json` with the exact OpenAPI
+SHA-256 fingerprint reported by the failing API-contract CI guard:
+`2b6553482d280aa92fabda40522f5525d2b009ff3c07649106e6b943be2d1a6b`.
+The full contract checker must still be green on the committed code;
+the metadata update is not by itself completion or owner-device proof.
