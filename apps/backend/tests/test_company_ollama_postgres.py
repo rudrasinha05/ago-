@@ -82,11 +82,16 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
             if deny_risk and "ROLE: RISK\n" in prompt:
                 return "BOARD_RECOMMENDATION: DENY\nRISKS: Security risk unresolved"
             if engineering and "ROLE: EMPLOYEE\n" in prompt:
+                assert "unittest.TestCase" in prompt
+                assert "NOT discovered" in prompt
                 return json.dumps({
                     "files": [
                         {"path":"src/logic.py", "content":"def answer():\n    return 42\n"},
                         {"path":"tests/test_logic.py", "content":
-                         "from src.logic import answer\n\ndef test_answer():\n    assert answer()==42\n"},
+                         "import unittest\nfrom src.logic import answer\n"
+                         "class AnswerTests(unittest.TestCase):\n"
+                         "    def test_answer(self):\n"
+                         "        self.assertEqual(answer(),42)\n"},
                     ],
                     "acceptance_checks":["Run isolated pytest after founder source review"],
                 })

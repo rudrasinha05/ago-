@@ -75,7 +75,10 @@ def run_four_role_chain(
              "fields path and content; include a Python src/*.py file and a "
              "tests/test_*.py file. acceptance_checks is a list of 1 to 5 "
              "plain-language checks. Small correct Python functions and standard "
-             "library tests only. No Markdown fences, code execution, secrets, "
+             "library tests only. Tests MUST contain a unittest.TestCase "
+             "subclass with at least one def test_* method, using import unittest. "
+             "Standalone pytest-style test functions are NOT discovered by the "
+             "offline test runner. No Markdown fences, code execution, secrets, "
              "network, imports from untrusted packages, or repository actions. "
              "Your response is NOT a committed file or passed test.\n"
              if code_author else
