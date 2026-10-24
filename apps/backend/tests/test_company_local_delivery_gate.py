@@ -168,7 +168,7 @@ def repaired_request(tmp_path, module):
         "release_ready": False,
     }), encoding="utf-8")
     changed = [dict(f) for f in original["files"]]
-    changed[0]["content"] = "def twice(x):\\n    return x * 2 + 0\\n"
+    changed[0]["content"] = "def twice(x):\n    return x * 2 + 0\n"
     updated = reviewed_candidate(json.dumps({
         "files": changed, "acceptance_checks": original["acceptance_checks"],
     }))
@@ -226,7 +226,7 @@ def test_repair_input_cannot_skip_failed_origin_or_launder_approval(
         changed = [dict(f) for f in candidate["files"]]
         checks = candidate["acceptance_checks"]
         if tampering == "modified_test":
-            changed[1]["content"] += "# injected relaxation\\n"
+            changed[1]["content"] += "# injected relaxation\n"
         elif tampering == "modified_checks":
             checks = ["Anything passes"]
         else:
