@@ -1,6 +1,6 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {githubDeliveryRows,sameRecord} from './company-github-delivery-state';
+import {githubDeliveryRows,sameRecord,verifiedGitHubChecks} from './company-github-delivery-state';
 
 const APPLY='APPLY_APPROVED_GITHUB_OPERATION';
 const EXECUTE='EXECUTE_VERIFIED_GITHUB_OPERATION';
@@ -52,24 +52,16 @@ export function CompanyGithubDelivery({api,me}){
   const row=entry.row;
   const key=step+':'+op.id;
   const required=step==='apply'?APPLY:EXECUTE;
-  if(confirmation!==required){setError('Type the exact confirmation shown for this action.');return;}
+  if(confirmation!==required){setError('Select the exact confirmation shown for this action.');return;}
   if(used.current.has(key)){setError('This action was already attempted in this browser session. Inspect AGO before any retry.');return;}
   if(!proposal||proposal.status!=='approved'||proposal.actor_id!==me.id||
      proposal.command!=='github_operation'||!sameRecord(proposal.specification,op)||
      (step==='apply'?entry.applied:!row?.eligibleExecute)){
     setError('Original Founder proposal, independent approval or current private GitHub state is missing.');return;
   }
-  if(step==='execute'&&op.operation==='create_pull_request'){
-   const checkNames=op.payload?.required_checks;
-   const runs=project.status.ci_check_runs||[];
-   const statuses=project.status.ci_statuses||[];
-   if(!Array.isArray(checkNames)||!checkNames.length||
-      project.status.ci_check_truncated!==false||
-      project.status.ci_status_truncated!==false||!Array.isArray(runs)||!Array.isArray(statuses)||
-      checkNames.some(name=>[...runs.filter(r=>r.name===name).map(r=>r.status==='completed'&&r.conclusion==='success'),
-        ...statuses.filter(s=>s.context===name).map(s=>s.state==='success')].join(',')!=='true')){
-    setError('Required real GitHub CI is not fully verified. PR execution blocked.');return;
-   }
+  if(step==='execute'&&op.operation==='create_pull_request'&&
+      !verifiedGitHubChecks(project.status,op.payload?.required_checks)){
+   setError('Required real GitHub CI is incomplete or ambiguous. PR blocked.');return;
   }
   used.current.add(key);setBusy(key);setError('');setNotice('');setConfirmation('');
   try{

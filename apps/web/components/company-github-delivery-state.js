@@ -4,6 +4,26 @@ export const sameRecord=(a,b)=>{
   ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,sorted(v[k])])):v;
  return Boolean(a&&b)&&JSON.stringify(sorted(a))===JSON.stringify(sorted(b));
 };
+/** Exactly one successful real provider check/status for every reviewed name. */
+export function verifiedGitHubChecks(status,names){
+ if(!Array.isArray(names)||!names.length||names.length>24||
+    names.some(x=>typeof x!=='string'||!x||x.length>120)||
+    new Set(names).size!==names.length||
+    status?.ci_truncated!==false||status?.ci_check_truncated!==false||
+    status?.ci_status_truncated!==false||
+    !Array.isArray(status?.ci_check_runs)||!Array.isArray(status?.ci_statuses)||
+    !Number.isInteger(status?.ci_check_total)||
+    status.ci_check_total!==status.ci_check_runs.length)return false;
+ return names.every(name=>{
+  const matches=[
+   ...status.ci_check_runs.filter(x=>x?.name===name)
+     .map(x=>x.status==='completed'&&x.conclusion==='success'),
+   ...status.ci_statuses.filter(x=>x?.context===name)
+     .map(x=>x.state==='success'),
+  ];
+  return matches.length===1&&matches[0]===true;
+ });
+}
 export function githubDeliveryRows(project,operations,proposals){
  const status=project?.status;
  if(!status||status.repository_private!==true||!Array.isArray(status.operations))
@@ -32,18 +52,20 @@ export function githubDeliveryRows(project,operations,proposals){
    event.result.head_sha===operation.payload?.expected_sha;
   const headOk=operation.payload?.expected_sha===status.develop_sha;
   const neverRetry=Boolean(event);
-  const applicable=Boolean(p&&approved&&!item.proposal_applied);
+  const prChecksOk=operation.operation!=='create_pull_request'||
+   verifiedGitHubChecks(status,operation.payload?.required_checks);
   return {id:operation.id,type:operation.operation,
-   proposalId:p?.id||null,approved,applied:true,
+   proposalId:p?.id||null,approved,
    headOk,neverRetry,createdPr,committed,
    dispatch:event?.status||'not_started',
    commitSha:committed?recordedSha:null,
    prUrl:createdPr?event.result.url:null,
    label:operation.operation==='commit_files'?'AI-generated code commit':'Review-only draft Pull Request',
-   eligibleExecute:approved&&headOk&&!neverRetry,
+   eligibleExecute:approved&&headOk&&prChecksOk&&!neverRetry,
    blocker:!p?'Original independent governance proposal not visible.'
     :!approved?'Waiting for independent human governance approval.'
     :!headOk?'GitHub develop changed; inspect and re-review.'
+    :!prChecksOk?'Required GitHub CI checks incomplete or unverifiable.'
     :neverRetry?(committed?'Verified commit delivered.':createdPr?'Verified draft PR delivered.':'Previous dispatch is recorded; inspect before retry.')
     :null};
  });

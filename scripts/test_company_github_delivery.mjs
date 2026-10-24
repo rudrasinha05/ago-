@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {githubDeliveryRows,sameRecord} from '../apps/web/components/company-github-delivery-state.js';
+import {githubDeliveryRows,sameRecord,verifiedGitHubChecks} from '../apps/web/components/company-github-delivery-state.js';
 
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const commit={id:uuid(9),project_id:uuid(1),operation:'commit_files',
@@ -87,4 +87,33 @@ test('draft PR is only verified with bound exact-number provider receipt',()=>{
   [stored(pr)],[proposal(pr)]);
  assert.equal(wrong.rows[0].createdPr,false);
  assert.equal(wrong.rows[0].prUrl,null);
+});
+
+
+test('PR execution unavailable until complete single provider CI evidence passes',()=>{
+ const reviewed={...project,status:{...project.status,develop_sha:'c'.repeat(40),
+  ci_truncated:false,ci_check_truncated:false,ci_status_truncated:false,
+  ci_check_runs:[
+   {name:'Backend QA',status:'completed',conclusion:'success'},
+   {name:'Browser QA',status:'completed',conclusion:'success'},
+  ],ci_check_total:2,ci_statuses:[]}};
+ const good=githubDeliveryRows(reviewed,[stored(pr)],[proposal(pr)]);
+ assert.equal(good.rows[0].eligibleExecute,true);
+ assert.equal(verifiedGitHubChecks(reviewed.status,pr.payload.required_checks),true);
+ for(const altered of [
+  {...reviewed.status,ci_check_truncated:true},
+  {...reviewed.status,ci_truncated:true},
+  {...reviewed.status,ci_check_total:10},
+  {...reviewed.status,ci_check_runs:[{name:'Backend QA',status:'completed',conclusion:'success'}]},
+  {...reviewed.status,ci_check_runs:[...reviewed.status.ci_check_runs,
+   reviewed.status.ci_check_runs[0]]},
+  {...reviewed.status,ci_check_runs:[{name:'Backend QA',status:'completed',
+   conclusion:'failure'},reviewed.status.ci_check_runs[1]]},
+  {...reviewed.status,ci_check_runs:[{name:'Backend QA',status:'in_progress',
+   conclusion:null},reviewed.status.ci_check_runs[1]]},
+ ]){
+  const out=githubDeliveryRows({...reviewed,status:altered},[stored(pr)],[proposal(pr)]);
+  assert.equal(out.rows[0].eligibleExecute,false);
+  assert.match(out.rows[0].blocker,/CI checks incomplete/);
+ }
 });
