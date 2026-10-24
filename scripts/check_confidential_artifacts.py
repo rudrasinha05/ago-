@@ -5,10 +5,10 @@ does NOT prevent accidental forced 'git add -f' or historical commits.
 """
 from __future__ import annotations
 
-from pathlib import PurePosixPath
 import re
 import subprocess
 import sys
+from pathlib import PurePosixPath
 
 PRIVATE_ROOTS = frozenset({
     ".ago-private",
