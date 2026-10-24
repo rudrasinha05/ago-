@@ -226,7 +226,19 @@ export function CompanyMap({api,me,data,onRefresh}) {
   return <section id="ago-unified-cockpit" className="company-command" aria-label="Company map and conversations">
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div>{me.permissions.includes('organization:manage')&&<div className="company-heading-actions"><button type="button" className="btn" aria-expanded={addingDepartment} onClick={()=>setAddingDepartment(v=>!v)}>Add department</button><button type="button" className="btn" disabled={!departments.length} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></div>}</header>
     {addingDepartment&&me.permissions.includes('organization:manage')&&<form className="company-add-department" onSubmit={createDepartment}><label htmlFor="company-department-name">Department name</label><input id="company-department-name" name="name" autoFocus required maxLength={150} placeholder="e.g. Engineering"/><button className="btn" disabled={sending}>{sending?'Saving…':'Create department'}</button><button type="button" className="btn" onClick={()=>setAddingDepartment(false)}>Cancel</button></form>}
-    <nav className="company-cockpit-nav" aria-label="Company control center sections">
+    <nav className="company-cockpit-nav" aria-label="Company control center sections"
+      onClick={event=>{
+        // Fragment navigation must remain reliable on tablet Firefox while
+        // React repaints task updates; never reload a tab-memory AGO session.
+        const anchor=event.target.closest?.('a[href^="#"]');
+        const fragment=anchor?.getAttribute('href');
+        if(!fragment||!/^#[A-Za-z0-9_-]+$/.test(fragment))return;
+        const destination=document.getElementById(fragment.slice(1));
+        if(!destination)return;
+        event.preventDefault();
+        if(window.location.hash!==fragment)window.history.pushState(null,'',fragment);
+        destination.scrollIntoView({block:'start',behavior:'instant'});
+      }}>
       <a href="#ago-unified-cockpit">Company Brain</a>
       <a href="#company-approval-inbox">Founder Approvals</a>
       {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business Opportunities</a>}
