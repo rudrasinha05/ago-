@@ -132,3 +132,30 @@ def test_reviewed_unsubmitted_github_draft_is_allowed_only_if_exact(tmp_path):
     draft_file.write_text(json.dumps(operation), encoding="utf-8")
     with pytest.raises(PermissionError, match="differs"):
         MODULE["verify"](directory)
+
+
+
+def test_docker_qa_receipt_never_persists_private_stdout_or_terminal_control_codes(tmp_path):
+    """Untrusted candidate test logs can contain real credentials or founder briefs."""
+    import hashlib
+
+    directory, candidate = staged(tmp_path)
+    secret = "ghp_" + "a" * 32
+    founder_brief = "SECRET_FOUNDER_COMPANY_BRIEF"
+    combined_stdout = "AGO_UNITTEST_CASES=1\n" + founder_brief + "\n"
+    combined_stderr = "\x1b[31m" + secret + "\x1b[0m\n"
+    def execute(_command, **kwargs):
+        return SimpleNamespace(returncode=0, stdout=combined_stdout,
+                               stderr=combined_stderr)
+    result = MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"],
+                              runner=execute)
+    saved = (directory / "AGO_TEST_RECEIPT.json").read_text(encoding="utf-8")
+    assert result["candidate_sha256"] == candidate["candidate_sha256"]
+    assert result["tests_passed"] is True
+    assert result["output_sha256"] == hashlib.sha256(
+        (combined_stdout + "\n" + combined_stderr).encode("utf-8")
+    ).hexdigest()
+    for disallowed in (founder_brief, secret, "\x1b[31m"):
+        assert disallowed not in saved
+    assert result["output_excerpt"].startswith("REDACTED:")
+    assert result["independent_qa_approved"] is False
