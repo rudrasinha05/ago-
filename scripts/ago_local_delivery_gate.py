@@ -54,10 +54,10 @@ def prepare(
         raise FileExistsError("Use a new empty candidate review directory")
     if qa_packet_path.exists() or qa_packet_path.is_symlink():
         raise FileExistsError("Use a new independent QA packet output path")
-    if not qa_packet_path.parent.is_dir():
-        raise ValueError("QA packet parent directory must already exist")
     if qa_packet_path.resolve().is_relative_to(staged_directory.resolve()):
         raise PermissionError("QA packet must be stored outside staged candidate")
+    if not qa_packet_path.parent.is_dir():
+        raise ValueError("QA packet parent directory must already exist")
     stage_candidate(candidate, staged_directory)
     if draft:
         with (staged_directory / "AGO_UNSUBMITTED_GITHUB_OPERATION.json").open(
