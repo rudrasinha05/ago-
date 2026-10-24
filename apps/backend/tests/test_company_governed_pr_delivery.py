@@ -31,11 +31,10 @@ def setup(monkeypatch, tmp_path):
     pr_op_id = str(uuid4())
     project_id = original["project_id"]
     checks = ["Backend QA", "Browser QA"]
-    pr_record = None
     calls = []
     state = {"ci": "success", "visibility": True, "prior_pr": False,
              "commit_status": "succeeded", "pr_approved": True,
-             "pr_applied": True, "uncertain": False}
+             "pr_applied": True, "uncertain": False, "pr_record": None}
 
     def mock(req, timeout=20):
         calls.append((req.get_method(), req.full_url, req.data))
@@ -49,10 +48,10 @@ def setup(monkeypatch, tmp_path):
                 "id": original["id"], "kind": "github_operation",
                 "payload": original, "proposal_id": commit_proposal,
             }]
-            if state["pr_applied"] and pr_record is not None:
+            if state["pr_applied"] and state["pr_record"] is not None:
                 rows.append({
                     "id": pr_op_id, "kind": "github_operation",
-                    "payload": pr_record["operation"],
+                    "payload": state["pr_record"]["operation"],
                     "proposal_id": pr_proposal,
                 })
             return Reply({"github_operations": rows})
@@ -86,14 +85,14 @@ def setup(monkeypatch, tmp_path):
             })
         if req.full_url.endswith("/v1/enterprise/reviews/integration"):
             proposals = []
-            if pr_record is not None:
+            if state["pr_record"] is not None:
                 proposals.append({
                     "id": pr_proposal, "domain": "integration",
                     "command": "github_operation",
                     "status": "approved" if state["pr_approved"] else "pending",
                     "actor_id": founder, "approval_id": str(uuid4()),
                     "operation_key": pr_op_id,
-                    "specification": pr_record["operation"],
+                    "specification": state["pr_record"]["operation"],
                 })
             return Reply({"revision": 8, "proposals": proposals})
         if req.full_url.endswith("/propose"):
@@ -127,24 +126,23 @@ def setup(monkeypatch, tmp_path):
         token="signed-founder", opener=mock,
     )
     files = (commit_draft, export, stage, qa, tmp_path / "draft-pr.json")
-    return pr, files, state, calls, args, checks, pr_op_id, (
-        lambda: pr_record
-    ), (lambda value: None)
+    return pr, files, state, calls, args, checks, pr_op_id
 
 
 def prepare(setup):
-    pr, files, state, calls, args, checks, pr_id, *_ = setup
+    pr, files, state, calls, args, checks, pr_id = setup[-1]
     values = dict(phase="prepare", operation_id=pr_id,
                   title="Verified AI project", body="Independent human QA and CI evidence",
                   checks=checks)
     result = pr.deliver(*files, **args, **values, apply=True,
                         confirm=pr.CONFIRMS["prepare"])
     assert result["private_draft_saved"] is True
-    return json.loads(files[4].read_text())
+    state["pr_record"] = json.loads(files[4].read_text())
+    return state["pr_record"]
 
 
 def test_local_ci_is_strict_and_blocks_failed_pending_duplicate_or_public(setup):
-    pr, files, state, calls, args, checks, pr_id, *_ = setup
+    pr, files, state, calls, args, checks, pr_id = setup[-1]
     for condition in ("pending", "failed", "missing", "duplicate"):
         state["ci"] = condition
         with pytest.raises(PermissionError):
@@ -161,7 +159,7 @@ def test_local_ci_is_strict_and_blocks_failed_pending_duplicate_or_public(setup)
 
 
 def test_verified_commit_and_ci_make_private_pr_draft_without_network_write(setup):
-    pr, files, state, calls, args, checks, pr_id, *_ = setup
+    pr, files, state, calls, args, checks, pr_id = setup[-1]
     record = prepare(setup)
     assert record["kind"] == "ago_ci_verified_draft_pr"
     assert record["operation"]["operation"] == "create_pull_request"
@@ -173,7 +171,7 @@ def test_verified_commit_and_ci_make_private_pr_draft_without_network_write(setu
 
 
 def test_mutated_pr_or_source_cannot_enter_governance(setup):
-    pr, files, state, calls, args, checks, pr_id, *_ = setup
+    pr, files, state, calls, args, checks, pr_id = setup[-1]
     record = prepare(setup)
     record["operation"]["payload"]["title"] = "Switched project"
     files[4].write_text(json.dumps(record))
@@ -183,7 +181,7 @@ def test_mutated_pr_or_source_cannot_enter_governance(setup):
 
 
 def test_missing_real_github_commit_never_creates_pr(setup):
-    pr, files, state, calls, args, checks, pr_id, *_ = setup
+    pr, files, state, calls, args, checks, pr_id = setup[-1]
     state["commit_status"] = "uncertain"
     with pytest.raises(PermissionError):
         pr.deliver(*files, **args, phase="prepare",
@@ -193,9 +191,92 @@ def test_missing_real_github_commit_never_creates_pr(setup):
 
 
 def test_pr_schema_and_required_ci_reject_unbounded_or_fake_checks(setup):
-    pr, files, state, calls, args, checks, pr_id, *_ = setup
+    pr, files, state, calls, args, checks, pr_id = setup[-1]
     for item in ([], ["same", "same"], [""]):
         with pytest.raises(ValueError):
             pr.deliver(*files, **args, phase="prepare",
                        operation_id=pr_id, title="Review", body="QA", checks=item)
     assert not files[4].exists()
+
+
+def test_distinct_founder_approval_proposal_then_apply_then_real_draft_pr(setup, tmp_path):
+    pr, files, state, calls, args, checks, pr_id = setup
+    prepare(setup)
+    claims = pr.DurableAttemptJournal(tmp_path / "claims")
+    preview = pr.deliver(*files, **args, phase="submit")
+    assert preview["github_pr_created"] is False
+    assert all(method == "GET" for method, *_ in calls)
+    proposed = pr.deliver(*files, **args, phase="submit", apply=True,
+                          confirm=pr.CONFIRMS["submit"], journal=claims)
+    assert proposed["pr_proposal_id"]
+    assert proposed["github_pr_created"] is False
+    pr_proposal = proposed["pr_proposal_id"]
+    with pytest.raises(FileExistsError):
+        pr.deliver(*files, **args, phase="submit", apply=True,
+                   confirm=pr.CONFIRMS["submit"], journal=claims)
+    preview_apply = pr.deliver(*files, **args, phase="apply", pr_proposal=pr_proposal)
+    assert preview_apply["github_pr_created"] is False
+    applied = pr.deliver(
+        *files, **args, phase="apply", pr_proposal=pr_proposal, apply=True,
+        confirm=pr.CONFIRMS["apply"], journal=claims,
+    )
+    assert applied["governance_applied"] is True
+    assert applied["github_pr_created"] is False
+    preview_exec = pr.deliver(*files, **args, phase="execute",
+                              pr_proposal=pr_proposal)
+    assert preview_exec["github_pr_created"] is False
+    completed = pr.deliver(
+        *files, **args, phase="execute", pr_proposal=pr_proposal,
+        apply=True, confirm=pr.CONFIRMS["execute"], journal=claims,
+    )
+    assert completed["github_pr_created"] is True
+    assert completed["draft_pr_number"] == 4
+    assert completed["draft_pr_url"].endswith("/private-project/pull/4")
+    assert completed["merge_authorized"] is False
+    assert completed["release_ready"] is False
+    assert len([x for x in calls if x[0] == "POST"]) == 3
+    with pytest.raises(FileExistsError):
+        pr.deliver(*files, **args, phase="execute", pr_proposal=pr_proposal,
+                   apply=True, confirm=pr.CONFIRMS["execute"], journal=claims)
+    assert len([x for x in calls if x[0] == "POST"]) == 3
+
+
+@pytest.mark.parametrize("failed", ["unapproved", "not_applied", "previous", "pending_ci"])
+def test_pr_execution_refuses_missing_independent_acceptance(setup, tmp_path, failed):
+    pr, files, state, calls, args, checks, pr_id = setup
+    prepare(setup)
+    proposal = str(uuid4())
+    if failed == "unapproved":
+        state["pr_approved"] = False
+    if failed == "not_applied":
+        state["pr_applied"] = False
+    if failed == "previous":
+        state["prior_pr"] = True
+    if failed == "pending_ci":
+        state["ci"] = "pending"
+    with pytest.raises(PermissionError):
+        pr.deliver(
+            *files, **args, phase="execute", pr_proposal=proposal, apply=True,
+            confirm=pr.CONFIRMS["execute"],
+            journal=pr.DurableAttemptJournal(tmp_path / "claims"),
+        )
+    assert all(method == "GET" for method, *_ in calls)
+    assert not (tmp_path / "claims").exists()
+
+
+@pytest.mark.parametrize("phase", ["submit", "apply", "execute"])
+def test_uncertain_submission_is_never_replayed(setup, tmp_path, phase):
+    pr, files, state, calls, args, checks, pr_id = setup
+    prepare(setup)
+    state["uncertain"] = True
+    claims = tmp_path / "claims"
+    proposal = str(uuid4())
+    kwargs = dict(phase=phase, pr_proposal=proposal, apply=True,
+                  confirm=pr.CONFIRMS[phase])
+    with pytest.raises(TimeoutError):
+        pr.deliver(*files, **args, **kwargs,
+                   journal=pr.DurableAttemptJournal(claims))
+    with pytest.raises(FileExistsError):
+        pr.deliver(*files, **args, **kwargs,
+                   journal=pr.DurableAttemptJournal(claims))
+    assert len([m for m, *_ in calls if m == "POST"]) == 1
