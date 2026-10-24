@@ -237,7 +237,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
         if(!destination)return;
         event.preventDefault();
         if(window.location.hash!==fragment)window.history.pushState(null,'',fragment);
-        destination.scrollIntoView({block:'start',behavior:'instant'});
+        destination.scrollIntoView({block:'start',behavior:'auto'});
       }}>
       <a href="#ago-unified-cockpit">Company Brain</a>
       <a href="#company-approval-inbox">Founder Approvals</a>
