@@ -30,7 +30,7 @@ def read_document(path: Path, *, max_bytes: int = MAX_JSON) -> dict:
         raise ValueError("A small regular local evidence file is required")
     result = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(result, dict):
-        raise ValueError("Local evidence must be one JSON object")
+        raise TypeError("Local evidence must be one JSON object")
     return result
 
 
@@ -39,7 +39,8 @@ def verify_handoff(export: Path, staged: Path, qa_file: Path) -> dict:
     source = read_document(export, max_bytes=40000)
     if (source.get("source") != "ago_authenticated_founder_run"
             or source.get("status") != "completed"
-            or source.get("result", {}).get("board_review_cleared") is not True):
+            or not isinstance(source.get("result"), dict)
+            or source["result"].get("board_review_cleared") is not True):
         raise PermissionError("Exact completed Board-cleared AGO source required")
     run_id = str(UUID(str(source["id"])))
     task_id = str(UUID(str(source["task_id"])))
@@ -100,7 +101,7 @@ def review_from_session(
         raise PermissionError("An authenticated independent human QA reviewer is required")
     queue = remote_json(base, token, "/v1/console/qa-queue", opener=opener)
     if not isinstance(queue, list):
-        raise ValueError("Server QA queue evidence must be a list")
+        raise TypeError("Server QA queue evidence must be a list")
     matches = [x for x in queue if isinstance(x, dict)
                and str(x.get("id")) == evidence["task_id"]]
     if (len(matches) != 1 or matches[0].get("status") != "completed"
