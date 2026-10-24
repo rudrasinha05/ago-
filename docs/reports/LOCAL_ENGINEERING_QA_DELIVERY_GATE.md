@@ -37,11 +37,26 @@ Only after reading source/test files and confirming the local image exists, run:
 python scripts/ago_verify_candidate.py --staged-directory .\reviewed-candidate --apply --confirm EXECUTE_LOCAL_ISOLATED_TESTS
 ```
 
+After a passing receipt, build a separate **independent QA review request**. Preview is read-only and does not require GitHub credentials:
+
+```powershell
+python scripts/ago_qa_review_packet.py --staged-directory .\\reviewed-candidate
+```
+
+Write one review packet **outside** the staged source directory only after deliberate confirmation:
+
+```powershell
+python scripts/ago_qa_review_packet.py --staged-directory .\\reviewed-candidate --output .\\ago-independent-qa-review.json --apply --confirm PREPARE_INDEPENDENT_QA_REVIEW
+```
+
+This packet binds the original candidate SHA-256, a digest of the local test receipt, exact file names, acceptance checks, and any still-unsubmitted GitHub draft ID. It **does not** identify an authenticated reviewer or grant approval. A local JSON receipt may be edited or forged by its owner, so AGO's separate signed-in human QA workflow must corroborate the actual source and test execution before GitHub dispatch or release. Do not manually change packet flags to pretend QA is done.
+
 The resulting `AGO_TEST_RECEIPT.json` is written once under the staged directory. Do not reinterpret a CI-mocked test as a live local Docker execution. If the test fails, inspect the recorded output and stage a *new* reviewed candidate to retry. Do not overwrite a receipt or automatically rerun an uncertain outcome.
 
 ## Remaining local delivery gates after the Milestone A CI repair
 
 - Current generator is intentionally bounded to small Python `src/` files and `tests/test_*.py` tests. The container runs **standard-library unittest**, not pytest plugins or arbitrary project build systems. A candidate with only pytest functions produces **zero unittest cases** and fails closed.
+- GitHub Actions' **trusted synthetic fixture smoke** also runs a fixed correct and fixed deliberately broken Python source in a real non-root, read-only, no-network Docker container. It verifies that success and failure produce distinct truthful receipts. This is not execution of Ollama-generated code and does not prove real human QA.
 - The Docker isolation flags reduce risk but do **not** guarantee containment of hostile source, prevent Docker engine vulnerabilities, or constitute an independent security assessment. If you do not trust the candidate, do not run it on the laptop.
 - No actual local Docker execution on the owner's PC is established by repository tests; this is a tested, operator-triggered execution path requiring the user's machine and preloaded image.
 - Independent QA must separately review program behavior, requirements coverage, evidence, security, and documentation. A generated unit test can miss bugs.
