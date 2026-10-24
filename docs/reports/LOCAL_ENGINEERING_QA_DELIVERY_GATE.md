@@ -239,7 +239,7 @@ process only, run:
 # Terminal 1: Ollama must already be installed and responsive (never auto pulled)
 .\scripts\ago-visual.ps1 -Engineering -Model qwen2.5-coder:1.5b
 # Terminal 2: After real Board appointments and Founder task approval in AGO
-.\scripts\ago.ps1 run-approved-internal
+.\scripts\ago.ps1 run-approved-engineering
 # Terminal 3: For a completed cleared AI run, export its candidate safely
 .\scripts\ago.ps1 export-candidate
 ```
@@ -258,3 +258,22 @@ recommendation or missing task approval blocks code generation.
 This mode enables **actual** model attempts, not guaranteed passing source.
 A successful AI reply is still untrusted code; the independent offline Docker
 review, QA and approved GitHub delivery remain separate gates.
+
+
+### Preventing accidental deterministic-stub completion
+
+`run-approved-engineering` is separate from the generic
+`run-approved-internal` command. Before any execution POST, it requires an
+authenticated Founder-visible read of
+`GET /v1/agents/engineering-capabilities`, which must confirm all six
+current-server opt-in settings: development mode, local Ollama provider,
+enabled local models, full company chain, complete five-seat Board review,
+and engineering-candidate generation. If the server was started normally
+without `-Engineering`, the command **refuses the task without consuming
+approval or starting deterministic fallback work**.
+
+The capabilities endpoint is a configured-mode preflight only. It expressly
+reports `model_inference_verified=false` and does not assert that Ollama is
+live, the Board is staffed, the task is approved, tests passed, GitHub is
+connected, or any product is releasable. The server remains the final
+authorization authority on a subsequent dispatch.
