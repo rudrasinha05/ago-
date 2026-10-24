@@ -167,8 +167,8 @@ def test_failure_category_only_exposes_bounded_reason_not_raw_private_trace(tmp_
     private = "FOUNDERS_CONFIDENTIAL_TEST_DATA"
     def execute(_command, **kwargs):
         return SimpleNamespace(
-            returncode=1, stdout="AGO_UNITTEST_CASES=1\\n",
-            stderr="AssertionError: " + private + "\\n",
+            returncode=1, stdout="AGO_UNITTEST_CASES=1\n",
+            stderr="AssertionError: " + private + "\n",
         )
     result = MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"],
                               runner=execute)
