@@ -14,9 +14,10 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 export-candidate  # exact completed Board-cleared AI run -> new local source review
 .\scripts\ago.ps1 test-exported-candidate  # reviewed source -> Docker -> pending independent QA
 .\scripts\ago.ps1 review-tested-candidate  # authenticated independent human QA decision
+.\scripts\ago.ps1 prepare-github-draft  # human-QA-passed code -> private, unsubmitted GitHub draft
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate", "prepare-github-draft")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -199,6 +200,46 @@ try {
         }
         & python ../../scripts/ago_human_qa_handoff.py --local-url "http://127.0.0.1:$Port" --export $ExportFile --staged-directory $Stage --qa-packet $Qa --verdict $Verdict --notes $Notes --apply --confirm INDEPENDENT_HUMAN_QA_DECISION
         exit $LASTEXITCODE
+    }
+    if ($Action -eq "prepare-github-draft") {
+        Write-Host "Generate an UNAPPROVED GitHub commit draft from an actual AGO human QA PASS."
+        Write-Host "This does not change GitHub or verify the remote branch head."
+        $RunId = Read-Host "Exact completed Board-cleared AGO run UUID"
+        if ($RunId -notmatch '^[0-9a-fA-F-]{36}$') {
+            throw "Recorded run UUID required."
+        }
+        $Source = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
+        if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
+            throw "Private original AI export missing."
+        }
+        $Stage = Read-Host "Original PASSING offline Docker stage path"
+        $Qa = Read-Host "Exact pending local QA packet path"
+        if (-not (Test-Path -LiteralPath $Stage -PathType Container) -or -not (Test-Path -LiteralPath $Qa -PathType Leaf)) {
+            throw "Original source test stage and matching QA packet required."
+        }
+        $GithubProjectId = Read-Host "Existing AGO Github integration project UUID (not intake ID)"
+        $ExpectedSha = Read-Host "Founder-reviewed 40-character develop HEAD SHA"
+        $Message = Read-Host "Human-reviewed GitHub commit message"
+        if ($GithubProjectId -notmatch '^[0-9a-fA-F-]{36}$' -or $ExpectedSha -notmatch '^[0-9a-f]{40}$' -or -not $Message) {
+            throw "Exact GitHub project UUID, remote HEAD SHA, and message required."
+        }
+        $OperationId = [guid]::NewGuid().ToString()
+        $Folder = Join-Path $HOME ".ago\delivery_runs"
+        if (-not (Test-Path -LiteralPath $Folder -PathType Container)) {
+            New-Item -ItemType Directory -Path $Folder -Force | Out-Null
+        }
+        $OutputFile = Join-Path $Folder ("github-draft-" + $OperationId + ".json")
+        $Confirm = Read-Host "Prepare only a LOCAL QA-verified GitHub draft? Type PREPARE_VERIFIED_QA_GITHUB_DRAFT"
+        if ($Confirm -cne "PREPARE_VERIFIED_QA_GITHUB_DRAFT") {
+            Write-Host "Cancelled. No draft created."
+            exit 2
+        }
+        & python ../../scripts/ago_prepare_github_handoff.py --local-url "http://127.0.0.1:$Port" --export $Source --staged-directory $Stage --qa-packet $Qa --output $OutputFile --github-project-id $GithubProjectId --operation-id $OperationId --expected-sha $ExpectedSha --message $Message --apply --confirm PREPARE_VERIFIED_QA_GITHUB_DRAFT
+        if ($LASTEXITCODE -ne 0) {
+            throw "Exact human QA or GitHub draft validation failed. No GitHub write."
+        }
+        Write-Host "LOCAL draft only. Governance review still required: $OutputFile"
+        exit 0
     }
     if ($Action -eq "safe-reconcile") {
         if (-not $env:AGO_MARKET_TENANT_ID) {

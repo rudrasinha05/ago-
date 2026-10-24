@@ -245,3 +245,17 @@ def test_human_qa_operator_uses_real_signed_review_without_auto_git_dispatch():
     assert 'Read-Host "Independent human QA verdict: pass or fail"' in text
     assert "No automated QA pass" not in text
     assert text.count("finally {") == 1
+
+
+def test_qa_pass_to_github_draft_is_explicit_private_and_unsubmitted():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert script.count('if ($Action -eq "prepare-github-draft")') == 1
+    assert "ago_prepare_github_handoff.py" in script
+    assert "--apply --confirm PREPARE_VERIFIED_QA_GITHUB_DRAFT" in script
+    assert '"Existing AGO Github integration project UUID (not intake ID)"' in script
+    assert "[guid]::NewGuid().ToString()" in script
+    assert 'Join-Path $HOME ".ago\\delivery_runs"' in script
+    assert "This does not change GitHub or verify the remote branch head." in script
+    assert "git push" not in script
+    assert script.count("finally {") == 1

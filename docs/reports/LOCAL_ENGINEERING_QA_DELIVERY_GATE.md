@@ -395,3 +395,19 @@ HEAD is deliberately not certified by this helper; AGO's existing
 reviewed GitHub operation service and non-force develop compare-and-swap
 must independently authorize any actual network write. No PR, release
 or merge is created here.
+
+
+The convenient Windows operator flow for this same reviewed draft is:
+
+```powershell
+.\scripts\ago.ps1 prepare-github-draft
+```
+
+Provide the original completed run ID, passing Docker stage and QA packet;
+the **AGO GitHub integration project UUID** (not the founder intake ID);
+the currently reviewed develop HEAD SHA, and a commit message.
+Authenticate as the real Founder and approve the separate draft action.
+AGO creates a **new private JSON draft** under `~/.ago/delivery_runs/`.
+Nothing is sent to GitHub, and no external head/CI/release evidence is
+assumed. The existing governed GitHub service must separately review,
+authorize, compare the remote develop SHA and execute any eventual commit.
