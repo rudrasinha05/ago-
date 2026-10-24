@@ -13,7 +13,9 @@ import json
 import re
 import sys
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
+
+from ago.model_provider import _DenyRedirect
 from uuid import UUID
 
 from ago_engineering_candidate import inspect as inspect_run
@@ -22,6 +24,7 @@ from local_approved_agent_batch import DurableAttemptJournal, founder_login, loc
 
 CONFIRM = "INDEPENDENT_HUMAN_QA_DECISION"
 MAX_JSON = 20000
+LOCAL_OPENER = build_opener(ProxyHandler({}), _DenyRedirect()).open
 
 
 def read_document(path: Path, *, max_bytes: int = MAX_JSON) -> dict:
@@ -63,7 +66,7 @@ def verify_handoff(export: Path, staged: Path, qa_file: Path) -> dict:
 
 
 def remote_json(base: str, token: str, endpoint: str, *,
-                method: str = "GET", payload=None, opener=urlopen) -> object:
+                method: str = "GET", payload=None, opener=LOCAL_OPENER) -> object:
     allowed = (
         endpoint in ("/v1/console/me", "/v1/console/qa-queue")
         and method == "GET"
@@ -89,7 +92,7 @@ def remote_json(base: str, token: str, endpoint: str, *,
 def review_from_session(
     base: str, token: str, export: Path, staged: Path, qa_file: Path,
     *, verdict: str, notes: str, apply=False, confirm="",
-    journal: DurableAttemptJournal | None = None, opener=urlopen,
+    journal: DurableAttemptJournal | None = None, opener=LOCAL_OPENER,
 ) -> dict:
     evidence = verify_handoff(export, staged, qa_file)
     if verdict not in ("pass", "fail") or not isinstance(notes, str) or not 15 <= len(notes.strip()) <= 1200:
@@ -168,7 +171,7 @@ def main(argv=None):
         tenant = input("AGO organization ID: ").strip()
         email = input("Independent human QA reviewer email: ").strip()
         password = getpass.getpass("Human reviewer password (hidden): ")
-        token = founder_login(base, tenant, email, password)
+        token = founder_login(base, tenant, email, password, opener=LOCAL_OPENER)
         del password
         result = review_from_session(
             base, token, a.export, a.staged_directory, a.qa_packet,
