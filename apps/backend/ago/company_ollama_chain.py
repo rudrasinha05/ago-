@@ -1,5 +1,7 @@
 """Pure bounded AI governance and engineering artifact drafting; no database side effects."""
 
+import time
+
 from ago.company_engineering import assert_discoverable_unittest, reviewed_candidate
 
 ROLE_STAGES=(
@@ -43,7 +45,7 @@ def board_recommendation(text: str) -> str:
 
 def run_four_role_chain(
     *, task, participants: list[dict], provider, engineering_candidates: bool = False,
-    on_role_completed=None,
+    on_role_completed=None, clock=None,
 ) -> dict:
     project=task.project_context
     title=str(project["title"])[:180]
@@ -60,6 +62,11 @@ def run_four_role_chain(
         raise PermissionError("Each Board and delivery role needs a distinct AI employee")
     if any(role != person["role"] for (role, _, _), person in zip(stages, participants)):
         raise PermissionError("Appointed employee order does not match scoped company chain")
+    clock = time.monotonic if clock is None else clock
+    started = clock()
+    if not isinstance(started, (int, float)):
+        raise ValueError("Monotonic runtime clock required")
+    maximum_seconds = 450  # Seven single-threaded bounded 60s model calls + margin.
     handoffs=[]
     board_advice=[]
     blocked_seat=None
@@ -67,6 +74,8 @@ def run_four_role_chain(
     engineering_candidate=None
     previous=""
     for (role,_,goal),person in zip(stages,participants,strict=True):
+        if not 0 <= clock() - started < maximum_seconds:
+            raise TimeoutError("Local governed inference exhausted its wall-clock budget")
         if role!=person["role"]:
             raise RuntimeError("Internal role order mismatch")
         code_author = role=="employee" and engineering_candidates
@@ -98,7 +107,11 @@ def run_four_role_chain(
             +previous[:650]+"\n")
         if len(prompt)>4000:
             raise ValueError("Local project prompt exceeds bounded provider input")
+        role_started = clock()
         output=provider.generate(prompt).strip()
+        duration = clock() - role_started
+        if not 0 <= duration <= 60 or not 0 <= clock() - started <= maximum_seconds:
+            raise TimeoutError("Local inference exceeded per-role or overall time budget")
         if not output or len(output)>12000:
             raise RuntimeError("Local model did not return bounded role evidence")
         bounded=output[:950]
@@ -127,6 +140,7 @@ def run_four_role_chain(
             "role":role,"employee_id":person["employee_id"],
             "employee_name":person["employee_name"],
             "draft":bounded,"model_inference_completed":True,
+            "elapsed_ms":round(duration * 1000),
             "human_qa_approved":False,
         })
         previous=bounded
@@ -161,6 +175,8 @@ def run_four_role_chain(
         "requires_founder_resolution":bool(blocked_seat),
         "roles_completed":len(handoffs),
         "roles_expected":len(stages),
+        "max_runtime_seconds":maximum_seconds,
+        "runtime_elapsed_ms":round((clock() - started) * 1000),
         "handoff_complete":len(handoffs)==len(stages),
         "execution_scope":(
             "AI drafting paused on Board decision: "+str(block_reason)

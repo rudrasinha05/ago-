@@ -406,3 +406,60 @@ def test_engineering_requires_real_five_seat_preflight_before_model_or_credit(mo
         )
     assert all("FROM ago_company_board_appointments" not in statement
                for statement, _ in db.queries)
+
+
+def test_p1_governed_chain_enforces_aggregate_and_per_role_wallclock_budgets():
+    db = ApprovedProjectDb()
+    people = CompanyOllamaChainQueries(db).assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task()
+    )
+    now = [0.0]
+
+    class SlowModel:
+        def __init__(self, delay):
+            self.delay = delay
+            self.calls = 0
+
+        def generate(self, prompt):
+            self.calls += 1
+            now[0] += self.delay
+            return "BOARD_RECOMMENDATION: APPROVE\\nDELIVERABLE: Scoped draft"
+
+    over = SlowModel(61)
+    with pytest.raises(TimeoutError, match="time budget"):
+        run_four_role_chain(
+            task=db.task(), participants=people, provider=over, clock=lambda: now[0]
+        )
+    assert over.calls == 1
+    now[0] = 0
+    healthy = SlowModel(0.5)
+    result = run_four_role_chain(
+        task=db.task(), participants=people, provider=healthy, clock=lambda: now[0]
+    )
+    assert result["max_runtime_seconds"] == 450
+    assert result["roles_completed"] == 4
+    assert result["runtime_elapsed_ms"] == 2000
+    assert [x["elapsed_ms"] for x in result["handoffs"]] == [500] * 4
+
+
+def test_p1_governed_chain_stops_before_next_inference_if_global_deadline_exhausted():
+    db = ApprovedProjectDb()
+    people = CompanyOllamaChainQueries(db).assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task()
+    )
+    now = [0.0]
+    calls = []
+
+    class DeadlineModel:
+        def generate(self, prompt):
+            calls.append(prompt)
+            if len(calls) == 1:
+                now[0] = 451
+            return "BOARD_RECOMMENDATION: APPROVE"
+
+    with pytest.raises(TimeoutError, match="time budget"):
+        run_four_role_chain(
+            task=db.task(), participants=people, provider=DeadlineModel(),
+            clock=lambda: now[0]
+        )
+    assert len(calls) == 1
