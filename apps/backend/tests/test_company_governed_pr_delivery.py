@@ -34,7 +34,8 @@ def setup(monkeypatch, tmp_path):
     calls = []
     state = {"ci": "success", "visibility": True, "prior_pr": False,
              "commit_status": "succeeded", "pr_approved": True,
-             "pr_applied": True, "uncertain": False, "pr_record": None}
+             "pr_applied": True, "uncertain": False, "pr_record": None,
+             "pr_proposal": pr_proposal}
 
     def mock(req, timeout=20):
         calls.append((req.get_method(), req.full_url, req.data))
@@ -248,7 +249,7 @@ def test_distinct_founder_approval_proposal_then_apply_then_real_draft_pr(setup,
 def test_pr_execution_refuses_missing_independent_acceptance(setup, tmp_path, failed):
     pr, files, state, calls, args, checks, pr_id = setup
     prepare(setup)
-    proposal = str(uuid4())
+    proposal = state["pr_proposal"]
     if failed == "unapproved":
         state["pr_approved"] = False
     if failed == "not_applied":
@@ -273,7 +274,7 @@ def test_uncertain_submission_is_never_replayed(setup, tmp_path, phase):
     prepare(setup)
     state["uncertain"] = True
     claims = tmp_path / "claims"
-    proposal = str(uuid4())
+    proposal = state["pr_proposal"]
     kwargs = dict(phase=phase, pr_proposal=proposal, apply=True,
                   confirm=pr.CONFIRMS[phase])
     with pytest.raises(TimeoutError):
