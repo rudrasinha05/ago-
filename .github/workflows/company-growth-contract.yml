@@ -28,6 +28,7 @@ on:
       - "apps/backend/ago/model_handlers.py"
       - "apps/backend/ago/api_agents.py"
       - "apps/backend/tests/test_company_engineering_capabilities.py"
+      - "docs/architecture/section13_api_contract.json"
       - "apps/backend/tests/test_local_model_provider.py"
       - "apps/backend/ago/company_ollama_chain.py"
       - "apps/backend/ago/company_engineering.py"
