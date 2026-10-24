@@ -432,3 +432,17 @@ than retrying a new operation. This step does not apply the proposal,
 approve it, call the GitHub provider, merge a PR, or mark a release ready.
 An independently authorized enterprise review and later Founder-triggered
 GitHub execution are still mandatory.
+
+
+For the Founder Windows interface, invoke:
+
+```powershell
+.\scripts\ago.ps1 submit-github-proposal
+```
+
+Enter the exact completed run and saved draft operation UUIDs, original
+passing Docker stage and QA packet. Authenticate as the real Founder and
+confirm. The result is an **AGO enterprise review proposal** awaiting
+independent approval—not a GitHub commit. Review the proposal in AGO's
+enterprise integration governance and perform the separate approved
+apply/execute operations when permitted.

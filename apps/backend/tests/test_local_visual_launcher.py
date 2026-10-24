@@ -259,3 +259,15 @@ def test_qa_pass_to_github_draft_is_explicit_private_and_unsubmitted():
     assert "This does not change GitHub or verify the remote branch head." in script
     assert "git push" not in script
     assert script.count("finally {") == 1
+
+
+def test_qa_verified_github_proposal_operator_never_pushes_remote_code():
+    root = Path(__file__).resolve().parents[3]
+    text = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert text.count('if ($Action -eq "submit-github-proposal")') == 1
+    assert 'ago_submit_github_proposal.py' in text
+    assert '--apply --confirm SUBMIT_QA_VERIFIED_GITHUB_PROPOSAL' in text
+    assert "GitHub remains unchanged" in text
+    assert 'Join-Path $HOME (".ago\\candidate_exports\\ago-run-" + $RunId + ".json")' in text
+    assert "git push" not in text
+    assert text.count("finally {") == 1

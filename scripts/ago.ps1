@@ -15,9 +15,10 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 test-exported-candidate  # reviewed source -> Docker -> pending independent QA
 .\scripts\ago.ps1 review-tested-candidate  # authenticated independent human QA decision
 .\scripts\ago.ps1 prepare-github-draft  # human-QA-passed code -> private, unsubmitted GitHub draft
+.\scripts\ago.ps1 submit-github-proposal  # explicit Founder governance proposal, NOT a GitHub push
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate", "prepare-github-draft")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate", "prepare-github-draft", "submit-github-proposal")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -240,6 +241,31 @@ try {
         }
         Write-Host "LOCAL draft only. Governance review still required: $OutputFile"
         exit 0
+    }
+    if ($Action -eq "submit-github-proposal") {
+        Write-Host "Founder submits a verified draft to AGO governance; GitHub remains unchanged."
+        $RunId = Read-Host "Exact completed AGO AI run UUID"
+        $OperationId = Read-Host "Exact saved GitHub draft operation UUID"
+        if ($RunId -notmatch '^[0-9a-fA-F-]{36}$' -or $OperationId -notmatch '^[0-9a-fA-F-]{36}$') {
+            throw "Run and reviewed draft UUIDs are required."
+        }
+        $ExportFile = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
+        $DraftFile = Join-Path $HOME (".ago\delivery_runs\github-draft-" + $OperationId + ".json")
+        $Stage = Read-Host "Original passing Docker stage directory"
+        $Qa = Read-Host "Original independent QA handoff packet JSON"
+        if (-not (Test-Path -LiteralPath $ExportFile -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $DraftFile -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $Stage -PathType Container) -or
+            -not (Test-Path -LiteralPath $Qa -PathType Leaf)) {
+            throw "Original exact QA-verified local source evidence required."
+        }
+        $Confirm = Read-Host "Submit ONE signed immutable proposal for independent review? Type SUBMIT_QA_VERIFIED_GITHUB_PROPOSAL"
+        if ($Confirm -cne "SUBMIT_QA_VERIFIED_GITHUB_PROPOSAL") {
+            Write-Host "Proposal cancelled; AGO and GitHub unchanged."
+            exit 2
+        }
+        & python ../../scripts/ago_submit_github_proposal.py --local-url "http://127.0.0.1:$Port" --draft $DraftFile --export $ExportFile --staged-directory $Stage --qa-packet $Qa --apply --confirm SUBMIT_QA_VERIFIED_GITHUB_PROPOSAL
+        exit $LASTEXITCODE
     }
     if ($Action -eq "safe-reconcile") {
         if (-not $env:AGO_MARKET_TENANT_ID) {
