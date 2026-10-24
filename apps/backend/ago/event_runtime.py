@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ago.event_migrations import apply_migrations
 from ago.event_worker import EventWorker
-from ago.events import EventBus
+from ago.events import EventBus, UnhandledEventError
 from ago.postgres_event_store import PostgresEventStore
 
 
@@ -37,7 +37,7 @@ async def serve_worker(
 
     async def dispatch(event):
         if not bus.has_subscribers(event.name):
-            raise RuntimeError(f"No handler registered for {event.name}")
+            raise UnhandledEventError("No handler registered")
         result = await bus.publish(event)
         if result.failures:
             raise RuntimeError(

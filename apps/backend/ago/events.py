@@ -17,6 +17,23 @@ from uuid import uuid4
 logger = logging.getLogger("ago.events")
 
 
+class UnhandledEventError(RuntimeError):
+    """A known missing event consumer, without reflecting private event names."""
+
+
+def safe_failure_category(exc: Exception) -> str:
+    """Fixed diagnostic labels only; never persist user/exception text."""
+    if isinstance(exc, UnhandledEventError):
+        return "No handler registered"
+    if isinstance(exc, TimeoutError):
+        return "handler_timeout"
+    if isinstance(exc, PermissionError):
+        return "handler_permission_denied"
+    if isinstance(exc, ConnectionError):
+        return "handler_connection_error"
+    return "handler_failed"
+
+
 @dataclass(frozen=True)
 class Event:
     name: str
@@ -100,9 +117,12 @@ class EventBus:
                         event_id=event.id,
                         handler_name=getattr(handler, "__name__", type(handler).__name__),
                         attempts=attempts,
-                        error=f"{type(exc).__name__}: {exc}",
+                        error=safe_failure_category(exc),
                     )
                     result.failures.append(failure)
-                    logger.exception("Event handler failed: %s", failure.handler_name)
+                    logger.error(
+                        "Event handler failed: category=%s", failure.error,
+                        exc_info=False,
+                    )
                     break
         return result

@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ago.events import Event
+from ago.events import Event, safe_failure_category
 
 logger = logging.getLogger("ago.event_worker")
 
@@ -62,15 +62,22 @@ class EventWorker:
                 # Lease expires and another worker can recover the event.
                 raise
             except Exception as exc:
+                # A handler exception can include model prompts, passwords or
+                # customer data; neither the durable outbox nor CI logs may
+                # receive exception repr, message, or a full traceback.
+                category = safe_failure_category(exc)
                 acknowledged = await asyncio.to_thread(
                     self.store.failed, event.id, self.worker_id,
-                    f"{type(exc).__name__}: {exc}", self.max_attempts,
+                    category, self.max_attempts,
                 )
                 if acknowledged:
                     failed += 1
                 else:
                     lost += 1
-                logger.exception("Outbox handler failed: event_id=%s", event.id)
+                logger.error(
+                    "Outbox handler failed: event_id=%s category=%s",
+                    event.id, category, exc_info=False,
+                )
             else:
                 if await asyncio.to_thread(self.store.delivered, event.id, self.worker_id):
                     delivered += 1

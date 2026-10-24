@@ -76,3 +76,24 @@ def test_worker_stops_gracefully():
         await EventWorker(store, "worker", handler).run_forever(stop, poll_seconds=0.01)
 
     asyncio.run(run())
+
+
+def test_outbox_worker_never_persists_or_logs_handler_secret(caplog):
+    secret = "ghp_" + "b" * 36
+    private = "CONFIDENTIAL_PROJECT_IN_HANDLER_EXCEPTION"
+    event = Event("private.task", {"private": private})
+    store = FakeStore([event])
+
+    async def leaking_handler(_event):
+        raise RuntimeError(secret + " " + private)
+
+    with caplog.at_level("ERROR", logger="ago.event_worker"):
+        report = asyncio.run(EventWorker(store, "worker-secret", leaking_handler).run_once())
+    assert report.failed == 1
+    assert len(store.errors) == 1
+    assert store.errors[0][2] == "handler_failed"
+    assert secret not in str(store.errors)
+    assert private not in str(store.errors)
+    assert secret not in caplog.text
+    assert private not in caplog.text
+    assert "Traceback" not in caplog.text

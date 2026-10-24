@@ -96,3 +96,21 @@ def test_event_bus_registered_in_application_container():
     container = build_container()
     assert container.resolve("event_bus") is container.resolve("event_bus")
     assert isinstance(container.resolve("event_bus"), EventBus)
+
+
+def test_event_bus_failure_never_exposes_private_exception_in_result_or_logs(caplog):
+    token = "ghp_" + "a" * 36
+    secret = "PRIVATE_FOUNDER_BRIEF_DO_NOT_LOG"
+    bus = EventBus()
+    def unsafe(_event):
+        raise RuntimeError("credentials=" + token + " brief=" + secret)
+    bus.subscribe("unsafe", unsafe)
+    with caplog.at_level("ERROR", logger="ago.events"):
+        result = asyncio.run(bus.publish(Event("unsafe", {"brief": secret})))
+    assert len(result.failures) == 1
+    assert result.failures[0].error == "handler_failed"
+    assert token not in str(result.failures)
+    assert secret not in str(result.failures)
+    assert token not in caplog.text
+    assert secret not in caplog.text
+    assert "Traceback" not in caplog.text
