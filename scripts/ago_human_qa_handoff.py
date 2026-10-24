@@ -14,9 +14,9 @@ import re
 import sys
 from pathlib import Path
 from urllib.request import ProxyHandler, Request, build_opener
+from uuid import UUID
 
 from ago.model_provider import _DenyRedirect
-from uuid import UUID
 
 from ago_engineering_candidate import inspect as inspect_run
 from ago_qa_review_packet import packet
