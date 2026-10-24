@@ -81,6 +81,9 @@ def setup(monkeypatch, tmp_path):
                 "repository_private": state["visibility"],
                 "develop_sha": "c" * 40,
                 "ci": runs, "ci_total": len(runs), "ci_truncated": False,
+                "ci_check_runs": runs, "ci_check_total": len(runs),
+                "ci_check_truncated": False,
+                "ci_statuses": [], "ci_status_truncated": False,
                 "operations": operations,
             })
         if req.full_url.endswith("/v1/enterprise/reviews/integration"):
