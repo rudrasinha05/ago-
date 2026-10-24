@@ -8,10 +8,14 @@ existing local ago_test password in a fresh terminal. It never changes database 
 perform migrations, create tenants or download Ollama models.
 .EXAMPLE
 .\scripts\ago-visual.ps1
+.\scripts\ago-visual.ps1 -Engineering -Model qwen2.5-coder:1.5b
 #>
 param(
     [ValidateRange(1024,65535)]
-    [int]$Port = 8000
+    [int]$Port = 8000,
+    [switch]$Engineering,
+    [ValidateSet("qwen2.5:3b", "qwen2.5:1.5b", "qwen2.5-coder:1.5b")]
+    [string]$Model = "qwen2.5-coder:1.5b"
 )
 
 $ErrorActionPreference = "Stop"
@@ -79,6 +83,13 @@ try {
     Pop-Location
 }
 
+# Revert opt-in model flags when this foreground operator process stops.
+$ModelFlagNames = @(
+    "AGO_LLM_PROVIDER", "AGO_ENABLE_LOCAL_MODELS", "AGO_LLM_MODEL",
+    "AGO_LOCAL_COMPANY_CHAIN", "AGO_LOCAL_FULL_BOARD_REVIEW",
+    "AGO_LOCAL_ENGINEERING_CANDIDATES"
+)
+$PreviousModelFlags = @{}
 Push-Location $root
 try {
     Write-Host "AGO visual frontend: packaging the saved circular Company Map and Company Brain."
@@ -100,9 +111,39 @@ try {
     Write-Host "  Circular organization map | Company Brain | Board seats"
     Write-Host "  Activity links and counters depend on real task/event records."
     Write-Host "Sign in with your existing AGO organization ID and founder credentials."
+    if ($Engineering) {
+        if ($env:AGO_ENABLE_PAID_MODELS -eq "true") {
+            throw "Disable paid providers before local engineering mode."
+        }
+        # Only validate an already-installed localhost model. Do not launch,
+        # download, or connect a model to a cloud provider.
+        & "$PSScriptRoot\ago-ollama-check.ps1" -Model $Model
+        if ($LASTEXITCODE -ne 0) {
+            throw "Local engineering requires an already-installed responsive Ollama model."
+        }
+        foreach ($Flag in $ModelFlagNames) {
+            $PreviousModelFlags[$Flag] = [Environment]::GetEnvironmentVariable($Flag, "Process")
+        }
+        $env:AGO_LLM_PROVIDER = "ollama_local"
+        $env:AGO_ENABLE_LOCAL_MODELS = "true"
+        $env:AGO_LLM_MODEL = $Model
+        $env:AGO_LOCAL_COMPANY_CHAIN = "true"
+        $env:AGO_LOCAL_FULL_BOARD_REVIEW = "true"
+        $env:AGO_LOCAL_ENGINEERING_CANDIDATES = "true"
+        Write-Host "Local engineering ENABLED for this foreground AGO session only."
+        Write-Host "Seven real appointed AI employees and approved project tasks are required."
+        Write-Host "No autonomous GitHub write, deployment, or QA approval is enabled."
+    }
     Write-Host "Starting the same-origin AGO API + visual frontend (Ctrl+C to stop)."
     & "$PSScriptRoot\ago.ps1" serve -Port $Port
     if ($LASTEXITCODE -ne 0) { throw "AGO server failed to start." }
 } finally {
+    if ($PreviousModelFlags.Count -gt 0) {
+        foreach ($Flag in $ModelFlagNames) {
+            [Environment]::SetEnvironmentVariable(
+                $Flag, $PreviousModelFlags[$Flag], "Process"
+            )
+        }
+    }
     Pop-Location
 }

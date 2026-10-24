@@ -226,3 +226,35 @@ The Docker gate can create an **unprivileged pending human QA packet** only if
 its isolated tests succeed. P2 completed-product acceptance still requires
 human review and a genuine AGO-origin GitHub operation, and must not be
 inferred from a local candidate or this export alone.
+
+
+## Real local AI engineering startup — explicit Founder opt-in
+
+The regular visual launcher does **not** enable models, so running the UI
+alone never proves that AGO is coding. To launch the **same** local Company
+Map and governed API with existing Ollama coding enabled for this foreground
+process only, run:
+
+```powershell
+# Terminal 1: Ollama must already be installed and responsive (never auto pulled)
+.\scripts\ago-visual.ps1 -Engineering -Model qwen2.5-coder:1.5b
+# Terminal 2: After real Board appointments and Founder task approval in AGO
+.\scripts\ago.ps1 run-approved-internal
+# Terminal 3: For a completed cleared AI run, export its candidate safely
+.\scripts\ago.ps1 export-candidate
+```
+
+The opt-in launcher checks the exact installed model through the localhost
+Ollama tags endpoint. It then enables `AGO_LLM_PROVIDER=ollama_local`,
+`AGO_ENABLE_LOCAL_MODELS=true`, `AGO_LOCAL_COMPANY_CHAIN=true`,
+`AGO_LOCAL_FULL_BOARD_REVIEW=true` and
+`AGO_LOCAL_ENGINEERING_CANDIDATES=true` only while that foreground AGO
+server runs; previous process-level model settings are restored when the
+launcher exits. The local endpoint is not auto-started; the model is never
+downloaded and no cloud/paid fallback is permitted. A missing real appointed
+five-seat Board, distinct PM and worker, inactive project, denied Board
+recommendation or missing task approval blocks code generation.
+
+This mode enables **actual** model attempts, not guaranteed passing source.
+A successful AI reply is still untrusted code; the independent offline Docker
+review, QA and approved GitHub delivery remain separate gates.

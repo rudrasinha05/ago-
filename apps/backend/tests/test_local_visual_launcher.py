@@ -148,3 +148,25 @@ def test_founder_candidate_path_is_private_and_not_inside_git_worktree():
     assert 'Join-Path $HOME ".ago\\candidate_exports"' in script
     assert 'Join-Path $ExportDirectory ("ago-run-" + $RunId + ".json")' in script
     assert "New-Item -ItemType Directory -Path $ExportDirectory" in script
+
+
+def test_opt_in_visual_engineering_uses_only_installed_ollama_and_reverts_flags():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago-visual.ps1").read_text(encoding="utf-8")
+    assert "[switch]$Engineering" in script
+    assert '[string]$Model = "qwen2.5-coder:1.5b"' in script
+    assert "if ($Engineering)" in script
+    assert 'ago-ollama-check.ps1" -Model $Model' in script
+    for setting in (
+        "AGO_LLM_PROVIDER", "AGO_ENABLE_LOCAL_MODELS", "AGO_LLM_MODEL",
+        "AGO_LOCAL_COMPANY_CHAIN", "AGO_LOCAL_FULL_BOARD_REVIEW",
+        "AGO_LOCAL_ENGINEERING_CANDIDATES",
+    ):
+        assert f'$env:{setting} = ' in script
+        assert f'"{setting}"' in script
+    assert '$PreviousModelFlags[$Flag]' in script
+    assert '[Environment]::SetEnvironmentVariable(' in script
+    assert '"Process"' in script
+    assert 'if ($env:AGO_ENABLE_PAID_MODELS -eq "true")' in script
+    assert 'ollama pull' not in script
+    assert 'Start-Process ollama' not in script
