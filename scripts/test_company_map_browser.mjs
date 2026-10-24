@@ -22,6 +22,7 @@ let tasks=[{id:id(6),action:'research:brief',assignee_id:developer,status:'runni
 let messages=[], calls=[];
 let appointments=[],roles={},reports=[],founderProjects=[],approvalRecords=[],asReviewer=false;
 let companyDocs=[],docAccess=[],docAudit=[];
+let githubProjects=[],githubOperations=[],integrationProposals=[],githubRunState=null;
 let workEvents=[{id:1,employee_id:developer,task_id:id(6),body:'research:brief → running',created_at:new Date().toISOString()}];
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try{
@@ -36,8 +37,15 @@ try{
   else if(path==='/v1/organization/employees')result=employees;
   else if(path.endsWith('/company/activity'))result=tasks;
   else if(path.endsWith('/company/notifications'))result={by_employee:{[developer]:workEvents.length,[cto]:0},recent:[...workEvents].reverse(),event_type:'committed_task_status'};
-  else if(path==='/v1/platform/catalog')result={github_projects:[]};
-  else if(path==='/v1/enterprise/reviews/integration')result={revision:0,proposals:[]};
+  else if(path==='/v1/platform/catalog')result={github_projects:githubProjects,github_operations:githubOperations};
+  else if(path.startsWith('/v1/platform/github/projects/')&&path.endsWith('/status'))result=githubRunState||{status:'unavailable'};
+  else if(path.startsWith('/v1/platform/github/operations/')&&path.endsWith('/execute')){
+    assert.ok(githubRunState?.repository_private===true,'No public GitHub write even through mocks');
+    const opId=path.split('/')[5];
+    githubRunState.operations.push({operation_id:opId,status:'succeeded',result:{sha:'c'.repeat(40)}});
+    result={status:'succeeded',operation_id:opId,result:{sha:'c'.repeat(40)}};
+  }
+  else if(path==='/v1/enterprise/reviews/integration')result={revision:0,proposals:integrationProposals};
   else if(path.endsWith('/company/projects/start')){
     const title=body.brief.split('\n')[0].slice(0,220);
     const stages=['discovery','architecture','implementation','quality','release'].map((stage,i)=>({
@@ -146,6 +154,40 @@ try{
  await page.locator('#ago-github-delivery').getByText('No approved GitHub project is linked.',{exact:false}).waitFor();
  assert.equal(await page.locator('#ago-github-delivery').getByRole('button',{name:/Execute approved GitHub/}).count(),0,
    'A Founder with no approved private project cannot dispatch GitHub work.');
+ // Simulated AGO signed provider records: execute only after independent approval and explicit Founder choice.
+ const mockedProject=id(70),mockedOperation=id(71),mockedProposal=id(72);
+ const operation={id:mockedOperation,project_id:mockedProject,operation:'commit_files',
+  payload:{expected_sha:'a'.repeat(40),message:'Test-only vetted source',
+   files:[{path:'src/main.py',content:'print("mock-only")'}]}};
+ githubProjects=[{payload:{id:mockedProject,repository:'ago-private-test',developer_ids:[]}}];
+ githubOperations=[{kind:'github_operation',payload:operation,proposal_id:mockedProposal}];
+ integrationProposals=[{id:mockedProposal,operation_key:mockedOperation,command:'github_operation',
+  specification:operation,status:'approved',actor_id:founder}];
+ githubRunState={project_id:mockedProject,repository:'rudrasinha05/ago-private-test',
+  repository_private:true,develop_sha:'a'.repeat(40),operations:[]};
+ const delivery=page.locator('#ago-github-delivery');
+ await delivery.getByRole('button',{name:'Refresh live records'}).click();
+ await delivery.getByText('AI-generated code commit').waitFor();
+ const execute=delivery.getByRole('button',{name:'Execute approved GitHub commit'});
+ await execute.click();
+ await delivery.getByText('Select the exact confirmation',{exact:false}).waitFor();
+ assert.equal(calls.filter(c=>c.path.endsWith('/execute')&&c.method==='POST').length,0);
+ await delivery.getByLabel('Explicit Founder confirmation for selected step')
+  .selectOption('EXECUTE_VERIFIED_GITHUB_OPERATION');
+ await execute.click();
+ await delivery.getByText('Verified commit:',{exact:false}).waitFor();
+ assert.equal(calls.filter(c=>c.path.endsWith('/execute')&&c.method==='POST').length,1,
+  'One Founder confirmation permits at most one real provider dispatch request');
+ await delivery.getByRole('button',{name:'Refresh live records'}).click();
+ assert.equal(await delivery.getByRole('button',{name:'Execute approved GitHub commit'}).count(),0,
+  'Committed operation must not expose a second execution action');
+ githubRunState={...githubRunState,repository_private:false};
+ await delivery.getByRole('button',{name:'Refresh live records'}).click();
+ await delivery.getByText('This repository is public',{exact:false}).waitFor();
+ assert.equal(await delivery.getByRole('button',{name:/Execute approved GitHub/}).count(),0);
+ // Reset simulated records for remaining company and independent reviewer tests.
+ githubProjects=[];githubOperations=[];integrationProposals=[];githubRunState=null;
+ await delivery.getByRole('button',{name:'Refresh live records'}).click();
 
  await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
  await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
