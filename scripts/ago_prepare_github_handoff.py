@@ -16,7 +16,9 @@ from uuid import UUID
 from ago.company_engineering import draft_github_commit_operation
 from ago_engineering_candidate import inspect as inspect_run
 from ago_human_qa_handoff import (
-    LOCAL_OPENER, remote_json, verify_handoff,
+    LOCAL_OPENER,
+    remote_json,
+    verify_handoff,
 )
 from local_approved_agent_batch import founder_login, local_url
 
