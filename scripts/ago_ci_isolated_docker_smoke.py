@@ -12,7 +12,6 @@ import tempfile
 from pathlib import Path
 
 from ago.company_engineering import reviewed_candidate, stage_candidate
-
 from ago_verify_candidate import CONFIRM, verify
 
 
