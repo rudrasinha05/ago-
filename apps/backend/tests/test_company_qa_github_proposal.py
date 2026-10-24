@@ -8,12 +8,8 @@ from uuid import uuid4
 
 import pytest
 
-from test_company_qa_github_handoff import (
-    opener_for,
-    params,
-    setup,
-)
 from test_company_human_qa_handoff import Reply
+from test_company_qa_github_handoff import opener_for, params, setup
 
 ROOT = Path(__file__).resolve().parents[3]
 
