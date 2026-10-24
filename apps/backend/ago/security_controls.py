@@ -8,8 +8,8 @@ from typing import Any
 
 from ago.audit_redaction import audit_metadata_safe
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
-from ago.security import Principal
 from ago.governance_domain import CONSTITUTION_CONTEXTS
+from ago.security import Principal
 
 
 class SecurityControls:
