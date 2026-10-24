@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,7 +47,7 @@ def inspect(directory: str | Path) -> dict:
         raise TypeError("Reviewed file evidence and acceptance criteria required")
     files = []
     known = {"AGO_REVIEW_MANIFEST.json", "AGO_TEST_RECEIPT.json",
-             "AGO_UNSUBMITTED_GITHUB_OPERATION.json"}
+             "AGO_TEST_ATTEMPT.json", "AGO_UNSUBMITTED_GITHUB_OPERATION.json"}
     for item in expected:
         path = item.get("path") if isinstance(item, dict) else None
         if not isinstance(path, str) or path.startswith("/") or ".." in path.split("/"):
@@ -82,7 +83,11 @@ def inspect(directory: str | Path) -> dict:
             raise PermissionError("GitHub draft source differs from reviewed candidate")
     return {"candidate_sha256": candidate["candidate_sha256"],
             "files": [x["path"] for x in files], "acceptance_checks": checks,
-            "tests_executed": False, "sandbox_verified": False}
+            "tests_executed": False, "sandbox_verified": False,
+            "unresolved_execution_attempt": (
+                (root / "AGO_TEST_ATTEMPT.json").exists()
+                and not (root / "AGO_TEST_RECEIPT.json").exists()
+            )}
 
 
 def docker_command(root: Path, container_name: str) -> list[str]:
@@ -112,10 +117,27 @@ def verify(directory: str | Path, *, apply: bool = False, confirm: str | None = 
         raise ValueError("Test timeout must be 10..300 seconds")
     root = Path(directory)
     receipt_path = root / "AGO_TEST_RECEIPT.json"
-    if receipt_path.exists() or receipt_path.is_symlink():
-        raise FileExistsError("A previous test receipt exists; stage a new candidate")
+    attempt_path = root / "AGO_TEST_ATTEMPT.json"
+    if (receipt_path.exists() or receipt_path.is_symlink()
+            or attempt_path.exists() or attempt_path.is_symlink()):
+        raise FileExistsError("A previous Docker attempt exists; stage a new candidate")
     container = "ago-qa-" + uuid4().hex
     command = docker_command(root, container)
+    # Write and fsync BEFORE launching untrusted source. A crash or timeout
+    # leaves an immutable attempt marker and blocks accidental replay.
+    attempt = {
+        "kind": "ago_local_docker_attempt_v1",
+        "candidate_sha256": evidence["candidate_sha256"],
+        "container": container,
+        "state": "outcome_unknown_until_final_receipt",
+        "tests_passed": False,
+        "independent_qa_approved": False,
+        "release_ready": False,
+    }
+    with attempt_path.open("x", encoding="utf-8") as handle:
+        json.dump(attempt, handle, sort_keys=True)
+        handle.flush()
+        os.fsync(handle.fileno())
     try:
         result = runner(command, capture_output=True, text=True,
                         timeout=timeout, check=False)

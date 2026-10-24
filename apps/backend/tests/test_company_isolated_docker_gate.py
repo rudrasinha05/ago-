@@ -176,3 +176,39 @@ def test_failure_category_only_exposes_bounded_reason_not_raw_private_trace(tmp_
     assert result["failure_category"] == "assertion_failure"
     assert result["failure_category_advisory_only"] is True
     assert private not in (directory / "AGO_TEST_RECEIPT.json").read_text()
+
+
+def test_docker_attempt_is_durable_before_runner_and_blocks_crash_replay(tmp_path):
+    directory, candidate = staged(tmp_path)
+    attempt_path = directory / "AGO_TEST_ATTEMPT.json"
+    assert not attempt_path.exists()
+    calls = []
+    def crashed(command, **kwargs):
+        calls.append(command)
+        attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
+        assert attempt["candidate_sha256"] == candidate["candidate_sha256"]
+        assert attempt["state"] == "outcome_unknown_until_final_receipt"
+        assert attempt["tests_passed"] is False
+        assert attempt["container"] in command
+        raise RuntimeError("Simulated process failure after Docker started")
+    with pytest.raises(RuntimeError, match="Simulated process failure"):
+        MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"], runner=crashed)
+    assert len(calls) == 1
+    preview = MODULE["verify"](directory)
+    assert preview["unresolved_execution_attempt"] is True
+    with pytest.raises(FileExistsError, match="previous Docker attempt"):
+        MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"], runner=crashed)
+    assert len(calls) == 1
+
+
+def test_passing_docker_candidate_preserves_attempt_and_final_receipt(tmp_path):
+    directory, candidate = staged(tmp_path)
+    def passed(_command, **_kwargs):
+        assert (directory / "AGO_TEST_ATTEMPT.json").is_file()
+        return SimpleNamespace(returncode=0, stdout="AGO_UNITTEST_CASES=1\\n", stderr="")
+    receipt = MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"], runner=passed)
+    assert receipt["tests_passed"] is True
+    assert receipt["candidate_sha256"] == candidate["candidate_sha256"]
+    assert (directory / "AGO_TEST_ATTEMPT.json").is_file()
+    assert (directory / "AGO_TEST_RECEIPT.json").is_file()
+    assert MODULE["verify"](directory)["unresolved_execution_attempt"] is False
