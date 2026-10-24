@@ -301,3 +301,30 @@ produce a positive independent-QA verdict or a GitHub operation.
 A passing container test produces only a pending human QA review packet,
 not an approval, PR or release. The existing lower-level scripts remain
 available for advanced and failure-reconciliation use.
+
+
+### Real local P2 repair loop (explicit, original tests immutable)
+
+For a **failed** `ago.ps1 test-exported-candidate` run, copy the
+`stage-...` location printed **before** the Docker invocation. The
+PowerShell operator supports a deliberately separate review and repair flow:
+
+```powershell
+.\scripts\ago-repair.ps1 -Mode preview -FailedStage "$HOME\.ago\delivery_runs\stage-..."
+.\scripts\ago-repair.ps1 -Mode propose -FailedStage "$HOME\.ago\delivery_runs\stage-..."
+.\scripts\ago-repair.ps1 -Mode retest -FailedStage "$HOME\.ago\delivery_runs\stage-..." -Proposal "$HOME\.ago\delivery_runs\repair-....json"
+```
+
+Preview validates the exact failed source and Docker receipt without
+inference. Propose verifies an already installed localhost Ollama model,
+asks explicit confirmation, performs **one** source-only proposal and
+restores the original model flags. It never changes test files, the
+acceptance plan, or previous failed evidence. No automatic attempt
+retries are launched.
+
+Retest requires the **separate** original staged failure and the saved
+unapproved proposal. AGO checks the same source/test paths and exact
+preserved acceptance checks, prints the new SHA, asks a second separate
+authorization, pins that digest and uses a fresh offline Docker stage.
+Only a passing retest produces a still-unapproved independent human QA
+packet. No source is silently published or committed to GitHub.

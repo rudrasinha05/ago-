@@ -67,6 +67,7 @@ on:
       - "apps/web/components/command-brain.jsx"
       - "apps/web/app/workspace.css"
       - "scripts/ago.ps1"
+      - "scripts/ago-repair.ps1"
       - "scripts/ago-visual.ps1"
       - "scripts/ago-ollama-check.ps1"
       - "apps/backend/tests/test_local_visual_launcher.py"
@@ -161,7 +162,7 @@ jobs:
       - name: Parse Windows operator scripts with actual PowerShell parser
         shell: pwsh
         run: |
-          foreach ($file in @("scripts/ago.ps1", "scripts/ago-visual.ps1", "scripts/ago-ollama-check.ps1")) {
+          foreach ($file in @("scripts/ago.ps1", "scripts/ago-visual.ps1", "scripts/ago-ollama-check.ps1", "scripts/ago-repair.ps1")) {
             $tokens = $null
             $parseErrors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile(

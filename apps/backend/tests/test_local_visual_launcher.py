@@ -206,3 +206,30 @@ def test_exported_candidate_has_one_digest_pinned_docker_qa_operator_action():
     assert 'Join-Path $HOME ".ago\\delivery_runs"' in script
     assert 'NewGuid().ToString("N")' in script
     assert script.count("finally {") == 1
+
+
+def test_repair_operator_has_two_distinct_confirmed_unprivileged_gates():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago-repair.ps1").read_text(encoding="utf-8")
+    assert 'ValidateSet("preview", "propose", "retest")' in script
+    assert script.count("finally {") == 2
+    assert "--staged-directory $FailedStage" in script
+    assert "--repair-from $FailedStage" in script
+    assert "--expected-candidate-sha256 $Digest" in script
+    assert "PROPOSE_ONE_LOCAL_SOURCE_REPAIR" in script
+    assert "RETEST_REVIEWED_SOURCE_REPAIR" in script
+    assert "STAGE_TEST_AND_PREPARE_QA" in script
+    assert "AGO_LOCAL_REPAIR_PROPOSALS" in script
+    assert "ago-ollama-check.ps1" in script
+    assert "if ($Mode -eq \"preview\")" in script
+    assert "github_adapter" not in script
+    assert "git push" not in script
+
+
+def test_failed_docker_result_prints_exact_recovery_stage_for_operator():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert "retain for a source-only repair if tests fail" in script
+    assert script.index('Write-Host "Docker execution stage') < script.index(
+        "--expected-candidate-sha256 $Digest"
+    )

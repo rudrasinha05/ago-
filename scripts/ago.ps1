@@ -159,6 +159,7 @@ try {
             Write-Host "Testing cancelled. No candidate executed."
             exit 2
         }
+        Write-Host "Docker execution stage (retain for a source-only repair if tests fail): $Stage"
         & python ../../scripts/ago_local_delivery_gate.py --input $InputFile --staged-directory $Stage --qa-output $Qa --expected-candidate-sha256 $Digest --apply --confirm STAGE_TEST_AND_PREPARE_QA
         if ($LASTEXITCODE -ne 0) {
             throw "Candidate did not pass isolated tests; no QA approval was issued."
