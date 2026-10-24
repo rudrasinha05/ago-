@@ -298,7 +298,7 @@ try {
             throw "Signed source/independent approval preflight failed; no write requested."
         }
         if ($Execute) {
-            Write-Host "WARNING: Next confirmation can make a REAL private GitHub commit on develop."
+            Write-Host "WARNING: Next confirmation can make a REAL GitHub commit on private develop."
             Write-Host "No automatic PR, merge or release follows this operation."
         }
         $Accept = Read-Host "To authorize this EXACT step, type $Confirmation"

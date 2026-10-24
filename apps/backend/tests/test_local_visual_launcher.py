@@ -286,5 +286,5 @@ def test_approved_github_delivery_operator_has_distinct_apply_and_execute_phases
         '--proposal-id $ProposalId --apply --confirm $Confirmation'
     )
     assert "ago_finalize_github_delivery.py" in script
-    assert "REAL private GitHub commit on develop." in script
+    assert "REAL GitHub commit on private develop." in script
     assert script.count("finally {") == 1

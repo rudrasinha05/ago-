@@ -160,6 +160,7 @@ def verified_delivery(
         )
         if (not isinstance(live, dict)
                 or str(live.get("project_id")) != operation["project_id"]
+                or live.get("repository_private") is not True
                 or live.get("develop_sha") != expected
                 or not isinstance(live.get("operations"), list)
                 or any(str(x.get("operation_id")) == operation["id"]

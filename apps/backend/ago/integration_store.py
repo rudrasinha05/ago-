@@ -1094,6 +1094,7 @@ class IntegrationStore:
         return {
             "project_id": project_id,
             "repository": repo["full_name"],
+            "repository_private": repo["private"],
             "develop_sha": head,
             "ci": [
                 {

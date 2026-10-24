@@ -506,3 +506,10 @@ credentials, changed project identity/HEAD, rejected review or an earlier
 uncertain dispatch must block execution. The original source must not be
 uploaded to a public repository without a separate explicit repository
 visibility review. **No automatic pull request, merge or product release.**
+
+
+**Private repository gate:** Before a real commit, the server reports the
+live bound GitHub repository visibility. The Founder finalizer refuses
+`repository_private=false` or an absent visibility field, as well as a
+changed develop SHA. Publishing the private source to a public repo is a
+separate product decision and must never follow implicitly from QA pass.

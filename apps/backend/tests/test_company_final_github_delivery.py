@@ -55,6 +55,7 @@ def mock_server(record, draft, *, mutate=None, uncertain=False):
     }
     status = {
         "project_id": project_id,
+        "repository_private": True,
         "develop_sha": expected_sha,
         "operations": [],
     }
@@ -68,6 +69,8 @@ def mock_server(record, draft, *, mutate=None, uncertain=False):
         applied["proposal_id"] = str(uuid4())
     if mutate == "changed_head":
         status["develop_sha"] = "b" * 40
+    if mutate == "public_repo":
+        status["repository_private"] = False
     if mutate == "previous_dispatch":
         status["operations"] = [{"operation_id": operation["id"], "status": "uncertain"}]
     if mutate == "failed_qa":
@@ -167,7 +170,7 @@ def test_execute_requires_applied_exact_head_and_returns_real_sha(modules, tmp_p
 
 @pytest.mark.parametrize("bad", [
     "unapproved", "wrong_proposal", "different_founder", "not_applied",
-    "changed_head", "previous_dispatch", "failed_qa",
+    "changed_head", "public_repo", "previous_dispatch", "failed_qa",
 ])
 def test_no_wrong_review_or_changed_source_can_execute(modules, tmp_path, bad):
     *files, review, draft = setup(tmp_path, modules)
