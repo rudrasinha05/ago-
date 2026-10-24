@@ -233,3 +233,15 @@ def test_failed_docker_result_prints_exact_recovery_stage_for_operator():
     assert script.index('Write-Host "Docker execution stage') < script.index(
         "--expected-candidate-sha256 $Digest"
     )
+
+
+def test_human_qa_operator_uses_real_signed_review_without_auto_git_dispatch():
+    root = Path(__file__).resolve().parents[3]
+    text = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert text.count('if ($Action -eq "review-tested-candidate")') == 1
+    assert "ago_human_qa_handoff.py" in text
+    assert '--verdict $Verdict --notes $Notes --apply --confirm INDEPENDENT_HUMAN_QA_DECISION' in text
+    assert 'Read-Host "Human review findings (at least 15 characters)"' in text
+    assert 'Read-Host "Independent human QA verdict: pass or fail"' in text
+    assert "No automated QA pass" not in text
+    assert text.count("finally {") == 1

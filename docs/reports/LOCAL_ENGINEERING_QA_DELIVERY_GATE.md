@@ -352,3 +352,22 @@ AI assignee and persists the QA verdict. A positive result is reported only
 when AGO confirms the exact verdict, reviewer and evidence.
 
 No GitHub connector or release is invoked by this review helper.
+
+
+To submit an independently completed **human** review through the
+actual AGO API, run:
+
+```powershell
+.\scripts\ago.ps1 review-tested-candidate
+```
+
+Enter the original completed run UUID, the exact passing Docker stage,
+the pending QA packet JSON path, `pass` or `fail`, substantive
+review notes, and the explicit confirmation. Authenticate as an active
+human reviewer granted `qa:review` and `qa:read`, **not the AI worker**.
+Only an unreviewed, completed task in that tenant's QA queue can receive
+a verdict. The server records the review durably; client-side evidence
+remains untrusted and cannot impersonate an independent reviewer.
+The request has a durable pre-POST no-replay marker. If review submission
+times out, inspect AGO QA queue/review state before taking any new action.
+No GitHub write or release follows automatically.

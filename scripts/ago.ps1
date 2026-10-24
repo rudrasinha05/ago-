@@ -13,9 +13,10 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 watch-approved-internal  # up to 60 minutes or 10 tasks; Ctrl+C stops
 .\scripts\ago.ps1 export-candidate  # exact completed Board-cleared AI run -> new local source review
 .\scripts\ago.ps1 test-exported-candidate  # reviewed source -> Docker -> pending independent QA
+.\scripts\ago.ps1 review-tested-candidate  # authenticated independent human QA decision
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -166,6 +167,38 @@ try {
         }
         Write-Host "Offline tests passed. QA review packet (not an approval): $Qa"
         exit 0
+    }
+    if ($Action -eq "review-tested-candidate") {
+        Write-Host "Independent HUMAN QA: inspect actual generated files, acceptance criteria and Docker test evidence."
+        Write-Host "This is NOT an automatic QA pass or GitHub release."
+        $RunId = Read-Host "Exact exported AGO run ID (UUID)"
+        if ($RunId -notmatch '^[0-9a-fA-F-]{36}$') {
+            throw "A valid completed run UUID is required."
+        }
+        $ExportFile = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
+        if (-not (Test-Path -LiteralPath $ExportFile -PathType Leaf)) {
+            throw "Founder Board-cleared export not found."
+        }
+        $Stage = Read-Host "Exact existing PASSED Docker staged directory"
+        $Qa = Read-Host "Exact existing pending QA packet JSON path"
+        if (-not (Test-Path -LiteralPath $Stage -PathType Container) -or -not (Test-Path -LiteralPath $Qa -PathType Leaf)) {
+            throw "The original staged test evidence and pending QA packet are required."
+        }
+        $Verdict = Read-Host "Independent human QA verdict: pass or fail"
+        if ($Verdict -cnotin @("pass", "fail")) {
+            throw "Explicit pass or fail required."
+        }
+        $Notes = Read-Host "Human review findings (at least 15 characters)"
+        if (-not $Notes -or $Notes.Trim().Length -lt 15 -or $Notes.Trim().Length -gt 1200) {
+            throw "Substantive independent review notes are required."
+        }
+        $Approve = Read-Host "To submit ONE signed AGO QA verdict, type INDEPENDENT_HUMAN_QA_DECISION"
+        if ($Approve -cne "INDEPENDENT_HUMAN_QA_DECISION") {
+            Write-Host "Review cancelled; no AGO QA decision submitted."
+            exit 2
+        }
+        & python ../../scripts/ago_human_qa_handoff.py --local-url "http://127.0.0.1:$Port" --export $ExportFile --staged-directory $Stage --qa-packet $Qa --verdict $Verdict --notes $Notes --apply --confirm INDEPENDENT_HUMAN_QA_DECISION
+        exit $LASTEXITCODE
     }
     if ($Action -eq "safe-reconcile") {
         if (-not $env:AGO_MARKET_TENANT_ID) {
