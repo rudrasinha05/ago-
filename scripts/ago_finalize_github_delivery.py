@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.request import Request
 from uuid import UUID, uuid5
 
-from ago_human_qa_handoff import LOCAL_OPENER, remote_json
+from ago_human_qa_handoff import LOCAL_OPENER
 from ago_submit_github_proposal import inspect_verified_draft
 from local_approved_agent_batch import DurableAttemptJournal, founder_login, local_url
 
@@ -133,7 +133,7 @@ def verified_delivery(
         raise PermissionError("Authenticated original Founder session required")
     reviews = read_local(base, token, "/v1/enterprise/reviews/integration",
                          opener=opener)
-    proposal = checked_review(proposal_id, operation, reviews, me["id"])
+    checked_review(proposal_id, operation, reviews, me["id"])
     expected = operation["payload"]["expected_sha"]
     proof = verified["qa"]
     out = {
