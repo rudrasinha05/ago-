@@ -167,7 +167,7 @@ approved-task preview and explicitly choose:
 .\scripts\ago.ps1 watch-approved-internal
 ```
 
-The operator must sign in with a real founder account and confirm. The worker
+The operator must sign in with a real founder account through hidden password prompting (no browser-token copy) and confirm. The worker
 polls only already approved `internal:brief` tasks for **at most 60 minutes
 or 10 attempted tasks**, sequentially, and can be stopped immediately with
 Ctrl+C. It does not create projects, grant approvals, call GitHub, deploy code,

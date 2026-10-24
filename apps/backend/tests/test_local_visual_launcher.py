@@ -120,3 +120,13 @@ def test_approved_internal_watch_is_bounded_and_never_auto_started():
     assert "if ($Action -in @" in script
     assert "scheduled task" not in script.lower()
     assert "Start-Job" not in script
+
+
+def test_approved_local_launcher_uses_hidden_founder_login_not_copied_browser_token():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    approved = [line for line in script.splitlines()
+                if "python ../../scripts/local_approved_agent_batch.py" in line]
+    assert len(approved) == 3
+    assert all("--login" in line for line in approved)
+    assert "Bearer " not in script
