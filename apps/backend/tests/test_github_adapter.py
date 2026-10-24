@@ -326,3 +326,46 @@ def test_pr_schema_denies_unreviewed_ci_requirements(checks):
             "payload": {"expected_sha": "a" * 40, "title": "Review",
                         "body": "Evidence", "required_checks": checks},
         })
+
+
+@pytest.mark.parametrize("name", [
+    "secrets.json", "src/.env", "config/.env.production",
+    "private_key.pem", "keys/id_ed25519", "foo/db.backup",
+    "service-credentials.yaml", "nested/private-key.json",
+])
+def test_ago_github_never_commits_credential_or_backup_paths(name):
+    proposal = {
+        "operation": "commit_files",
+        "payload": {
+            "expected_sha": "a" * 40, "message": "Reviewed code",
+            "files": [{"path": name, "content": "ordinary file"}],
+        },
+    }
+    with pytest.raises(ValueError, match="Safe unique bounded"):
+        gh.validate_operation(proposal)
+
+
+@pytest.mark.parametrize("credential", [
+    "-----BEGIN OPENSSH PRIVATE KEY-----",
+    "github_pat_" + "A" * 34,
+    "ghp_" + "A" * 38,
+    "AKIA" + "A" * 16,
+    "sk-proj-" + "A" * 36,
+])
+def test_ago_github_source_secret_preflight_stops_before_provider_calls(
+    monkeypatch, credential,
+):
+    provider_calls = []
+    monkeypatch.setattr(gh, "request",
+                        lambda *args, **kwargs: provider_calls.append(args))
+    proposal = {
+        "operation": "commit_files",
+        "payload": {
+            "expected_sha": "a" * 40, "message": "Reviewed code",
+            "files": [{"path": "src/main.py",
+                       "content": "SENSITIVE_TEST_VALUE = " + credential}],
+        },
+    }
+    with pytest.raises(ValueError, match="Safe unique bounded"):
+        gh.validate_operation(proposal)
+    assert provider_calls == []

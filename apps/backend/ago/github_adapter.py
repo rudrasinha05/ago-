@@ -286,6 +286,20 @@ def validate_operation(value: dict) -> None:
     ):
         raise ValueError("Positive issue number and explicit state required")
     if "files" in p:
+        # The destination is private, but even a private Git repository is
+        # not a credential vault. Never export known token/key material.
+        private_file = re.compile(
+            r"(?i)(?:^|/)(?:\\.env(?:\\.[^/]*)?|id_(?:rsa|ed25519)|"
+            r"[^/]*(?:credentials?|private[_-]?key|secrets?)[^/]*\\.(?:json|ya?ml|ini|txt)|"
+            r"[^/]*\\.(?:pem|p12|pfx|key|dump|backup|pgdump))$"
+        )
+        private_content = re.compile(
+            r"-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+            r"|\\bgithub_pat_[A-Za-z0-9_]{20,}"
+            r"|\\bgh[pousr]_[A-Za-z0-9]{30,}"
+            r"|\\bAKIA[A-Z0-9]{16}\\b"
+            r"|\\bsk-(?:proj-)?[A-Za-z0-9_-]{30,}"
+        )
         if not isinstance(p["files"], list) or not 1 <= len(p["files"]) <= 20:
             raise ValueError("One to twenty reviewed files required")
         seen = set()
@@ -304,6 +318,8 @@ def validate_operation(value: dict) -> None:
                 or any(x in ("", ".", "..") for x in path.split("/"))
                 or path in seen
                 or len(file["content"].encode()) > 40000
+                or private_file.search(path) is not None
+                or private_content.search(file["content"]) is not None
             ):
                 raise ValueError("Safe unique bounded repository path required")
             seen.add(path)
