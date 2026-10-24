@@ -1091,6 +1091,10 @@ class IntegrationStore:
         runs = github_adapter.request(
             "GET", root + "/actions/runs?head_sha=" + head + "&per_page=100"
         )
+        check_runs = github_adapter.request("GET", root + "/commits/" + head + "/check-runs?per_page=100")
+        commit_status = github_adapter.request("GET", root + "/commits/" + head + "/status")
+        if not isinstance(check_runs.get("check_runs"), list) or not isinstance(commit_status.get("statuses"), list):
+            raise TypeError("GitHub job and commit status evidence required")
         return {
             "project_id": project_id,
             "repository": repo["full_name"],
@@ -1108,6 +1112,11 @@ class IntegrationStore:
             ],
             "ci_total": runs["total_count"],
             "ci_truncated": runs["total_count"] > len(runs["workflow_runs"]),
+            "ci_check_runs": check_runs["check_runs"],
+            "ci_check_total": check_runs.get("total_count", len(check_runs["check_runs"])),
+            "ci_check_truncated": check_runs.get("total_count", len(check_runs["check_runs"])) > len(check_runs["check_runs"]),
+            "ci_statuses": commit_status["statuses"],
+            "ci_status_truncated": len(commit_status["statuses"]) >= 100,
             "operations": [
                 dict(r)
                 for r in self.db.execute(
