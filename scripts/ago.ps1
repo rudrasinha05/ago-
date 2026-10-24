@@ -102,55 +102,7 @@ try {
     if ($Action -eq "export-candidate") {
         Write-Host "This exports code from an authenticated, completed AGO AI run for OFFLINE review only."
         $RunId = Read-Host "Exact completed AGO agent run ID (UUID)"
-        if ($RunId -notmatch '^[0-9a-fA-F-]{36}
-        exit $LASTEXITCODE
-    }
-    if ($Action -eq "safe-reconcile") {
-        if (-not $env:AGO_MARKET_TENANT_ID) {
-            throw "Set existing AGO_MARKET_TENANT_ID before local recovery."
-        }
-        & python ../../scripts/company_safe_reconcile.py --tenant-id $env:AGO_MARKET_TENANT_ID
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        $Confirmation = Read-Host "To mark abandoned local runs FAILED without replay, type MARK_STALE_FAILED"
-        if ($Confirmation -cne "MARK_STALE_FAILED") {
-            Write-Host "Recovery cancelled. No state changed."
-            exit 2
-        }
-        & python ../../scripts/company_safe_reconcile.py --tenant-id $env:AGO_MARKET_TENANT_ID --apply --confirm MARK_STALE_FAILED
-        exit $LASTEXITCODE
-    }
-    if ($Action -eq "market-watch") {
-        if (-not $env:AGO_MARKET_TENANT_ID) {
-            throw "Set AGO_MARKET_TENANT_ID to your actual company UUID before launching market research."
-        }
-        & python ../../scripts/company_market_watch.py --tenant-id $env:AGO_MARKET_TENANT_ID --interval-seconds 3600
-        exit $LASTEXITCODE
-    }
-    if ($Action -eq "serve") {
-        # The retired M9 frontend no longer exists in the application package.
-        # Founder starts this foreground server and decides when to shut it down.
-        # Research is NEVER implicitly started by setting a tenant variable.
-        # To run research, the founder launches 'market-watch' separately.
-        Write-Host "AGO local server only. Market watcher is not auto-started."
-        $VisualRoute = Join-Path $BackendPath "ago\frontend\organization\index.html"
-        if (Test-Path -LiteralPath $VisualRoute -PathType Leaf) {
-            Write-Host "Visual Company Map: http://127.0.0.1:$Port/workspace/organization/"
-        }
-        else {
-            Write-Host "Company Map React frontend is not packaged. From repo root use .\\scripts\\ago-visual.ps1"
-            Write-Host "Old /console/ redirects to the visual Company Map; no duplicate UI."
-        }
-        & python -m ago.local_ops serve --port $Port
-    }
-    else {
-        & python -m ago.local_ops $Action
-    }
-    exit $LASTEXITCODE
-}
-finally {
-    Pop-Location
-}
-) {
+        if ($RunId -notmatch '^[0-9a-fA-F-]{36}$') {
             throw "A valid recorded run UUID is required."
         }
         $Confirmation = Read-Host "To export only, type EXPORT_APPROVED_AI_CANDIDATE"
@@ -158,7 +110,7 @@ finally {
             Write-Host "Export cancelled. No file created."
             exit 2
         }
-        # Persist private code outside the Git working tree by default.
+        # Private AI-generated code is never written into the public Git checkout.
         $ExportDirectory = Join-Path $HOME ".ago\candidate_exports"
         if (-not (Test-Path -LiteralPath $ExportDirectory -PathType Container)) {
             New-Item -ItemType Directory -Path $ExportDirectory -Force | Out-Null

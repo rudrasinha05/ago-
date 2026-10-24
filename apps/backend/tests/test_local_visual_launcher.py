@@ -179,3 +179,15 @@ def test_operator_has_separate_fail_closed_real_engineering_dispatch():
     assert '$Coding = $Action -eq "run-approved-engineering"' in script
     assert '$CodingCheck += "--require-engineering"' in script
     assert '--login @CodingCheck --apply' in script
+
+
+def test_windows_operator_has_single_reachable_complete_action_chain():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    for action in ("export-candidate", "safe-reconcile", "market-watch", "serve"):
+        assert script.count(f'if ($Action -eq "{action}")') == 1
+    assert script.count("finally {") == 1
+    assert "if ($RunId -notmatch '^[0-9a-fA-F-]{36}$') {" in script
+    assert 'ago_pull_candidate.py' in script
+    assert "PRIVATE FOUNDER" not in script
+    assert script.rstrip().endswith("finally {\n    Pop-Location\n}")
