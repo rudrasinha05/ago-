@@ -513,3 +513,45 @@ live bound GitHub repository visibility. The Founder finalizer refuses
 `repository_private=false` or an absent visibility field, as well as a
 changed develop SHA. Publishing the private source to a public repo is a
 separate product decision and must never follow implicitly from QA pass.
+
+
+### Real AGO-origin GitHub commit → passed CI → human-approved DRAFT PR
+
+The existing `create_pull_request` provider path now requires an **explicit
+immutable list of required GitHub CI check names**, stored in the independently
+reviewed operation. At final server-side execution the GitHub provider itself
+re-reads the bound **private** repository, verifies the exact `develop` SHA,
+and rechecks **all** named GitHub check runs/statuses. Missing, pending,
+failing, duplicated or truncated evidence stops PR creation before the
+GitHub POST. A CLI-only green indicator is not enough.
+
+After a real, successful **AGO-origin** `execute-github-commit` and actual
+required GitHub CI success, the Founder can use one Windows operator with
+four separately authorized stages:
+
+```powershell
+.\scripts\ago-pr.ps1 -Phase prepare  # source + real GitHub commit + exact CI -> private PR draft
+.\scripts\ago-pr.ps1 -Phase submit   # immutable PR proposal -> enterprise review
+.\scripts\ago-pr.ps1 -Phase apply    # requires DIFFERENT active human's enterprise approval
+.\scripts\ago-pr.ps1 -Phase execute  # creates GitHub DRAFT PR only (never merges)
+```
+
+Each phase requests the original Board-cleared run, approved commit operation
+and enterprise proposal IDs, passing source stage and independent QA packet.
+`prepare` also requires the exact names of every Founder-required CI
+workflow, a human-reviewed title and description, and creates a new
+`~/.ago/delivery_runs/pr-draft-<UUID>.json` outside the source repository.
+The operator prints this UUID for later phases; capture it from your private
+files. The `submit` phase stores a new immutable AGO enterprise proposal
+after a separate Founder confirmation. A DIFFERENT active human reviewer
+must approve it in the AGO governance system; the Founder cannot self-approve.
+`apply` requires that independent approval; `execute` separately rechecks
+the approved/applied operation, original AGO-owned GitHub commit and live CI.
+
+No phase silently retries an uncertain POST. Durable per-operation markers
+prevent duplicate submits, applies and PR creations. AGO's server is still
+the ultimate GitHub credential, review, tenancy and dispatch authority.
+The target must remain the private, correctly bound repository. The resulting
+PR is `draft=true` and goes from `develop` to `main`; **no merge,
+deployment, marketplace publication or release is authorized**. A newly
+created draft PR does not establish a market-ready product by itself.

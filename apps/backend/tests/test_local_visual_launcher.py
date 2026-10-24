@@ -288,3 +288,21 @@ def test_approved_github_delivery_operator_has_distinct_apply_and_execute_phases
     assert "ago_finalize_github_delivery.py" in script
     assert "REAL GitHub commit on private develop." in script
     assert script.count("finally {") == 1
+
+
+def test_governed_draft_pr_operator_is_four_phase_and_never_merges():
+    root = Path(__file__).resolve().parents[3]
+    ps = (root / "scripts" / "ago-pr.ps1").read_text(encoding="utf-8")
+    assert 'ValidateSet("prepare", "submit", "apply", "execute")' in ps
+    assert "ago_draft_pull_request.py @Args" in ps
+    assert "PREPARE_VERIFIED_DRAFT_PR" in ps
+    assert "SUBMIT_VERIFIED_DRAFT_PR" in ps
+    assert "APPLY_APPROVED_DRAFT_PR" in ps
+    assert "CREATE_APPROVED_DRAFT_PR" in ps
+    assert ps.index("Read-Host \"Authorize EXACTLY this phase") < ps.index(
+        "ago_draft_pull_request.py @Args --apply --confirm"
+    )
+    assert "git push" not in ps
+    assert "pulls/merge" not in ps
+    assert "merge main" in ps
+    assert ps.count("finally {") == 1
