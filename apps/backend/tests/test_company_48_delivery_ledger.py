@@ -25,8 +25,8 @@ def test_all_48_p0_p1_p2_tasks_present_in_original_numbering():
     assert report["per_priority"] == {"P0": 12, "P1": 22, "P2": 14}
     assert report["self_certified_completed"] == 0
     assert report["all_48_proven_complete"] is False
-    assert report["completed"] == 2
-    assert report["completed_ids"] == [14, 45]
+    assert report["completed"] == 5
+    assert report["completed_ids"] == [14, 45, 120, 22, 128]
     assert report["completed"] + report["partial"] + report["pending"] == 48
 
 
@@ -88,7 +88,7 @@ def test_completion_requires_reviewed_ci_evidence(mutation):
         task["completion_proved"] = True
         doc["completion_evidence"]["140"] = copy.deepcopy(doc["completion_evidence"]["14"])
     else:
-        task = next(t for t in doc["tasks"] if t["id"] == 120)
+        task = next(t for t in doc["tasks"] if t["id"] == 133)
         task["status"] = "completed"
         task["completion_proved"] = True
     with pytest.raises((PermissionError, TypeError, ValueError)):
@@ -97,9 +97,23 @@ def test_completion_requires_reviewed_ci_evidence(mutation):
 
 def test_completed_gates_have_only_ci_scope_and_exact_pinned_sources():
     doc = ledger()
-    assert sorted(int(key) for key in doc["completion_evidence"]) == [14, 45]
+    assert sorted(int(key) for key in doc["completion_evidence"]) == [14, 22, 45, 120, 128]
     for task in doc["tasks"]:
         if task["status"] == "completed":
             assert task["completion_proved"] is True
             assert task["owner_local_or_external_evidence_required"] is False
     assert MODULE.validate(doc)["self_certified_completed"] == 0
+
+
+@pytest.mark.parametrize("gate,proof_source", [
+    (120,"apps/backend/tests/test_company_ceo_stage_scope.py"),
+    (22,"packages/sdk/tests/company-model.test.mjs"),
+    (128,"apps/backend/tests/test_local_approved_agent_batch.py"),
+])
+def test_newly_closed_gates_require_exact_proof_sources(gate,proof_source):
+    document = ledger()
+    assert proof_source in document["completion_evidence"][str(gate)]["tests"]
+    assert document["tasks"][[t["id"] for t in document["tasks"]].index(gate)]["status"] == "completed"
+    document["completion_evidence"][str(gate)]["tests"] = ["unrelated-test.py"]
+    with pytest.raises((PermissionError, ValueError)):
+        MODULE.validate(document)

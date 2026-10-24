@@ -27,6 +27,17 @@ CI_GATES = {
     45: ("docs/ARCHITECTURE_STATUS_AND_BACKLOG.md",
          ("tests/frontend/workspace.spec.mjs",
           "apps/backend/tests/test_company_dual_approval.py")),
+    120: ("docs/reports/AGO_LOCAL_SOLO_FOUNDER_AUTHORITY.md",
+          ("apps/backend/tests/test_company_dual_approval.py",
+           "apps/backend/tests/test_company_solo_founder.py",
+           "apps/backend/tests/test_company_ceo_stage_scope.py")),
+    22: ("docs/ARCHITECTURE_STATUS_AND_BACKLOG.md",
+         ("packages/sdk/tests/company-model.test.mjs",
+          "apps/backend/tests/test_company_first_run_postgres.py")),
+    128: ("docs/reports/LOCAL_ENGINEERING_QA_DELIVERY_GATE.md",
+          ("apps/backend/tests/test_company_safe_reconcile.py",
+           "apps/backend/tests/test_local_approved_agent_batch.py",
+           "apps/backend/tests/test_company_isolated_docker_gate.py")),
 }
 
 
