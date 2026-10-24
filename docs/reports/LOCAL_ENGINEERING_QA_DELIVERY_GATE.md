@@ -328,3 +328,27 @@ preserved acceptance checks, prints the new SHA, asks a second separate
 authorization, pins that digest and uses a fresh offline Docker stage.
 Only a passing retest produces a still-unapproved independent human QA
 packet. No source is silently published or committed to GitHub.
+
+
+### Authenticated independent human QA bridge
+
+After a **real** passing Docker run has created its pending `qa-....json`,
+the reviewer can run `scripts/ago_human_qa_handoff.py` in **preview** mode
+with the exact private exported Board-cleared source file, the matching
+staged Docker directory, pending QA packet, chosen human verdict and
+substantive review notes. The script logs in to AGO using the **separate
+human QA reviewer's own credentials**, checks `qa:review` and `qa:read`,
+matches the completed unreviewed task ID against the authenticated
+`/v1/console/qa-queue`, verifies that the worker is not the reviewer,
+and reconstructs the candidate SHA and passing test-receipt hash.
+
+After independently examining the generated code, acceptance requirements
+and failing cases, the human can explicitly pass `--apply --confirm
+INDEPENDENT_HUMAN_QA_DECISION`. A durable local no-replay marker is written
+**before** the actual `POST /v1/tasks/<UUID>/review`. If the network result
+is uncertain, the operator must inspect AGO review state rather than retry.
+The server itself enforces an actual human reviewer separate from the
+AI assignee and persists the QA verdict. A positive result is reported only
+when AGO confirms the exact verdict, reviewer and evidence.
+
+No GitHub connector or release is invoked by this review helper.
