@@ -80,7 +80,7 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
       <div className="brain-stat"><small>Employees working</small><b>{new Set(active.map(t=>t.assignee_id)).size}</b></div>
       <div className="brain-stat"><small>Pending action / approval</small><b>{known?queued.length:'—'}</b></div>
       <div className="brain-stat"><small>Recent durable work events</small><b>{notifications?events.length:'—'}</b></div>
-      <div className="brain-work-detail" aria-label="Recorded company task assignments">
+      <section className="brain-work-detail" aria-label="Recorded company task assignments">
         <h4>Live assignment evidence</h4>
         {assigned.length?<ul>{assigned.map(task=><li key={task.id}>
           <span className={'brain-work-state '+(task.status==='running'?'work-running':'work-waiting')}>
@@ -93,7 +93,7 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
               {brief(employeeNames.get(task.assignee_id),26)} ↗
             </button>:<small>Employee not available</small>}
         </li>)}</ul>:<p>{known?'No running or queued assignments':'Task feed unavailable'}</p>}
-      </div>
+      </section>
       <p className="brain-disclaimer">Visual monitor stays visible. A live model is only active when a configured, authorized runtime actually executes a job.</p>
      </section>
    </div>
