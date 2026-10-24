@@ -1112,10 +1112,21 @@ class IntegrationStore:
             ],
             "ci_total": runs["total_count"],
             "ci_truncated": runs["total_count"] > len(runs["workflow_runs"]),
-            "ci_check_runs": check_runs["check_runs"],
-            "ci_check_total": check_runs.get("total_count", len(check_runs["check_runs"])),
-            "ci_check_truncated": check_runs.get("total_count", len(check_runs["check_runs"])) > len(check_runs["check_runs"]),
-            "ci_statuses": commit_status["statuses"],
+            "ci_check_runs": [
+                {"name": c.get("name"), "status": c.get("status"),
+                 "conclusion": c.get("conclusion")}
+                for c in check_runs["check_runs"]
+            ],
+            "ci_check_total": check_runs.get(
+                "total_count", len(check_runs["check_runs"])
+            ),
+            "ci_check_truncated": check_runs.get(
+                "total_count", len(check_runs["check_runs"])
+            ) > len(check_runs["check_runs"]),
+            "ci_statuses": [
+                {"context": c.get("context"), "state": c.get("state")}
+                for c in commit_status["statuses"]
+            ],
             "ci_status_truncated": len(commit_status["statuses"]) >= 100,
             "operations": [
                 dict(r)
