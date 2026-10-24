@@ -11,7 +11,6 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, company_ollama_chain_queries, enterprise_store, organizational_dna, task_store |
 | [agent_runtime_queries](../../apps/backend/ago/agent_runtime_queries.py) | workforce | persistence | backend_contracts |
 | [analytics_store](../../apps/backend/ago/analytics_store.py) | strategy | persistence | architecture_guard, backend_contracts, graph_store, reviewed_changes, security, security_controls |
-| [audit_redaction](../../apps/backend/ago/audit_redaction.py) | governance | foundation | None |
 | [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, model_handlers, repository_ports, security |
 | [api_brain](../../apps/backend/ago/api_brain.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
 | [api_company_chat](../../apps/backend/ago/api_company_chat.py) | transport | transport | api_contracts, api_m2, repository_ports |
@@ -27,6 +26,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [api_tools](../../apps/backend/ago/api_tools.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security, tool_catalog |
 | [approvals](../../apps/backend/ago/approvals.py) | governance | domain | None |
 | [architecture_guard](../../apps/backend/ago/architecture_guard.py) | entrypoints | foundation | None |
+| [audit_redaction](../../apps/backend/ago/audit_redaction.py) | governance | foundation | None |
 | [auth_api](../../apps/backend/ago/auth_api.py) | transport | transport | api_contracts, rate_limit, security |
 | [auth_guard](../../apps/backend/ago/auth_guard.py) | transport | transport | security |
 | [backend_contracts](../../apps/backend/ago/backend_contracts.py) | platform | foundation | None |
