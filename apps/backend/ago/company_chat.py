@@ -296,6 +296,83 @@ class CompanyChat:
             "event_type":"committed_work_event",
         }
 
+
+    def staffing_proposals(self, actor, project_id: str) -> dict:
+        """Read-only CEO-accountable gap suggestions, never automatic hiring."""
+        import hashlib
+
+        UUID(actor.tenant_id)
+        UUID(actor.subject)
+        UUID(project_id)
+        if 'founder' not in actor.roles:
+            raise PermissionError('Only founder may inspect internal staffing needs')
+        project=self.db.execute("""
+            SELECT i.id,i.title,p.status
+            FROM ago_founder_intakes i
+            JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+            JOIN ago_users u ON u.tenant_id=i.tenant_id AND u.id=i.founder_id AND u.active
+            JOIN ago_employees founder ON founder.tenant_id=u.tenant_id
+                 AND founder.id=u.id AND founder.kind='human'
+            WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
+        """,(actor.tenant_id,project_id,actor.subject)).fetchone()
+        if project is None or project["status"] != "active":
+            raise PermissionError('Founder-owned active approved project required')
+        chief=self.db.execute("""
+            SELECT e.id FROM ago_company_board_appointments b
+            JOIN ago_employees e ON e.tenant_id=b.tenant_id AND e.id=b.employee_id
+            WHERE b.tenant_id=%s AND b.seat='Strategy & Vision' AND e.kind='ai'
+        """,(actor.tenant_id,)).fetchone()
+        if chief is None:
+            raise PermissionError('Real founder-appointed AI CEO required')
+        stages=self.db.execute("""
+            SELECT stage,position,suggested_assignee_id
+            FROM ago_founder_intake_stages
+            WHERE tenant_id=%s AND intake_id=%s ORDER BY position
+        """,(actor.tenant_id,project_id)).fetchall()
+        titles=self.db.execute("""
+            SELECT DISTINCT lower(trim(role_title)) AS role
+            FROM ago_employees
+            WHERE tenant_id=%s AND kind='ai' AND role_title IS NOT NULL
+        """,(actor.tenant_id,)).fetchall()
+        existing={str(row["role"]) for row in titles}
+        roles={
+            'discovery':'Research Analyst',
+            'architecture':'Solution Architect',
+            'implementation':'Software Developer',
+            'quality':'Independent QA Engineer',
+            'release':'Release Engineer',
+        }
+        proposals=[]
+        for stage in stages:
+            if stage["suggested_assignee_id"] is not None:
+                continue
+            role=roles.get(stage["stage"])
+            if role is None:
+                raise ValueError('Unknown founder project stage')
+            proposals.append({
+                "stage":stage["stage"],
+                "suggested_role":role,
+                "existing_specialization_recorded":role.lower() in existing,
+                "decision":"review_existing_staff" if role.lower() in existing
+                           else "propose_specialist_staffing",
+            })
+        digest=hashlib.sha256((
+            project_id+"|"+str(chief["id"])+"|"+
+            "|".join(p["stage"]+":"+p["suggested_role"] for p in proposals)
+        ).encode()).hexdigest()
+        return {
+            "kind":"ago_p1_readonly_staffing_proposals",
+            "project_id":project_id,
+            "ceo_employee_id":str(chief["id"]),
+            "proposals":proposals,
+            "source_sha256":digest,
+            "is_live_project_evidence":True,
+            "charter_granted":False,
+            "personnel_hired":False,
+            "permission_granted":False,
+            "requires_founder_review":True,
+        }
+
     def ceo_reconcile(self, actor, project_id: str) -> dict:
         """Bounded CEO-operational authorization for ONE founder-approved project.
 

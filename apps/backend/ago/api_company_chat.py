@@ -201,6 +201,20 @@ def ceo_reconcile(project_id: UUID, actor=Depends(authenticated),
         translate_error(exc)
 
 
+@router.get('/projects/{project_id}/staffing-proposals')
+def founder_project_staffing_proposals(
+    project_id: UUID, actor=Depends(authenticated),
+    repositories=Depends(repository_scope),
+):
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'approval:founder')
+    try:
+        return repositories.resolve(CompanyChatPort).staffing_proposals(
+            actor,str(project_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
 @router.get('/projects/{project_id}')
 def founder_project_details(project_id: UUID,actor=Depends(authenticated),
                             repositories=Depends(repository_scope)):
