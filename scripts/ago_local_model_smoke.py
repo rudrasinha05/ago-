@@ -11,7 +11,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ago.model_provider import OllamaLocalTextProvider
@@ -70,7 +70,7 @@ def smoke(destination: Path, *, apply: bool = False, confirm: str = "",
         response_digest_sha256=hashlib.sha256(output.encode("utf-8")).hexdigest(),
         response_bytes=len(output.encode("utf-8")),
         elapsed_seconds=round(seconds, 3),
-        observed_at=datetime.now(timezone.utc).isoformat(),
+        observed_at=datetime.now(UTC).isoformat(),
         proof_level="untrusted_local_operator_receipt_not_independent_attestation",
     )
     with destination.open("x", encoding="utf-8") as stream:
