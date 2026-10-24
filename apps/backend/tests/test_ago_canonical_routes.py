@@ -1,6 +1,7 @@
 """Guard routes and links against returning to legacy People & departments."""
-from pathlib import Path
 import importlib.util
+import re
+from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -44,7 +45,13 @@ def test_raw_company_links_respect_the_next_basepath():
     company = (root / "apps/web/components/company-map.jsx").read_text(encoding="utf-8")
     # Next Link keeps session in tab memory; native anchors would reload and sign out.
     assert "import Link from 'next/link';" in company
-    assert company.count('<Link href="/tools/"') == 2
+    # Next Link accepts extra accessibility/touch-target props before href.
+    # Count real Next Link elements, not a brittle exact JSX attribute order.
+    assert len(re.findall(r'<Link\\b[^>]*\\bhref="/tools/"', company)) == 2
+    assert '<Link className="company-github-navigation" href="/tools/"' in company
+    css = (root / "apps/web/app/workspace.css").read_text(encoding="utf-8")
+    assert ".company-github-navigation{display:inline-flex" in css
+    assert "min-height:44px" in css
     assert '<a href="/tools/"' not in company
     assert '<a href="/workspace/tools/"' not in company
     assert "founderView&&me.permissions?.includes('brain:manage')&&<a href=\"#ago-project-portfolio\"" in company
