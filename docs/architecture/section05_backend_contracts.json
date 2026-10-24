@@ -379,6 +379,10 @@
         "assignments": {
           "arguments": "self, *, tenant_id: str, actor_id: str, task",
           "returns": "list[dict]"
+        },
+        "record_verified_handoff": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, task_id: str, role: str, employee_id: str, blocked: bool, participants: list[dict]",
+          "returns": "None"
         }
       }
     },
