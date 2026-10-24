@@ -3,6 +3,7 @@
 AgentRuntime's normal authorize_and_start gate is exercised separately in the
 M4 integration suite. These tests exercise the opt-in local-only handoff adapter.
 """
+from contextlib import nullcontext
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -46,9 +47,16 @@ class ApprovedProjectDb:
         self.human_board = human_board
         self.wrong_manager = wrong_manager
         self.queries = []
+        self.events = []
+
+    def transaction(self):
+        return nullcontext()
 
     def execute(self, sql, parameters):
         self.queries.append((sql,parameters))
+        if "INSERT INTO ago_company_chat" in sql:
+            self.events.append(parameters)
+            return Cursor([])
         if "FROM ago_founder_intakes i" in sql:
             return Cursor([{
                 "id":self.intake,"title":"Local company project",
@@ -243,6 +251,14 @@ def test_opt_in_registers_handoff_under_existing_approved_task_action(monkeypatc
     assert [x["operation_key"] for x in charges]==[
         f"local-chain:{db.task_id}:role:{i}" for i in range(1,5)
     ]
+    assert len(db.events)==4
+    assert [event[2] for event in db.events]==[
+        "AGO verified local inference for " + role +
+        "; task proposal only; independent QA pending."
+        for role in ("ceo", "cto", "pm", "employee")
+    ]
+    assert all(event[0]==db.tenant and event[-1]==db.task_id
+               for event in db.events)
 
 
 
@@ -364,6 +380,9 @@ def test_full_board_charges_seven_virtual_attempts(monkeypatch):
     assert [x["operation_key"] for x in charged]==[
         f"local-chain:{db.task_id}:role:{i}" for i in range(1,8)
     ]
+    assert len(db.events)==7
+    assert all(event[0]==db.tenant and event[-1]==db.task_id
+               for event in db.events)
 
 
 def test_disabled_chain_keeps_previous_no_model_execution(monkeypatch):

@@ -165,6 +165,19 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     assert len(usage)==expected_count
     assert all(Decimal(u["amount"]) == Decimal("1") for u in usage)
     assert len({u["operation_key"] for u in usage})==expected_count
+    visible=info["db"].execute("""
+        SELECT employee_id,body FROM ago_company_chat
+        WHERE tenant_id=%s AND task_id=%s AND kind='status'
+        ORDER BY id
+    """,(info["tenant"],task_id)).fetchall()
+    assert len(visible)==expected_count
+    assert [str(event["employee_id"]) for event in visible]==expected_people
+    assert all("AGO verified local inference for " in event["body"]
+               and "independent QA pending" in event["body"]
+               and "secret" not in event["body"].lower()
+               for event in visible)
+    if deny_risk:
+        assert "Founder resolution" in visible[-1]["body"]
     assert float(CreditBudget(info["db"]).balance(tenant_id=info["tenant"])["consumed"])==expected_count
     assert result["roles_expected"]==(7 if full_board else 4)
     assert result["handoff_complete"] is not deny_risk

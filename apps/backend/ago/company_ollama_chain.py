@@ -43,6 +43,7 @@ def board_recommendation(text: str) -> str:
 
 def run_four_role_chain(
     *, task, participants: list[dict], provider, engineering_candidates: bool = False,
+    on_role_completed=None,
 ) -> dict:
     project=task.project_context
     title=str(project["title"])[:180]
@@ -129,6 +130,11 @@ def run_four_role_chain(
             "human_qa_approved":False,
         })
         previous=bounded
+        # A caller may durably publish a *fact of completed inference*, not
+        # untrusted generated prose, after its bounded role response. This is
+        # not a human approval, release, or permission to start another role.
+        if on_role_completed is not None:
+            on_role_completed(role, person["employee_id"], bool(blocked_seat))
         # Do not send a rejected proposal to the next AI role; retain the
         # actual objection as a recorded draft for founder resolution.
         if blocked_seat:
