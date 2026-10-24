@@ -9,7 +9,7 @@ const commit={id:uuid(9),project_id:uuid(1),operation:'commit_files',
 const pr={id:uuid(10),project_id:uuid(1),operation:'create_pull_request',
  payload:{expected_sha:'c'.repeat(40),title:'Review AI project',body:'Human QA',
  required_checks:['Backend QA','Browser QA']}};
-const project={id:uuid(1),repository:'rudrasinha05/private-project',
+const project={id:uuid(1),repository:'private-project',
  status:{project_id:uuid(1),repository:'rudrasinha05/private-project',repository_private:true,
   develop_sha:'a'.repeat(40),operations:[]}};
 const proposal=op=>({id:uuid(30),command:'github_operation',operation_key:op.id,
