@@ -17,7 +17,10 @@ from uuid import UUID, uuid5
 
 from ago.github_adapter import validate_operation
 from ago_finalize_github_delivery import (
-    checked_applied, checked_review, post_local, read_local,
+    checked_applied,
+    checked_review,
+    post_local,
+    read_local,
 )
 from ago_human_qa_handoff import LOCAL_OPENER, read_document
 from ago_submit_github_proposal import enterprise_call, inspect_verified_draft
