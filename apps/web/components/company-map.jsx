@@ -236,7 +236,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
         const destination=document.getElementById(fragment.slice(1));
         if(!destination)return;
         event.preventDefault();
-        if(window.location.hash!==fragment)window.history.pushState(null,'',fragment);
+        if(window.location.hash!==fragment)window.location.hash=fragment;
         destination.scrollIntoView({block:'start',behavior:'auto'});
       }}>
       <a href="#ago-unified-cockpit">Company Brain</a>
