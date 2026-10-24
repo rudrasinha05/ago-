@@ -369,3 +369,11 @@
 .company-github-footnote{padding-top:9px;border-top:1px solid #355880}
 #ago-github-delivery{scroll-margin-top:75px}
 @media(max-width:650px){.company-github-desk{padding:13px}.company-github-desk header{align-items:flex-start;flex-direction:column}}
+
+/* P1: actual WebGL-mesh brain; layered SVG is retained only for non-WebGL devices. */
+.ago-real-3d-brain{display:block;position:absolute;inset:0;width:100%;height:295px;z-index:4;touch-action:pan-y;cursor:grab}
+.ago-real-3d-brain:active{cursor:grabbing}
+.brain-volume.webgl-active .brain-depth-stack,
+.brain-volume.webgl-active .brain-svg{visibility:hidden}
+.brain-volume.webgl-active{min-height:295px}
+@media(prefers-reduced-motion:reduce){.ago-real-3d-brain{animation:none}}

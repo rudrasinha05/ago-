@@ -1,5 +1,6 @@
 "use client";
-import {useState} from 'react';
+import {useCallback,useState} from 'react';
+import {Brain3DScene} from './brain-3d-scene';
 import {boardFunctionSeats} from '@ago/sdk/company';
 
 const brief=(text,max=110)=>text?.length>max?text.slice(0,max)+'…':text;
@@ -10,6 +11,8 @@ const CORTEX_POINTS=[[162,126],[254,106],[205,162],[269,197],[147,201],[295,137]
 export function CommandBrain({tasks,notifications,employees,onSelect,governance,onAppoint,canGovern}) {
  const [choices,setChoices]=useState({});
  const [rotation,setRotation]=useState(0);
+ const [gpuReady,setGpuReady]=useState(false);
+ const updateGpuReady=useCallback(ready=>setGpuReady(ready),[]);
  const known=Array.isArray(tasks);
  const active=known?tasks.filter(t=>t.status==='running'):[];
  const queued=known?tasks.filter(t=>['proposed','ready','waiting_approval'].includes(t.status)):[];
@@ -31,9 +34,10 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
      </section>
      <div className="brain-hologram" aria-label="Interactive founder-controlled 3D work observatory">
        <div className="brain-orbit orbit-one"/><div className="brain-orbit orbit-two"/>
-       <div className={'brain-volume '+(active.length?'brain-volume-active':'')}
+       <div className={'brain-volume '+(active.length?'brain-volume-active':'')+(gpuReady?' webgl-active':'')}
          role="img" aria-label={'Layered 3D company work brain: '+active.length+' verified running tasks, '+queued.length+' awaiting action; not a simulated conscious AI'}
          style={{'--brain-rotation':rotation+'deg'}}>
+        <Brain3DScene running={active.length} rotation={rotation} onReady={updateGpuReady}/>
         <div className="brain-depth-stack" aria-hidden="true">
           {CORTEX_DEPTHS.map((depth,index)=><svg key={depth} viewBox="0 0 420 300" className="brain-depth-slice"
             style={{'--cortex-depth':depth+'px','--cortex-scale':String(1-Math.abs(depth-30)/800)}}>
