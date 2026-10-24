@@ -59,3 +59,15 @@ test('red routes require running tasks; pending routes are amber and include dep
  assert.equal(activeRouteKeys(map,staff,[{assignee_id:'dev',status:'completed'}]).routes.size,0);
  assert.equal(activeRouteKeys(map,staff,null).routes.size,0);
 });
+
+test('failed and blocked persisted task states are never shown as idle',()=>{
+ const assigned=(status)=>[{assignee_id:'e',status}];
+ assert.deepEqual([employeeStatus('e',assigned('blocked')).tone,
+   employeeStatus('e',assigned('failed')).tone],['blocked','failed']);
+ assert.equal(employeeStatus('e',assigned('failed')).label,'Failed work recorded');
+ assert.equal(employeeStatus('e',assigned('completed')).tone,'idle');
+ assert.equal(employeeStatus('e',[...assigned('running'),...assigned('failed')]).tone,'busy');
+ assert.equal(employeeStatus('e',[...assigned('waiting_approval'),...assigned('failed')]).tone,'waiting');
+ assert.equal(employeeStatus('e',[{assignee_id:'somebody-else',status:'failed'}]).tone,'idle');
+ assert.equal(employeeStatus('e',undefined).tone,'unknown');
+});

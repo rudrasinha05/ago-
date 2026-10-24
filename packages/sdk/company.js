@@ -2,9 +2,15 @@
 export function employeeStatus(employeeId, tasks) {
   if (!Array.isArray(tasks)) return {label:'Unknown',tone:'unknown',tasks:[]};
   const assigned=tasks.filter(t=>t.assignee_id===employeeId);
-  const running=assigned.filter(t=>t.status==='running');
-  const waiting=assigned.filter(t=>['waiting_approval','proposed','ready'].includes(t.status));
-  return {label:running.length?'Busy':waiting.length?'Waiting':'Idle',tone:running.length?'busy':waiting.length?'waiting':'idle',tasks:assigned};
+  const running=assigned.some(t=>t.status==='running');
+  const waiting=assigned.some(t=>['waiting_approval','proposed','ready'].includes(t.status));
+  const blocked=assigned.some(t=>t.status==='blocked');
+  const failed=assigned.some(t=>t.status==='failed');
+  // Historical failures remain visible, but never trump genuinely running
+  // or queued work. Missing/denied task evidence is Unknown, not Idle.
+  const tone=running?'busy':waiting?'waiting':blocked?'blocked':failed?'failed':'idle';
+  const labels={busy:'Busy',waiting:'Waiting',blocked:'Blocked',failed:'Failed work recorded',idle:'Idle'};
+  return {label:labels[tone],tone,tasks:assigned};
 }
 export function companyLayout(departments, employees, founderId) {
   const people=employees.filter(e=>e.id!==founderId), byId=new Map(people.map(e=>[e.id,e]));
