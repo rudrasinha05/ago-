@@ -9,11 +9,56 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
 import json
+import os
 import time
+from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from uuid import UUID
+
+class DurableAttemptJournal:
+    """Owner-local no-replay receipt, written BEFORE an approved task POST.
+
+    An attempted ID is never automatically retried, even across process restarts.
+    Entries contain only a one-way hash of the UUID, never founder briefs,
+    session tokens, AI output, or private failure messages.
+    """
+
+    def __init__(self, directory):
+        self.directory = Path(directory).expanduser()
+
+    def claim(self, task_id: str) -> bool:
+        task_uuid = UUID(str(task_id))
+        directory = self.directory
+        # Disallow symlink-controlled receipt folders. The parent is local to
+        # the operator; the application never writes here during a dry run.
+        if directory.is_symlink() or directory.parent.is_symlink():
+            raise PermissionError("Attempt journal symlink is not allowed")
+        directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+        if directory.is_symlink() or not directory.is_dir():
+            raise PermissionError("Attempt journal must be a local directory")
+        digest = hashlib.sha256(task_uuid.bytes).hexdigest()
+        receipt = directory / (digest + ".attempt")
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            handle = os.open(receipt, flags, 0o600)
+        except FileExistsError:
+            return False
+        try:
+            with os.fdopen(handle, "w", encoding="ascii") as file:
+                file.write("AGO_ATTEMPT_V1 " + digest + "\n")
+                file.flush()
+                os.fsync(file.fileno())
+        except BaseException:
+            # A possibly claimed but incomplete receipt fails closed: do not
+            # remove the file and accidentally authorize a duplicate POST.
+            raise
+        return True
+
 
 CONFIRM="EXECUTE_APPROVED_INTERNAL_TASKS"
 READ_TIMEOUT_SECONDS=15
@@ -109,7 +154,7 @@ def confirmed_local_delivery(result, expected_task_id: str) -> bool:
 
 
 def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, apply: bool,
-          confirm: str | None) -> dict:
+          confirm: str | None, claim=None) -> dict:
     if not 1<=limit<=10:
         raise ValueError("No more than ten approved tasks in a batch")
     if apply and confirm!=CONFIRM:
@@ -132,16 +177,21 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
         if len(ids)==limit:
             break
     completed=[]
+    skipped=[]
     if apply:
-        # No retries: HTTP 502/timeout may follow an external side effect.
-        # The authenticated task endpoint holds the security decision.
+        # Atomically persist before network I/O. Unknown remote outcomes are
+        # never replayed by a fresh script invocation.
         for task_id in ids:
+            if claim is not None and not claim(task_id):
+                skipped.append(task_id)
+                continue
             result=dispatch(task_id)
             if not confirmed_local_delivery(result, task_id):
                 raise RuntimeError("AGO did not confirm an exact unblocked completed task")
             completed.append(task_id)
     result={"mode":"founder_approved_single_batch" if apply else "dry_run",
             "eligible_task_ids":ids,"completed_task_ids":completed,
+            "skipped_previously_attempted":skipped,
             "external_actions_authorized":False,
             "task_count":len(completed),"next_step":"Independent human QA required"}
     if not apply:
@@ -151,7 +201,7 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
 
 
 def watch(fetch, dispatch, *, minutes: int, max_tasks: int, interval: int,
-          confirm: str, clock=None, pause=None) -> dict:
+          confirm: str, clock=None, pause=None, claim=None) -> dict:
     """Single founder-controlled session: approved internal tasks, one at a time.
 
     Never replay attempted IDs in the same session even after a timeout or
@@ -166,6 +216,7 @@ def watch(fetch, dispatch, *, minutes: int, max_tasks: int, interval: int,
     started=clock()
     seen=set()
     completed=[]
+    skipped=[]
     polls=0
     while clock()-started < minutes*60 and len(seen)<max_tasks:
         records,approvals=fetch()
@@ -176,6 +227,9 @@ def watch(fetch, dispatch, *, minutes: int, max_tasks: int, interval: int,
         next_id=next((v for v in preview["eligible_task_ids"] if v not in seen),None)
         if next_id is not None:
             seen.add(next_id)  # Mark BEFORE I/O: no uncertain-outcome replay.
+            if claim is not None and not claim(next_id):
+                skipped.append(next_id)
+                continue
             result=dispatch(next_id)
             if not confirmed_local_delivery(result, next_id):
                 raise RuntimeError("Blocked or unknown task outcome; reconcile manually")
@@ -186,6 +240,7 @@ def watch(fetch, dispatch, *, minutes: int, max_tasks: int, interval: int,
                 pause(min(interval,remaining))
     return {"mode":"founder_bounded_local_watch","poll_count":polls,
             "attempted_task_count":len(seen),"completed_task_ids":completed,
+            "skipped_previously_attempted":skipped,
             "task_count":len(completed),"external_actions_authorized":False,
             "next_step":"Independent human QA required", "scheduled_service":False}
 
@@ -197,6 +252,8 @@ def main(argv=None) -> int:
     parser.add_argument("--confirm")
     parser.add_argument("--login",action="store_true",help="Prompt for founder credentials instead of copying a browser token")
     parser.add_argument("--watch-minutes",type=int,default=0,help="0: one pass; 1..60: founder-started bounded polling of approved work")
+    parser.add_argument("--attempt-journal",default=None,
+                        help="Owner-local durable attempt directory; defaults to ~/.ago/approved_attempts")
     parser.add_argument("--interval-seconds",type=int,default=15,help="Watch polling interval: 10..120 seconds")
     args=parser.parse_args(argv)
     try:
@@ -241,16 +298,22 @@ def main(argv=None) -> int:
             return (request("GET","/v1/organization/company/activity"),
                     request("GET","/v1/organization/company/approvals"))
         dispatch=lambda task_id:request("POST","/v1/agents/tasks/"+task_id+"/run")
+        # The durable record prevents duplicate network dispatch after a crash.
+        # A dry-run never creates a receipt folder.
+        claim = DurableAttemptJournal(
+            args.attempt_journal or Path.home()/".ago"/"approved_attempts"
+        ).claim if args.apply else None
         if args.watch_minutes:
             result=watch(fetch,dispatch,minutes=args.watch_minutes,
                          max_tasks=args.limit,interval=args.interval_seconds,
-                         confirm=args.confirm)
+                         confirm=args.confirm,claim=claim)
         else:
             records,approvals=fetch()
             if not isinstance(records,list) or not isinstance(approvals,list):
                 raise TypeError("Authenticated task/approval evidence unavailable")
             result=batch(records,approvals,dispatch,
-                         limit=args.limit,apply=args.apply,confirm=args.confirm)
+                         limit=args.limit,apply=args.apply,confirm=args.confirm,
+                         claim=claim)
     except KeyboardInterrupt:
         print(json.dumps({"status":"stopped_by_founder","automated_replay":False}))
         return 130

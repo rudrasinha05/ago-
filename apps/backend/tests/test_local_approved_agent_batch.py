@@ -223,3 +223,67 @@ def test_local_watch_stops_immediately_on_board_veto_without_replay():
         module.watch(lambda: (rows, approvals), reject, minutes=1, max_tasks=2,
                      interval=10, confirm=module.CONFIRM)
     assert attempts == [task_id]
+
+
+def test_durable_attempt_journal_blocks_cross_session_replay_and_keeps_no_secrets(tmp_path):
+    task_id=str(uuid4())
+    journal=module.DurableAttemptJournal(tmp_path/"receipts")
+    assert not (tmp_path/"receipts").exists()
+    assert journal.claim(task_id) is True
+    assert journal.claim(task_id) is False
+    assert module.DurableAttemptJournal(tmp_path/"receipts").claim(task_id) is False
+    records=list((tmp_path/"receipts").glob("*.attempt"))
+    assert len(records)==1
+    receipt=records[0].read_text()
+    assert task_id not in receipt
+    assert "Bearer " not in receipt
+    assert receipt.startswith("AGO_ATTEMPT_V1 ")
+    assert len(records[0].stem)==64
+
+
+def test_durable_claim_happens_before_post_and_never_retries_unknown(tmp_path):
+    task_id=str(uuid4())
+    records=[{"id":task_id,"action":"internal:brief",
+              "status":"waiting_approval","approval_id":"verified"}]
+    approvals=[{"id":"verified","status":"approved","action":"internal:brief"}]
+    journal=module.DurableAttemptJournal(tmp_path/"attempts")
+    calls=[]
+    def unknown(tid):
+        calls.append(tid)
+        raise TimeoutError("Outcome unknown")
+    with pytest.raises(TimeoutError):
+        module.batch(records,approvals,unknown,limit=1,apply=True,
+                     confirm=module.CONFIRM,claim=journal.claim)
+    replay=module.batch(records,approvals,unknown,limit=1,apply=True,
+                        confirm=module.CONFIRM,
+                        claim=module.DurableAttemptJournal(tmp_path/"attempts").claim)
+    assert calls==[task_id]
+    assert replay["completed_task_ids"]==[]
+    assert replay["skipped_previously_attempted"]==[task_id]
+
+
+def test_durable_watch_skips_already_attempted_ids_without_faking_delivery(tmp_path):
+    task_id=str(uuid4())
+    journal=module.DurableAttemptJournal(tmp_path/"attempts")
+    assert journal.claim(task_id)
+    tasks=[{"id":task_id,"action":"internal:brief","status":"waiting_approval","approval_id":"a"}]
+    approvals=[{"id":"a","status":"approved","action":"internal:brief"}]
+    clock=[0.0]
+    output=module.watch(lambda:(tasks,approvals),lambda _:pytest.fail("Replay attempted"),
+                        minutes=1,max_tasks=1,interval=10,confirm=module.CONFIRM,
+                        clock=lambda:clock[0],pause=lambda dt:clock.__setitem__(0,clock[0]+dt),
+                        claim=journal.claim)
+    assert output["task_count"]==0
+    assert output["skipped_previously_attempted"]==[task_id]
+
+
+def test_attempt_journal_refuses_symlink_folder(tmp_path):
+    target=tmp_path/"legitimate"
+    target.mkdir()
+    link=tmp_path/"link"
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except (OSError,NotImplementedError):
+        pytest.skip("Filesystem does not permit symlinks")
+    with pytest.raises(PermissionError):
+        module.DurableAttemptJournal(link).claim(str(uuid4()))
