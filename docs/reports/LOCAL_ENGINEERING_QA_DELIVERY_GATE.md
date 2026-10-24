@@ -411,3 +411,24 @@ AGO creates a **new private JSON draft** under `~/.ago/delivery_runs/`.
 Nothing is sent to GitHub, and no external head/CI/release evidence is
 assumed. The existing governed GitHub service must separately review,
 authorize, compare the remote develop SHA and execute any eventual commit.
+
+
+### Submit a human-QA-verified GitHub draft into AGO governance
+
+`python scripts/ago_submit_github_proposal.py --help` supports a
+read-only preview and a distinct, explicit confirmed proposal. Supply the
+exact private QA-verified draft, original Board-cleared export, passed
+Docker source staging directory and local pending QA packet. The operator
+logs in as the Founder; AGO re-reads the persisted human `pass` review
+and currently committed source bytes, revalidates the entire `commit_files`
+payload, fetches the **live integration domain revision**, and creates
+one immutable, *pending* `github_operation` through
+`POST /v1/enterprise/reviews/integration/propose` only after an explicit
+`SUBMIT_QA_VERIFIED_GITHUB_PROPOSAL` confirmation.
+
+The helper writes a no-replay receipt before the POST. A timeout means
+**uncertain**; inspect the AGO governance proposal and approval inbox rather
+than retrying a new operation. This step does not apply the proposal,
+approve it, call the GitHub provider, merge a PR, or mark a release ready.
+An independently authorized enterprise review and later Founder-triggered
+GitHub execution are still mandatory.
