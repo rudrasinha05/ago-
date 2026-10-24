@@ -154,3 +154,32 @@ The resulting `AGO_TEST_RECEIPT.json` is written once under the staged directory
 ## Acceptance for this gate
 
 Offline unit tests assert that review is read-only by default; exact confirmation is mandatory; staged digest and file contents cannot change; unknown files and links are rejected; optional unsubmitted GitHub draft files must match exact reviewed source; Docker command is network-disabled/read-only/unprivileged; zero-test and failing results never claim success; a passing mocked test never claims independent QA or release.
+
+
+## Founder-started bounded live work and no-replay crash protection
+
+The Company Map/Brain is a visual observer of the same persisted work records, not
+a model kept artificially busy. Run the authenticated localhost AGO application
+in one terminal. In a **separate** Windows PowerShell terminal, inspect the
+approved-task preview and explicitly choose:
+
+```powershell
+.\scripts\ago.ps1 watch-approved-internal
+```
+
+The operator must sign in with a real founder account and confirm. The worker
+polls only already approved `internal:brief` tasks for **at most 60 minutes
+or 10 attempted tasks**, sequentially, and can be stopped immediately with
+Ctrl+C. It does not create projects, grant approvals, call GitHub, deploy code,
+start itself on login, or execute any unapproved task. A separate human QA
+verdict remains mandatory. Laptop powered off means no worker is running.
+
+Applied dispatch writes one owner-local `~/.ago/approved_attempts` receipt
+**before** the network request. Each filename is a SHA-256 of the task UUID,
+not a token, private brief or model output. If a timeout or process crash makes
+the server outcome uncertain, a later invocation skips the same task rather
+than replaying its possible side effects. The operator must use AGO signed-in
+task history and manual reconciliation; do not delete journal files merely to
+force another attempt. A dry run never creates a journal entry. This is an
+incremental P1 #128/#152/#154 safeguard, **not** evidence of live owner-device
+operation, distributed scheduling, or a completed P2 release.

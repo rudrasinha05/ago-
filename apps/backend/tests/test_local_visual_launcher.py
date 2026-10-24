@@ -108,3 +108,15 @@ def test_normal_founder_launch_forces_single_visual_frontend():
     for relative in ("scripts/ago-visual.ps1", "scripts/ago.ps1"):
         source = (root / relative).read_text(encoding="utf-8")
         assert "AGO_LEGACY_CONSOLE_TEST_MODE" not in source
+
+
+def test_approved_internal_watch_is_bounded_and_never_auto_started():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert '"watch-approved-internal"' in script
+    assert "--watch-minutes 60 --limit 10 --interval-seconds 15" in script
+    assert "EXECUTE_APPROVED_INTERNAL_TASKS" in script
+    assert "Ctrl+C" in script
+    assert "if ($Action -in @" in script
+    assert "scheduled task" not in script.lower()
+    assert "Start-Job" not in script

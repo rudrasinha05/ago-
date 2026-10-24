@@ -9,9 +9,10 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 market-watch  # opt-in in a separate terminal, Ctrl+C stops
 .\scripts\ago.ps1 safe-reconcile  # manual stale-run recovery, no replay
 .\scripts\ago.ps1 run-approved-internal  # only previously approved local internal AI briefs
+.\scripts\ago.ps1 watch-approved-internal  # up to 60 minutes or 10 tasks; Ctrl+C stops
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "watch-approved-internal")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -71,16 +72,26 @@ try {
         & python ../../scripts/company_readiness_audit.py --tenant-id $env:AGO_MARKET_TENANT_ID
         exit $LASTEXITCODE
     }
-    if ($Action -eq "run-approved-internal") {
-        Write-Host "Dry run of signed, founder-controlled, approved internal brief tasks."
+    if ($Action -in @("run-approved-internal", "watch-approved-internal")) {
+        $Continuous = $Action -eq "watch-approved-internal"
+        Write-Host "Preview of authenticated, founder-approved internal brief tasks only."
         & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        $Confirmation = Read-Host "Run up to 3 individually approved internal tasks? Type EXECUTE_APPROVED_INTERNAL_TASKS"
+        if ($Continuous) {
+            Write-Host "Watch will poll for at most 60 minutes / 10 approved tasks, only while this terminal is open."
+            Write-Host "Every POST has a durable no-replay receipt under ~/.ago/approved_attempts."
+        }
+        $Confirmation = Read-Host "Authorize this bounded local AI work? Type EXECUTE_APPROVED_INTERNAL_TASKS"
         if ($Confirmation -cne "EXECUTE_APPROVED_INTERNAL_TASKS") {
             Write-Host "Execution cancelled. No tasks dispatched."
             exit 2
         }
-        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
+        if ($Continuous) {
+            & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --watch-minutes 60 --limit 10 --interval-seconds 15 --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
+        }
+        else {
+            & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
+        }
         exit $LASTEXITCODE
     }
     if ($Action -eq "safe-reconcile") {
