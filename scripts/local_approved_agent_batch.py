@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from uuid import UUID
 
+
 class DurableAttemptJournal:
     """Owner-local no-replay receipt, written BEFORE an approved task POST.
 
@@ -48,15 +49,12 @@ class DurableAttemptJournal:
             handle = os.open(receipt, flags, 0o600)
         except FileExistsError:
             return False
-        try:
-            with os.fdopen(handle, "w", encoding="ascii") as file:
-                file.write("AGO_ATTEMPT_V1 " + digest + "\n")
-                file.flush()
-                os.fsync(file.fileno())
-        except BaseException:
-            # A possibly claimed but incomplete receipt fails closed: do not
-            # remove the file and accidentally authorize a duplicate POST.
-            raise
+        # Keep even a partial receipt on disk if writing fails: fail closed.
+        # Removing it could replay an uncertain network operation.
+        with os.fdopen(handle, "w", encoding="ascii") as file:
+            file.write("AGO_ATTEMPT_V1 " + digest + "\n")
+            file.flush()
+            os.fsync(file.fileno())
         return True
 
 
