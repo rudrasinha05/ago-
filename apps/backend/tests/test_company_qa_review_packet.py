@@ -114,7 +114,7 @@ def test_missing_receipt_unknown_code_and_symlink_rejected(tmp_path, module):
     elsewhere.write_bytes(original.read_bytes())
     original.unlink()
     original.symlink_to(elsewhere)
-    with pytest.raises(ValueError, match="regular"):
+    with pytest.raises(PermissionError, match="unexpected symlink"):
         module["packet"](location2)
 
 
