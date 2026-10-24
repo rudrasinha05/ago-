@@ -73,7 +73,7 @@ def remote_json(base: str, token: str, endpoint: str, *,
     ) or (
         endpoint.startswith("/v1/tasks/")
         and re.fullmatch(r"/v1/tasks/[0-9a-f-]{36}/review", endpoint)
-        and method == "POST"
+        and method in ("GET", "POST")
     )
     if not allowed or not isinstance(token, str) or not token or len(token) > 4096:
         raise PermissionError("Authenticated exact AGO review endpoint required")
