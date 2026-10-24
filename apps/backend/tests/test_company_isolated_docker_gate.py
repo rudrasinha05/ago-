@@ -205,7 +205,7 @@ def test_passing_docker_candidate_preserves_attempt_and_final_receipt(tmp_path):
     directory, candidate = staged(tmp_path)
     def passed(_command, **_kwargs):
         assert (directory / "AGO_TEST_ATTEMPT.json").is_file()
-        return SimpleNamespace(returncode=0, stdout="AGO_UNITTEST_CASES=1\\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="AGO_UNITTEST_CASES=1\n", stderr="")
     receipt = MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"], runner=passed)
     assert receipt["tests_passed"] is True
     assert receipt["candidate_sha256"] == candidate["candidate_sha256"]
