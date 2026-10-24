@@ -9,6 +9,42 @@ Owner's operating policy: the laptop owner decides when processes run. No cloud,
 3. `scripts/ago_verify_candidate.py` verifies manifest-to-files integrity again and, **only after explicit operator confirmation**, invokes the local Docker CLI. Docker has no network, cannot pull missing images, drops Linux capabilities, runs as non-root, and uses read-only files plus memory/CPU/process limits. It runs standard-library `unittest.TestCase` tests and refuses zero-test successes.
 4. The test receipt records SHA-256 candidate identity, real test count and process status, and always says GitHub not committed, independent QA not approved, and release not ready. A true result is **local container unit-test evidence only**.
 
+## Local failed-code repair — one deliberate proposal, never an automatic rerun
+
+If the previous candidate's real offline Docker tests **failed**, the operator can request a single bounded local Ollama *source-only* repair. This uses a separately enabled already-installed **local model**, not a cloud endpoint, public repository or paid AI. It cannot modify original tests, documentation, acceptance checks, file names or QA verdicts.
+
+Preview without calling a model:
+
+```powershell
+python scripts/ago_local_repair_proposal.py --staged-directory .\\reviewed-candidate --output .\\repair-proposal.json
+```
+
+After personally inspecting the original failing code and enabling only this shell session, explicitly allow a single local inference:
+
+```powershell
+$env:AGO_LLM_PROVIDER='ollama_local'
+$env:AGO_ENABLE_LOCAL_MODELS='true'
+$env:AGO_LOCAL_REPAIR_PROPOSALS='true'
+$env:AGO_LLM_MODEL='qwen2.5-coder:1.5b'
+python scripts/ago_local_repair_proposal.py --staged-directory .\\reviewed-candidate --output .\\repair-proposal.json --apply --confirm PROPOSE_ONE_LOCAL_SOURCE_REPAIR
+```
+
+The `repair-proposal.json` is a new **unapproved** candidate, not a proof of test pass. Review source changes and then stage/test that new candidate in a *new* folder:
+
+```powershell
+python scripts/ago_local_delivery_gate.py --input .\\repair-proposal.json --staged-directory .\\repaired-candidate --qa-output .\\repaired-qa-review.json
+# After inspecting all source and unchanged original tests:
+python scripts/ago_local_delivery_gate.py --input .\\repair-proposal.json --staged-directory .\\repaired-candidate --qa-output .\\repaired-qa-review.json --apply --confirm STAGE_TEST_AND_PREPARE_QA
+```
+
+A passing retest still needs a **separate authenticated human QA decision**. If it fails again, the same attempt cannot be reused; inspect evidence, start a new reviewed attempt or stop. No auto-replay after model or Docker timeouts.
+
+Test stdout/stderr may contain confidential founder data. Current container receipts retain an SHA-256 digest and only a **redacted** output marker, not raw failure logs. Existing historical receipts should still be handled as confidential.
+
+## Exact P0 + P1 + P2 tracking
+
+The reviewed, **incomplete** inventory is `docs/reports/AGO_P0_P1_P2_48_TASK_ACCEPTANCE.json`: 12 P0, 22 P1 and 14 P2 gates (48 total). Run `python scripts/check_ago_48_delivery_ledger.py` to fail closed if a gate is missing, reordered or falsely marked completed. A checklist or mocked CI is not a human QA verdict or market-ready product.
+
 ## Single-command manual delivery option
 
 The separate inspection/staging/QA commands below remain supported. For a reviewed full-Board receipt, an optional **one-command local handoff** combines the same guarded steps. It neither runs automatically nor grants any GitHub permission.
