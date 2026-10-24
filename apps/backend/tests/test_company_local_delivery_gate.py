@@ -291,7 +291,7 @@ def test_source_review_digest_rejects_rewritten_receipt_without_retry(
     calls = stub_docker(monkeypatch, module)
     content = json.loads(source.read_text())
     files = [dict(row) for row in original["files"]]
-    files[0]["content"] = "def twice(x):\\n    return x * 3\\n"
+    files[0]["content"] = "def twice(x):\n    return x * 3\n"
     from ago.company_engineering import reviewed_candidate
     content["result"]["engineering_candidate"] = reviewed_candidate(json.dumps({
         "files": files, "acceptance_checks": original["acceptance_checks"]
