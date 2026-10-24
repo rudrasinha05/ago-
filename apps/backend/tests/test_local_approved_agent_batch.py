@@ -1,4 +1,6 @@
 """Approved internal tasks only; real API owns execution permissions."""
+import subprocess
+import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from uuid import uuid4
@@ -287,3 +289,39 @@ def test_attempt_journal_refuses_symlink_folder(tmp_path):
         pytest.skip("Filesystem does not permit symlinks")
     with pytest.raises(PermissionError):
         module.DurableAttemptJournal(link).claim(str(uuid4()))
+
+
+def test_safe_queue_resume_after_actual_separate_python_process_exit(tmp_path):
+    """A new OS process cannot replay a previous one-shot dispatch claim."""
+    first_task, next_task = str(uuid4()), str(uuid4())
+    directory = tmp_path / "owner_attempts"
+    program = (
+        "import importlib.util,sys;"
+        "spec=importlib.util.spec_from_file_location('ago_batch',sys.argv[1]);"
+        "module=importlib.util.module_from_spec(spec);"
+        "spec.loader.exec_module(module);"
+        "print(int(module.DurableAttemptJournal(sys.argv[2]).claim(sys.argv[3])))"
+    )
+    command = [sys.executable, "-c", program, str(SCRIPT), str(directory), first_task]
+    first = subprocess.run(command, check=True, capture_output=True, text=True)
+    restarted = subprocess.run(command, check=True, capture_output=True, text=True)
+    assert first.stdout.strip() == "1"
+    assert restarted.stdout.strip() == "0"
+    assert len(list(directory.glob("*.attempt"))) == 1
+    tasks = [
+        {"id":first_task,"action":"internal:brief",
+         "status":"waiting_approval","approval_id":"approved"},
+        {"id":next_task,"action":"internal:brief",
+         "status":"waiting_approval","approval_id":"approved"},
+    ]
+    approved = [{"id":"approved","action":"internal:brief","status":"approved"}]
+    called=[]
+    def run(task_id):
+        called.append(task_id)
+        return {"task_id":task_id,"status":"completed"}
+    fresh = module.DurableAttemptJournal(directory)
+    result = module.batch(tasks, approved, run, limit=2, apply=True,
+                          confirm=module.CONFIRM, claim=fresh.claim)
+    assert result["completed_task_ids"] == [next_task]
+    assert result["skipped_previously_attempted"] == [first_task]
+    assert called == [next_task]
