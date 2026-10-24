@@ -37,6 +37,7 @@ try{
   else if(path.endsWith('/company/activity'))result=tasks;
   else if(path.endsWith('/company/notifications'))result={by_employee:{[developer]:workEvents.length,[cto]:0},recent:[...workEvents].reverse(),event_type:'committed_task_status'};
   else if(path==='/v1/platform/catalog')result={github_projects:[]};
+  else if(path==='/v1/enterprise/reviews/integration')result={revision:0,proposals:[]};
   else if(path.endsWith('/company/projects/start')){
     const title=body.brief.split('\n')[0].slice(0,220);
     const stages=['discovery','architecture','implementation','quality','release'].map((stage,i)=>({
@@ -141,6 +142,11 @@ try{
  assert.equal(await page.locator('#login-form').count(),0,'Tools link must not lose tab-memory sign-in');
  await page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:'Organization',exact:true}).click();
  await page.getByRole('heading',{name:'Company map',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Project Delivery Center'}).waitFor();
+ await page.locator('#ago-github-delivery').getByText('No approved GitHub project is linked.',{exact:false}).waitFor();
+ assert.equal(await page.locator('#ago-github-delivery').getByRole('button',{name:/Execute approved GitHub/}).count(),0,
+   'A Founder with no approved private project cannot dispatch GitHub work.');
+
  await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
  await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
  assert.match(await page.locator('.employee-inspector').innerText(),/Busy/);
@@ -303,6 +309,8 @@ try{
  await page.getByLabel('Work email').fill('member@example.test');
  await page.getByLabel('Password',{exact:true}).fill('test-member-password');
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ assert.equal(await page.locator('#ago-github-delivery').count(),0,
+   'Regular company members cannot view Founder GitHub dispatch controls.');
  await page.locator('#company-approval-inbox').getByText('0 need my review',{exact:false}).waitFor();
  const readOnly=page.locator('#company-approval-inbox .approval-entry');
  await readOnly.first().getByRole('button',{name:'View approval details'}).click();
