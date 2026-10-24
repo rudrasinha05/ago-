@@ -32,6 +32,18 @@ test('unknown or public provider state is never claimed as delivery',()=>{
  }
 });
 
+test('cross-project or alternate repository receipts never confer delivery access',()=>{
+ for(const status of [
+  {...project.status,project_id:uuid(200)},
+  {...project.status,repository:'rudrasinha05/unrelated-project'},
+  {...project.status,repository:'attacker/private-project'},
+ ]){
+  const out=githubDeliveryRows({...project,status},[stored(commit)],[proposal(commit)]);
+  assert.equal(out.health,'unavailable');
+  assert.deepEqual(out.rows,[]);
+ }
+});
+
 test('unapproved operation has no execution action, missing approval cannot be forged',()=>{
  const out=githubDeliveryRows(project,[stored(commit)],[]);
  assert.equal(out.health,'verified');

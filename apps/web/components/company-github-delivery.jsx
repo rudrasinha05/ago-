@@ -46,7 +46,9 @@ export function CompanyGithubDelivery({api,me}){
  },[founder,refresh]);
  if(!founder)return null;
  async function act(step,project,entry){
-  if(busy||!project?.status||project.status.repository_private!==true)return;
+  if(busy||!project?.status||project.status.repository_private!==true||
+     project.status.project_id!==project.id||
+     project.status.repository!=='rudrasinha05/'+project.repository)return;
   const op=entry.operation;
   const proposal=entry.proposal;
   const row=entry.row;

@@ -26,7 +26,9 @@ export function verifiedGitHubChecks(status,names){
 }
 export function githubDeliveryRows(project,operations,proposals){
  const status=project?.status;
- if(!status||status.repository_private!==true||!Array.isArray(status.operations))
+ if(!status||status.repository_private!==true||!Array.isArray(status.operations)||
+    status.project_id!==project.id||
+    status.repository!=='rudrasinha05/'+project.repository)
   return {health:'unavailable',rows:[],blocker:status?.repository_private===false
    ?'This repository is public; private-source delivery is blocked.'
    :'Verified private GitHub project status is unavailable.'};
