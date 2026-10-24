@@ -46,7 +46,7 @@ def audit(root: Path = ROOT) -> dict:
         raise ValueError("Original recovered blueprint provenance changed")
     # Check every recovered historical phase in its actual table, not
     # scattered incidental words in comment text.
-    rows = re.findall(r"^\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|", report, re.M)
+    rows = re.findall(r"^\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|", report, re.MULTILINE)
     found = [label.strip() for _, label in rows]
     if any(name not in found for name in PHASES):
         raise PermissionError("One or more original 13 phases were dropped")
