@@ -21,7 +21,7 @@ IDS = {
 
 def validate(document: dict) -> dict:
     if not isinstance(document, dict):
-        raise ValueError("48-task delivery ledger must be an object")
+        raise TypeError("48-task delivery ledger must be an object")
     if document.get("schema") != "ago_p0_p1_p2_48_task_delivery_v1":
         raise ValueError("Unsupported delivery gate schema")
     tasks = document.get("tasks")
