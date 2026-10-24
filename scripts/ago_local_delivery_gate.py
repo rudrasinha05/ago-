@@ -14,18 +14,62 @@ from pathlib import Path
 
 from ago.company_engineering import draft_github_commit_operation, stage_candidate
 from ago_engineering_candidate import inspect as inspect_run
+from ago_local_repair_proposal import original_failed_candidate
 from ago_qa_review_packet import packet
 from ago_verify_candidate import CONFIRM, verify
 
 APPLY_CONFIRM = "STAGE_TEST_AND_PREPARE_QA"
 
 
+def inspect_local_input(input_path: Path, repair_from: Path | None) -> tuple[dict, str]:
+    """Validate exact failed-source lineage before a repaired code retest."""
+    candidate = inspect_run(input_path)
+    document = json.loads(input_path.read_text(encoding="utf-8"))
+    if document.get("kind") != "ago_unapproved_local_repair_proposal":
+        if repair_from is not None:
+            raise PermissionError("Only an unapproved repair proposal may set --repair-from")
+        kind = "board_record" if "result" in document else "direct_unapproved_candidate"
+        return candidate, kind
+    if repair_from is None:
+        raise PermissionError("An unapproved AI repair requires original --repair-from evidence")
+    if set(document) != {
+        "kind", "original_candidate_sha256", "engineering_candidate",
+        "source_tests_preserved", "requires_new_local_docker_test",
+        "requires_independent_human_qa", "qa_approved",
+        "github_write_authorized", "release_ready", "automated_retry_executed",
+    }:
+        raise PermissionError("Repair request must contain exact unapproved fields")
+    for key in ("source_tests_preserved", "requires_new_local_docker_test",
+                "requires_independent_human_qa"):
+        if document.get(key) is not True:
+            raise PermissionError("Repair must retain all source and review gates")
+    for key in ("qa_approved", "github_write_authorized",
+                "release_ready", "automated_retry_executed"):
+        if document.get(key) is not False:
+            raise PermissionError("Repair proposal cannot claim authorization or execution")
+    original = original_failed_candidate(repair_from)
+    if document.get("original_candidate_sha256") != original["candidate_sha256"]:
+        raise PermissionError("Original failed candidate digest does not match repair")
+    old = {item["path"]: item["content"] for item in original["files"]}
+    new = {item["path"]: item["content"] for item in candidate["files"]}
+    if set(old) != set(new) or candidate["acceptance_checks"] != original["acceptance_checks"]:
+        raise PermissionError("Repair cannot replace original files or acceptance checks")
+    if any(old[path] != content for path, content in new.items()
+           if not path.startswith("src/")):
+        raise PermissionError("Repair cannot alter existing tests or documentation")
+    if not any(old[path] != content for path, content in new.items()
+               if path.startswith("src/")):
+        raise PermissionError("Repair must contain a genuine source-only change")
+    return candidate, "repair_pending_retest"
+
+
 def prepare(
     input_path: Path, staged_directory: Path, qa_packet_path: Path,
     *, apply: bool = False, confirm: str = "",
     github_options: tuple[str | None, ...] = (None, None, None, None),
+    repair_from: Path | None = None,
 ) -> dict:
-    candidate = inspect_run(input_path)
+    candidate, input_kind = inspect_local_input(input_path, repair_from)
     if len(github_options) != 4:
         raise ValueError("Four exact GitHub draft fields required")
     draft = None
@@ -39,7 +83,10 @@ def prepare(
     summary = {
         "candidate_sha256": candidate["candidate_sha256"],
         "candidate_files": [x["path"] for x in candidate["files"]],
-        "board_review_verified_from_local_receipt": True,
+        # A repaired proposal is NOT a newly approved Board decision.
+        "input_kind": input_kind,
+        "board_review_verified_from_local_receipt": input_kind == "board_record",
+        "repair_source_lineage_checked": input_kind == "repair_pending_retest",
         "mode": "inspection_only",
         "tests_executed": False,
         "independent_qa_approved": False,
@@ -94,6 +141,7 @@ def main(argv=None) -> int:
     parser.add_argument("--github-operation-id")
     parser.add_argument("--github-expected-sha")
     parser.add_argument("--github-message")
+    parser.add_argument("--repair-from", type=Path)
     args = parser.parse_args(argv)
     try:
         result = prepare(
@@ -101,6 +149,7 @@ def main(argv=None) -> int:
             apply=args.apply, confirm=args.confirm,
             github_options=(args.github_project_id, args.github_operation_id,
                             args.github_expected_sha, args.github_message),
+            repair_from=args.repair_from,
         )
     except (ValueError, TypeError, KeyError, RuntimeError,
             PermissionError, OSError) as exc:

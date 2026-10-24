@@ -149,3 +149,113 @@ def test_optional_github_draft_is_immutable_and_unsubmitted(
     assert summary["github_committed"] is False
     assert summary["release_ready"] is False
     assert len(calls) == 1
+
+
+def repaired_request(tmp_path, module):
+    """Model an existing failed Docker test and an unapproved source-only patch."""
+    from ago.company_engineering import stage_candidate
+
+    _, original = sample(tmp_path)
+    previous = tmp_path / "failed-stage"
+    stage_candidate(original, previous)
+    (previous / "AGO_TEST_RECEIPT.json").write_text(json.dumps({
+        "kind": "ago_local_container_unittest_receipt",
+        "candidate_sha256": original["candidate_sha256"],
+        "tests_executed": True, "tests_passed": False,
+        "unittest_cases": 1, "docker_exit_code": 1,
+        "network_disabled": True, "read_only_container": True,
+        "independent_qa_approved": False, "git_committed": False,
+        "release_ready": False,
+    }), encoding="utf-8")
+    changed = [dict(f) for f in original["files"]]
+    changed[0]["content"] = "def twice(x):\\n    return x * 2 + 0\\n"
+    updated = reviewed_candidate(json.dumps({
+        "files": changed, "acceptance_checks": original["acceptance_checks"],
+    }))
+    repair = {
+        "kind": "ago_unapproved_local_repair_proposal",
+        "original_candidate_sha256": original["candidate_sha256"],
+        "engineering_candidate": updated,
+        "source_tests_preserved": True, "requires_new_local_docker_test": True,
+        "requires_independent_human_qa": True, "qa_approved": False,
+        "github_write_authorized": False, "release_ready": False,
+        "automated_retry_executed": False,
+    }
+    inp = tmp_path / "repair-proposal.json"
+    inp.write_text(json.dumps(repair), encoding="utf-8")
+    return inp, previous, repair, updated
+
+
+def test_repair_retest_requires_original_failed_evidence_and_keeps_qa_pending(
+        tmp_path, module, monkeypatch):
+    inp, previous, _, candidate = repaired_request(tmp_path, module)
+    calls = stub_docker(monkeypatch, module)
+    destination, packet = tmp_path / "retested", tmp_path / "retested-qa.json"
+    with pytest.raises(PermissionError, match="original --repair-from"):
+        module.prepare(inp, destination, packet)
+    assert not destination.exists()
+    preview = module.prepare(inp, destination, packet, repair_from=previous)
+    assert preview["input_kind"] == "repair_pending_retest"
+    assert preview["board_review_verified_from_local_receipt"] is False
+    assert preview["repair_source_lineage_checked"] is True
+    assert calls == []
+    accepted = module.prepare(inp, destination, packet, repair_from=previous,
+                              apply=True, confirm=module.APPLY_CONFIRM)
+    assert accepted["mode"] == "pending_independent_human_qa"
+    assert accepted["candidate_sha256"] == candidate["candidate_sha256"]
+    assert accepted["independent_qa_approved"] is False
+    assert accepted["github_committed"] is False
+    assert len(calls) == 1
+    assert json.loads(packet.read_text())["qa_approved"] is False
+
+
+@pytest.mark.parametrize("tampering", [
+    "missing_original", "original_digest", "modified_test", "modified_checks",
+    "release_claim", "execution_claim", "original_is_not_failed", "no_source_change",
+])
+def test_repair_input_cannot_skip_failed_origin_or_launder_approval(
+        tmp_path, module, monkeypatch, tampering):
+    from ago.company_engineering import reviewed_candidate
+    inp, previous, request, candidate = repaired_request(tmp_path, module)
+    calls = stub_docker(monkeypatch, module)
+    if tampering == "missing_original":
+        previous = tmp_path / "nonexistent"
+    elif tampering == "original_digest":
+        request["original_candidate_sha256"] = "f" * 64
+    elif tampering in ("modified_test", "modified_checks", "no_source_change"):
+        changed = [dict(f) for f in candidate["files"]]
+        checks = candidate["acceptance_checks"]
+        if tampering == "modified_test":
+            changed[1]["content"] += "# injected relaxation\\n"
+        elif tampering == "modified_checks":
+            checks = ["Anything passes"]
+        else:
+            original = module.original_failed_candidate(previous)
+            changed = original["files"]
+        request["engineering_candidate"] = reviewed_candidate(json.dumps({
+            "files": changed, "acceptance_checks": checks,
+        }))
+    elif tampering == "release_claim":
+        request["qa_approved"] = True
+    elif tampering == "execution_claim":
+        request["automated_retry_executed"] = True
+    else:
+        receipt = previous / "AGO_TEST_RECEIPT.json"
+        row = json.loads(receipt.read_text())
+        row["tests_passed"] = True
+        receipt.write_text(json.dumps(row))
+    inp.write_text(json.dumps(request), encoding="utf-8")
+    with pytest.raises((ValueError, PermissionError)):
+        module.prepare(inp, tmp_path / "test", tmp_path / "qa.json",
+                       repair_from=previous, apply=True, confirm=module.APPLY_CONFIRM)
+    assert calls == [] and not (tmp_path / "test").exists()
+
+
+def test_normal_board_record_cannot_claim_repair_lineage(tmp_path, module):
+    inp, _ = sample(tmp_path)
+    summary = module.prepare(inp, tmp_path / "staging", tmp_path / "qa.json")
+    assert summary["board_review_verified_from_local_receipt"] is True
+    assert summary["repair_source_lineage_checked"] is False
+    with pytest.raises(PermissionError, match="Only an unapproved repair"):
+        module.prepare(inp, tmp_path / "staging", tmp_path / "qa.json",
+                       repair_from=tmp_path / "untrusted")

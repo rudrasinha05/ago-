@@ -54,10 +54,12 @@ python scripts/ago_local_repair_proposal.py --staged-directory .\\reviewed-candi
 The `repair-proposal.json` is a new **unapproved** candidate, not a proof of test pass. Review source changes and then stage/test that new candidate in a *new* folder:
 
 ```powershell
-python scripts/ago_local_delivery_gate.py --input .\\repair-proposal.json --staged-directory .\\repaired-candidate --qa-output .\\repaired-qa-review.json
+python scripts/ago_local_delivery_gate.py --input .\\repair-proposal.json --repair-from .\\reviewed-candidate --staged-directory .\\repaired-candidate --qa-output .\\repaired-qa-review.json
 # After inspecting all source and unchanged original tests:
-python scripts/ago_local_delivery_gate.py --input .\\repair-proposal.json --staged-directory .\\repaired-candidate --qa-output .\\repaired-qa-review.json --apply --confirm STAGE_TEST_AND_PREPARE_QA
+python scripts/ago_local_delivery_gate.py --input .\\repair-proposal.json --repair-from .\\reviewed-candidate --staged-directory .\\repaired-candidate --qa-output .\\repaired-qa-review.json --apply --confirm STAGE_TEST_AND_PREPARE_QA
 ```
+
+The `--repair-from` directory is mandatory for repairs: its **original failed Docker receipt**, exact source digest, unchanged tests and unchanged acceptance checks are rechecked before any restaging or execution. A local repair proposal alone is *not* new Board approval. Direct candidate inputs are labeled separately in the preview.
 
 A passing retest still needs a **separate authenticated human QA decision**. If it fails again, the same attempt cannot be reused; inspect evidence, start a new reviewed attempt or stop. No auto-replay after model or Docker timeouts.
 
