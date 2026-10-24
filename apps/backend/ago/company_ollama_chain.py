@@ -1,6 +1,6 @@
 """Pure bounded AI governance and engineering artifact drafting; no database side effects."""
 
-from ago.company_engineering import reviewed_candidate
+from ago.company_engineering import assert_discoverable_unittest, reviewed_candidate
 
 ROLE_STAGES=(
     ("ceo","Strategy & Vision",
@@ -105,7 +105,7 @@ def run_four_role_chain(
             # Untrusted model output must become an exact-file artifact before
             # it can be considered reviewable. Invalid content fails the task
             # through AgentRuntime; it is never executed or sent to GitHub.
-            engineering_candidate=reviewed_candidate(output)
+            engineering_candidate=assert_discoverable_unittest(reviewed_candidate(output))
             bounded=("Code proposal prepared for founder review: "
                      +str(len(engineering_candidate["files"]))+
                      " files, Python syntax checked; tests NOT executed.")

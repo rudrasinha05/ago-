@@ -90,6 +90,41 @@ def reviewed_candidate(raw: str) -> dict:
     }
 
 
+def assert_discoverable_unittest(value: dict) -> dict:
+    """Check generated tests match our offline unittest runner, without executing code.
+
+    This is only a static preflight, NOT evidence that test assertions pass.
+    A fixture using bare pytest functions cannot be run by our isolated
+    standard-library-only Docker command.
+    """
+    tests = [item["content"] for item in value["files"]
+             if item["path"].startswith("tests/test_")]
+    for source in tests:
+        tree = ast.parse(source)
+        imported = any(
+            isinstance(node, ast.Import) and any(alias.name == "unittest"
+                and (alias.asname is None or alias.asname == "unittest")
+                for alias in node.names)
+            for node in tree.body
+        )
+        if not imported:
+            continue
+        for cls in (node for node in tree.body if isinstance(node, ast.ClassDef)):
+            is_case = any(
+                isinstance(base, ast.Attribute) and base.attr == "TestCase"
+                and isinstance(base.value, ast.Name) and base.value.id == "unittest"
+                for base in cls.bases
+            )
+            if is_case and any(
+                isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and method.name.startswith("test_")
+                and not isinstance(method, ast.AsyncFunctionDef)
+                for method in cls.body
+            ):
+                return value
+    raise ValueError("AI code must include discoverable unittest.TestCase test_* methods")
+
+
 def verify_persisted_candidate(value: dict) -> dict:
     """Reject any post-inference tampering before the founder stages files."""
     if not isinstance(value, dict):

@@ -16,7 +16,10 @@ def candidate():
         "files": [
             {"path": "src/adder.py", "content": "def add(a, b):\n    return a + b\n"},
             {"path": "tests/test_adder.py",
-             "content": "from src.adder import add\n\ndef test_add():\n    assert add(2, 3) == 5\n"},
+             "content": ("import unittest\nfrom src.adder import add\n"
+                         "class AdderTests(unittest.TestCase):\n"
+                         "    def test_add(self):\n"
+                         "        self.assertEqual(add(2, 3), 5)\n")},
         ],
         "acceptance_checks": [
             "Run isolated Python unit test with explicit operator review",
@@ -155,6 +158,43 @@ def test_invalid_model_source_fails_closed_without_hidden_code_execution():
             task=fake_task(), participants=participants(),
             provider=InvalidSource(), engineering_candidates=True,
         )
+
+
+@pytest.mark.parametrize("test_source", [
+    "from src.adder import add\n\ndef test_add():\n    assert add(2, 3)==5\n",
+    "import unittest\nclass NoTests(unittest.TestCase):\n    def helper(self): pass\n",
+    "import unittest\nclass Suspicious:\n    def test_fake(self): pass\n",
+])
+def test_generated_engineering_rejects_tests_not_discovered_by_offline_runner(test_source):
+    from ago.company_engineering import assert_discoverable_unittest
+
+    source = candidate()
+    source["files"][1]["content"] = test_source
+    validated = reviewed_candidate(json.dumps(source))
+    with pytest.raises(ValueError, match="discoverable unittest.TestCase"):
+        assert_discoverable_unittest(validated)
+
+    class CompleteBoard:
+        def generate(self, prompt):
+            if "ROLE: EMPLOYEE\n" in prompt:
+                return json.dumps(source)
+            return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Human-review only"
+    with pytest.raises(ValueError, match="discoverable unittest.TestCase"):
+        run_four_role_chain(
+            task=fake_task(), participants=participants(),
+            provider=CompleteBoard(), engineering_candidates=True,
+        )
+
+
+def test_generated_engineering_unittest_preflight_remains_not_a_qa_verdict():
+    from ago.company_engineering import assert_discoverable_unittest
+
+    proposed = reviewed_candidate(json.dumps(candidate()))
+    validated = assert_discoverable_unittest(proposed)
+    assert validated["candidate_sha256"] == proposed["candidate_sha256"]
+    assert validated["tests_executed"] is False
+    assert validated["qa_approved"] is False
+    assert validated["github_committed"] is False
 
 
 def test_two_seat_drafting_cannot_spoof_full_board_engineering():
