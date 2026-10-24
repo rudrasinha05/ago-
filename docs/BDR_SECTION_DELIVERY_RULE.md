@@ -49,6 +49,31 @@ including future approved sections, regardless of milestone labels M0–M20.
     acceptance and evidence first, then select the next by dependency and
     impact; do not simultaneously leave multiple sections half-implemented.
 
+## Founder update — One-go high-throughput delivery (2026-10-25)
+
+The Founder has explicitly rejected stopping after every tiny patch, slow
+piecemeal iterations, and repeatedly requiring a new `continue` prompt.
+
+- **Batch all dependent work in one execution pass:** missing functionality,
+  integration wiring, security gates, tests, local operator commands,
+  documentation and applicable CI repairs belong to the same functional
+  milestone. Avoid stopping after an isolated helper or a green unit test
+  while the related runtime path is still disconnected.
+- **Maximize real completed scope, not acceptance-counter changes:** do not
+  manufacture completion, but do fix adjacent in-scope blockers uncovered
+  during implementation when a bounded repair can finish the milestone.
+- **Consolidate interaction:** the Founder receives one substantive
+  acceptance/evidence report after the batch, rather than requiring a new
+  prompt per file, commit, QA check or CI fix. Short safety/status messages
+  are allowed during extended execution, never as a substitute for work.
+- **External boundaries remain real:** unavailable Owner laptop/credentials,
+  independent human verdict, provider-side approval or a real deployment
+  cannot be fabricated. Complete everything available up to that boundary,
+  provide the exact consolidated local command and preserve source evidence.
+- **No artificial stage inflation:** keep the single `develop` branch,
+  frozen section scope and protected higher governance; do not create extra
+  process phases merely to delay actual execution.
+
 ## Meaning of section statuses
 
 - **Not started:** requirements identified, no implementation commenced.
