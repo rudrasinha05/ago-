@@ -371,3 +371,27 @@ remains untrusted and cannot impersonate an independent reviewer.
 The request has a durable pre-POST no-replay marker. If review submission
 times out, inspect AGO QA queue/review state before taking any new action.
 No GitHub write or release follows automatically.
+
+
+### Authenticated QA-passed source → unexecuted GitHub draft
+
+A Founder can prepare a **local, reviewable** Section34 `commit_files`
+operation only after AGO's actual persisted human QA record contains
+`pass` for the same completed task, with exact origin run UUID, project,
+candidate SHA-256 and Docker receipt SHA-256.
+
+Run `python scripts/ago_prepare_github_handoff.py --help` for the
+read-only preview and separately confirmed export command. Supply the
+original Board-cleared exported JSON, passed Docker stage, exact pending QA
+packet, and explicit AGO GitHub project ID, new operation UUID, reviewed
+`develop` SHA and human-readable commit message. The helper prompts for
+the active Founder account and verifies `GET /v1/tasks/<task>/review`
+against those local bytes.
+
+A negative or missing human verdict, changed candidate, altered tests,
+different task/receipt, or unknown reviewer stops operation creation.
+The draft remains **private, unsubmitted, and unapproved**. Its remote
+HEAD is deliberately not certified by this helper; AGO's existing
+reviewed GitHub operation service and non-force develop compare-and-swap
+must independently authorize any actual network write. No PR, release
+or merge is created here.
