@@ -102,3 +102,13 @@ def test_unfiltered_ci_workflows_enforce_private_paths_and_original_parity():
         workflow = (root / ".github" / "workflows" / name).read_text(encoding="utf-8")
         assert "python scripts/check_confidential_artifacts.py" in workflow
         assert "python scripts/check_p0_original_parity.py" in workflow
+
+
+def test_focused_p0_workflow_runs_for_every_develop_push():
+    root = Path(__file__).resolve().parents[3]
+    workflow = (root / ".github" / "workflows" / "company-growth-contract.yml").read_text(
+        encoding="utf-8"
+    )
+    trigger = workflow.split("  push:", 1)[1].split("concurrency:", 1)[0]
+    assert "branches: [develop]" in trigger
+    assert "paths:" not in trigger
