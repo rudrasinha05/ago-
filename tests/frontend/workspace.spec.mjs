@@ -233,3 +233,22 @@ test('founder can create first real governed task then separately approve and di
  await expect(page.locator('#ago-execution-desk')).toContainText('Needs QA');
  expect(errors).toEqual([]);
 });
+
+test('P1 WebGL company brain reflects persisted active task, not simulated AI thinking',async({page})=>{
+  const {errors}=await fixtures(page);
+  await page.route('**/v1/organization/company/activity',async route=>{
+    await route.fulfill({status:200,json:[{
+      id:other,status:'running',assignee_id:user,project_name:'Actual persisted test project'
+    }]});
+  });
+  await login(page);
+  await navigate(page,'Organization');
+  const scene=page.locator('canvas.ago-real-3d-brain');
+  await expect(scene).toBeVisible();
+  await expect(scene).toHaveAttribute('aria-label',/Verified running tasks: 1/);
+  await expect(page.locator('.brain-volume-active')).toHaveCount(1);
+  await page.getByRole('button',{name:'Rotate brain right'}).click();
+  await expect(page.locator('.brain-volume')).toHaveAttribute('style',/--brain-rotation: 15deg/);
+  await expect(page.locator('.brain-work-detail')).toContainText('Actual persisted test project');
+  expect(errors).toEqual([]);
+});
