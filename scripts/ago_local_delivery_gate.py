@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -68,8 +69,14 @@ def prepare(
     *, apply: bool = False, confirm: str = "",
     github_options: tuple[str | None, ...] = (None, None, None, None),
     repair_from: Path | None = None,
+    expected_candidate_sha256: str | None = None,
 ) -> dict:
     candidate, input_kind = inspect_local_input(input_path, repair_from)
+    if expected_candidate_sha256 is not None:
+        if (not isinstance(expected_candidate_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", expected_candidate_sha256) is None
+                or candidate["candidate_sha256"] != expected_candidate_sha256):
+            raise PermissionError("Source digest no longer matches Founder-reviewed candidate")
     if len(github_options) != 4:
         raise ValueError("Four exact GitHub draft fields required")
     draft = None
@@ -142,6 +149,7 @@ def main(argv=None) -> int:
     parser.add_argument("--github-expected-sha")
     parser.add_argument("--github-message")
     parser.add_argument("--repair-from", type=Path)
+    parser.add_argument("--expected-candidate-sha256")
     args = parser.parse_args(argv)
     try:
         result = prepare(
@@ -150,6 +158,7 @@ def main(argv=None) -> int:
             github_options=(args.github_project_id, args.github_operation_id,
                             args.github_expected_sha, args.github_message),
             repair_from=args.repair_from,
+            expected_candidate_sha256=args.expected_candidate_sha256,
         )
     except (ValueError, TypeError, KeyError, RuntimeError,
             PermissionError, OSError) as exc:

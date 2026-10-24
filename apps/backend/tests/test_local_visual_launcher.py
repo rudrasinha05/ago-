@@ -191,3 +191,18 @@ def test_windows_operator_has_single_reachable_complete_action_chain():
     assert 'ago_pull_candidate.py' in script
     assert "PRIVATE FOUNDER" not in script
     assert script.rstrip().endswith("finally {\n    Pop-Location\n}")
+
+
+def test_exported_candidate_has_one_digest_pinned_docker_qa_operator_action():
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert script.count('if ($Action -eq "test-exported-candidate")') == 1
+    assert "--expected-candidate-sha256 $Digest" in script
+    assert "--apply --confirm STAGE_TEST_AND_PREPARE_QA" in script
+    assert script.index('Read-Host "To run untrusted code in offline Docker') < script.index(
+        "--expected-candidate-sha256 $Digest"
+    )
+    assert 'if ($Preview.input_kind -cne "board_record"' in script
+    assert 'Join-Path $HOME ".ago\\delivery_runs"' in script
+    assert 'NewGuid().ToString("N")' in script
+    assert script.count("finally {") == 1

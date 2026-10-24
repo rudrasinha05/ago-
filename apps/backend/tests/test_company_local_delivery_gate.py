@@ -259,3 +259,49 @@ def test_normal_board_record_cannot_claim_repair_lineage(tmp_path, module):
     with pytest.raises(PermissionError, match="Only an unapproved repair"):
         module.prepare(inp, tmp_path / "staging", tmp_path / "qa.json",
                        repair_from=tmp_path / "untrusted")
+
+
+def test_reviewed_digest_is_pinned_before_staging_or_docker(
+    tmp_path, module, monkeypatch
+):
+    original_path, original = sample(tmp_path)
+    calls = stub_docker(monkeypatch, module)
+    stage, qa = tmp_path / "pinned-stage", tmp_path / "pinned-qa.json"
+    with pytest.raises(PermissionError, match="Source digest"):
+        module.prepare(
+            original_path, stage, qa, apply=True,
+            expected_candidate_sha256="f" * 64,
+            confirm=module.APPLY_CONFIRM,
+        )
+    assert not stage.exists() and not qa.exists() and calls == []
+    report = module.prepare(
+        original_path, stage, qa, apply=True,
+        expected_candidate_sha256=original["candidate_sha256"],
+        confirm=module.APPLY_CONFIRM,
+    )
+    assert report["qa_packet_prepared"] is True
+    assert report["qa_packet_candidate_sha256"] == original["candidate_sha256"]
+    assert len(calls) == 1
+
+
+def test_source_review_digest_rejects_rewritten_receipt_without_retry(
+    tmp_path, module, monkeypatch
+):
+    source, original = sample(tmp_path)
+    calls = stub_docker(monkeypatch, module)
+    content = json.loads(source.read_text())
+    files = [dict(row) for row in original["files"]]
+    files[0]["content"] = "def twice(x):\\n    return x * 3\\n"
+    from ago.company_engineering import reviewed_candidate
+    content["result"]["engineering_candidate"] = reviewed_candidate(json.dumps({
+        "files": files, "acceptance_checks": original["acceptance_checks"]
+    }))
+    source.write_text(json.dumps(content), encoding="utf-8")
+    stage, qa = tmp_path / "tampered-stage", tmp_path / "tampered-qa.json"
+    with pytest.raises(PermissionError, match="Source digest"):
+        module.prepare(
+            source, stage, qa, apply=True,
+            expected_candidate_sha256=original["candidate_sha256"],
+            confirm=module.APPLY_CONFIRM,
+        )
+    assert not stage.exists() and not qa.exists() and calls == []

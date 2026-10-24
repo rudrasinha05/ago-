@@ -277,3 +277,27 @@ reports `model_inference_verified=false` and does not assert that Ollama is
 live, the Board is staffed, the task is approved, tests passed, GitHub is
 connected, or any product is releasable. The server remains the final
 authorization authority on a subsequent dispatch.
+
+
+### Faster source-reviewed Docker → QA handoff (one Windows operator action)
+
+After the authenticated `export-candidate` step, the Founder can now run:
+
+```powershell
+.\scripts\ago.ps1 test-exported-candidate
+```
+
+Enter the existing run UUID. AGO locates the private code under
+`~/.ago/candidate_exports/`, previews the recorded five-seat Board source
+and prints the exact candidate SHA-256 and file list. Inspect the original
+exported JSON's actual code and tests, then explicitly authorize Docker
+with `TEST_REVIEWED_AI_CANDIDATE`.
+
+The command creates a fresh, unique private stage and a QA packet under
+`~/.ago/delivery_runs/` and passes the **same reviewed candidate SHA** into
+the offline Docker executor. A changed candidate between preview and apply
+is rejected *before staging or execution*. Failed isolated tests never
+produce a positive independent-QA verdict or a GitHub operation.
+A passing container test produces only a pending human QA review packet,
+not an approval, PR or release. The existing lower-level scripts remain
+available for advanced and failure-reconciliation use.
