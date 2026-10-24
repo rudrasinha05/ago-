@@ -333,6 +333,7 @@
     "company_ollama_chain": [],
     "company_ollama_chain_queries": [
       "ago_company_board_appointments",
+      "ago_company_chat",
       "ago_employees",
       "ago_founder_intake_stages",
       "ago_founder_intakes",
@@ -598,9 +599,7 @@
       "ago_meta_recommendations"
     ],
     "metrics": [],
-    "model_handlers": [
-      "ago_company_chat"
-    ],
+    "model_handlers": [],
     "model_provider": [],
     "organization": [],
     "organization_store": [

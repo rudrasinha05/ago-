@@ -122,3 +122,32 @@ class CompanyOllamaChainQueries:
         return [{"role":item["role"],"employee_id":str(item["id"]),
                  "employee_name":item["name"]} for item in ordered]
 
+
+    def record_verified_handoff(
+        self, *, tenant_id: str, founder_id: str, task_id: str, role: str,
+        employee_id: str, blocked: bool, participants: list[dict],
+    ) -> None:
+        """Persist only the fact of a verified role inference, never model text."""
+        UUID(tenant_id)
+        UUID(founder_id)
+        UUID(task_id)
+        UUID(employee_id)
+        if role not in {"ceo", "cto", "finance", "risk", "quality", "pm", "employee"}:
+            raise PermissionError("Unknown company role cannot publish local work events")
+        if not isinstance(blocked, bool) or not any(
+            p["role"] == role and p["employee_id"] == employee_id
+            for p in participants
+        ):
+            raise PermissionError("Unassigned AI member cannot publish task progress")
+        description = (
+            "AGO verified local inference for " + role
+            + ("; Board requested Founder resolution; independent QA pending."
+               if blocked else "; task proposal only; independent QA pending.")
+        )
+        with self.db.transaction():
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                  (tenant_id,channel,author_id,author_name,body,kind,
+                   employee_id,task_id)
+                VALUES (%s,'global',%s,'AGO local agent runtime',%s,'status',%s,%s)
+            """, (tenant_id, founder_id, description, employee_id, task_id))

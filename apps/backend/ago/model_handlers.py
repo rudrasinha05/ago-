@@ -139,33 +139,11 @@ def optional_model_handlers(
                     return provider.generate(prompt)
 
             def record_role_completed(role: str, employee_id: str, blocked: bool):
-                # Only the actual founder-authorized local execution path
-                # writes this event. No raw model output or private brief may
-                # become a company-wide notification.
-                from uuid import UUID
-
-                UUID(employee_id)
-                if role not in {"ceo", "cto", "finance", "risk",
-                                "quality", "pm", "employee"}:
-                    raise PermissionError("Unknown role completion cannot be recorded")
-                if employee_id not in {p["employee_id"] for p in participants}:
-                    raise PermissionError("Unassigned AI employee cannot emit task progress")
-                description = (
-                    "AGO verified local inference for " + role
-                    + "; Board requested Founder resolution; independent QA pending."
-                    if blocked else
-                    "AGO verified local inference for " + role
-                    + "; task proposal only; independent QA pending."
+                repositories.resolve(CompanyOllamaChainQueries).record_verified_handoff(
+                    tenant_id=actor.tenant_id, founder_id=actor.subject,
+                    task_id=task.id, role=role, employee_id=employee_id,
+                    blocked=blocked, participants=participants,
                 )
-                with db.transaction():
-                    db.execute("""
-                        INSERT INTO ago_company_chat
-                          (tenant_id,channel,author_id,author_name,body,kind,
-                           employee_id,task_id)
-                        VALUES (%s,'global',%s,'AGO local agent runtime',
-                                %s,'status',%s,%s)
-                    """, (actor.tenant_id, actor.subject, description,
-                          employee_id, task.id))
 
             return run_four_role_chain(
                 task=task, participants=participants, provider=MeteredLocalProvider(),
