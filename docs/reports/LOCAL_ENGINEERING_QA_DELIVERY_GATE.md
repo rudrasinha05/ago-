@@ -9,6 +9,28 @@ Owner's operating policy: the laptop owner decides when processes run. No cloud,
 3. `scripts/ago_verify_candidate.py` verifies manifest-to-files integrity again and, **only after explicit operator confirmation**, invokes the local Docker CLI. Docker has no network, cannot pull missing images, drops Linux capabilities, runs as non-root, and uses read-only files plus memory/CPU/process limits. It runs standard-library `unittest.TestCase` tests and refuses zero-test successes.
 4. The test receipt records SHA-256 candidate identity, real test count and process status, and always says GitHub not committed, independent QA not approved, and release not ready. A true result is **local container unit-test evidence only**.
 
+## Real owner-local Ollama smoke — proves only model connectivity
+
+The P1 local-model acceptance gate needs an actual response from the *already-installed* model on the owner's laptop, not GitHub CI fake providers. The optional standalone proof does not start Ollama, touch GitHub or include a private project brief.
+
+Preview without inference:
+
+```powershell
+$env:AGO_LLM_MODEL='qwen2.5-coder:1.5b'
+python scripts/ago_local_model_smoke.py --output .\\ago-local-ollama-proof.json
+```
+
+After manually starting Ollama and enabling this shell session, run one bounded local inference:
+
+```powershell
+$env:AGO_LLM_PROVIDER='ollama_local'
+$env:AGO_ENABLE_LOCAL_MODELS='true'
+$env:AGO_LLM_MODEL='qwen2.5-coder:1.5b'
+python scripts/ago_local_model_smoke.py --output .\\ago-local-ollama-proof.json --apply --confirm TEST_INSTALLED_LOCAL_MODEL
+```
+
+The newly created receipt records the model tag, an output digest, response byte count and elapsed time, but **not raw response content**. It is a self-reported local receipt; it does **not** establish GPU offloading, signed identity, real Founder project execution, independent QA, GitHub delivery or release. Do not share API tokens or confidential project content.
+
 ## Local failed-code repair — one deliberate proposal, never an automatic rerun
 
 If the previous candidate's real offline Docker tests **failed**, the operator can request a single bounded local Ollama *source-only* repair. This uses a separately enabled already-installed **local model**, not a cloud endpoint, public repository or paid AI. It cannot modify original tests, documentation, acceptance checks, file names or QA verdicts.
