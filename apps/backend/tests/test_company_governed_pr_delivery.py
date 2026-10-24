@@ -130,7 +130,7 @@ def setup(monkeypatch, tmp_path):
 
 
 def prepare(setup):
-    pr, files, state, calls, args, checks, pr_id = setup[-1]
+    pr, files, state, calls, args, checks, pr_id = setup
     values = dict(phase="prepare", operation_id=pr_id,
                   title="Verified AI project", body="Independent human QA and CI evidence",
                   checks=checks)
@@ -142,7 +142,7 @@ def prepare(setup):
 
 
 def test_local_ci_is_strict_and_blocks_failed_pending_duplicate_or_public(setup):
-    pr, files, state, calls, args, checks, pr_id = setup[-1]
+    pr, files, state, calls, args, checks, pr_id = setup
     for condition in ("pending", "failed", "missing", "duplicate"):
         state["ci"] = condition
         with pytest.raises(PermissionError):
@@ -159,7 +159,7 @@ def test_local_ci_is_strict_and_blocks_failed_pending_duplicate_or_public(setup)
 
 
 def test_verified_commit_and_ci_make_private_pr_draft_without_network_write(setup):
-    pr, files, state, calls, args, checks, pr_id = setup[-1]
+    pr, files, state, calls, args, checks, pr_id = setup
     record = prepare(setup)
     assert record["kind"] == "ago_ci_verified_draft_pr"
     assert record["operation"]["operation"] == "create_pull_request"
@@ -171,7 +171,7 @@ def test_verified_commit_and_ci_make_private_pr_draft_without_network_write(setu
 
 
 def test_mutated_pr_or_source_cannot_enter_governance(setup):
-    pr, files, state, calls, args, checks, pr_id = setup[-1]
+    pr, files, state, calls, args, checks, pr_id = setup
     record = prepare(setup)
     record["operation"]["payload"]["title"] = "Switched project"
     files[4].write_text(json.dumps(record))
@@ -181,7 +181,7 @@ def test_mutated_pr_or_source_cannot_enter_governance(setup):
 
 
 def test_missing_real_github_commit_never_creates_pr(setup):
-    pr, files, state, calls, args, checks, pr_id = setup[-1]
+    pr, files, state, calls, args, checks, pr_id = setup
     state["commit_status"] = "uncertain"
     with pytest.raises(PermissionError):
         pr.deliver(*files, **args, phase="prepare",
@@ -191,7 +191,7 @@ def test_missing_real_github_commit_never_creates_pr(setup):
 
 
 def test_pr_schema_and_required_ci_reject_unbounded_or_fake_checks(setup):
-    pr, files, state, calls, args, checks, pr_id = setup[-1]
+    pr, files, state, calls, args, checks, pr_id = setup
     for item in ([], ["same", "same"], [""]):
         with pytest.raises(ValueError):
             pr.deliver(*files, **args, phase="prepare",
