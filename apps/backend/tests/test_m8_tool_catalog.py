@@ -100,3 +100,18 @@ def test_existing_tenant_permissions_cannot_be_granted_without_operator_confirma
     assert "tool:dispatch" not in ROLE_PERMISSIONS["reviewer"]
     assert "tool:enroll" not in ROLE_PERMISSIONS["reviewer"]
     assert "tool:read" in ROLE_PERMISSIONS["reviewer"]
+
+
+def test_external_metrics_adapter_refuses_ambient_proxy_credentials(monkeypatch):
+    from urllib.request import ProxyHandler
+
+    monkeypatch.setenv("HTTPS_PROXY", "http://hostile-proxy.example:8080")
+    provider = ReadOnlyMetricsProvider(
+        hostname="reports.example.com", api_token="operator-secret",
+    )
+    handlers = [
+        h for h in provider.opener.__self__.handlers
+        if isinstance(h, ProxyHandler)
+    ]
+    assert len(handlers) == 1
+    assert handlers[0].proxies == {}

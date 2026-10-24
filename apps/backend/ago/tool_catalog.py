@@ -12,7 +12,7 @@ import os
 import re
 from collections.abc import Callable
 from urllib.error import HTTPError
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.scorecard import Scorecard
@@ -74,7 +74,9 @@ class ReadOnlyMetricsProvider:
         self.url = f"https://{hostname}/v1/metrics"
         self.token = api_token
         self.timeout = timeout
-        self.opener = opener or build_opener(_NoRedirect()).open
+        # Explicit operator HTTPS; never silently forward a credential to an
+        # environment-configured proxy or follow a provider redirect.
+        self.opener = opener or build_opener(ProxyHandler({}), _NoRedirect()).open
 
     def fetch(self) -> dict:
         request = Request(
