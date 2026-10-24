@@ -50,3 +50,57 @@ def test_security_audit_records_structured_metadata():
         "login", "denied", tenant_id="tenant-a", metadata={"reason": "bad_credentials"}
     )
     assert "bad_credentials" in db.calls[-1][1][-1]
+
+
+def test_security_audit_never_persists_arbitrary_secret_payloads():
+    import json
+
+    db = DB()
+    payload = {
+        "reason": "bad_credentials",
+        "context": "tools",
+        "source": "constitution",
+        "password": "SUPER_PRIVATE_TEST_PASSWORD",
+        "api_token": "SUPER_PRIVATE_TEST_TOKEN",
+        "founder_brief": "SUPER_PRIVATE_TEST_IDEA",
+        "prompt": "SUPER_PRIVATE_TEST_PROMPT",
+        "email": "founder_private@example.org",
+        "traceback": "Traceback SUPER_PRIVATE_TEST_STACK",
+        "record_id": "f63ea5c0-207f-41f5-bdc8-00b1cbeae79c",
+        "details": {"deep": ["SUPER_PRIVATE_TEST_NESTED"]},
+        "category": "handler_failed SUPER_PRIVATE_TEST_EXCEPTION",
+    }
+    SecurityControls(db).audit("tool:denied", "blocked", tenant_id="tenant-a",
+                               actor_id="worker-a", metadata=payload)
+    metadata = db.calls[-1][1][-1]
+    parsed = json.loads(metadata)
+    assert parsed["reason"] == "bad_credentials"
+    assert parsed["context"] == "tools"
+    assert parsed["record_id"] == payload["record_id"]
+    for secret in ("SUPER_PRIVATE_TEST_PASSWORD", "SUPER_PRIVATE_TEST_TOKEN",
+                   "SUPER_PRIVATE_TEST_IDEA", "SUPER_PRIVATE_TEST_PROMPT",
+                   "founder_private@example.org", "SUPER_PRIVATE_TEST_STACK",
+                   "SUPER_PRIVATE_TEST_NESTED", "SUPER_PRIVATE_TEST_EXCEPTION"):
+        assert secret not in metadata
+    assert "password" not in parsed and "founder_brief" not in parsed
+    assert "traceback" not in parsed and "details" not in parsed
+    assert parsed["category"] == "[redacted]"
+
+
+def test_security_audit_redaction_will_not_stringify_untrusted_object():
+    import json
+
+    class Hostile:
+        def __str__(self):
+            raise AssertionError("Untrusted audit object stringified")
+
+        def __repr__(self):
+            raise AssertionError("Untrusted audit object repr leaked")
+
+    db = DB()
+    SecurityControls(db).audit("read", "denied", metadata={
+        "reason": Hostile(), "private": Hostile(),
+        "context": ["SUPER_PRIVATE_TEST_LIST"],
+    })
+    parsed = json.loads(db.calls[-1][1][-1])
+    assert parsed == {"reason": "[redacted]", "context": "[redacted]"}

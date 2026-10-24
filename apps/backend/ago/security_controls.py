@@ -6,6 +6,7 @@ import hashlib
 import json
 from typing import Any
 
+from ago.audit_redaction import audit_metadata_safe
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.security import Principal
 from ago.governance_domain import CONSTITUTION_CONTEXTS
@@ -125,5 +126,5 @@ class SecurityControls:
             """INSERT INTO ago_security_audit
                (tenant_id, actor_id, action, outcome, metadata)
                VALUES (%s, %s, %s, %s, %s::jsonb)""",
-            (tenant_id, actor_id, action, outcome, json.dumps(metadata or {})),
+            (tenant_id, actor_id, action, outcome, json.dumps(audit_metadata_safe(metadata))),
         )
