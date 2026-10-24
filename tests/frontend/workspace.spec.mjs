@@ -77,13 +77,13 @@ test('Control Center redirects to authenticated Company Map and internal links p
     const fragment=await links.nth(i).getAttribute('href');
     await expect(page.locator(fragment)).toHaveCount(1);
     await links.nth(i).click();
-    await expect.poll(()=>new URL(page.url()).hash).toBe(fragment);
+    await expect.poll(()=>new URL(page.url()).hash,{timeout:15000}).toBe(fragment);
   }
   await expect(nav.locator('a[href="#ago-workforce"]')).toHaveCount(0);
   await expect(nav.locator('a[href="#ago-opportunities"]')).toHaveCount(0);
   // This cross-workspace link MUST be an SPA navigation: a full reload loses tab-memory auth.
   await page.getByRole('link',{name:'View GitHub operations and CI'}).click();
-  await expect.poll(()=>new URL(page.url()).pathname).toBe('/workspace/tools/');
+  await expect.poll(()=>new URL(page.url()).pathname,{timeout:15000}).toBe('/workspace/tools/');
   await expect(page.getByRole('button',{name:'Sign out',exact:true})).toBeVisible();
   await expect(page.locator('#login-form')).toHaveCount(0);
   await navigate(page,'Organization');

@@ -212,7 +212,7 @@
 
 /* Within-company tabs navigate existing panels without reloading or DB duplication. */
 .company-cockpit-nav{position:sticky;top:0;z-index:15;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:9px 12px;margin-bottom:13px;border:1px solid #375a81;border-radius:12px;background:#071c34f2;backdrop-filter:blur(8px)}
-.company-cockpit-nav a{font-size:12px;line-height:1.25;padding:8px 11px;border:1px solid #3a608b;border-radius:8px;background:#183354;color:#def3ff;text-decoration:none}
+.company-cockpit-nav a{display:inline-flex;align-items:center;min-height:44px;touch-action:manipulation;font-size:12px;line-height:1.25;padding:8px 11px;border:1px solid #3a608b;border-radius:8px;background:#183354;color:#def3ff;text-decoration:none}
 .company-cockpit-nav a:hover,.company-cockpit-nav a:focus-visible{background:#286193;outline-offset:2px}
 #company-approval-inbox,#ago-opportunities,#ago-workforce,#ago-company-org-map{scroll-margin-top:75px}
 
