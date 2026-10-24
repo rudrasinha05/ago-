@@ -337,3 +337,16 @@
 .brain-node-working{fill:#ff9dcb;filter:drop-shadow(0 0 5px #ff4b96);animation:agoVerifiedNodePulse 1.8s ease-in-out infinite}
 @keyframes agoVerifiedNodePulse{50%{opacity:.52;filter:drop-shadow(0 0 2px #ff4b96)}}
 @media(prefers-reduced-motion:reduce){.brain-node-working{animation:none}}
+
+/* The Brain's task inspector links only server-visible assigned work and people. */
+.brain-work-detail{margin-top:14px;border-top:1px solid #274774;padding-top:12px}
+.brain-work-detail h4{font-size:12px;color:#d9edff;margin:0 0 9px}
+.brain-work-detail ul{padding:0;margin:0;list-style:none;display:grid;gap:9px;max-height:290px;overflow:auto}
+.brain-work-detail li{display:grid;gap:4px;border:1px solid #27436d;border-radius:9px;padding:8px;min-width:0;background:#07172ac9}
+.brain-work-detail li strong{color:#e9f2ff;font-size:11px;overflow-wrap:anywhere}
+.brain-work-detail li button{padding:4px 7px;border-radius:7px;border:1px solid #4775ad;color:#b9ddff;background:#0b2850;min-height:30px;text-align:left;font-size:11px}
+.brain-work-detail li button:focus-visible{outline:2px solid #e5c1ff}
+.brain-work-state{font-size:10px;font-weight:700;color:#c1cce1}
+.brain-work-state.work-running{color:#ff87aa}
+.brain-work-state.work-waiting{color:#f4d198}
+.brain-work-detail>p{color:#91a7c4;font-size:11px}

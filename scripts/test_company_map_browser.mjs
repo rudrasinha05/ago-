@@ -165,6 +165,11 @@ try{
  assert.equal(await brain.evaluate(n=>getComputedStyle(n).transformStyle),'preserve-3d');
  assert.equal(await brain.locator('[data-verified-running="true"]').count(),1);
  assert.equal(await brain.locator('[data-verified-running="false"]').count(),5);
+ const verifiedQueue=page.getByRole('region',{name:'Recorded company task assignments'});
+ await verifiedQueue.getByText('Orchestration research',{exact:true}).waitFor();
+ await verifiedQueue.getByText('Running',{exact:true}).waitFor();
+ await verifiedQueue.getByRole('button',{name:'Open Developer work details'}).click();
+ await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Rotate brain right'}).click();
  assert.notEqual(await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation')),initialRotation);
  assert.match(await brain.getAttribute('aria-label'),/verified running tasks/);

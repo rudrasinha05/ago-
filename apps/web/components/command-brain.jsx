@@ -15,6 +15,8 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
  const queued=known?tasks.filter(t=>['proposed','ready','waiting_approval'].includes(t.status)):[];
  const finished=known?tasks.filter(t=>['completed','passed'].includes(t.status)):[];
  const events=notifications?.recent||[];
+ const assigned=known?[...active,...queued].slice(0,8):[];
+ const employeeNames=new Map(employees.map(e=>[e.id,e.name]));
  const approved=(governance?.board||[]).map(s=>({...s,member_id:s.employee_id,approved:true}));
  const seats=boardFunctionSeats(employees,approved);
  return <div className="command-overview">
@@ -78,6 +80,20 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
       <div className="brain-stat"><small>Employees working</small><b>{new Set(active.map(t=>t.assignee_id)).size}</b></div>
       <div className="brain-stat"><small>Pending action / approval</small><b>{known?queued.length:'—'}</b></div>
       <div className="brain-stat"><small>Recent durable work events</small><b>{notifications?events.length:'—'}</b></div>
+      <div className="brain-work-detail" aria-label="Recorded company task assignments">
+        <h4>Live assignment evidence</h4>
+        {assigned.length?<ul>{assigned.map(task=><li key={task.id}>
+          <span className={'brain-work-state '+(task.status==='running'?'work-running':'work-waiting')}>
+            {task.status==='running'?'Running':task.status==='ready'?'Ready':task.status==='proposed'?'Proposed':'Approval required'}
+          </span>
+          <strong title={task.project_name||'Unlinked task'}>{brief(task.project_name||'Unlinked task',52)}</strong>
+          {employeeNames.has(task.assignee_id)?
+            <button type="button" onClick={()=>onSelect(task.assignee_id)}
+              aria-label={'Open '+employeeNames.get(task.assignee_id)+' work details'}>
+              {brief(employeeNames.get(task.assignee_id),26)} ↗
+            </button>:<small>Employee not available</small>}
+        </li>)}</ul>:<p>{known?'No running or queued assignments':'Task feed unavailable'}</p>}
+      </div>
       <p className="brain-disclaimer">Visual monitor stays visible. A live model is only active when a configured, authorized runtime actually executes a job.</p>
      </section>
    </div>
