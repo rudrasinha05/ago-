@@ -91,7 +91,7 @@
     "GET /v1/organization/company/governance": "7833fb84971471e329769e453ec987ceddf05514159c23b7c5962403291e9f5d",
     "GET /v1/organization/company/management/workload": "a20603d1139369e306b131ea60b077e682d195e1a72436e6475ec9201f0d97dd",
     "GET /v1/organization/company/market-intelligence": "ff3044d38f30f9f00514d027a320eec36966b65370cd6c28110592d0aebf0fcc",
-    "GET /v1/organization/company/notifications": "899b8928129d687a37b4d5ac2bbb8e62d73201c724d0982c3d3c16c356e0166e",
+    "GET /v1/organization/company/notifications": "8e941b604c0824bced7295b9e18c12521e82e2bbfa5e8b8189405d933d8076fe",
     "GET /v1/organization/company/opportunities": "ac8b39c81c3f85e3549ffe80980bf1c3c6d78497cb91281c76615f5de6ecb67b",
     "GET /v1/organization/company/projects": "7e5a4d63b23f0ebb92f32dd8d1cb1677ce6ef501878da773c8b16e12df51fec6",
     "GET /v1/organization/company/projects/{project_id}": "57d8f069d590cff606973eb888e3d843d113ebe2725df8367a97fb9591530589",
@@ -304,7 +304,8 @@
     "POST /v1/tools/runs/recover-stale": "28f01e3c031785f079749274d10ae1a1ee6e37ddbfc7b8dfb68e2c883ed8bce6",
     "POST /v1/tools/tasks/{task_id}/run": "dd47e08b423ec283e80a04dfd8a7909a17e90234d311035dcb254a9cdbcff02d",
     "PUT /v1/organization/company/employees/{employee_id}/manager": "0181556702d8acf8d5f5d8a49829952af1265ced23c901897661b7b7d845491c",
-    "PUT /v1/organization/company/employees/{employee_id}/role": "2e63f9d19d5edd1b6ceb2ab161109d07f64ff2f5555e2110542abace8c11b794"
+    "PUT /v1/organization/company/employees/{employee_id}/role": "2e63f9d19d5edd1b6ceb2ab161109d07f64ff2f5555e2110542abace8c11b794",
+    "GET /v1/organization/company/projects/{project_id}/staffing-proposals": "29659f76d81376f04592b94e2c8f317f802a3b8c6b08b9024065f398b51eb4d4"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",
