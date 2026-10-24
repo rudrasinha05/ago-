@@ -598,7 +598,9 @@
       "ago_meta_recommendations"
     ],
     "metrics": [],
-    "model_handlers": [],
+    "model_handlers": [
+      "ago_company_chat"
+    ],
     "model_provider": [],
     "organization": [],
     "organization_store": [
