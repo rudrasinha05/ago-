@@ -31,7 +31,8 @@ def setup(tmp_path, modules):
         tmp_path, (bridge, draft_module, proposal_module)
     )
     row = json.loads(draft.read_text())
-    return export, stage, qa, draft, review, row
+    # Operator signature is (draft, source, staged, qa_packet).
+    return draft, export, stage, qa, review, row
 
 
 def mock_server(record, draft, *, mutate=None, uncertain=False):
