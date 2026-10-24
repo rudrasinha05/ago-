@@ -3,10 +3,10 @@
   "purpose": "Unfinished scope only, no asserted completion without evidence",
   "baseline": "2026-10-24",
   "verified_p0_ci_baseline": {
-    "sha": "56280fe6927700e99e0b3559b685b1e546c2d33f",
-    "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40118651437",
-    "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40118651487",
-    "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40118651556"
+    "sha": "97b4d4a33b3015ddb13353dbd0156ecea387fa0b",
+    "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40119370321",
+    "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40119370383",
+    "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40119370327"
   },
   "status_semantics": {
     "partial": "Some source/contract exists; acceptance not proved",
@@ -322,10 +322,10 @@
       "id": 154,
       "priority": "P1",
       "title": "Reliable interrupted execution recovery",
-      "status": "partial",
+      "status": "completed",
       "acceptance": "Restarted worker resumes only safe queued work and does not duplicate unknown writes",
       "owner_local_or_external_evidence_required": false,
-      "completion_proved": false
+      "completion_proved": true
     },
     {
       "id": 92,
@@ -456,10 +456,10 @@
   ],
   "completion_evidence": {
     "14": {
-      "sha": "56280fe6927700e99e0b3559b685b1e546c2d33f",
-      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40118651437",
-      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40118651487",
-      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40118651556",
+      "sha": "97b4d4a33b3015ddb13353dbd0156ecea387fa0b",
+      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40119370321",
+      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40119370383",
+      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40119370327",
       "report": "docs/reports/SECTION14_FINAL_ACCEPTANCE.md",
       "tests": [
         "apps/backend/tests/test_section14_module_boundaries.py"
@@ -468,10 +468,10 @@
       "limitation": "Architecture rules only, not external branch protection or full application security"
     },
     "22": {
-      "sha": "56280fe6927700e99e0b3559b685b1e546c2d33f",
-      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40118651437",
-      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40118651487",
-      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40118651556",
+      "sha": "97b4d4a33b3015ddb13353dbd0156ecea387fa0b",
+      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40119370321",
+      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40119370383",
+      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40119370327",
       "report": "docs/ARCHITECTURE_STATUS_AND_BACKLOG.md",
       "tests": [
         "packages/sdk/tests/company-model.test.mjs",
@@ -481,10 +481,10 @@
       "limitation": "Observability covers stored task state, not external process heartbeats or proof of a model currently generating tokens"
     },
     "45": {
-      "sha": "56280fe6927700e99e0b3559b685b1e546c2d33f",
-      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40118651437",
-      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40118651487",
-      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40118651556",
+      "sha": "97b4d4a33b3015ddb13353dbd0156ecea387fa0b",
+      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40119370321",
+      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40119370383",
+      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40119370327",
       "report": "docs/ARCHITECTURE_STATUS_AND_BACKLOG.md",
       "tests": [
         "tests/frontend/workspace.spec.mjs",
@@ -494,10 +494,10 @@
       "limitation": "Not local model execution, independent project QA or a released usable product"
     },
     "120": {
-      "sha": "56280fe6927700e99e0b3559b685b1e546c2d33f",
-      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40118651437",
-      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40118651487",
-      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40118651556",
+      "sha": "97b4d4a33b3015ddb13353dbd0156ecea387fa0b",
+      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40119370321",
+      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40119370383",
+      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40119370327",
       "report": "docs/reports/AGO_LOCAL_SOLO_FOUNDER_AUTHORITY.md",
       "tests": [
         "apps/backend/tests/test_company_dual_approval.py",
@@ -508,10 +508,10 @@
       "limitation": "Authority and independence contracts only; no completed independent human product QA or live released product is proven"
     },
     "128": {
-      "sha": "56280fe6927700e99e0b3559b685b1e546c2d33f",
-      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40118651437",
-      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40118651487",
-      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40118651556",
+      "sha": "97b4d4a33b3015ddb13353dbd0156ecea387fa0b",
+      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40119370321",
+      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40119370383",
+      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40119370327",
       "report": "docs/reports/LOCAL_ENGINEERING_QA_DELIVERY_GATE.md",
       "tests": [
         "apps/backend/tests/test_company_safe_reconcile.py",
@@ -520,6 +520,19 @@
       ],
       "scope": "Approved local task dispatch and isolated Docker operations persist pre-execution attempt receipts, block uncertain replay, and document manual reconciliation",
       "limitation": "Scoped local governed dispatch only; unrelated third-party tools and an actual owner-laptop failure drill are not certified"
+    },
+    "154": {
+      "sha": "97b4d4a33b3015ddb13353dbd0156ecea387fa0b",
+      "architecture": "https://github.com/rudrasinha05/ago-/actions/runs/40119370321",
+      "backend": "https://github.com/rudrasinha05/ago-/actions/runs/40119370383",
+      "focused": "https://github.com/rudrasinha05/ago-/actions/runs/40119370327",
+      "report": "docs/reports/LOCAL_ENGINEERING_QA_DELIVERY_GATE.md",
+      "tests": [
+        "apps/backend/tests/test_local_approved_agent_batch.py",
+        "apps/backend/tests/test_company_safe_reconcile.py"
+      ],
+      "scope": "Cross-process process-restart test proves prior approved dispatch receipt survives interpreter exit; a freshly created worker skips the uncertain write and advances only another approved task",
+      "limitation": "This is a bounded user-started local worker flow, not automatic OS daemon recovery or evidence of arbitrary third-party side effects"
     }
   }
 }

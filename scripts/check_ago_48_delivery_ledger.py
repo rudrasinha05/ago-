@@ -38,6 +38,9 @@ CI_GATES = {
           ("apps/backend/tests/test_company_safe_reconcile.py",
            "apps/backend/tests/test_local_approved_agent_batch.py",
            "apps/backend/tests/test_company_isolated_docker_gate.py")),
+    154: ("docs/reports/LOCAL_ENGINEERING_QA_DELIVERY_GATE.md",
+          ("apps/backend/tests/test_local_approved_agent_batch.py",
+           "apps/backend/tests/test_company_safe_reconcile.py")),
 }
 
 

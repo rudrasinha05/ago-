@@ -25,8 +25,8 @@ def test_all_48_p0_p1_p2_tasks_present_in_original_numbering():
     assert report["per_priority"] == {"P0": 12, "P1": 22, "P2": 14}
     assert report["self_certified_completed"] == 0
     assert report["all_48_proven_complete"] is False
-    assert report["completed"] == 5
-    assert report["completed_ids"] == [14, 45, 120, 22, 128]
+    assert report["completed"] == 6
+    assert report["completed_ids"] == [14, 45, 120, 22, 128, 154]
     assert report["completed"] + report["partial"] + report["pending"] == 48
 
 
@@ -97,7 +97,7 @@ def test_completion_requires_reviewed_ci_evidence(mutation):
 
 def test_completed_gates_have_only_ci_scope_and_exact_pinned_sources():
     doc = ledger()
-    assert sorted(int(key) for key in doc["completion_evidence"]) == [14, 22, 45, 120, 128]
+    assert sorted(int(key) for key in doc["completion_evidence"]) == [14, 22, 45, 120, 128, 154]
     for task in doc["tasks"]:
         if task["status"] == "completed":
             assert task["completion_proved"] is True
@@ -109,6 +109,7 @@ def test_completed_gates_have_only_ci_scope_and_exact_pinned_sources():
     (120,"apps/backend/tests/test_company_ceo_stage_scope.py"),
     (22,"packages/sdk/tests/company-model.test.mjs"),
     (128,"apps/backend/tests/test_local_approved_agent_batch.py"),
+    (154,"apps/backend/tests/test_company_safe_reconcile.py"),
 ])
 def test_newly_closed_gates_require_exact_proof_sources(gate,proof_source):
     document = ledger()
