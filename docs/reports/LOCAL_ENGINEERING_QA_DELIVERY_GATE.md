@@ -446,3 +446,37 @@ confirm. The result is an **AGO enterprise review proposal** awaiting
 independent approval—not a GitHub commit. Review the proposal in AGO's
 enterprise integration governance and perform the separate approved
 apply/execute operations when permitted.
+
+
+### Independently approved AGO proposal → actual GitHub commit dispatch
+
+Once a **separate authorized human** has approved the exact enterprise
+integration proposal in AGO, use the *existing server-authorized*
+apply/execute endpoints through the bounded Founder helper:
+
+`python scripts/ago_finalize_github_delivery.py --help`
+
+Supply the **saved original draft**, original Board-cleared source, passing
+Docker stage, pending human QA packet, exact original **enterprise proposal
+UUID**, and one of `--action apply` or `--action execute`.
+The default is **read-only preview**. Apply requires an independent approved
+review and explicit `--apply --confirm APPLY_INDEPENDENTLY_APPROVED_GITHUB_OPERATION`
+authorization. This only records the approved operation in AGO's
+integration settings; it does not contact GitHub.
+
+**Execute** is separately confirmed with
+`--apply --confirm EXECUTE_APPROVED_GITHUB_COMMIT`. Before any write,
+the helper verifies the original QA, immutable approved proposal, exact
+applied operation in AGO's live catalog, and GitHub project's current
+`develop` HEAD against the *Founder-reviewed* SHA. It writes a
+durable local no-replay claim before sending one POST to AGO's existing
+`/v1/platform/github/operations/<UUID>/execute`.
+
+The AGO **server** still independently requires same-tenant Founder
+authority, valid independent human approval, applied proposal, bound
+repository identity, explicit owner GitHub credential, unchanged HEAD and
+an unused durable server-side dispatch marker. The helper accepts success
+only with a real server-recorded succeeded dispatch and 40-digit GitHub
+commit SHA. Missing credentials, changed HEAD, rejected reviewer, timeout,
+prior dispatch or uncertain GitHub result must remain blocked. This commit
+operation does **not** create a PR, merge, deploy or declare product release.
