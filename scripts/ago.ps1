@@ -155,7 +155,7 @@ finally {
             exit 2
         }
         # Persist private code outside the Git working tree by default.
-        $ExportDirectory = Join-Path $HOME ".ago\\candidate_exports"
+        $ExportDirectory = Join-Path $HOME ".ago\candidate_exports"
         if (-not (Test-Path -LiteralPath $ExportDirectory -PathType Container)) {
             New-Item -ItemType Directory -Path $ExportDirectory -Force | Out-Null
         }
