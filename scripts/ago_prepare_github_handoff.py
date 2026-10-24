@@ -79,6 +79,7 @@ def prepare_draft(
         "origin_task_id": evidence["task_id"],
         "origin_project_id": evidence["project_id"],
         "github_project_id": github_project_id,
+        "founder_reviewed_expected_sha": expected_sha,
         "candidate_sha256": evidence["candidate_sha256"],
         "docker_receipt_sha256": evidence["test_receipt_sha256"],
         "human_qa_reviewer_id": evidence["qa_reviewer_id"],

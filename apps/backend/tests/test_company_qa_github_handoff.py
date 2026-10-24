@@ -93,6 +93,7 @@ def test_authenticated_qa_pass_yields_exact_draft_without_github_write(modules, 
     result = json.loads(path.read_text(encoding="utf-8"))
     assert result["github_operation"]["operation"] == "commit_files"
     assert result["github_operation"]["payload"]["expected_sha"] == "a" * 40
+    assert result["founder_reviewed_expected_sha"] == "a" * 40
     assert result["github_operation"]["payload"]["files"] == candidate["files"]
     assert result["human_qa_verdict"] == "pass"
     assert result["operation_submitted_to_ago"] is False

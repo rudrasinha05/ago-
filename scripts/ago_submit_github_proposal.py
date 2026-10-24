@@ -52,7 +52,9 @@ def inspect_verified_draft(draft: Path, source: Path, stage: Path, qa_file: Path
         operation_id=operation["id"], expected_sha=payload["expected_sha"],
         message=payload["message"],
     )
-    if exact != operation or row.get("github_project_id") != operation["project_id"]:
+    if (exact != operation
+            or row.get("github_project_id") != operation["project_id"]
+            or row.get("founder_reviewed_expected_sha") != payload["expected_sha"]):
         raise PermissionError("Reviewed source or GitHub operation was changed")
     return {"operation": operation, "qa": proof}
 
