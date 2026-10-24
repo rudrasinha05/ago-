@@ -178,3 +178,48 @@ def test_batch_diagnostic_distinguishes_pending_and_real_model_tasks():
     diagnostic=module.inspection_summary(tasks,approvals)
     assert diagnostic["internal_eligible_now"]==1
     assert diagnostic["internal_waiting_for_review"]==0
+
+
+def test_local_batch_refuses_false_success_from_risk_board_veto():
+    task_id = str(uuid4())
+    rows = [{"id": task_id, "action": "internal:brief",
+             "status": "waiting_approval", "approval_id": "reviewed"}]
+    approvals = [{"id": "reviewed", "action": "internal:brief", "status": "approved"}]
+    attempts = []
+    for body in (
+        {"task_id": task_id, "status": "completed", "delivery_status": "blocked",
+         "result": {"board_blocked": True}},
+        {"task_id": task_id, "status": "completed", "delivery_status": "completed",
+         "result": {"requires_founder_resolution": True}},
+        {"task_id": task_id, "status": "completed", "result": "untrusted malformed payload"},
+        {"task_id": task_id, "status": "completed", "delivery_status": "unknown"},
+    ):
+        def dispatch(tid):
+            attempts.append(tid)
+            return body
+        with pytest.raises(RuntimeError, match="unblocked completed task"):
+            module.batch(rows, approvals, dispatch, limit=1, apply=True,
+                         confirm=module.CONFIRM)
+    assert attempts == [task_id] * 4
+    assert module.confirmed_local_delivery(
+        {"task_id": task_id, "status": "completed",
+         "delivery_status": "completed", "result": {"board_blocked": False}},
+        task_id,
+    ) is True
+
+
+def test_local_watch_stops_immediately_on_board_veto_without_replay():
+    task_id = str(uuid4())
+    rows = [{"id": task_id, "action": "internal:brief",
+             "status": "waiting_approval", "approval_id": "reviewed"}]
+    approvals = [{"id": "reviewed", "action": "internal:brief", "status": "approved"}]
+    attempts = []
+    def reject(tid):
+        attempts.append(tid)
+        return {"task_id": tid, "status": "completed", "delivery_status": "blocked",
+                "result": {"kind": "local_company_governed_handoff",
+                           "board_blocked": True, "requires_founder_resolution": True}}
+    with pytest.raises(RuntimeError, match="Blocked or unknown task outcome"):
+        module.watch(lambda: (rows, approvals), reject, minutes=1, max_tasks=2,
+                     interval=10, confirm=module.CONFIRM)
+    assert attempts == [task_id]

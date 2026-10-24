@@ -91,6 +91,23 @@ def inspection_summary(records: list[dict], approvals: list[dict]) -> dict:
     }
 
 
+def confirmed_local_delivery(result, expected_task_id: str) -> bool:
+    """A completed inference attempt is NOT a completed Board-blocked task."""
+    if not isinstance(result, dict):
+        return False
+    if result.get("status") != "completed" or result.get("task_id") != expected_task_id:
+        return False
+    if result.get("delivery_status", "completed") != "completed":
+        return False
+    payload = result.get("result")
+    if payload is not None:
+        if not isinstance(payload, dict):
+            return False
+        if payload.get("board_blocked") is True or payload.get("requires_founder_resolution") is True:
+            return False
+    return True
+
+
 def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, apply: bool,
           confirm: str | None) -> dict:
     if not 1<=limit<=10:
@@ -120,8 +137,8 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
         # The authenticated task endpoint holds the security decision.
         for task_id in ids:
             result=dispatch(task_id)
-            if result.get("status")!="completed" or result.get("task_id")!=task_id:
-                raise RuntimeError("AGO did not confirm an exact completed task")
+            if not confirmed_local_delivery(result, task_id):
+                raise RuntimeError("AGO did not confirm an exact unblocked completed task")
             completed.append(task_id)
     result={"mode":"founder_approved_single_batch" if apply else "dry_run",
             "eligible_task_ids":ids,"completed_task_ids":completed,
@@ -160,8 +177,8 @@ def watch(fetch, dispatch, *, minutes: int, max_tasks: int, interval: int,
         if next_id is not None:
             seen.add(next_id)  # Mark BEFORE I/O: no uncertain-outcome replay.
             result=dispatch(next_id)
-            if result.get("status")!="completed" or result.get("task_id")!=next_id:
-                raise RuntimeError("Unknown task execution result; reconcile manually")
+            if not confirmed_local_delivery(result, next_id):
+                raise RuntimeError("Blocked or unknown task outcome; reconcile manually")
             completed.append(next_id)
         else:
             remaining=minutes*60-(clock()-started)
