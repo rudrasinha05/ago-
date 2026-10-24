@@ -140,7 +140,10 @@ def verify(directory: str | Path, *, apply: bool = False, confirm: str | None = 
         "git_committed": False,
         "independent_qa_approved": False,
         "release_ready": False,
-        "output_excerpt": output[-2500:],
+        # Untrusted test output may contain founder briefs, secrets or terminal
+        # control codes. Retain only a digest; never print or persist raw logs.
+        "output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
+        "output_excerpt": "REDACTED: local test stdout/stderr not persisted",
     }
     with receipt_path.open("x", encoding="utf-8") as handle:
         json.dump(receipt, handle, indent=2, sort_keys=True)
