@@ -87,6 +87,15 @@ def test_p1_notification_cursor_reads_all_events_without_cross_employee_leaks(ca
     assert final["has_more"] is False
     assert len(final["recent"])==25
     assert min(x["id"] for x in final["recent"])>ids[-1]
+    # Preserve the real API authorization contract: the normal reviewer role
+    # is denied until the tenant explicitly grants both read capabilities.
+    assert client.get(BASE+"/notifications",headers=employee,
+                      params={"after_id":baseline}).status_code==403
+    for permission in ("organization:read","task:read"):
+        info["db"].execute("""
+            INSERT INTO ago_role_permissions(tenant_id,role,permission)
+            VALUES (%s,'reviewer',%s) ON CONFLICT DO NOTHING
+        """,(tenant,permission))
     scoped=client.get(BASE+"/notifications",headers=employee,
                       params={"after_id":baseline})
     assert scoped.status_code==200
