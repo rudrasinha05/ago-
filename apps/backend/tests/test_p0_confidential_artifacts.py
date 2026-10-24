@@ -79,3 +79,26 @@ def test_ci_failure_does_not_print_private_paths(monkeypatch, capsys):
     assert ".env.production.local" not in output.err
     assert "PRIVATE-PROJECTS" not in output.err
     assert not output.out
+
+
+def test_confidential_scan_anchors_to_full_repository_even_from_subdirectories(monkeypatch):
+    check = load()
+    calls = []
+
+    def fake_check_output(arguments):
+        calls.append(arguments)
+        return b""
+
+    monkeypatch.setattr(check.subprocess, "check_output", fake_check_output)
+    assert check.main() == 0
+    assert calls == [
+        ["git", "-C", str(Path(__file__).resolve().parents[3]), "ls-files", "-z"]
+    ]
+
+
+def test_unfiltered_ci_workflows_enforce_private_paths_and_original_parity():
+    root = Path(__file__).resolve().parents[3]
+    for name in ("backend-quality.yml", "ago-backend-ci.yml"):
+        workflow = (root / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        assert "python scripts/check_confidential_artifacts.py" in workflow
+        assert "python scripts/check_p0_original_parity.py" in workflow

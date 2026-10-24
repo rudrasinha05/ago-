@@ -166,6 +166,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Enforce P0 private-file and recorded original parity guards
+        working-directory: .
+        run: |
+          python scripts/check_confidential_artifacts.py
+          python scripts/check_p0_original_parity.py
       - name: Install backend dependencies
         id: install
         run: |

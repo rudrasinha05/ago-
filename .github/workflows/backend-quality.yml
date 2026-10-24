@@ -43,6 +43,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Enforce P0 private-file and recorded original parity guards
+        run: |
+          python scripts/check_confidential_artifacts.py
+          python scripts/check_p0_original_parity.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

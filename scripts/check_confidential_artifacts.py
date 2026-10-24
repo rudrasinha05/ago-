@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 PRIVATE_ROOTS = frozenset({
     ".ago-private",
@@ -53,7 +53,7 @@ def forbidden(path: str) -> bool:
 
 
 def main() -> int:
-    tracked = subprocess.check_output(["git", "ls-files", "-z"])
+    tracked = subprocess.check_output(["git", "-C", str(Path(__file__).resolve().parents[1]), "ls-files", "-z"])
     offending = sum(
         forbidden(item.decode("utf-8", errors="replace"))
         for item in tracked.split(bytes([0])) if item
