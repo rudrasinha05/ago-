@@ -207,3 +207,18 @@ def test_apply_requires_explicit_confirmation_and_never_overwrites(exporter,tmp_
         exporter.export_from_founder_session("http://127.0.0.1:8000","token",
             record["id"],output,apply=True,confirm=exporter.CONFIRM,opener=io_mock)
     assert output.read_text()=="previous private file"
+
+
+def test_founder_export_refuses_to_put_private_source_inside_git_checkout(
+    exporter, monkeypatch, tmp_path
+):
+    record = stored_run()
+    io_mock, _ = opener_for(record)
+    source_root = ROOT
+    output = source_root / "private_candidate_not_for_git.json"
+    with pytest.raises(PermissionError, match="outside the AGO source repository"):
+        exporter.export_from_founder_session(
+            "http://127.0.0.1:8000", "token", record["id"], output,
+            apply=True, confirm=exporter.CONFIRM, opener=io_mock,
+        )
+    assert not output.exists()

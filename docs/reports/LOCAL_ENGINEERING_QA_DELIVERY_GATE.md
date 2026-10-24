@@ -201,8 +201,8 @@ in the repository root and run:
 ```
 
 The operator enters the **exact completed run UUID** (from the Founder-visible
-agent run record) and a **new** JSON review file destination, then explicitly
-confirms. AGO prompts for the actual Founder organization ID, email and hidden
+agent run record) and explicitly confirms; AGO writes the **new** JSON review file to the
+private `~/.ago/candidate_exports/ago-run-<UUID>.json` folder, outside Git. AGO prompts for the actual Founder organization ID, email and hidden
 password. Only localhost signed-in `GET /v1/console/me` and
 `GET /v1/agents/runs` are read. A non-Founder, missing/failed run, uncleared
 Board, missing unique AI staff, tampered code digest or existing output file
@@ -210,14 +210,14 @@ fails closed. No raw chat, token, founder brief or model prose is copied into
 the export; only the exact validated code candidate and its original run IDs
 are retained.
 
-For example, after reviewing the newly exported file
-`./candidate-review.json`, the **existing** delivery gate can inspect
-that file and, separately, stage and run offline Docker tests:
+For example, after reviewing the private exported file
+`~/.ago/candidate_exports/ago-run-<UUID>.json`, the **existing** delivery
+gate can inspect it and, separately, stage and run offline Docker tests:
 
 ```powershell
-python scripts/ago_local_delivery_gate.py --input ./candidate-review.json --staged-directory ./candidate-stage-new --qa-output ./qa-handoff-new.json
+python scripts/ago_local_delivery_gate.py --input "$HOME/.ago/candidate_exports/ago-run-<UUID>.json" --staged-directory "$HOME/.ago/candidate_stage_new" --qa-output "$HOME/.ago/qa-handoff-new.json"
 # After independently reviewing the generated code, explicit confirmation only:
-python scripts/ago_local_delivery_gate.py --input ./candidate-review.json --staged-directory ./candidate-stage-new --qa-output ./qa-handoff-new.json --apply --confirm STAGE_TEST_AND_PREPARE_QA
+python scripts/ago_local_delivery_gate.py --input "$HOME/.ago/candidate_exports/ago-run-<UUID>.json" --staged-directory "$HOME/.ago/candidate_stage_new" --qa-output "$HOME/.ago/qa-handoff-new.json" --apply --confirm STAGE_TEST_AND_PREPARE_QA
 ```
 
 The export itself never executes code, starts Ollama, calls GitHub, grants QA,

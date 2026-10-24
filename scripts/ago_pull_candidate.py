@@ -127,6 +127,11 @@ def export_from_founder_session(base: str, token: str, run_id: str, output: Path
         return summary
     if confirm != CONFIRM:
         raise PermissionError("Separate Founder export authorization required")
+    # Candidate source and acceptance artifacts are private local data:
+    # never place them inside the source-controlled public AGO repository.
+    repo_root = Path(__file__).resolve().parents[1]
+    if output.resolve().is_relative_to(repo_root):
+        raise PermissionError("Export candidate outside the AGO source repository")
     if output.exists() or output.is_symlink() or not output.parent.is_dir():
         raise FileExistsError("Export requires a new file in an existing directory")
     # Explicit local-only write; exclusive creation prevents overwrite/replay.
