@@ -51,7 +51,7 @@ def activity(actor=Depends(authenticated), repositories=Depends(repository_scope
 
     
 @router.get('/notifications')
-def notifications(after_id: int | None = Query(default=None,gt=0),
+def notifications(after_id: int | None = Query(default=None,ge=0),
                   actor=Depends(authenticated), repositories=Depends(repository_scope)):
     allowed(repositories, actor, 'organization:read')
     allowed(repositories, actor, 'task:read')

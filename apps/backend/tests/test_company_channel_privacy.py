@@ -75,7 +75,7 @@ def test_p1_notification_cursor_reads_all_events_without_cross_employee_leaks(ca
             VALUES (%s,'global',%s,'AGO test source',%s,'status',%s)
         """,(tenant,info["founder_id"],"Verified local work event "+str(number),
              employee_id))
-    assert baseline > 0
+    assert baseline >= 0
     first = client.get(BASE+"/notifications",headers=founder,
                        params={"after_id":baseline}).json()
     assert first["has_more"] is True

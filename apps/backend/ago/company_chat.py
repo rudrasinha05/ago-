@@ -244,7 +244,7 @@ class CompanyChat:
         if reader_id is None:
             raise PermissionError('Authenticated notification reader required')
         UUID(reader_id)
-        if after_id is not None and (type(after_id) is not int or after_id <= 0):
+        if after_id is not None and (type(after_id) is not int or after_id < 0):
             raise ValueError('Positive notification cursor required')
         founder=self.db.execute("""
             SELECT 1 FROM ago_users u JOIN ago_employees e
