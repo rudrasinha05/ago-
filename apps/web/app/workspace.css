@@ -325,3 +325,15 @@
 .employee-approval-counter{min-width:31px;min-height:31px;font-weight:800}
 .employee-approval-flyout{animation:ago-notification-open .17s ease-out}
 @media(prefers-reduced-motion:reduce){.employee-approval-flyout{animation:none}}
+
+/* Volumetric cortex: do not apply CSS filter to a preserve-3d parent;
+   doing so would flatten its descendants. All task signals derive from data. */
+.brain-volume,.brain-volume-active{filter:none;transform-style:preserve-3d}
+.brain-depth-stack{position:absolute;inset:0;transform-style:preserve-3d;pointer-events:none}
+.brain-depth-slice{position:absolute;inset:0;width:100%;height:295px;overflow:visible;transform:translateZ(var(--cortex-depth)) scale(var(--cortex-scale));backface-visibility:visible;pointer-events:none}
+.brain-svg{transform:translateZ(48px);animation:none;filter:drop-shadow(0 0 18px #4775ffb2)}
+.brain-volume-active .brain-svg{filter:drop-shadow(0 0 22px #ff4f8caa)}
+.brain-node-idle{fill:#6c9fc7;opacity:.28}
+.brain-node-working{fill:#ff9dcb;filter:drop-shadow(0 0 5px #ff4b96);animation:agoVerifiedNodePulse 1.8s ease-in-out infinite}
+@keyframes agoVerifiedNodePulse{50%{opacity:.52;filter:drop-shadow(0 0 2px #ff4b96)}}
+@media(prefers-reduced-motion:reduce){.brain-node-working{animation:none}}

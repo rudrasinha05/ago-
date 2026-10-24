@@ -159,6 +159,12 @@ try{
  await page.getByRole('heading',{name:'AI Company Command Center'}).waitFor();
  const brain=page.locator('.brain-volume');
  const initialRotation=await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation'));
+ assert.equal(await brain.locator('.brain-depth-slice').count(),8);
+ const depthValues=await brain.locator('.brain-depth-slice').evaluateAll(nodes=>nodes.map(n=>n.style.getPropertyValue('--cortex-depth')));
+ assert.equal(new Set(depthValues).size,8);
+ assert.equal(await brain.evaluate(n=>getComputedStyle(n).transformStyle),'preserve-3d');
+ assert.equal(await brain.locator('[data-verified-running="true"]').count(),1);
+ assert.equal(await brain.locator('[data-verified-running="false"]').count(),5);
  await page.getByRole('button',{name:'Rotate brain right'}).click();
  assert.notEqual(await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation')),initialRotation);
  assert.match(await brain.getAttribute('aria-label'),/verified running tasks/);

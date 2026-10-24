@@ -3,6 +3,10 @@ import {useState} from 'react';
 import {boardFunctionSeats} from '@ago/sdk/company';
 
 const brief=(text,max=110)=>text?.length>max?text.slice(0,max)+'…':text;
+// These separate CSS 3D planes supply depth; only real running tasks illuminate nodes.
+const CORTEX_CONTOUR='M199 247 C176 258 137 238 136 209 C93 205 82 164 110 139 C84 107 107 74 143 80 C149 44 194 39 207 65 C229 36 270 47 284 73 C323 62 347 92 337 119 C373 148 351 188 320 197 C323 228 293 251 266 239 C249 259 222 255 208 241Z';
+const CORTEX_DEPTHS=[-75,-60,-45,-30,-15,0,15,30];
+const CORTEX_POINTS=[[162,126],[254,106],[205,162],[269,197],[147,201],[295,137]];
 export function CommandBrain({tasks,notifications,employees,onSelect,governance,onAppoint,canGovern}) {
  const [choices,setChoices]=useState({});
  const [rotation,setRotation]=useState(0);
@@ -26,8 +30,16 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
      <div className="brain-hologram" aria-label="Interactive founder-controlled 3D work observatory">
        <div className="brain-orbit orbit-one"/><div className="brain-orbit orbit-two"/>
        <div className={'brain-volume '+(active.length?'brain-volume-active':'')}
-         role="img" aria-label={'3D-style rotating company work brain: '+active.length+' verified running tasks, '+queued.length+' awaiting action; not a simulated conscious AI'}
+         role="img" aria-label={'Layered 3D company work brain: '+active.length+' verified running tasks, '+queued.length+' awaiting action; not a simulated conscious AI'}
          style={{'--brain-rotation':rotation+'deg'}}>
+        <div className="brain-depth-stack" aria-hidden="true">
+          {CORTEX_DEPTHS.map((depth,index)=><svg key={depth} viewBox="0 0 420 300" className="brain-depth-slice"
+            style={{'--cortex-depth':depth+'px','--cortex-scale':String(1-Math.abs(depth-30)/800)}}>
+            <path d={CORTEX_CONTOUR} fill={index%2===0?'#18458d':'#16295e'}
+              fillOpacity=".27" stroke={active.length?'#fa568c':'#66c4ff'}
+              strokeOpacity={String(.23+index*.045)} strokeWidth="2.5"/>
+          </svg>)}
+        </div>
         <svg viewBox="0 0 420 300" className="brain-svg" aria-hidden="true">
         <defs><radialGradient id="agoBrainFill" cx=".44" cy=".35" r=".78"><stop stopColor="#335bd0" stopOpacity=".93"/><stop offset=".57" stopColor="#1e347d" stopOpacity=".8"/><stop offset="1" stopColor="#070c29"/></radialGradient>
           <linearGradient id="agoBrainStroke" x1="0" x2="1"><stop stopColor="#69ecff"/><stop offset=".48" stopColor="#ab83ff"/><stop offset="1" stopColor="#fa518e"/></linearGradient>
@@ -46,7 +58,11 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
           <path d="M126 117 Q172 102 207 121 T288 106 T340 130"/>
           <path d="M205 70 Q215 115 207 158 Q225 204 207 242"/>
         </g>
-        <g fill="#f99cff" filter="url(#agoBrainGlow)"><circle cx="162" cy="126" r="5"/><circle cx="254" cy="106" r="5"/><circle cx="205" cy="162" r="5"/><circle cx="269" cy="197" r="5"/><circle cx="147" cy="201" r="4"/><circle cx="295" cy="137" r="4"/></g>
+        <g className="brain-cortex-nodes">{CORTEX_POINTS.map(([cx,cy],index)=>
+          <circle key={index} cx={cx} cy={cy} r={index<active.length?5:3}
+            className={index<active.length?'brain-node-working':'brain-node-idle'}
+            data-verified-running={index<active.length?'true':'false'}/>
+        )}</g>
         <path d="M209 244 Q216 265 202 281 M228 243 Q234 265 225 282" fill="none" stroke="#64cffa" strokeWidth="6" opacity=".8"/>
         </svg>
        </div>
