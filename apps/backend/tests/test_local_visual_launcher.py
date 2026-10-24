@@ -130,3 +130,13 @@ def test_approved_local_launcher_uses_hidden_founder_login_not_copied_browser_to
     assert len(approved) == 3
     assert all("--login" in line for line in approved)
     assert "Bearer " not in script
+
+
+def test_founder_operator_exports_only_a_review_candidate_without_auto_run():
+    root = Path(__file__).resolve().parents[3]
+    text = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
+    assert '"export-candidate"' in text
+    assert "ago_pull_candidate.py" in text
+    assert "--apply --confirm EXPORT_APPROVED_AI_CANDIDATE" in text
+    assert 'Read-Host "Exact completed AGO agent run ID (UUID)"' in text
+    assert "Github token" not in text

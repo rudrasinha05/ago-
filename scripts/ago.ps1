@@ -10,9 +10,10 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 safe-reconcile  # manual stale-run recovery, no replay
 .\scripts\ago.ps1 run-approved-internal  # only previously approved local internal AI briefs
 .\scripts\ago.ps1 watch-approved-internal  # up to 60 minutes or 10 tasks; Ctrl+C stops
+.\scripts\ago.ps1 export-candidate  # exact completed Board-cleared AI run -> new local source review
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "watch-approved-internal")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "watch-approved-internal", "export-candidate")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -92,6 +93,21 @@ try {
         else {
             & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
         }
+        exit $LASTEXITCODE
+    }
+    if ($Action -eq "export-candidate") {
+        Write-Host "This exports code from an authenticated, completed AGO AI run for OFFLINE review only."
+        $RunId = Read-Host "Exact completed AGO agent run ID (UUID)"
+        $OutputFile = Read-Host "New JSON review file path (must not exist)"
+        if (-not $RunId -or -not $OutputFile) {
+            throw "A recorded run ID and a new local destination are required."
+        }
+        $Confirmation = Read-Host "To export only, type EXPORT_APPROVED_AI_CANDIDATE"
+        if ($Confirmation -cne "EXPORT_APPROVED_AI_CANDIDATE") {
+            Write-Host "Export cancelled. No file created."
+            exit 2
+        }
+        & python ../../scripts/ago_pull_candidate.py --local-url "http://127.0.0.1:$Port" --run-id $RunId --output $OutputFile --apply --confirm EXPORT_APPROVED_AI_CANDIDATE
         exit $LASTEXITCODE
     }
     if ($Action -eq "safe-reconcile") {

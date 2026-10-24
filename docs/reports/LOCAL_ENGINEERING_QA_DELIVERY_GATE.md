@@ -183,3 +183,46 @@ task history and manual reconciliation; do not delete journal files merely to
 force another attempt. A dry run never creates a journal entry. This is an
 incremental P1 #128/#152/#154 safeguard, **not** evidence of live owner-device
 operation, distributed scheduling, or a completed P2 release.
+
+
+## Authenticated real AI run -> offline source review (no manual JSON copying)
+
+When a real Founder-approved `internal:brief` model run has completed its
+five independent **AI Board recommendations** plus Project Manager and
+developer stages, AGO stores the resulting validated `engineering_candidate`
+in `ago_agent_runs`. Previously the operator had to manually copy JSON
+from a run and risk using the wrong task or a rejected Board candidate.
+
+With the existing local server running, open a separate PowerShell terminal
+in the repository root and run:
+
+```powershell
+.\scripts\ago.ps1 export-candidate
+```
+
+The operator enters the **exact completed run UUID** (from the Founder-visible
+agent run record) and a **new** JSON review file destination, then explicitly
+confirms. AGO prompts for the actual Founder organization ID, email and hidden
+password. Only localhost signed-in `GET /v1/console/me` and
+`GET /v1/agents/runs` are read. A non-Founder, missing/failed run, uncleared
+Board, missing unique AI staff, tampered code digest or existing output file
+fails closed. No raw chat, token, founder brief or model prose is copied into
+the export; only the exact validated code candidate and its original run IDs
+are retained.
+
+For example, after reviewing the newly exported file
+`./candidate-review.json`, the **existing** delivery gate can inspect
+that file and, separately, stage and run offline Docker tests:
+
+```powershell
+python scripts/ago_local_delivery_gate.py --input ./candidate-review.json --staged-directory ./candidate-stage-new --qa-output ./qa-handoff-new.json
+# After independently reviewing the generated code, explicit confirmation only:
+python scripts/ago_local_delivery_gate.py --input ./candidate-review.json --staged-directory ./candidate-stage-new --qa-output ./qa-handoff-new.json --apply --confirm STAGE_TEST_AND_PREPARE_QA
+```
+
+The export itself never executes code, starts Ollama, calls GitHub, grants QA,
+issues approvals, merges, publishes, or modifies the original run in PostgreSQL.
+The Docker gate can create an **unprivileged pending human QA packet** only if
+its isolated tests succeed. P2 completed-product acceptance still requires
+human review and a genuine AGO-origin GitHub operation, and must not be
+inferred from a local candidate or this export alone.
