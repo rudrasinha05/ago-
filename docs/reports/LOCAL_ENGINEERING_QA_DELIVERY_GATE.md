@@ -9,6 +9,24 @@ Owner's operating policy: the laptop owner decides when processes run. No cloud,
 3. `scripts/ago_verify_candidate.py` verifies manifest-to-files integrity again and, **only after explicit operator confirmation**, invokes the local Docker CLI. Docker has no network, cannot pull missing images, drops Linux capabilities, runs as non-root, and uses read-only files plus memory/CPU/process limits. It runs standard-library `unittest.TestCase` tests and refuses zero-test successes.
 4. The test receipt records SHA-256 candidate identity, real test count and process status, and always says GitHub not committed, independent QA not approved, and release not ready. A true result is **local container unit-test evidence only**.
 
+## Single-command manual delivery option
+
+The separate inspection/staging/QA commands below remain supported. For a reviewed full-Board receipt, an optional **one-command local handoff** combines the same guarded steps. It neither runs automatically nor grants any GitHub permission.
+
+Preview only:
+
+```powershell
+python scripts/ago_local_delivery_gate.py --input .\\review-receipt.json --staged-directory .\\reviewed-candidate --qa-output .\\ago-independent-qa-review.json
+```
+
+Only after personally reviewing the candidate's exact source and acceptance tests, and confirming that offline Docker is installed, explicitly allow local execution:
+
+```powershell
+python scripts/ago_local_delivery_gate.py --input .\\review-receipt.json --staged-directory .\\reviewed-candidate --qa-output .\\ago-independent-qa-review.json --apply --confirm STAGE_TEST_AND_PREPARE_QA
+```
+
+On failing tests, it retains the truthful failing receipt in the new staged directory and creates **no** QA packet. On passing tests, it creates only an **unsigned review request** outside the staged directory. Any optional GitHub draft needs four additional exact arguments (`--github-project-id`, `--github-operation-id`, `--github-expected-sha`, `--github-message`) and is never submitted by this command. Both output destinations must be new to prevent overwrites.
+
 ## Windows/PowerShell procedure
 
 Prerequisite: AGO backend package installed in a supported virtual environment, Docker Desktop running by the owner's choice, and an existing local `python:3.11-slim` image. This procedure does not automatically install or download the image. If Docker cannot run safely, stop; do not use host Python on AI-generated source as a shortcut.
