@@ -11,6 +11,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+
 from ago_verify_candidate import inspect
 
 KIND = "ago_independent_qa_review_request"
