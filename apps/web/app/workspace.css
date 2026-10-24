@@ -82,6 +82,8 @@
 .employee-inspector dl{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin:5px 0}
 .employee-inspector dt{color:#7cbfe6}.employee-inspector dd{color:#e2f2ff;margin:0;overflow-wrap:anywhere}
 .employee-inspector a,.command-delivery a{color:#7bcfff}
+.company-github-navigation{display:inline-flex;align-items:center;min-height:44px;padding:10px 12px;border-radius:9px;border:1px solid #4a85ab;text-underline-offset:3px;touch-action:manipulation}
+.company-github-navigation:focus-visible{outline:3px solid #93dfff;outline-offset:3px}
 .command-delivery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:15px}
 .command-delivery section{border:1px solid #284777;background:#0d1b37;border-radius:12px;padding:15px}
 .command-delivery p{font-size:11px;line-height:1.65;color:#aabedb}
