@@ -23,3 +23,28 @@ Retrieved 2026-10-10 using official primary documentation. These references info
 Security/distributed alternatives: OAuth/OIDC verification and encrypted MFA already have tested Section10 adapter contracts. This bibliography does not replace their recorded security evidence or external review. ADRs list RabbitMQ/Kafka, Temporal/Camunda, Neo4j/Qdrant and cloud stores as alternatives; no version or installation is asserted for unadopted products. Version authority is pyproject.toml for backend ranges, package-lock.json for npm exact resolution, deployment image tags for CI services and actual model manifest for embedding identity. Recheck primary docs and complete the full matrix before any upgrade.
 
 Do not use vendor marketing or generated summaries as authority for comparative performance, security certification or financial ROI. Future Phase12 comparisons require pinned environments, reproducible input/evaluation, raw results and stated uncertainty.
+
+
+## Original ten canonical links, preserved verbatim (P0 #18)
+
+Source: the founder-uploaded original generated blueprint, SHA-256
+`6589bc4f7e4f30287a61cefe3979b01d0b2a8357e3bb76dd6bb058d9e1daa1c4`.
+The original list is historical **reference material**, not a mandate to
+install every product on the founder's Windows laptop.
+
+| Original technology | Exact original reference | AGO disposition |
+|---|---|---|
+| FastAPI | https://fastapi.tiangolo.com/ | Adopted locally |
+| Next.js | https://nextjs.org/docs | Adopted locally |
+| PostgreSQL | https://www.postgresql.org/docs/ | Adopted locally |
+| Docker Compose | https://docs.docker.com/compose/ | Adopted for local preview/test |
+| Kubernetes | https://kubernetes.io/docs/ | Deferred; no production cluster |
+| Apache Kafka | https://kafka.apache.org/documentation/ | Deferred; PostgreSQL durable outbox selected |
+| Temporal | https://docs.temporal.io/ | Deferred; local task scheduler and durable journal selected |
+| OpenTelemetry | https://opentelemetry.io/docs/ | Documentation reference; no hosted collector claimed |
+| HashiCorp Vault | https://developer.hashicorp.com/vault/docs | Production/optional vault deferred; local protected secrets only |
+| Qdrant | https://qdrant.tech/documentation/ | Local vector index/embedding alternative selected, no Qdrant server claimed |
+
+Compare the recovered canonical list and later curated engineering links
+using `scripts/check_p0_original_parity.py`. No undocumented technology
+adoption or external certification is implied.

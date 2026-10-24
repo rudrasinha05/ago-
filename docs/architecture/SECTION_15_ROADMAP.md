@@ -68,3 +68,35 @@ Security signoff: existing CI proves bounded auth/tenant/independent approval be
 Backlog: keep Sections21–34 statuses unchanged; full OOS, state awareness, multilevel planning, invoiced economics, marketplace, controlled evolution, calibrated twins, fair comparisons, formal constitutional amendments, calendar cycles, full ontology, psychology validation, complete analytics and public integrations require their own frozen batches. Production Phase11 requires a new owner scope decision. Recover complete original source before exact parity acceptance.
 
 Historical milestone evidence remains in docs/ARCHITECTURE_STATUS_AND_BACKLOG.md and individual acceptance reports. This roadmap does not turn historical M1–M12 acceptance into completion of all original phases.
+
+
+## Recovered original generated blueprint — separate and preserved (P0 #15)
+
+The original founder-uploaded Phase −1 generated blueprint has **13 phases,
+numbered −1 through 11**, NOT the later Phase 0–12 plan in the table above.
+Original source SHA-256 recorded by source recovery:
+`6589bc4f7e4f30287a61cefe3979b01d0b2a8357e3bb76dd6bb058d9e1daa1c4`.
+The canonical exact historical crosswalk, with phase responsibilities, is
+[`SECTIONS15_18_SOURCE_VERIFICATION.md`](../reports/SECTIONS15_18_SOURCE_VERIFICATION.md).
+Original phase order:
+
+| Original phase | Name | Disposition for personal localhost |
+|---|---|---|
+| −1 | Architecture Baseline | Historical design stage, source recovered |
+| 0 | Engineering Foundation | Local foundations implemented; production alternatives deferred |
+| 1 | Identity, Audit, and Messaging Foundation | Bounded tenant security and PostgreSQL outbox tests |
+| 2 | Organization and Employee Core | Local registry and staff control present |
+| 3 | Workflow and Approval MVP | Local scoped workflow and independent decisions |
+| 4 | Memory MVP | Scoped memory and storage present |
+| 5 | Execution Sandbox MVP | Opt-in isolated Docker, live owner test outstanding |
+| 6 | Company Brain and Executive Council | Local governed Board and visualization, live model acceptance outstanding |
+| 7 | QA and Evaluation | Isolated tests and human QA workflow, real complete project acceptance outstanding |
+| 8 | Communication Hub | Internal messages, external delivery approvals scoped |
+| 9 | Simulation Lab | Bounded source-backed scenarios, predictions not externally validated |
+| 10 | Production Hardening | **Deferred** by Founder personal-use choice |
+| 11 | Microservice Extraction Readiness | **Optional/deferred**, monolith retained |
+
+Do not silently replace this original roadmap with later Phase 0–12 or M1–M12
+milestone names, and do not close AI project delivery merely because a phase
+has a partially implemented module. Full section parity remains separately
+audited in `P0_34_SECTION_SOURCE_PARITY.json`.
