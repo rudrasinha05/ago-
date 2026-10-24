@@ -1044,6 +1044,10 @@ class IntegrationStorePort(Protocol):
 @runtime_checkable
 class CompanyOllamaChainQueriesPort(Protocol):
     def assignments(self, *, tenant_id: str, actor_id: str, task: Any) -> list[dict]: ...
+    def record_verified_handoff(
+        self, *, tenant_id: str, founder_id: str, task_id: str, role: str,
+        employee_id: str, blocked: bool, participants: list[dict],
+    ) -> None: ...
 
 
 @runtime_checkable
