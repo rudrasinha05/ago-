@@ -54,14 +54,14 @@ def forbidden(path: str) -> bool:
 
 def main() -> int:
     tracked = subprocess.check_output(["git", "ls-files", "-z"])
-    offending = sorted(x.decode("utf-8", errors="replace")
-                       for x in tracked.split(b"\0") if x
-                       and forbidden(x.decode("utf-8", errors="replace")))
+    offending = sum(
+        forbidden(item.decode("utf-8", errors="replace"))
+        for item in tracked.split(bytes([0])) if item
+    )
     if offending:
-        print("CONFIDENTIALITY FAILURE: tracked private paths:", file=sys.stderr)
-        for item in offending:
-            print("  " + item, file=sys.stderr)
-        print("Do not merely delete the working file: investigate Git history and exposure.",
+        # CI logs must not disclose founder project paths or key filenames.
+        print("CONFIDENTIALITY FAILURE: tracked private files detected", file=sys.stderr)
+        print("Investigate Git index and history in an access-controlled environment.",
               file=sys.stderr)
         return 2
     print("OK: no known confidential local directory or key material is tracked")

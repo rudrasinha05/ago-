@@ -63,3 +63,19 @@ def test_safe_example_dotenv_files_and_normal_source_are_not_blocked():
     ]
     for name in safe:
         assert not check.forbidden(name), name
+
+
+def test_ci_failure_does_not_print_private_paths(monkeypatch, capsys):
+    check = load()
+    confidential = b"client/PRIVATE-PROJECTS/FounderAcquisitionPlan.txt"
+    monkeypatch.setattr(
+        check.subprocess, "check_output",
+        lambda arguments: confidential + bytes([0]) + b"nested/.env.production.local" + bytes([0]),
+    )
+    assert check.main() == 2
+    output = capsys.readouterr()
+    assert "CONFIDENTIALITY FAILURE" in output.err
+    assert "FounderAcquisitionPlan" not in output.err
+    assert ".env.production.local" not in output.err
+    assert "PRIVATE-PROJECTS" not in output.err
+    assert not output.out
