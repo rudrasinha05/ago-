@@ -238,8 +238,11 @@ def test_opt_in_registers_handoff_under_existing_approved_task_action(monkeypatc
     assert set(h)=={"research:brief","project:plan","internal:brief"}
     result=h["internal:brief"](db.task())
     assert result["roles_completed"]==4
-    assert len(charges)==1 and charges[0]["amount"]=="4"
-    assert charges[0]["operation_key"]=="local-chain:"+db.task_id
+    assert len(charges)==4
+    assert [x["amount"] for x in charges]==["1"]*4
+    assert [x["operation_key"] for x in charges]==[
+        f"local-chain:{db.task_id}:role:{i}" for i in range(1,5)
+    ]
 
 
 
@@ -356,7 +359,11 @@ def test_full_board_charges_seven_virtual_attempts(monkeypatch):
     monkeypatch.setattr(handlers,"OllamaLocalTextProvider",Model)
     response=handlers.optional_model_handlers(db,actor,repositories=Repos())["internal:brief"](db.task())
     assert response["roles_completed"]==7
-    assert len(charged)==1 and charged[0]["amount"]=="7"
+    assert len(charged)==7
+    assert [x["amount"] for x in charged]==["1"]*7
+    assert [x["operation_key"] for x in charged]==[
+        f"local-chain:{db.task_id}:role:{i}" for i in range(1,8)
+    ]
 
 
 def test_disabled_chain_keeps_previous_no_model_execution(monkeypatch):

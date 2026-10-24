@@ -5,6 +5,7 @@ the exact model endpoint is tested separately. PostgreSQL approvals and stored
 run evidence are real and isolated to a disposable fixture transaction.
 """
 from uuid import uuid4
+from decimal import Decimal
 
 import json
 import pytest
@@ -157,7 +158,7 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         ORDER BY operation_key
     """,(info["tenant"],f"local-chain:{task_id}:role:%")).fetchall()
     assert len(usage)==expected_count
-    assert all(str(u["amount"]) in ("1", "1.00") for u in usage)
+    assert all(Decimal(u["amount"]) == Decimal("1") for u in usage)
     assert len({u["operation_key"] for u in usage})==expected_count
     assert float(CreditBudget(info["db"]).balance(tenant_id=info["tenant"])["consumed"])==expected_count
     assert result["roles_expected"]==(7 if full_board else 4)
