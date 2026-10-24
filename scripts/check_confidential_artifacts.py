@@ -32,14 +32,24 @@ SENSITIVE_NAME = re.compile(
 
 
 def forbidden(path: str) -> bool:
+    """Reject private material regardless of directory depth, case or dot-env suffix."""
     normalized = PurePosixPath(path.replace("\\", "/"))
-    parts = normalized.parts
-    return (
-        any(p in PRIVATE_ROOTS for p in parts)
-        or any(SENSITIVE_NAME.fullmatch(part) for part in parts
-               if part not in (".env.example", ".env.sample", ".env.template", ".env.dist"))
-        or str(normalized).lower().endswith(SECRET_SUFFIXES)
-    )
+    parts = tuple(part.casefold() for part in normalized.parts)
+    if ".." in parts or any(part in PRIVATE_ROOTS for part in parts):
+        return True
+    safe_env_templates = frozenset({
+        ".env.example", ".env.sample", ".env.template", ".env.dist",
+    })
+    for part in parts:
+        if (part == ".env" or part.startswith(".env.")) and part not in safe_env_templates:
+            return True
+        if part in {".envrc", ".npmrc", ".pypirc", ".netrc", "kubeconfig"}:
+            return True
+        if part in {".ssh", ".aws", ".azure", ".kube"}:
+            return True
+        if SENSITIVE_NAME.fullmatch(part) and part not in safe_env_templates:
+            return True
+    return str(normalized).casefold().endswith(SECRET_SUFFIXES)
 
 
 def main() -> int:

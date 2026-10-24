@@ -35,3 +35,31 @@ def test_safe_templates_and_source_remain_eligible():
     ]
     for name in allowed:
         assert not check.forbidden(name), name
+
+
+def test_nested_dotenv_variants_case_insensitive_paths_and_cloud_tokens_blocked():
+    check = load()
+    dangerous = [
+        ".env.production.local", "nested/.env.staging.backup",
+        "apps/backend/.ENV.PRODUCTION.local", "company/PRIVATE-PROJECTS/brief.md",
+        "nested/.ssh/id_ecdsa", ".aws/credentials", ".azure/accessTokens.json",
+        "user/.kube/config", "nested/.npmrc", "nested/.pypirc",
+        "nested/.netrc", "nested/kubeconfig", "nested/SECRETS-2026.JSON",
+        "nested/credentials.TXT", "nested/.env.example.local",
+        r"apps\\web\\PRIVATE-PROJECTS\\confidential.txt",
+        "nested/../backup/public.md",
+    ]
+    for name in dangerous:
+        assert check.forbidden(name), name
+
+
+def test_safe_example_dotenv_files_and_normal_source_are_not_blocked():
+    check = load()
+    safe = [
+        ".env.example", ".env.sample", ".env.template", ".env.dist",
+        "examples/.env.example", "apps/web/.env.template",
+        "docs/architecture/SECTION_10_SECURITY_ARCHITECTURE.md",
+        "deploy/docker/Dockerfile",
+    ]
+    for name in safe:
+        assert not check.forbidden(name), name
