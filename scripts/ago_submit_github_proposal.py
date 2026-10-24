@@ -16,9 +16,9 @@ from uuid import UUID
 
 from ago.company_engineering import draft_github_commit_operation
 from ago_engineering_candidate import inspect as inspect_run
-from ago_human_qa_handoff import DurableAttemptJournal, LOCAL_OPENER, read_document
+from ago_human_qa_handoff import LOCAL_OPENER, read_document
 from ago_prepare_github_handoff import verified_qa
-from local_approved_agent_batch import founder_login, local_url
+from local_approved_agent_batch import DurableAttemptJournal, founder_login, local_url
 
 CONFIRM = "SUBMIT_QA_VERIFIED_GITHUB_PROPOSAL"
 
