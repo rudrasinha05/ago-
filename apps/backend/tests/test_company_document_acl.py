@@ -106,3 +106,57 @@ def test_vault_rejects_bad_identity_cross_project_and_implicit_powers(case):
     assert client.get(BASE+"/documents/"+doc["id"],headers=f).json()["classification"]==(
         "project_restricted"
     )
+
+
+def test_p0_founder_brief_and_doc_body_never_leak_to_unrelated_staff_surfaces(case):
+    client, headers, info = case
+    founder, staff = headers["founder"], headers["reviewer"]
+    marker = "P0_CONFIDENTIAL_PROJECT_NEVER_EXPORT_9CB24C"
+    document_marker = "P0_CONFIDENTIAL_DOC_NEVER_EXPORT_17F5AC"
+    project = post(client, BASE + "/projects/start", founder, {
+        "brief": marker + " is an unreleased project and must remain private.",
+        "operation_key": str(uuid4()),
+    })
+    doc = post(client, BASE + "/projects/" + project["id"] + "/documents", founder, {
+        "title": "Restricted project investment memo",
+        "body": document_marker + " contains founder-only source data.",
+        "classification": "founder_only",
+    })
+    assert client.get(BASE + "/documents/" + doc["id"], headers=staff).status_code == 403
+    assert client.get(BASE + "/projects/" + project["id"] + "/documents", headers=staff).json() == []
+    endpoints = [
+        BASE + "/projects",
+        BASE + "/projects/" + project["id"],
+        BASE + "/reports",
+        BASE + "/activity",
+        BASE + "/notifications",
+        BASE + "/approvals",
+        BASE + "/chat",
+        BASE + "/opportunities",
+        BASE + "/market-intelligence",
+        "/v1/enterprise/analytics/reports",
+        "/v1/enterprise/analytics/dashboard?dashboard=executive",
+        "/v1/knowledge/nodes",
+        "/v1/knowledge/documents",
+        "/v1/tools/runs",
+        "/v1/insights/scorecard",
+        "/v1/platform/catalog",
+    ]
+    for endpoint in endpoints:
+        response = client.get(endpoint, headers=staff)
+        assert response.status_code in (200, 401, 403, 404), (
+            endpoint, response.status_code
+        )
+        assert marker not in response.text, endpoint
+        assert document_marker not in response.text, endpoint
+    assert client.get(BASE + "/documents/" + doc["id"], headers=founder).status_code == 200
+    founders_list = client.get(
+        BASE + "/projects/" + project["id"] + "/documents", headers=founder
+    )
+    assert founders_list.status_code == 200
+    assert document_marker not in founders_list.text
+    for endpoint in (BASE + "/documents/" + doc["id"],
+                     BASE + "/projects/" + project["id"] + "/documents"):
+        response = client.get(endpoint)
+        assert response.status_code == 401
+        assert document_marker not in response.text

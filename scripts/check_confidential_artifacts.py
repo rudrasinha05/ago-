@@ -6,6 +6,7 @@ does NOT prevent accidental forced 'git add -f' or historical commits.
 from __future__ import annotations
 
 from pathlib import PurePosixPath
+import re
 import subprocess
 import sys
 
@@ -18,13 +19,26 @@ PRIVATE_ROOTS = frozenset({
     "confidential-documents",
     "local-private",
 })
-SECRET_SUFFIXES = (".pem", ".p12", ".pfx", ".key", ".dump", ".backup")
+SECRET_SUFFIXES = (
+    ".pem", ".p12", ".pfx", ".key", ".dump", ".backup",
+    ".pgdump", ".sqlite", ".sqlite3", ".age", ".asc",
+)
+SENSITIVE_NAME = re.compile(
+    r"(?i)^(?:\.env(?:\.[^.]+)?|id_(?:rsa|dsa|ed25519)|"
+    r"(?:.*[-_.])?(?:credentials?|service[-_.]?account|"
+    r"private[-_.]?key|secrets?)[-_.]?[^/]*\.(?:json|ya?ml|ini|toml|txt))$"
+)
+
 
 
 def forbidden(path: str) -> bool:
     normalized = PurePosixPath(path.replace("\\", "/"))
-    return (bool(normalized.parts and normalized.parts[0] in PRIVATE_ROOTS)
-            or str(normalized).lower().endswith(SECRET_SUFFIXES))
+    parts = normalized.parts
+    return (
+        any(p in PRIVATE_ROOTS for p in parts)
+        or any(SENSITIVE_NAME.fullmatch(part) for part in parts)
+        or str(normalized).lower().endswith(SECRET_SUFFIXES)
+    )
 
 
 def main() -> int:
