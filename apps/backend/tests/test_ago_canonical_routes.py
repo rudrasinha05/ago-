@@ -47,7 +47,7 @@ def test_raw_company_links_respect_the_next_basepath():
     assert "import Link from 'next/link';" in company
     # Next Link accepts extra accessibility/touch-target props before href.
     # Count real Next Link elements, not a brittle exact JSX attribute order.
-    assert len(re.findall(r'<Link\\b[^>]*\\bhref="/tools/"', company)) == 2
+    assert len(re.findall(r'<Link[^>]*href="/tools/"', company)) == 2
     assert '<Link className="company-github-navigation" href="/tools/"' in company
     css = (root / "apps/web/app/workspace.css").read_text(encoding="utf-8")
     assert ".company-github-navigation{display:inline-flex" in css
