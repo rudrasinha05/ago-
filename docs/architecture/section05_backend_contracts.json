@@ -292,7 +292,7 @@
           "returns": "Any"
         },
         "notifications": {
-          "arguments": "self, tenant_id: str, reader_id: str | None=None",
+          "arguments": "self, tenant_id: str, reader_id: str | None=None, after_id: int | None=None",
           "returns": "dict"
         },
         "governance": {
