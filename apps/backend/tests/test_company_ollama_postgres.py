@@ -4,10 +4,10 @@ Uses an injected fake *local* provider, not cloud inference or laptop Ollama;
 the exact model endpoint is tested separately. PostgreSQL approvals and stored
 run evidence are real and isolated to a disposable fixture transaction.
 """
-from uuid import uuid4
-from decimal import Decimal
-
 import json
+from decimal import Decimal
+from uuid import uuid4
+
 import pytest
 
 from ago.credits import CreditBudget
