@@ -72,6 +72,9 @@ on:
       - "apps/backend/tests/test_company_first_run_postgres.py"
       - "apps/web/components/company-first-run.jsx"
       - "apps/web/components/company-execution-desk.jsx"
+      - "apps/web/components/company-github-delivery.jsx"
+      - "apps/web/components/company-github-delivery-state.js"
+      - "scripts/test_company_github_delivery.mjs"
       - "packages/sdk/company-first-run.js"
       - "apps/backend/ago/company_ollama_chain_queries.py"
 
@@ -184,6 +187,8 @@ jobs:
               exit 2
             }
           }
+      - name: Verify live GitHub delivery states are honest and fail closed
+        run: node --experimental-default-type=module --test scripts/test_company_github_delivery.mjs
       - name: Parse real Company Map browser acceptance before build
         run: node --check scripts/test_company_map_browser.mjs
       - name: Build founder company web cockpit

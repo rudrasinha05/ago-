@@ -10,6 +10,7 @@ import {CompanyApprovals} from './company-approvals';
 import {CompanyApprovalBadge} from './company-approval-badge';
 import {ManagementWorkload} from './company-management';
 import {CompanyExecutionDesk} from './company-execution-desk';
+import {CompanyGithubDelivery} from './company-github-delivery';
 import {CompanyRolePlanner} from './company-role-planner';
 import {OpportunityRadar} from './company-opportunities';
 const BASE='/v1/organization/company';
@@ -225,6 +226,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       {founderView&&me.permissions?.includes('organization:manage')&&<a href="#ago-role-planner">Roles & Expertise</a>}
        {me.permissions?.includes('task:read')&&<a href="#ago-execution-desk">Execution Desk</a>}
        {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
+       {founderView&&<a href="#ago-github-delivery">Project Delivery</a>}
       <a href="#ago-company-org-map">Organization & Chat</a>
     </nav>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
@@ -233,6 +235,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
      <CompanyExecutionDesk api={api} me={me} tasks={tasks} approvals={approvalList} employees={employees} onChange={async()=>{await refreshActivity();await refreshEvents();setApprovalRefresh(v=>v+1);}} onEmployee={id=>choose('employee:'+id)}/>
      <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
+     {founderView&&<CompanyGithubDelivery api={api} me={me}/>} 
     <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
     <div id="ago-company-org-map" className={"company-shell"+(fullscreen?" company-fullscreen":"")} aria-label="Organization map workspace">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>

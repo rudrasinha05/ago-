@@ -350,3 +350,22 @@
 .brain-work-state.work-running{color:#ff87aa}
 .brain-work-state.work-waiting{color:#f4d198}
 .brain-work-detail>p{color:#91a7c4;font-size:11px}
+
+/* Real AGO approval/dispatch records; never animate nonexistent project work. */
+.company-github-desk{margin:19px 0;padding:20px;border:1px solid #41698f;border-radius:14px;background:#0b1c34;color:#e7f4ff}
+.company-github-desk header{display:flex;gap:15px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.company-github-desk h3{margin:0;font-size:20px}
+.company-github-desk h4{margin:0 0 8px;font-size:15px;overflow-wrap:anywhere}
+.company-github-desk p,.company-github-desk small{font-size:12px;line-height:1.65;color:#bbcee7}
+.company-github-desk button,.company-github-confirm select{min-height:42px;border:1px solid #648db7;border-radius:9px;padding:8px 13px;background:#204169;color:#f0faff;cursor:pointer}
+.company-github-desk button:disabled{opacity:.5;cursor:not-allowed}
+.company-github-desk a{color:#92d8ff}
+.company-github-project{border:1px solid #355880;border-radius:11px;background:#0c2545;margin-top:13px;padding:14px}
+.github-delivery-operation{display:grid;gap:8px;margin-top:9px;padding:12px;border-left:3px solid #589ee7;background:#0b1a35;border-radius:8px}
+.github-delivery-operation small,.github-delivery-operation strong{overflow-wrap:anywhere}
+.github-delivery-operation code{word-break:break-all}
+.github-delivery-operation button{justify-self:start}
+.company-github-confirm{display:grid;gap:7px;margin-top:16px;font-weight:700;max-width:590px}
+.company-github-footnote{padding-top:9px;border-top:1px solid #355880}
+#ago-github-delivery{scroll-margin-top:75px}
+@media(max-width:650px){.company-github-desk{padding:13px}.company-github-desk header{align-items:flex-start;flex-direction:column}}
