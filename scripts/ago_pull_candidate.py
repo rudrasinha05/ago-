@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
-import sys
 from pathlib import Path
 from urllib.request import Request, urlopen
 from uuid import UUID
