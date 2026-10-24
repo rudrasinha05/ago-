@@ -168,6 +168,7 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     visible=info["db"].execute("""
         SELECT employee_id,body FROM ago_company_chat
         WHERE tenant_id=%s AND task_id=%s AND kind='status'
+          AND body LIKE 'AGO verified local inference for %'
         ORDER BY id
     """,(info["tenant"],task_id)).fetchall()
     assert len(visible)==expected_count
