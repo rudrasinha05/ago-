@@ -103,6 +103,11 @@ on:
       - "apps/backend/tests/test_company_ceo_stage_scope.py"
       - "apps/web/components/company-founder-decision.js"
       - ".github/workflows/company-growth-contract.yml"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+
 jobs:
   growth:
     runs-on: ubuntu-latest
