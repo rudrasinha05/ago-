@@ -244,6 +244,11 @@
       "layer": "foundation",
       "imports": []
     },
+    "audit_redaction": {
+      "context": "governance",
+      "layer": "foundation",
+      "imports": []
+    },
     "auth_api": {
       "context": "transport",
       "layer": "transport",
@@ -994,6 +999,7 @@
       "context": "governance",
       "layer": "persistence",
       "imports": [
+        "audit_redaction",
         "backend_contracts",
         "governance_domain",
         "security"

@@ -36,7 +36,8 @@ def forbidden(path: str) -> bool:
     parts = normalized.parts
     return (
         any(p in PRIVATE_ROOTS for p in parts)
-        or any(SENSITIVE_NAME.fullmatch(part) for part in parts)
+        or any(SENSITIVE_NAME.fullmatch(part) for part in parts
+               if part not in (".env.example", ".env.sample", ".env.template", ".env.dist"))
         or str(normalized).lower().endswith(SECRET_SUFFIXES)
     )
 
