@@ -12,7 +12,7 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 run-approved-engineering  # refuse non-Ollama fallback; real 7-role AI coding
 .\scripts\ago.ps1 watch-approved-internal  # up to 60 minutes or 10 tasks; Ctrl+C stops
 .\scripts\ago.ps1 export-candidate  # exact completed Board-cleared AI run -> new local source review
-.\scripts\ago.ps1 test-exported-candidate  # reviewed exact source -> offline Docker -> pending independent QA
+.\scripts\ago.ps1 test-exported-candidate  # reviewed source -> Docker -> pending independent QA
 #>
 param(
     [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate")]
@@ -124,52 +124,7 @@ try {
     if ($Action -eq "test-exported-candidate") {
         Write-Host "Review private AI source before testing. Docker stays offline; human QA is separate."
         $RunId = Read-Host "Exact exported AGO agent run ID (UUID)"
-        if ($RunId -notmatch '^[0-9a-fA-F-]{36}
-        if (-not $env:AGO_MARKET_TENANT_ID) {
-            throw "Set existing AGO_MARKET_TENANT_ID before local recovery."
-        }
-        & python ../../scripts/company_safe_reconcile.py --tenant-id $env:AGO_MARKET_TENANT_ID
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        $Confirmation = Read-Host "To mark abandoned local runs FAILED without replay, type MARK_STALE_FAILED"
-        if ($Confirmation -cne "MARK_STALE_FAILED") {
-            Write-Host "Recovery cancelled. No state changed."
-            exit 2
-        }
-        & python ../../scripts/company_safe_reconcile.py --tenant-id $env:AGO_MARKET_TENANT_ID --apply --confirm MARK_STALE_FAILED
-        exit $LASTEXITCODE
-    }
-    if ($Action -eq "market-watch") {
-        if (-not $env:AGO_MARKET_TENANT_ID) {
-            throw "Set AGO_MARKET_TENANT_ID to your actual company UUID before launching market research."
-        }
-        & python ../../scripts/company_market_watch.py --tenant-id $env:AGO_MARKET_TENANT_ID --interval-seconds 3600
-        exit $LASTEXITCODE
-    }
-    if ($Action -eq "serve") {
-        # The retired M9 frontend no longer exists in the application package.
-        # Founder starts this foreground server and decides when to shut it down.
-        # Research is NEVER implicitly started by setting a tenant variable.
-        # To run research, the founder launches 'market-watch' separately.
-        Write-Host "AGO local server only. Market watcher is not auto-started."
-        $VisualRoute = Join-Path $BackendPath "ago\frontend\organization\index.html"
-        if (Test-Path -LiteralPath $VisualRoute -PathType Leaf) {
-            Write-Host "Visual Company Map: http://127.0.0.1:$Port/workspace/organization/"
-        }
-        else {
-            Write-Host "Company Map React frontend is not packaged. From repo root use .\\scripts\\ago-visual.ps1"
-            Write-Host "Old /console/ redirects to the visual Company Map; no duplicate UI."
-        }
-        & python -m ago.local_ops serve --port $Port
-    }
-    else {
-        & python -m ago.local_ops $Action
-    }
-    exit $LASTEXITCODE
-}
-finally {
-    Pop-Location
-}
-) {
+        if ($RunId -notmatch '^[0-9a-fA-F-]{36}$') {
             throw "A valid run UUID is required."
         }
         $InputFile = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
@@ -192,52 +147,7 @@ finally {
             throw "Full Board-approved source evidence is required for this command."
         }
         $Digest = $Preview.candidate_sha256
-        if ($Digest -notmatch '^[0-9a-f]{64}
-        if (-not $env:AGO_MARKET_TENANT_ID) {
-            throw "Set existing AGO_MARKET_TENANT_ID before local recovery."
-        }
-        & python ../../scripts/company_safe_reconcile.py --tenant-id $env:AGO_MARKET_TENANT_ID
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        $Confirmation = Read-Host "To mark abandoned local runs FAILED without replay, type MARK_STALE_FAILED"
-        if ($Confirmation -cne "MARK_STALE_FAILED") {
-            Write-Host "Recovery cancelled. No state changed."
-            exit 2
-        }
-        & python ../../scripts/company_safe_reconcile.py --tenant-id $env:AGO_MARKET_TENANT_ID --apply --confirm MARK_STALE_FAILED
-        exit $LASTEXITCODE
-    }
-    if ($Action -eq "market-watch") {
-        if (-not $env:AGO_MARKET_TENANT_ID) {
-            throw "Set AGO_MARKET_TENANT_ID to your actual company UUID before launching market research."
-        }
-        & python ../../scripts/company_market_watch.py --tenant-id $env:AGO_MARKET_TENANT_ID --interval-seconds 3600
-        exit $LASTEXITCODE
-    }
-    if ($Action -eq "serve") {
-        # The retired M9 frontend no longer exists in the application package.
-        # Founder starts this foreground server and decides when to shut it down.
-        # Research is NEVER implicitly started by setting a tenant variable.
-        # To run research, the founder launches 'market-watch' separately.
-        Write-Host "AGO local server only. Market watcher is not auto-started."
-        $VisualRoute = Join-Path $BackendPath "ago\frontend\organization\index.html"
-        if (Test-Path -LiteralPath $VisualRoute -PathType Leaf) {
-            Write-Host "Visual Company Map: http://127.0.0.1:$Port/workspace/organization/"
-        }
-        else {
-            Write-Host "Company Map React frontend is not packaged. From repo root use .\\scripts\\ago-visual.ps1"
-            Write-Host "Old /console/ redirects to the visual Company Map; no duplicate UI."
-        }
-        & python -m ago.local_ops serve --port $Port
-    }
-    else {
-        & python -m ago.local_ops $Action
-    }
-    exit $LASTEXITCODE
-}
-finally {
-    Pop-Location
-}
-) {
+        if ($Digest -notmatch '^[0-9a-f]{64}$') {
             throw "Exact source digest missing."
         }
         Write-Host "Source review file: $InputFile"
