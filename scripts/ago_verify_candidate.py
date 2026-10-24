@@ -128,12 +128,26 @@ def verify(directory: str | Path, *, apply: bool = False, confirm: str | None = 
     seen = re.findall(r"(?:^|\n)AGO_UNITTEST_CASES=(\d+)(?:\r?\n|$)", output)
     count = int(seen[0]) if len(seen) == 1 else 0
     passed = result.returncode == 0 and count >= 1
+    # Raw model-supplied test output is never preserved. A bounded class label
+    # improves human debugging without exposing original exception messages.
+    failure_category = "none" if passed else "tests_not_discovered" if not count else next(
+        (label for token, label in (
+            ("AssertionError", "assertion_failure"),
+            ("ModuleNotFoundError", "missing_module"),
+            ("ImportError", "import_error"),
+            ("SyntaxError", "syntax_error"),
+            ("TypeError", "type_error"),
+            ("PermissionError", "permission_error"),
+        ) if token in output), "unclassified_failure"
+    )
     receipt = {
         "kind": "ago_local_container_unittest_receipt",
         "candidate_sha256": evidence["candidate_sha256"],
         "tests_executed": count >= 1,
         "tests_passed": passed,
         "unittest_cases": count,
+        "failure_category": failure_category,
+        "failure_category_advisory_only": True,
         "docker_exit_code": result.returncode,
         "network_disabled": True,
         "read_only_container": True,

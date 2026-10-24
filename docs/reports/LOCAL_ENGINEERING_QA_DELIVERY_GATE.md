@@ -63,7 +63,7 @@ The `--repair-from` directory is mandatory for repairs: its **original failed Do
 
 A passing retest still needs a **separate authenticated human QA decision**. If it fails again, the same attempt cannot be reused; inspect evidence, start a new reviewed attempt or stop. No auto-replay after model or Docker timeouts.
 
-Test stdout/stderr may contain confidential founder data. Current container receipts retain an SHA-256 digest and only a **redacted** output marker, not raw failure logs. Existing historical receipts should still be handled as confidential.
+Test stdout/stderr may contain confidential founder data. Current container receipts retain an SHA-256 digest, a **redacted** output marker and a fixed advisory failure category (such as assertion failure or missing module), never the raw private exception message. Only that bounded category can be included in the next local model's repair prompt. Existing historical receipts should still be handled as confidential.
 
 ## Exact P0 + P1 + P2 tracking
 

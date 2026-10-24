@@ -159,3 +159,20 @@ def test_docker_qa_receipt_never_persists_private_stdout_or_terminal_control_cod
         assert disallowed not in saved
     assert result["output_excerpt"].startswith("REDACTED:")
     assert result["independent_qa_approved"] is False
+
+
+
+def test_failure_category_only_exposes_bounded_reason_not_raw_private_trace(tmp_path):
+    directory, _ = staged(tmp_path)
+    private = "FOUNDERS_CONFIDENTIAL_TEST_DATA"
+    def execute(_command, **kwargs):
+        return SimpleNamespace(
+            returncode=1, stdout="AGO_UNITTEST_CASES=1\\n",
+            stderr="AssertionError: " + private + "\\n",
+        )
+    result = MODULE["verify"](directory, apply=True, confirm=MODULE["CONFIRM"],
+                              runner=execute)
+    assert result["tests_passed"] is False
+    assert result["failure_category"] == "assertion_failure"
+    assert result["failure_category_advisory_only"] is True
+    assert private not in (directory / "AGO_TEST_RECEIPT.json").read_text()
