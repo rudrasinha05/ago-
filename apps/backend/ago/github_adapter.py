@@ -155,9 +155,17 @@ def execute(project: dict, operation: dict, marker: str) -> dict:
         request("PATCH", root + "/git/refs/heads/develop", {"sha": commit["sha"], "force": False})
         return {"sha": commit["sha"], "tree": created["sha"]}
     if name == "create_pull_request":
+        if not current["private"] or project.get("private") is not True:
+            raise PermissionError("Draft PR must target the bound private repository")
         head = request("GET", root + "/git/ref/heads/develop")["object"]["sha"]
         if head != payload["expected_sha"]:
             raise PermissionError("Reviewed release head changed")
+        ci = inspect_required_ci(
+            project, expected_sha=head,
+            required_checks=tuple(payload["required_checks"]),
+        )
+        if ci["ci_verified"] is not True:
+            raise PermissionError("All independently reviewed required CI checks must pass")
         result = request(
             "POST",
             root + "/pulls",
@@ -246,11 +254,17 @@ def validate_operation(value: dict) -> None:
         "create_issue": {"title", "body"},
         "update_issue": {"number", "title", "body", "state"},
         "commit_files": {"expected_sha", "message", "files"},
-        "create_pull_request": {"expected_sha", "title", "body"},
+        "create_pull_request": {"expected_sha", "title", "body", "required_checks"},
     }
     op, p = value["operation"], value["payload"]
     if op not in schemas or not isinstance(p, dict) or set(p) != schemas[op]:
         raise ValueError("Exact supported GitHub operation fields required")
+    if op == "create_pull_request":
+        checks = p["required_checks"]
+        if (not isinstance(checks, list) or not 1 <= len(checks) <= 24
+                or any(not isinstance(x, str) or not 1 <= len(x) <= 120 for x in checks)
+                or len(set(checks)) != len(checks)):
+            raise ValueError("Explicit unique required CI names are mandatory for draft PR")
     if op == "link_repository" and (
         type(p["repository_id"]) is not int
         or p["repository_id"] <= 0

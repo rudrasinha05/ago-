@@ -69,7 +69,8 @@ def test_unsafe_github_changes_rejected(operation, payload):
         ),
         (
             "create_pull_request",
-            {"expected_sha": "a" * 40, "title": "Release", "body": "Independent QA"},
+            {"expected_sha": "a" * 40, "title": "Release", "body": "Independent QA",
+             "required_checks": ["Backend QA", "Browser QA"]},
         ),
     ],
 )
@@ -102,6 +103,13 @@ def test_exact_private_owner_provider_requests(monkeypatch, operation, payload):
             return {"sha": "c" * 40}
         if path.endswith("/git/commits"):
             return {"sha": "d" * 40}
+        if path.endswith("/check-runs?per_page=100"):
+            return {"total_count": 2, "check_runs": [
+                {"name": "Backend QA", "status": "completed", "conclusion": "success"},
+                {"name": "Browser QA", "status": "completed", "conclusion": "success"},
+            ]}
+        if path.endswith("/status"):
+            return {"statuses": []}
         return {"number": 1, "html_url": "https://github.com/" + gh.OWNER + "/project/pull/1"}
 
     monkeypatch.setattr(gh, "request", request)
@@ -270,3 +278,51 @@ def test_ci_gate_refuses_truncated_evidence(monkeypatch):
         gh.inspect_required_ci({"repository": "project", "repository_id": 42,
                                 "private": True}, expected_sha="a" * 40,
                                required_checks=("Required QA",))
+
+
+@pytest.mark.parametrize("mode", ["pending", "failed", "missing", "duplicate", "public", "changed_head"])
+def test_draft_pr_cannot_bypass_server_provider_ci_or_repo_privacy(monkeypatch, mode):
+    calls = []
+
+    def provider(method, path, body=None):
+        calls.append((method, path, body))
+        if path.endswith("/project"):
+            return {"owner": {"login": gh.OWNER}, "id": 42,
+                    "private": mode != "public", "archived": False}
+        if path.endswith("/git/ref/heads/develop"):
+            return {"object": {"sha": "b" * 40 if mode == "changed_head" else "a" * 40}}
+        if path.endswith("/check-runs?per_page=100"):
+            rows = [] if mode == "missing" else [{
+                "name": "Backend QA",
+                "status": "in_progress" if mode == "pending" else "completed",
+                "conclusion": "failure" if mode == "failed" else "success",
+            }]
+            if mode == "duplicate":
+                rows = rows + rows
+            return {"total_count": len(rows), "check_runs": rows}
+        if path.endswith("/status"):
+            return {"statuses": []}
+        raise AssertionError("Unapproved provider POST was attempted")
+    monkeypatch.setattr(gh, "request", provider)
+    op = {
+        "operation": "create_pull_request",
+        "payload": {"expected_sha": "a" * 40, "title": "Review candidate",
+                    "body": "Independent human QA",
+                    "required_checks": ["Backend QA"]},
+    }
+    gh.validate_operation(op)
+    with pytest.raises(PermissionError):
+        gh.execute({"repository": "project", "repository_id": 42,
+                    "private": True}, op, "ago-operation:123")
+    assert all(method == "GET" for method, _, _ in calls)
+
+
+@pytest.mark.parametrize("checks", [[], ["same", "same"], [""], ["QA"] * 25,
+                                       "Backend QA", [1], [""]])
+def test_pr_schema_denies_unreviewed_ci_requirements(checks):
+    with pytest.raises(ValueError):
+        gh.validate_operation({
+            "operation": "create_pull_request",
+            "payload": {"expected_sha": "a" * 40, "title": "Review",
+                        "body": "Evidence", "required_checks": checks},
+        })
