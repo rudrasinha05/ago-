@@ -145,6 +145,22 @@ class CompanyOllamaChainQueries:
                if blocked else "; task proposal only; independent QA pending.")
         )
         with self.db.transaction():
+            # Lock the exact governed task so two callbacks/retries cannot
+            # duplicate a notification or forge work for a nonexistent task.
+            task = self.db.execute("""
+                SELECT id FROM ago_governed_tasks
+                WHERE tenant_id=%s AND id=%s FOR UPDATE
+            """, (tenant_id, task_id)).fetchone()
+            if task is None:
+                raise PermissionError("Verified worker event requires a real task")
+            existing = self.db.execute("""
+                SELECT id FROM ago_company_chat
+                WHERE tenant_id=%s AND task_id=%s AND employee_id=%s
+                  AND kind='status' AND body=%s
+                LIMIT 1
+            """, (tenant_id, task_id, employee_id, description)).fetchone()
+            if existing:
+                return
             self.db.execute("""
                 INSERT INTO ago_company_chat
                   (tenant_id,channel,author_id,author_name,body,kind,

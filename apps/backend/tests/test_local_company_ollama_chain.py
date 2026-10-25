@@ -54,6 +54,15 @@ class ApprovedProjectDb:
 
     def execute(self, sql, parameters):
         self.queries.append((sql,parameters))
+        if "SELECT id FROM ago_governed_tasks" in sql:
+            return Cursor([{"id": self.task_id}])
+        if "SELECT id FROM ago_company_chat" in sql:
+            prior = any(
+                item[0] == parameters[0] and item[-1] == parameters[1]
+                and item[-2] == parameters[2] and item[2] == parameters[3]
+                for item in self.events
+            )
+            return Cursor([{"id": 1}] if prior else [])
         if "INSERT INTO ago_company_chat" in sql:
             self.events.append(parameters)
             return Cursor([])
@@ -463,3 +472,26 @@ def test_p1_governed_chain_stops_before_next_inference_if_global_deadline_exhaus
             clock=lambda: now[0]
         )
     assert len(calls) == 1
+
+
+def test_duplicate_local_role_receipts_count_only_once_and_reject_nonparticipants():
+    db = ApprovedProjectDb()
+    query = CompanyOllamaChainQueries(db)
+    participants = query.assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task()
+    )
+    details = dict(
+        tenant_id=db.tenant, founder_id=db.founder, task_id=db.task_id,
+        role="ceo", employee_id=db.ceo, blocked=False, participants=participants,
+    )
+    query.record_verified_handoff(**details)
+    query.record_verified_handoff(**details)
+    assert len(db.events) == 1
+    assert db.events[0][2] == (
+        "AGO verified local inference for ceo; task proposal only; independent QA pending."
+    )
+    with pytest.raises(PermissionError, match="Unassigned"):
+        query.record_verified_handoff(
+            **{**details, "employee_id": db.pm}
+        )
+    assert len(db.events) == 1

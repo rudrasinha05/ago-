@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 
+from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.credits import CreditBudget
 from test_enterprise_http_21_27 import department
 from test_m7_http_postgres import case as case, post
@@ -179,6 +180,23 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
                for event in visible)
     if deny_risk:
         assert "Founder resolution" in visible[-1]["body"]
+    # A delayed duplicate completion callback is idempotent; every badge
+    # represents one recorded employee inference, not every network retry.
+    CompanyOllamaChainQueries(info["db"]).record_verified_handoff(
+        tenant_id=info["tenant"], founder_id=info["founder"],
+        task_id=task_id, role=expected_roles[0],
+        employee_id=expected_people[0], blocked=False,
+        participants=[
+            {"role": role, "employee_id": employee_id}
+            for role, employee_id in zip(expected_roles, expected_people)
+        ],
+    )
+    duplicate_count = info["db"].execute("""
+        SELECT count(*) AS n FROM ago_company_chat
+        WHERE tenant_id=%s AND task_id=%s AND kind='status'
+          AND body LIKE %s
+    """, (info["tenant"], task_id, "AGO verified local inference for %")).fetchone()
+    assert duplicate_count["n"] == expected_count
     assert float(CreditBudget(info["db"]).balance(tenant_id=info["tenant"])["consumed"])==expected_count
     assert result["roles_expected"]==(7 if full_board else 4)
     assert result["handoff_complete"] is not deny_risk
