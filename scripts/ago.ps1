@@ -393,9 +393,9 @@ finally {
         $ExportFile = Join-Path $PrivateExports ("live-" + $RunId + "-" + $AttemptId + ".json")
         $Stage = Join-Path $PrivateRuns ("stage-" + $AttemptId)
         $Qa = Join-Path $PrivateRuns ("qa-" + $AttemptId + ".json")
-        $Args = @("--local-url", "http://127.0.0.1:$Port", "--run-id", $RunId,
+        $WorkflowArgs = @("--local-url", "http://127.0.0.1:$Port", "--run-id", $RunId,
             "--export", $ExportFile, "--staged-directory", $Stage, "--qa-packet", $Qa)
-        $PreviewText = (& python ../../scripts/ago_live_to_qa.py @Args | Out-String).Trim()
+        $PreviewText = (& python ../../scripts/ago_live_to_qa.py @WorkflowArgs | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) {
             throw "Local authenticated engineering run was not eligible. No Docker execution."
         }
@@ -647,7 +647,7 @@ finally {
         if ($DockerConsent -cne "STAGE_TEST_AND_PREPARE_QA") {
             throw "Docker execution not authorized."
         }
-        & python ../../scripts/ago_live_to_qa.py @Args --apply --expected-candidate-sha256 $Digest --confirm-export $ExportConsent --confirm-docker $DockerConsent
+        & python ../../scripts/ago_live_to_qa.py @WorkflowArgs --apply --expected-candidate-sha256 $Digest --confirm-export $ExportConsent --confirm-docker $DockerConsent
         if ($LASTEXITCODE -ne 0) {
             throw "Local delivery failed or was blocked. Keep existing receipts; NEVER auto-retry."
         }
