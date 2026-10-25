@@ -1129,7 +1129,7 @@
           "returns": "None"
         },
         "list": {
-          "arguments": "self, *, tenant_id: str",
+          "arguments": "self, *, tenant_id: str, reader_id: str | None=None",
           "returns": "list[dict]"
         }
       }
@@ -1567,7 +1567,7 @@
           "returns": "str"
         },
         "list": {
-          "arguments": "self, *, tenant_id: str",
+          "arguments": "self, *, tenant_id: str, reader_id: str | None=None",
           "returns": "list[dict]"
         },
         "steps": {

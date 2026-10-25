@@ -171,6 +171,14 @@ def test_reviewed_prospective_experiment_actual_variant_output_and_later_qa(case
     )["payload"]
     assert after["complete"] and after["baseline"]["samples"] == after["candidate"]["samples"] == 2
     assert after["pass_rate_delta"] == 0 and not after["policy_promoted"]
+    # Agent results are founder-only; evidence keeps only a digest and the
+    # experiment metadata the measurement needs.
+    outcomes = after["source_outcomes"]
+    assert len(outcomes) == 4
+    assert all("result" not in o and len(o["result_sha256"]) == 64 for o in outcomes)
+    assert {o["experiment"]["variant"] for o in outcomes} == {"baseline", "candidate"}
+    listed = client.get(BASE + "/evidence?kind=experiment_measurement", headers=f)
+    assert listed.status_code == 200 and "review_checklist" not in listed.text
     post(
         client,
         BASE + "/evolution/register",
@@ -259,6 +267,13 @@ def test_financial_sources_require_independent_review_and_deny_duplicate_bytes(c
     identifier = cost(client, f, "cost")
     invoice = document(client, f, identifier, "invoice", "invoice")
     bank = document(client, f, identifier, "bank", "bank")
+    # The bulk evidence list never returns raw document bytes.
+    raw_invoice = base64.b64encode(b"Disposable test source invoice").decode()
+    listed = client.get(BASE + "/evidence?kind=financial_document", headers=f)
+    assert listed.status_code == 200 and raw_invoice not in listed.text
+    assert {x["id"] for x in listed.json()} >= {invoice["id"], bank["id"]}
+    assert all("content_base64" not in x["payload"] and x["payload"]["content_withheld"]
+               for x in listed.json())
     params = {
         "operation_key": "match",
         "matches": [{"invoice_id": invoice["id"], "bank_id": bank["id"]}],

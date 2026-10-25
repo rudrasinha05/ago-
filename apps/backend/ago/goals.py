@@ -63,12 +63,40 @@ class GoalStore:
                 (status, tenant_id, goal_id),
             )
 
-    def list(self, *, tenant_id: str) -> list[dict]:
-        return [
-            dict(row)
-            for row in self.db.execute(
-                """SELECT id,parent_id,title,description,status FROM ago_goals
-               WHERE tenant_id=%s ORDER BY created_at,id""",
-                (tenant_id,),
-            ).fetchall()
-        ]
+    def list(self, *, tenant_id: str, reader_id: str | None = None) -> list[dict]:
+        """List goals; a founder-intake project stays with that founder.
+
+        Founder project intake copies the private brief into the goal
+        (title = first brief line, description = whole brief; the Approval
+        Inbox excerpt reads it there). Company-wide ``brain:read`` must not
+        reveal either to anyone else, so for those goals both are replaced
+        unless ``reader_id`` is the intake's own founder. A missing reader
+        fails closed.
+        """
+        UUID(tenant_id)
+        if reader_id is not None:
+            UUID(reader_id)
+        rows = self.db.execute(
+            """SELECT g.id,g.parent_id,g.title,g.description,g.status,
+                  EXISTS (
+                    SELECT 1 FROM ago_founder_intakes i
+                    WHERE i.tenant_id=g.tenant_id AND i.goal_id=g.id
+                      AND i.founder_id IS DISTINCT FROM %s::uuid
+                  ) AS founder_confidential
+           FROM ago_goals g
+           WHERE g.tenant_id=%s ORDER BY g.created_at,g.id""",
+            (reader_id, tenant_id),
+        ).fetchall()
+        return [_confidential_view(dict(row), "description") for row in rows]
+
+
+CONFIDENTIAL_TITLE = "Confidential founder project"
+
+
+def _confidential_view(row: dict, *fields: str) -> dict:
+    """Replace private founder-intake text for readers who are not its founder."""
+    if row.get("founder_confidential"):
+        row["title"] = CONFIDENTIAL_TITLE
+        for field in fields:
+            row[field] = None
+    return row

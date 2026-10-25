@@ -62,7 +62,9 @@ def list_goals(
     repositories: RepositoryScope = Depends(repository_scope),
 ):
     allowed(repositories, actor, "brain:read")
-    return repositories.resolve(GoalStorePort).list(tenant_id=actor.tenant_id)
+    return repositories.resolve(GoalStorePort).list(
+        tenant_id=actor.tenant_id, reader_id=actor.subject
+    )
 
 
 @router.post("/plans")
@@ -92,7 +94,9 @@ def list_plans(
     repositories: RepositoryScope = Depends(repository_scope),
 ):
     allowed(repositories, actor, "brain:read")
-    return repositories.resolve(PlanStorePort).list(tenant_id=actor.tenant_id)
+    return repositories.resolve(PlanStorePort).list(
+        tenant_id=actor.tenant_id, reader_id=actor.subject
+    )
 
 
 @router.post("/plans/{plan_id}/steps")

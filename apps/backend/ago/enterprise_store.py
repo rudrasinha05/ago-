@@ -27,6 +27,55 @@ from ago.calendar_store import CalendarStore
 from ago.governance_domain import CONSTITUTION_LAWS
 
 
+def _outcome_without_result(row: dict) -> dict:
+    """Keep measurement metadata; replace the private agent result by its digest.
+
+    Agent run results can contain founder project excerpts and are founder-only
+    elsewhere. Evidence is listed to every ``operations:read`` holder, so it
+    keeps only the experiment fields the measurement needs plus a SHA-256.
+    """
+    from hashlib import sha256
+    result = row.pop('result', None)
+    experiment = (result or {}).get('experiment') if isinstance(result, dict) else None
+    row['result_sha256'] = (
+        sha256(json.dumps(result, sort_keys=True, default=str).encode()).hexdigest()
+        if result is not None else None
+    )
+    row['experiment'] = (
+        {'registration_digest': experiment.get('registration_digest'),
+         'variant': experiment.get('variant')}
+        if isinstance(experiment, dict) else None
+    )
+    return row
+
+
+def _evidence_list_view(row: dict) -> dict:
+    """Bulk evidence listing never carries raw source bytes.
+
+    Financial documents and measurement sources (prompts, outputs, owner
+    records) keep their bytes in ``content_base64``. The bulk list drops them,
+    the same way ``_measurement_rows`` already does; an independent reviewer
+    still sees one item through its approval details. The stored payload and
+    digest are unchanged.
+    """
+    payload = row.get('payload')
+    if not isinstance(payload, dict):
+        return row
+    withheld = False
+    if 'content_base64' in payload:
+        payload = {k: v for k, v in payload.items() if k != 'content_base64'}
+        withheld = True
+    intent = payload.get('intent')
+    if isinstance(intent, dict) and 'content_base64' in intent:
+        payload = {**payload, 'intent': {k: v for k, v in intent.items()
+                                         if k != 'content_base64'}}
+        withheld = True
+    if withheld:
+        payload['content_withheld'] = True
+        row['payload'] = payload
+    return row
+
+
 class EnterpriseOperationsStore:
     def __init__(self, connection: DatabaseConnection, *,
                  repositories: RepositoryScope | None = None):
@@ -2111,7 +2160,7 @@ class EnterpriseOperationsStore:
         ).fetchall()]
 
     def evidence(self, *, tenant_id: str, kind: str | None = None) -> list[dict]:
-        return [dict(r) for r in self.connection.execute(
+        return [_evidence_list_view(dict(r)) for r in self.connection.execute(
             """SELECT e.id,e.kind,e.operation_key,e.payload,e.digest,e.created_at,
                       r.approval_id,r.created_at AS reviewed_at
                FROM ago_enterprise_evidence e
@@ -2967,13 +3016,14 @@ class EnterpriseOperationsStore:
                     'source_review_ids': [str(x['review_id']) for x in selected]}
         before, after = metrics('baseline'), metrics('candidate')
         pending = len(assignment)-len(groups['baseline'])-len(groups['candidate'])
+        outcomes = [_outcome_without_result(dict(r)) for r in rows]
         return self._save_evidence(actor=actor, kind='experiment_measurement', operation_key=operation_key,
             payload={'registration_id': str(UUID(registration_id)), 'registration_digest': registration['digest'],
                      'baseline': before, 'candidate': after, 'pending_samples': pending,
                      'complete': pending == 0,
                      'pass_rate_delta': after['pass_rate']-before['pass_rate']
                        if before['pass_rate'] is not None and after['pass_rate'] is not None else None,
-                     'source_outcomes': [dict(r) for r in rows], 'policy_promoted': False,
+                     'source_outcomes': outcomes, 'policy_promoted': False,
                      'limits': 'Seeded bounded packet-layout intervention; small-sample outcomes do not establish general prompt or architecture superiority.'})
 
     def financial_document(self, *, actor: Principal, cost_id: str, document_type: str,

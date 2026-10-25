@@ -491,6 +491,7 @@
     "feature_flags": [],
     "github_adapter": [],
     "goals": [
+      "ago_founder_intakes",
       "ago_goals"
     ],
     "governance": [
@@ -636,6 +637,7 @@
     ],
     "plan_store": [
       "ago_employees",
+      "ago_founder_intakes",
       "ago_goals",
       "ago_plan_steps",
       "ago_strategy_plans"

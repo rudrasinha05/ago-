@@ -115,15 +115,31 @@ class PlanStore:
             )
         return approval.request_id
 
-    def list(self, *, tenant_id: str) -> list[dict]:
-        return [
-            dict(row)
-            for row in self.db.execute(
-                """SELECT id,goal_id,title,status,approval_id
-               FROM ago_strategy_plans WHERE tenant_id=%s ORDER BY created_at,id""",
-                (tenant_id,),
-            ).fetchall()
-        ]
+    def list(self, *, tenant_id: str, reader_id: str | None = None) -> list[dict]:
+        """List plans; a founder-intake plan title stays with that founder.
+
+        Intake plan titles are the first line of the private founder brief.
+        Readers other than that founder get a neutral title; a missing
+        reader fails closed.
+        """
+        UUID(tenant_id)
+        if reader_id is not None:
+            UUID(reader_id)
+        rows = [dict(row) for row in self.db.execute(
+            """SELECT p.id,p.goal_id,p.title,p.status,p.approval_id,
+                  EXISTS (
+                    SELECT 1 FROM ago_founder_intakes i
+                    WHERE i.tenant_id=p.tenant_id AND i.plan_id=p.id
+                      AND i.founder_id IS DISTINCT FROM %s::uuid
+                  ) AS founder_confidential
+           FROM ago_strategy_plans p
+           WHERE p.tenant_id=%s ORDER BY p.created_at,p.id""",
+            (reader_id, tenant_id),
+        ).fetchall()]
+        for row in rows:
+            if row["founder_confidential"]:
+                row["title"] = "Confidential founder project"
+        return rows
 
     def steps(self, *, tenant_id: str, plan_id: str) -> list[dict]:
         return [

@@ -122,6 +122,26 @@ def test_confidential_registry_denies_unassigned_company_readers(case):
     # unless separately restricted to the active human founder.
     for confidential in ("/management/workload","/market-intelligence","/opportunities"):
         assert client.get(BASE+confidential,headers=reviewer).status_code==403
+    # The intake also creates a Company Brain goal and plan. Generic
+    # brain:read must not reveal the brief or its first-line title there.
+    brief_words="Confidential invention prototype"
+    for path in ("/v1/brain/goals","/v1/brain/plans"):
+        listed=client.get(path,headers=reviewer)
+        assert listed.status_code==200,listed.text
+        assert brief_words not in listed.text
+    goal=next(g for g in client.get("/v1/brain/goals",headers=reviewer).json()
+              if g["founder_confidential"])
+    assert goal["description"] is None
+    assert goal["title"]=="Confidential founder project"
+    plan=next(p for p in client.get("/v1/brain/plans",headers=reviewer).json()
+              if p["founder_confidential"])
+    assert plan["title"]=="Confidential founder project"
+    # The owning founder still sees the real goal and plan.
+    own_goals=client.get("/v1/brain/goals",headers=founder).json()
+    assert any(brief_words in (g["description"] or "") and not g["founder_confidential"]
+               for g in own_goals)
+    own_plans=client.get("/v1/brain/plans",headers=founder).json()
+    assert any(p["title"]==project["title"] for p in own_plans)
     founder_list=client.get(BASE+"/projects",headers=founder)
     assert any(x["id"]==project["id"] for x in founder_list.json())
     assert client.get(BASE+"/projects/"+project["id"],headers=founder).status_code==200
