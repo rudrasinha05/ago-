@@ -4,6 +4,13 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
+// Issue #3: job logs are not always reachable, so also report a failure as a
+// GitHub check annotation. Diagnostics only: the exit code stays non-zero.
+for(const event of ['uncaughtException','unhandledRejection'])process.on(event,error=>{
+ const text=String(error?.stack||error).split('\n').slice(0,10).join('\n');
+ console.log('::error title=Company map browser regression::'+text.replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A'));
+ console.error(error);process.exitCode=1;
+});
 const root=resolve('apps/web/out');
 const server=createServer(async(req,res)=>{try{
  let pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\/workspace/,'');
