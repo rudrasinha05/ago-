@@ -7,10 +7,10 @@ from typing import Literal
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field
 
-from ago.repository_ports import EnterpriseOperationsStorePort, ApprovalRepositoryPort
+from ago.repository_ports import EnterpriseOperationsStorePort, ApprovalRepositoryPort, SecurityControlsPort
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, db_connection, repository_scope, translate_error
 from ago.backend_contracts import RepositoryScope
@@ -1312,6 +1312,32 @@ def enterprise_evidence_list(
     allowed(repositories, actor, "operations:read")
     return repositories.resolve(EnterpriseOperationsStorePort).evidence(
         tenant_id=actor.tenant_id, kind=kind)
+
+
+@router.get("/enterprise/evidence/{evidence_id}")
+def enterprise_evidence_source(
+    evidence_id: UUID,
+    db=Depends(db_connection), actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    """Founder-only source inspection; bulk evidence listing stays redacted."""
+    allowed(repositories, actor, "organization:manage")
+    # organization:manage alone is not synonymous with Founder identity:
+    # another manager granted this permission must not read private prompts.
+    if "founder" not in actor.roles:
+        raise HTTPException(403, "Only the Founder may inspect exact source evidence")
+    with db.transaction():
+        record = enterprise_call(lambda: repositories.resolve(
+            EnterpriseOperationsStorePort).evidence_item(
+            tenant_id=actor.tenant_id, evidence_id=str(evidence_id)))
+        # A successful read writes a durable, redacted audit record before
+        # returning source bytes. Audit failures fail the whole read closed.
+        repositories.resolve(SecurityControlsPort).audit(
+            "enterprise:evidence:source_read", "allowed",
+            tenant_id=actor.tenant_id, actor_id=actor.subject,
+            metadata={"record_id":str(evidence_id),"kind":record["kind"]},
+        )
+    return record
 
 
 @router.post("/enterprise/evidence/{evidence_id}/approval")
