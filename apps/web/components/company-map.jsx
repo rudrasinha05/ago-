@@ -45,7 +45,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [updated,setUpdated]=useState(null),[popup,setPopup]=useState(null),[loading,setLoading]=useState(false);
   const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null),[governanceData,setGovernanceData]=useState(null);const lastEvent=useRef(null);
   const viewport=useRef(null),drag=useRef(null),previous=useRef(null),sequence=useRef(0),alive=useRef(false),retry=useRef(null),feed=useRef(null),staffKey=useRef(null);
-  const pendingFocus=useRef(null),mapInitialized=useRef(false);
+  const pendingFocus=useRef(null),mapInitialized=useRef(false),userMoved=useRef(false);
   const visibleEmployees=useMemo(()=>{
     if(mapMode==='all')return employees;
     const byId=new Map(employees.map(e=>[e.id,e]));
@@ -192,14 +192,23 @@ export function CompanyMap({api,me,data,onRefresh}) {
   function focusMap(key,scale=.8){
     const target=key==='founder'?layout.founder:layout.nodes.find(n=>n.key===key);
     if(!target)return false;
+    userMoved.current=true;
     setZoom(scale);
     setPan(boundedPan((layout.center-target.x)*scale,(layout.center-target.y)*scale,scale));
     return true;
   }
   function fitMap(){
     const w=viewport.current?.clientWidth||700,h=viewport.current?.clientHeight||700;
-    const fit=Math.max(.055,Math.min(1,Math.min(w,h)/layout.size*.92));
-    setZoom(fit);setPan({x:0,y:0});
+    // Fit the occupied area, not the whole orbit canvas: a small company must
+    // stay readable instead of shrinking to a few pixels inside empty rings.
+    const placed=[layout.founder,...layout.nodes].filter(n=>Number.isFinite(n?.x)&&Number.isFinite(n?.y));
+    const margin=170;
+    const xs=placed.map(n=>n.x),ys=placed.map(n=>n.y);
+    const minX=Math.min(...xs)-margin,maxX=Math.max(...xs)+margin,minY=Math.min(...ys)-margin,maxY=Math.max(...ys)+margin;
+    const fit=placed.length?Math.max(.055,Math.min(.9,w/(maxX-minX)*.94,h/(maxY-minY)*.94))
+      :Math.max(.055,Math.min(1,Math.min(w,h)/layout.size*.92));
+    setZoom(fit);
+    setPan(placed.length?boundedPan((layout.center-(minX+maxX)/2)*fit,(layout.center-(minY+maxY)/2)*fit,fit):{x:0,y:0});
   }
   useEffect(()=>{
     if(pendingFocus.current==='overview'){
@@ -209,7 +218,9 @@ export function CompanyMap({api,me,data,onRefresh}) {
         focusMap(pendingFocus.current,.82);
         pendingFocus.current=null;
       }
-    }else if(!mapInitialized.current&&employees.length>1){
+    }else if((!mapInitialized.current||!userMoved.current)&&employees.length>1){
+      // Keep fitting as records load (governance, tasks, mode) until the
+      // person zooms, pans or focuses a node themselves.
       mapInitialized.current=true;
       fitMap();
     }
@@ -217,11 +228,14 @@ export function CompanyMap({api,me,data,onRefresh}) {
   function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));if(!focusMap(key,.84)&&key.startsWith('employee:')){pendingFocus.current=key;setMapMode('all');}}
   function boundedPan(x,y,z=zoom){
     const w=viewport.current?.clientWidth||700,h=viewport.current?.clientHeight||700;
-    const maxX=Math.max(0,(layout.size*z-w)/2)+30;
-    const maxY=Math.max(0,(layout.size*z-h)/2)+30;
+    // Allow up to half the drawn canvas off-centre so an off-centre cluster
+    // (fit to occupied area) can be centred; still never lose the map.
+    const maxX=Math.max(0,(layout.size*z-w)/2)+Math.max(30,layout.size*z/2);
+    const maxY=Math.max(0,(layout.size*z-h)/2)+Math.max(30,layout.size*z/2);
     return {x:Math.max(-maxX,Math.min(maxX,x)),y:Math.max(-maxY,Math.min(maxY,y))};
   }
   function zoomOn(next,cx=null,cy=null){
+    userMoved.current=true;
     next=Math.max(.055,Math.min(1.65,next));
     const rect=viewport.current?.getBoundingClientRect();
     const dx=rect&&cx!==null?cx-rect.left-rect.width/2:0;
@@ -299,7 +313,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
        {founderView&&<a href="#ago-github-delivery">Project Delivery</a>}
       <a href="#ago-company-org-map">Organization & Chat</a>
     </nav>
-    <CommandBrain tasks={tasks} notifications={eventData} employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    <CommandBrain tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
     <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
     <FounderProjectIntake api={api} me={me} employees={employees} profiles={governanceData?.employees||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
@@ -316,7 +330,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
           return <details key={d.id} open><summary>{d.name}</summary><button onClick={()=>choose('department:'+d.id)} className={channel==='department:'+d.id?'chosen':''}>Open {d.name} chat</button><ul>{members.filter(e=>!members.some(x=>x.id===e.manager_id)).map(e=>branch(e))}</ul></details>;})}
         <p className="channel-note">Global chat is shared. Department and employee conversations are restricted to the founder and authorized members. AGO enforces access on every read and write.</p>
       </aside>
-      <div className="company-canvas" ref={viewport} onPointerDown={e=>{if(e.target.closest('button,textarea,input,a,form,[data-route-target],.employee-approval-zone,.map-node-wrap'))return;drag.current={x:e.clientX,y:e.clientY,startX:pan.x,startY:pan.y};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current)setPan(boundedPan(drag.current.startX+(e.clientX-drag.current.x),drag.current.startY+(e.clientY-drag.current.y)));}} onPointerUp={e=>{drag.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}} onPointerCancel={()=>{drag.current=null;}} onWheel={e=>{if(e.ctrlKey||e.target.closest('textarea'))return;zoomOn(zoom-e.deltaY*.0007);}}>
+      <div className="company-canvas" ref={viewport} onPointerDown={e=>{if(e.target.closest('button,textarea,input,a,form,[data-route-target],.employee-approval-zone,.map-node-wrap'))return;drag.current={x:e.clientX,y:e.clientY,startX:pan.x,startY:pan.y};userMoved.current=true;e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current)setPan(boundedPan(drag.current.startX+(e.clientX-drag.current.x),drag.current.startY+(e.clientY-drag.current.y)));}} onPointerUp={e=>{drag.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}} onPointerCancel={()=>{drag.current=null;}} onWheel={e=>{if(e.ctrlKey||e.target.closest('textarea'))return;zoomOn(zoom-e.deltaY*.0007);}}>
         <div className="map-controls">
           <button aria-label="Zoom in" onClick={()=>zoomOn(zoom+.1)}>+</button>
           <button aria-label="Zoom out" onClick={()=>zoomOn(zoom-.1)}>−</button>
@@ -324,7 +338,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
           <button type="button" aria-pressed={mapMode==='leadership'} onClick={()=>{setMapMode('leadership');pendingFocus.current='overview';}}>Leadership</button>
           <button type="button" aria-pressed={mapMode==='all'} onClick={()=>{setMapMode('all');pendingFocus.current='overview';}}>All employees</button>
           <button aria-label={fullscreen?"Exit full screen":"Full screen map"} aria-pressed={fullscreen} onClick={()=>setFullscreen(v=>!v)}>{fullscreen?"Exit full screen":"⛶ Full screen"}</button>
-          <button onClick={fitMap}>Fit all</button>
+          <button onClick={()=>{userMoved.current=false;fitMap();}}>Fit all</button>
           <span>{layout.nodes.filter(n=>n.type==='employee').length}/{employees.filter(e=>e.id!==me.id).length} staff · {Math.round(zoom*100)}%</span>
         </div>
         <div className="company-world" style={{width:layout.size,height:layout.size,transform:`translate(calc(-50% + ${pan.x}px),calc(-50% + ${pan.y}px)) scale(${zoom})`}}>

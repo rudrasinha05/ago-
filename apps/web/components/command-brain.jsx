@@ -1,6 +1,7 @@
 "use client";
-import {useCallback,useState} from 'react';
+import {useCallback,useMemo,useState} from 'react';
 import {Brain3DScene} from './brain-3d-scene';
+import {brainNetwork} from './brain-network';
 import {boardFunctionSeats} from '@ago/sdk/company';
 
 const brief=(text,max=110)=>text?.length>max?text.slice(0,max)+'…':text;
@@ -15,8 +16,25 @@ const BOARD_TITLES={
 const CORTEX_CONTOUR='M199 247 C176 258 137 238 136 209 C93 205 82 164 110 139 C84 107 107 74 143 80 C149 44 194 39 207 65 C229 36 270 47 284 73 C323 62 347 92 337 119 C373 148 351 188 320 197 C323 228 293 251 266 239 C249 259 222 255 208 241Z';
 const CORTEX_DEPTHS=[-75,-60,-45,-30,-15,0,15,30];
 const CORTEX_POINTS=[[162,126],[254,106],[205,162],[269,197],[147,201],[295,137]];
-export function CommandBrain({tasks,notifications,employees,onSelect,governance,onAppoint,canGovern}) {
+const ago=value=>{
+ const at=Date.parse(value);if(!Number.isFinite(at))return '';
+ const seconds=Math.max(0,Math.round((Date.now()-at)/1000));
+ if(seconds<60)return 'just now';if(seconds<3600)return Math.round(seconds/60)+' min ago';
+ if(seconds<86400)return Math.round(seconds/3600)+' h ago';return new Date(at).toLocaleDateString();
+};
+const NEURON_FILTERS=[['all','All'],['working','Working'],['waiting','Waiting'],['signals','Signals']];
+export function CommandBrain({tasks,notifications,employees,departments=[],founderId=null,selectedId=null,onSelect,governance,onAppoint,canGovern}) {
  const [choices,setChoices]=useState({});
+ const [highlight,setHighlight]=useState(null);
+ const [neuronFilter,setNeuronFilter]=useState('all');
+ // Polling returns new arrays every few seconds; keep the same network object
+ // (and so skip a WebGL redraw) unless the derived records actually changed.
+ const derived=brainNetwork({employees,departments,tasks,notifications,founderId});
+ const signature=JSON.stringify(derived);
+ const network=useMemo(()=>derived,[signature]);
+ const neuronById=new Map(network.nodes.map(n=>[n.id,n]));
+ const neurons=network.nodes.filter(n=>neuronFilter==='all'||(neuronFilter==='working'&&n.running)
+   ||(neuronFilter==='waiting'&&!n.running&&n.waiting)||(neuronFilter==='signals'&&n.signals>0));
  const [rotation,setRotation]=useState(0);
  const [gpuReady,setGpuReady]=useState(false);
  const updateGpuReady=useCallback(ready=>setGpuReady(ready),[]);
@@ -36,17 +54,29 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
      <div className="command-metrics"><span><b>{known?tasks.length:'—'}</b>Tasks</span><span><b>{known?active.length:'—'}</b>Working</span><span><b>{known?queued.length:'—'}</b>Awaiting</span><span><b>{known?finished.length:'—'}</b>Finished</span></div>
    </div>
    <div className="brain-stage">
-     <section className="brain-activity"><h3>◉ What the Brain Is Tracking</h3><p className="brain-sub">Recorded events, never invented thoughts</p>
+     <section className="brain-activity" aria-label="Communication and work signals"><h3>Communication &amp; work signals</h3><p className="brain-sub">Durable task events · never invented thoughts</p>
        <ol>
-         {events.length?events.slice(0,6).map(e=><li key={e.id}><span className="brain-dot"/><div><strong>Work event #{e.id}</strong><small>{brief(e.body)}</small></div></li>):<li><span className="brain-dot dormant"/><div><strong>{notifications?'Awaiting task transitions':'Event feed unavailable'}</strong><small>Recorded task events will appear here.</small></div></li>}
+         {events.length?events.slice(0,7).map(e=>{const name=employeeNames.get(e.employee_id),tone=neuronById.get(e.employee_id)?.tone||'unknown';return <li key={e.id}>
+           {name?<button type="button" className="brain-signal" aria-label={'Show '+name+' in the company brain: '+(e.body||'work event')}
+             onMouseEnter={()=>setHighlight(e.employee_id)} onMouseLeave={()=>setHighlight(null)}
+             onFocus={()=>setHighlight(e.employee_id)} onBlur={()=>setHighlight(null)}
+             onClick={()=>onSelect(e.employee_id)}>
+             <span className={'brain-dot tone-'+tone}/><span><strong>{brief(name,28)}</strong><small>{brief(e.body)}</small><time dateTime={e.created_at}>{ago(e.created_at)}</time></span>
+           </button>:<div className="brain-signal static"><span className="brain-dot"/><span><strong>Work event #{e.id}</strong><small>{brief(e.body)}</small></span></div>}
+         </li>;}):<li><div className="brain-signal static"><span className="brain-dot dormant"/><span><strong>{notifications?'Awaiting task transitions':'Event feed unavailable'}</strong><small>Recorded task events will appear here.</small></span></div></li>}
        </ol>
      </section>
      <div className="brain-hologram" aria-label="Interactive founder-controlled 3D work observatory">
-       <div className="brain-orbit orbit-one"/><div className="brain-orbit orbit-two"/>
+       <ul className="brain-legend" aria-label="Company brain legend">
+         <li><i className="tone-busy"/>Running task</li><li><i className="tone-waiting"/>Awaiting action</li>
+         <li><i className="tone-idle"/>Idle</li><li><i className="tone-blocked"/>Blocked</li><li><i className="tone-failed"/>Failure recorded</li>
+         <li><i className="route"/>Recorded route</li><li><i className="ring"/>Work signal</li>
+       </ul>
        <div className={'brain-volume '+(active.length?'brain-volume-active':'')+(gpuReady?' webgl-active':'')}
          role="img" aria-label={'Layered 3D company work brain: '+active.length+' verified running tasks, '+queued.length+' awaiting action; not a simulated conscious AI'}
          style={{'--brain-rotation':rotation+'deg'}}>
-        <Brain3DScene running={active.length} rotation={rotation} onReady={updateGpuReady}/>
+        <Brain3DScene network={network} running={active.length} rotation={rotation}
+          selectedId={selectedId} highlightId={highlight} onPick={id=>onSelect(id)} onReady={updateGpuReady}/>
         <div className="brain-depth-stack" aria-hidden="true">
           {CORTEX_DEPTHS.map((depth,index)=><svg key={depth} viewBox="0 0 420 300" className="brain-depth-slice"
             style={{'--cortex-depth':depth+'px','--cortex-scale':String(1-Math.abs(depth-30)/800)}}>
@@ -86,12 +116,12 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
          <button type="button" aria-label="Reset brain rotation" onClick={()=>setRotation(0)}>Front view</button>
          <button type="button" aria-label="Rotate brain right" onClick={()=>setRotation(x=>Math.min(68,x+15))}>↷</button>
        </div>
-       <div className="brain-label label-analyze">Analyze</div><div className="brain-label label-plan">Plan</div><div className="brain-label label-delegate">Delegate</div><div className="brain-label label-review">Review</div>
        <div className="brain-running"><span className={'brain-led '+(known?'connected':'')}/>{known?(active.length?'Recorded work is running · '+active.length+' active':queued.length?'Awaiting authorization / worker action':'Monitoring task records'):'Waiting for activity API'}</div>
      </div>
      <section className="brain-stats"><h3>Brain activity & delivery</h3><p className="brain-sub">Actual stored task states</p>
       <div className="brain-stat"><small>Employees working</small><b>{new Set(active.map(t=>t.assignee_id)).size}</b></div>
       <div className="brain-stat"><small>Pending action / approval</small><b>{known?queued.length:'—'}</b></div>
+      <div className="brain-stat"><small>Red routes (recorded links)</small><b>{known?network.counts.routes:'—'}</b></div>
       <div className="brain-stat"><small>Recent durable work events</small><b>{notifications?events.length:'—'}</b></div>
       <section className="brain-work-detail" aria-label="Recorded company task assignments">
         <h4>Live assignment evidence</h4>
@@ -110,6 +140,20 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
       <p className="brain-disclaimer">Visual monitor stays visible. A live model is only active when a configured, authorized runtime actually executes a job.</p>
      </section>
    </div>
+   <details className="brain-directory">
+    <summary>Company neurons · {network.nodes.length} employees · {network.counts.running} working · {network.counts.waiting} waiting</summary>
+    <div className="brain-directory-filters" role="group" aria-label="Filter company neurons">
+     {NEURON_FILTERS.map(([key,label])=><button key={key} type="button" aria-pressed={neuronFilter===key} onClick={()=>setNeuronFilter(key)}>{label}</button>)}
+    </div>
+    {neurons.length?<ul aria-label="Company neurons">{neurons.map(n=><li key={n.id}>
+      <button type="button" data-neuron={n.id} data-tone={n.tone} aria-current={n.id===selectedId?'true':undefined}
+        onMouseEnter={()=>setHighlight(n.id)} onMouseLeave={()=>setHighlight(null)}
+        onFocus={()=>setHighlight(n.id)} onBlur={()=>setHighlight(null)} onClick={()=>onSelect(n.id)}
+        aria-label={n.name+', '+n.department+': '+n.label+(n.routed?', on a recorded task route':'')+(n.signals?', '+n.signals+' work signals':'')}>
+        <i className={'tone-'+n.tone}/><strong>{brief(n.name,30)}</strong><small>{n.department}</small>
+        <span>{n.label}{n.signals?' · '+n.signals+' signal'+(n.signals===1?'':'s'):''}</span>
+      </button></li>)}</ul>:<p>No employees match this filter.</p>}
+   </details>
    <section className="board-command" aria-label="Board governance functions">
     <div><h3>Board of Directors</h3><small>{openBoardCount} of 5 seats unassigned · Software AI roles, not legal directors · Founder approval required</small></div>
     <div className="board-seats">{seats.map(s=>{

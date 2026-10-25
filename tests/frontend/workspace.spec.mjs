@@ -279,18 +279,74 @@ test('P1 WebGL company brain reflects persisted active task, not simulated AI th
   expect(errors).toEqual([]);
 });
 
+test('company brain neurons, red routes and work signals come only from persisted records',async({page})=>{
+ const {errors}=await fixtures(page);
+ const lead='10000000-0000-4000-8000-000000000011',specialist='10000000-0000-4000-8000-000000000012',analyst='10000000-0000-4000-8000-000000000013';
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},
+  {id:lead,name:'Delivery lead',department_id:department,kind:'ai',manager_id:user},
+  {id:specialist,name:'Delivery specialist',department_id:department,kind:'ai',manager_id:lead},
+  {id:analyst,name:'Unlinked analyst',department_id:department,kind:'ai'},
+ ]}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
+  {id:'20000000-0000-4000-8000-000000000031',assignee_id:specialist,action:'internal:brief',status:'running',project_name:'Recorded delivery'},
+  {id:'20000000-0000-4000-8000-000000000032',assignee_id:analyst,action:'internal:review',status:'waiting_approval',project_name:'Pending review'},
+ ]}));
+ await page.route(/\/v1\/organization\/company\/notifications/,route=>route.fulfill({status:200,json:{
+  by_employee:{[specialist]:2},event_type:'committed_task_status',
+  recent:[{id:7,employee_id:specialist,task_id:'20000000-0000-4000-8000-000000000031',body:'internal:brief → running',created_at:new Date().toISOString()}],
+ }}));
+ await login(page);await navigate(page,'Organization');
+ const scene=page.locator('canvas.ago-real-3d-brain');
+ // The Founder is the human core, not an employee neuron.
+ await expect(scene).toHaveAttribute('aria-label',/Verified running tasks: 1\. Employees: 3$/);
+ // Founder→lead→specialist are recorded links; the waiting analyst has no manager, so no invented route.
+ await expect(page.locator('.brain-stat').filter({hasText:'Red routes'}).locator('b')).toHaveText('2');
+ const signals=page.getByRole('region',{name:'Communication and work signals'});
+ await expect(signals.getByRole('button',{name:/Show Delivery specialist in the company brain: internal:brief → running/})).toBeVisible();
+ await page.locator('.brain-directory summary').click();
+ const neurons=page.getByRole('list',{name:'Company neurons'});
+ await expect(neurons.getByRole('button')).toHaveCount(3);
+ await expect(neurons.locator(`[data-neuron="${specialist}"]`)).toHaveAttribute('data-tone','busy');
+ await expect(neurons.locator(`[data-neuron="${specialist}"]`)).toHaveAttribute('aria-label',/on a recorded task route, 2 work signals/);
+ await expect(neurons.locator(`[data-neuron="${lead}"]`)).toHaveAttribute('aria-label',/Idle, on a recorded task route$/);
+ await expect(neurons.locator(`[data-neuron="${analyst}"]`)).toHaveAttribute('data-tone','waiting');
+ await expect(neurons.locator(`[data-neuron="${analyst}"]`)).not.toHaveAttribute('aria-label',/recorded task route/);
+ await page.getByRole('button',{name:'Working',exact:true}).click();
+ await expect(neurons.getByRole('button')).toHaveCount(1);
+ await page.getByRole('button',{name:'All',exact:true}).click();
+ // Keyboard path: a directory neuron opens the real employee record.
+ await neurons.locator(`[data-neuron="${analyst}"]`).focus();
+ await page.keyboard.press('Enter');
+ await expect(page.locator('.employee-inspector')).toContainText('Unlinked analyst');
+ if(await page.locator('.brain-volume.webgl-active').count()){
+  // Pointer path: clicking the running neuron in the 3D scene selects that employee.
+  const label=page.locator(`.brain-neuron-label[data-node="${specialist}"]`);
+  await expect(label).toHaveAttribute('data-x',/\d/);
+  await scene.scrollIntoViewIfNeeded();
+  const x=Number(await label.getAttribute('data-x')),y=Number(await label.getAttribute('data-y'));
+  await scene.click({position:{x,y}});
+  await expect(page.locator('.employee-inspector')).toContainText('Delivery specialist');
+  await expect(label).toHaveClass(/selected/);
+ }
+ // Open directory, signals, legend and labels together pass WCAG 2.1 AA, no horizontal scroll.
+ await accessibility(page);
+ expect(errors).toEqual([]);
+});
+
 test('3D company brain draws on demand under reduced motion and releases its GPU context',async({page})=>{
  // Issue #3: a continuous 60 fps WebGL redraw starved the main thread and
  // crashed WebKit content processes on GPU-less runners. Count real WebGL
  // calls made by the shipped page; no rendering code is mocked.
  await page.addInitScript(()=>{
-  const stats={draws:0,contexts:0,lost:0};window.__agoBrainGl=stats;
+  const stats={draws:0,frames:0,contexts:0,lost:0};window.__agoBrainGl=stats;
   const original=HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext=function(type,...rest){
    const gl=original.call(this,type,...rest);
    if(gl&&type==='webgl'&&!gl.__agoCounted){
     gl.__agoCounted=true;stats.contexts++;
     const drawArrays=gl.drawArrays.bind(gl);gl.drawArrays=(...args)=>{stats.draws++;return drawArrays(...args);};
+    const clear=gl.clear.bind(gl);gl.clear=(...args)=>{stats.frames++;return clear(...args);};
     const getExtension=gl.getExtension.bind(gl);
     gl.getExtension=name=>{const ext=getExtension(name);
      if(ext&&name==='WEBGL_lose_context'){const lose=ext.loseContext.bind(ext);return {...ext,loseContext:()=>{stats.lost++;return lose();},restoreContext:ext.restoreContext.bind(ext)};}
@@ -322,13 +378,14 @@ test('3D company brain draws on demand under reduced motion and releases its GPU
 test('3D company brain idle motion is throttled when motion is allowed',async({page})=>{
  // Decorative sway only: it must stay far below a 60 fps loop.
  await page.addInitScript(()=>{
-  const stats={draws:0,contexts:0,lost:0};window.__agoBrainGl=stats;
+  const stats={draws:0,frames:0,contexts:0,lost:0};window.__agoBrainGl=stats;
   const original=HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext=function(type,...rest){
    const gl=original.call(this,type,...rest);
    if(gl&&type==='webgl'&&!gl.__agoCounted){
     gl.__agoCounted=true;stats.contexts++;
     const drawArrays=gl.drawArrays.bind(gl);gl.drawArrays=(...args)=>{stats.draws++;return drawArrays(...args);};
+    const clear=gl.clear.bind(gl);gl.clear=(...args)=>{stats.frames++;return clear(...args);};
     const getExtension=gl.getExtension.bind(gl);
     gl.getExtension=name=>{const ext=getExtension(name);
      if(ext&&name==='WEBGL_lose_context'){const lose=ext.loseContext.bind(ext);return {...ext,loseContext:()=>{stats.lost++;return lose();},restoreContext:ext.restoreContext.bind(ext)};}
@@ -344,12 +401,13 @@ test('3D company brain idle motion is throttled when motion is allowed',async({p
  // Off-screen the scene does not animate at all (phone layouts start below it).
  await page.locator('.ago-real-3d-brain').scrollIntoViewIfNeeded();
  await page.waitForTimeout(500);
- const before=await page.evaluate(()=>window.__agoBrainGl.draws);
+ const before=await page.evaluate(()=>window.__agoBrainGl.frames);
  await page.waitForTimeout(1500);
- const drawn=await page.evaluate(()=>window.__agoBrainGl.draws)-before;
+ const drawn=await page.evaluate(()=>window.__agoBrainGl.frames)-before;
  if(await page.evaluate(()=>window.__agoBrainGl.contexts)>0){
   expect(drawn).toBeGreaterThan(0);
-  // >=66 ms between idle frames allows at most ~22 draws in 1.5 s on any
+  // A frame is one clear() followed by the cortex, link and neuron passes.
+  // >=66 ms between idle frames allows at most ~22 frames in 1.5 s on any
   // machine. An unthrottled loop draws ~90 at 60 fps; on a slow software
   // renderer it may also stay low, so this is an upper-bound guard only.
   expect(drawn).toBeLessThanOrEqual(25);

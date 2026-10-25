@@ -46,11 +46,6 @@
 .brain-rotate-controls button{border:1px solid #3879c9;color:#e6eaff;background:#0c2655eb;border-radius:8px;padding:5px 11px;font-size:11px;min-height:31px}
 .brain-rotate-controls button:focus-visible{outline:2px solid #e5c1ff}
 @media(prefers-reduced-motion:reduce){.brain-volume,.brain-svg{animation:none;transition:none}}
-.brain-orbit{position:absolute;width:65%;height:33%;border:2px solid #437dff80;border-radius:50%;box-shadow:0 0 18px #336fff77;transform:rotate(-15deg);animation:agoOrbit 8s ease-in-out infinite alternate}
-.orbit-two{width:72%;height:37%;border-color:#b848e079;transform:rotate(17deg);animation-direction:alternate-reverse}
-.brain-label{position:absolute;z-index:4;padding:7px 13px;border:1px solid #347ef4;border-radius:9px;background:#071c47e8;color:#bce6ff;box-shadow:0 0 13px #157ae244;font-size:11px;font-weight:700}
-.label-analyze{left:13%;top:14%}.label-plan{right:12%;top:14%;border-color:#b05bee}.label-delegate{right:9%;top:46%;color:#ffd2d7;border-color:#ff456a;box-shadow:0 0 14px #f1325e55}
-.label-review{left:11%;top:60%;border-color:#be69f5}
 .brain-running{position:absolute;z-index:4;bottom:12px;display:flex;gap:7px;align-items:center;background:#08172ddd;padding:8px 12px;border:1px solid #294979;border-radius:30px;font-size:10px;color:#c0e0fa}
 .brain-led{background:#6e879f;box-shadow:none}.brain-led.connected{background:#21e6aa;box-shadow:0 0 12px #08db89}
 .brain-stat{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #26436a;padding:14px 0;color:#99bde4}
@@ -94,7 +89,7 @@
 @media(max-width:1450px){.board-seats{grid-template-columns:repeat(3,minmax(135px,1fr))}.brain-stage{grid-template-columns:1fr 1.7fr 1fr}}
 @media(max-width:1020px){.brain-stage{grid-template-columns:1fr 1fr}.brain-hologram{grid-column:1/-1;grid-row:1}.board-seats{grid-template-columns:repeat(2,minmax(135px,1fr))}.command-delivery{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.command-head{align-items:flex-start;flex-direction:column}.brain-stage{display:flex;flex-direction:column}.brain-hologram{min-height:290px}.brain-svg{height:255px}.brain-activity,.brain-stats{border:0}.board-seats,.command-delivery{grid-template-columns:1fr}.map-node{min-height:120px}}
-@media(prefers-reduced-motion:reduce){.brain-svg,.brain-orbit,.company-world line.edge-live,.map-node.working{animation:none}}
+@media(prefers-reduced-motion:reduce){.brain-svg,.company-world line.edge-live,.map-node.working{animation:none}}
 
 
 /* Founder-approved accountability & protected hierarchical reporting */
@@ -212,8 +207,8 @@
 
 /* Within-company tabs navigate existing panels without reloading or DB duplication. */
 /* Opaque, no backdrop-filter: blurring the live WebGL brain under this sticky bar on every frame was costly without a GPU (Issue #3). */
-.company-cockpit-nav{position:sticky;top:0;z-index:15;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:9px 12px;margin-bottom:13px;border:1px solid #375a81;border-radius:12px;background:#071c34}
-.company-cockpit-nav a{display:inline-flex;align-items:center;min-height:44px;touch-action:manipulation;font-size:12px;line-height:1.25;padding:8px 11px;border:1px solid #3a608b;border-radius:8px;background:#183354;color:#def3ff;text-decoration:none}
+.company-cockpit-nav{position:sticky;top:0;z-index:15;display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;scrollbar-color:#375a81 transparent;align-items:center;padding:7px 10px;margin-bottom:13px;border:1px solid #375a81;border-radius:12px;background:#071c34}
+.company-cockpit-nav a{display:inline-flex;flex-shrink:0;white-space:nowrap;align-items:center;min-height:38px;touch-action:manipulation;font-size:12px;line-height:1.25;padding:8px 11px;border:1px solid #3a608b;border-radius:8px;background:#183354;color:#def3ff;text-decoration:none}
 .company-cockpit-nav a:hover,.company-cockpit-nav a:focus-visible{background:#286193;outline-offset:2px}
 #company-approval-inbox,#ago-opportunities,#ago-workforce,#ago-company-org-map{scroll-margin-top:75px}
 
@@ -397,31 +392,72 @@
 .company-canvas{background-image:radial-gradient(#395b78 1px,transparent 1px),linear-gradient(165deg,#07182b,#061323);background-size:26px 26px,100% 100%}
 @media(max-width:760px){.map-controls{right:10px;max-width:calc(100% - 20px);gap:3px}.map-controls button{padding:7px;font-size:11px}.map-legend{font-size:10px}}
 
-/* WebGL cortical observatory: large centered brain, no fake overlapping discs. */
-.brain-stage{grid-template-columns:minmax(195px,1fr) minmax(410px,2.5fr) minmax(195px,1fr);min-height:475px}
-.brain-hologram{min-height:455px;background:radial-gradient(ellipse at 50% 42%,#13407565,#080f25 70%)}
-.brain-hologram:before{opacity:.52}
-.brain-volume,.brain-volume-active{width:min(98%,650px);min-height:400px;transform:none;perspective:none;filter:none;overflow:visible}
-.brain-volume:before,.brain-volume:after{opacity:.18}
-.brain-volume .ago-real-3d-brain{position:absolute;top:0;left:0;width:100%;height:400px;z-index:4;touch-action:none;cursor:grab}
-.brain-volume.webgl-active .brain-depth-stack,
-.brain-volume.webgl-active .brain-svg{display:none}
-.brain-volume .brain-svg{width:100%;height:400px}
-.brain-volume .brain-depth-slice{height:400px}
-.brain-orbit{width:63%;height:25%;opacity:.46}
-.brain-rotate-controls{bottom:49px}
-.brain-label{pointer-events:none;font-size:10px;opacity:.86}
-.label-analyze{left:8%;top:18%}
-.label-plan{right:8%;top:18%}
-.label-delegate{right:7%;top:55%}
-.label-review{left:8%;top:64%}
-@media(max-width:1450px){.brain-stage{grid-template-columns:minmax(155px,1fr) minmax(330px,1.7fr) minmax(155px,1fr)}}
-@media(max-width:1020px){.brain-stage{grid-template-columns:1fr 1fr}.brain-hologram{grid-column:1/-1;grid-row:1;min-height:400px}}
-@media(max-width:650px){.brain-stage{display:flex;flex-direction:column}.brain-hologram{min-height:360px}.brain-volume,.brain-volume-active{min-height:330px}.brain-volume .ago-real-3d-brain,.brain-volume .brain-svg{height:330px}.brain-rotate-controls{bottom:36px}}
-@media(prefers-reduced-motion:reduce){.brain-orbit,.company-world line.company-link.edge-live{animation:none}}
+@media(prefers-reduced-motion:reduce){.company-world line.company-link.edge-live{animation:none}}
 
 /* AGO circular hierarchy: faint concentric guides clarify levels without
    implying authority. Only authenticated reporting records receive blue lines. */
 .company-world svg .company-orbit-ring{fill:none;stroke:#6ba1c8;stroke-width:2.2;stroke-dasharray:6 20;opacity:.25;pointer-events:none}
 .company-world line.company-link.edge-pending{stroke:#f6c362;stroke-width:6;stroke-dasharray:10 13;opacity:.96;filter:drop-shadow(0 0 5px #df9c40)}
 .map-reporting-warning{color:#ffd2a0;font-weight:700}
+
+/* Company Brain v2 — holographic glass cortex. Neurons are employee records,
+   synapses are recorded manager links, red routes are persisted running tasks. */
+.brain-stage{grid-template-columns:minmax(220px,.95fr) minmax(420px,3fr) minmax(220px,.95fr);min-height:500px;border-color:#1c3f68;background:radial-gradient(ellipse at 50% 46%,#0f2a5a 0%,#081530 55%,#060d1f 100%)}
+.brain-hologram{min-height:520px;background:radial-gradient(ellipse at 50% 50%,#1b3f8a33,transparent 62%)}
+.brain-hologram:before{opacity:.35}
+.brain-volume,.brain-volume-active{width:100%;min-height:470px;transform:none;perspective:none;filter:none;overflow:visible}
+.brain-volume:before,.brain-volume:after{display:none}
+.brain-volume .ago-real-3d-brain{position:absolute;top:0;left:0;width:100%;height:470px;z-index:4;touch-action:none;cursor:grab}
+.brain-volume.webgl-active .brain-depth-stack,.brain-volume.webgl-active .brain-svg{display:none}
+.brain-volume .brain-svg{width:100%;height:470px}
+.brain-volume .brain-depth-slice{height:470px}
+.brain-rotate-controls{bottom:56px}
+.brain-neuron-labels{position:absolute;inset:0;z-index:5;pointer-events:none;overflow:hidden}
+.brain-volume:not(.webgl-active) .brain-neuron-labels{display:none}
+.brain-neuron-label{position:absolute;left:0;top:0;display:grid;gap:1px;margin:0;padding:5px 9px;border:1px solid #3b6aa8;border-left:3px solid #6fb8ff;border-radius:8px;background:#06132bdd;color:#e8f3ff;font-size:11px;font-weight:700;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 6px 18px #00000066}
+.brain-neuron-label small{font-size:9.5px;font-weight:600;color:#9fbbd8}
+.brain-neuron-label.founder{border-left-color:#ffd88a;color:#ffe9be;font-size:10px}
+.brain-neuron-label.tone-busy{border-left-color:#ff4569}.brain-neuron-label.tone-busy small{color:#ff9cb1}
+.brain-neuron-label.tone-waiting{border-left-color:#ffc84d}.brain-neuron-label.tone-blocked{border-left-color:#ff8c40}
+.brain-neuron-label.tone-failed{border-left-color:#b78cff}.brain-neuron-label.tone-idle{border-left-color:#4debb3}
+.brain-neuron-label.selected{border-color:#f1f6ff;box-shadow:0 0 0 1px #f1f6ff55,0 6px 18px #00000066}
+.brain-legend{position:absolute;z-index:6;top:12px;left:12px;right:12px;display:flex;flex-wrap:wrap;gap:6px 12px;margin:0;padding:0;list-style:none;font-size:10.5px;color:#b9d0ea;pointer-events:none}
+.brain-legend li{display:flex;align-items:center;gap:5px}
+.brain-legend i,.brain-directory i{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.tone-busy{background:#ff4569;box-shadow:0 0 8px #ff4569}.tone-waiting{background:#ffc84d}.tone-idle{background:#4debb3}
+.tone-blocked{background:#ff8c40}.tone-failed{background:#b78cff}.tone-unknown{background:#9eacc0}
+.brain-legend i.route{width:16px;height:3px;border-radius:2px;background:#ff3d63;box-shadow:0 0 6px #ff3d63}
+.brain-legend i.ring{background:transparent;border:2px solid #8cd9ff}
+.brain-activity{display:flex;flex-direction:column;min-width:0}
+.brain-activity ol{gap:6px;overflow:auto;max-height:420px}
+.brain-activity li{display:block}
+.brain-signal{display:flex;gap:9px;align-items:flex-start;width:100%;text-align:left;padding:8px 9px;border:1px solid transparent;border-radius:9px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.brain-signal.static{cursor:default}
+.brain-signal:not(.static):hover,.brain-signal:focus-visible{border-color:#3d6aa3;background:#0c2246}
+.brain-signal:focus-visible{outline:2px solid #e5c1ff;outline-offset:1px}
+.brain-signal .brain-dot{margin-top:4px}
+.brain-signal>span:last-child{display:grid;gap:2px;min-width:0}
+.brain-signal strong{color:#e6f4ff;font-size:12px}.brain-signal small{color:#9db6d2;font-size:11px;overflow-wrap:anywhere}
+.brain-signal time{color:#6f8fb3;font-size:10px}
+.brain-directory{border:1px solid #1c3f68;border-radius:14px;background:#081530;padding:0}
+.brain-directory summary{cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#d9ebff;list-style-position:inside}
+.brain-directory summary:focus-visible{outline:2px solid #e5c1ff;outline-offset:-2px;border-radius:14px}
+.brain-directory-filters{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 10px}
+.brain-directory-filters button{min-height:32px;padding:5px 12px;border:1px solid #2f5b91;border-radius:999px;background:#0b1f40;color:#c7dcf3;font-size:12px}
+.brain-directory-filters button[aria-pressed="true"]{background:#e6f1ff;color:#08152e;border-color:#e6f1ff}
+.brain-directory ul{list-style:none;margin:0;padding:0 16px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;max-height:340px;overflow:auto}
+.brain-directory ul button{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;align-items:center;width:100%;min-height:44px;padding:8px 10px;border:1px solid #23466f;border-radius:10px;background:#0a1b38;color:#e8f2ff;text-align:left;font:inherit;cursor:pointer}
+.brain-directory ul button:hover,.brain-directory ul button:focus-visible{border-color:#6fb8ff;background:#0e2850}
+.brain-directory ul button:focus-visible{outline:2px solid #e5c1ff}
+.brain-directory ul button[aria-current="true"]{border-color:#f1f6ff}
+.brain-directory ul button strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brain-directory ul button small,.brain-directory ul button span{grid-column:2;font-size:10.5px;color:#9db6d2}
+.brain-directory ul button[data-tone="busy"] span{color:#ff9cb1}.brain-directory ul button[data-tone="waiting"] span{color:#ffd88a}
+.brain-directory>p{padding:0 16px 16px;margin:0;color:#9db6d2;font-size:12px}
+@media(max-width:1450px){.brain-stage{grid-template-columns:minmax(170px,1fr) minmax(340px,1.8fr) minmax(170px,1fr)}}
+@media(max-width:1020px){.brain-stage{grid-template-columns:1fr 1fr}.brain-hologram{grid-column:1/-1;grid-row:1;min-height:430px}}
+@media(max-width:650px){.brain-stage{display:flex;flex-direction:column}.brain-hologram{min-height:380px}.brain-volume,.brain-volume-active{min-height:340px}.brain-volume .ago-real-3d-brain,.brain-volume .brain-svg{height:340px}.brain-rotate-controls{bottom:40px}.brain-legend{font-size:9.5px;gap:4px 9px}.brain-neuron-label{font-size:10px;max-width:150px}.brain-activity ol{max-height:260px}}
+.brain-signal .brain-dot.tone-busy{background:#ff4569;box-shadow:0 0 10px #ff4569}.brain-signal .brain-dot.tone-waiting{background:#ffc84d;box-shadow:0 0 8px #ffc84d}.brain-signal .brain-dot.tone-idle{background:#4debb3;box-shadow:none}.brain-signal .brain-dot.tone-failed{background:#b78cff}.brain-signal .brain-dot.tone-blocked{background:#ff8c40}
+/* One-row cockpit bar; sections land below it when reached by anchor. */
+@media(pointer:coarse){.company-cockpit-nav a{min-height:44px}}
+.company-command [id^="ago-"],.company-command [id^="company-"]{scroll-margin-top:76px}
