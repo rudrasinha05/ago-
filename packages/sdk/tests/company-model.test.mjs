@@ -83,10 +83,11 @@ test('hierarchy graph draws recorded managers as reporting, department as groupi
   {id:'isolated',name:'Unassigned',department_id:'dB',manager_id:null},
  ];
  const layout=companyLayout(departments,people,'founder');
+ assert.equal(layout.edges.find(e=>e.to==='employee:ceo').from,'founder');
+ assert.equal(layout.edges.find(e=>e.to==='employee:ceo').kind,'reporting');
  assert.equal(layout.edges.find(e=>e.to==='employee:cto').from,'employee:ceo');
  assert.equal(layout.edges.find(e=>e.to==='employee:pm').kind,'reporting');
  assert.equal(layout.edges.find(e=>e.to==='employee:dev').from,'employee:pm');
- assert.equal(layout.edges.find(e=>e.to==='employee:ceo').kind,'grouping');
  assert.equal(layout.edges.find(e=>e.to==='employee:isolated').kind,'grouping');
  assert.equal(layout.edges.find(e=>e.to==='department:dB').from,'founder');
  assert.ok(layout.nodes.find(n=>n.key==='employee:cto').y < layout.nodes.find(n=>n.key==='employee:pm').y);
