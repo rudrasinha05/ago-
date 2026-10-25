@@ -418,3 +418,9 @@
 @media(max-width:1020px){.brain-stage{grid-template-columns:1fr 1fr}.brain-hologram{grid-column:1/-1;grid-row:1;min-height:400px}}
 @media(max-width:650px){.brain-stage{display:flex;flex-direction:column}.brain-hologram{min-height:360px}.brain-volume,.brain-volume-active{min-height:330px}.brain-volume .ago-real-3d-brain,.brain-volume .brain-svg{height:330px}.brain-rotate-controls{bottom:36px}}
 @media(prefers-reduced-motion:reduce){.brain-orbit,.company-world line.company-link.edge-live{animation:none}}
+
+/* AGO circular hierarchy: faint concentric guides clarify levels without
+   implying authority. Only authenticated reporting records receive blue lines. */
+.company-world svg .company-orbit-ring{fill:none;stroke:#6ba1c8;stroke-width:2.2;stroke-dasharray:6 20;opacity:.25;pointer-events:none}
+.company-world line.company-link.edge-pending{stroke:#f6c362;stroke-width:6;stroke-dasharray:10 13;opacity:.96;filter:drop-shadow(0 0 5px #df9c40)}
+.map-reporting-warning{color:#ffd2a0;font-weight:700}
