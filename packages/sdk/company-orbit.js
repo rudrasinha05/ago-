@@ -54,10 +54,13 @@ export function circularCompanyLayout(departments,employees,founderId){
       kind:parent||person.manager_id===founderId?'reporting':'grouping'
     });
     const childIds=children.get(person.id)||[];
-    let left=start;
+    // Keep subordinates in the parent's outward sector: a single CEO with
+    // many direct reports must not draw links straight across the Founder.
+    const spread=Math.min(end-start,2.4);
+    let left=angle-spread/2;
     const units=childIds.reduce((sum,id)=>sum+weight(id),0);
     for(const childId of childIds){
-      const arc=(end-start)*weight(childId)/units;
+      const arc=spread*weight(childId)/units;
       place(byId.get(childId),left,left+arc,depth+1);
       left+=arc;
     }
