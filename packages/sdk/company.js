@@ -13,34 +13,91 @@ export function employeeStatus(employeeId, tasks) {
   return {label:labels[tone],tone,tasks:assigned};
 }
 export function companyLayout(departments, employees, founderId) {
-  const people=employees.filter(e=>e.id!==founderId), byId=new Map(people.map(e=>[e.id,e]));
-  const children=new Map(people.map(e=>[e.id,[]])), roots=[];
+  // A tidy, top-down REPORTING tree rather than an exploding radial spiderweb.
+  // Department links are visual grouping only, NEVER a fabricated manager.
+  const people=employees.filter(e=>e.id!==founderId);
+  const byId=new Map(people.map(e=>[e.id,e]));
+  const order=(a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id))||String(a.id).localeCompare(String(b.id));
+  const directManager=new Map();
+  for(const e of people) {
+    if(!byId.has(e.manager_id)||e.id===e.manager_id)continue;
+    const seen=new Set([e.id]);let parent=e.manager_id,cyclic=false;
+    while(byId.has(parent)){
+      if(seen.has(parent)){cyclic=true;break;}
+      seen.add(parent);parent=byId.get(parent).manager_id;
+    }
+    if(!cyclic)directManager.set(e.id,e.manager_id);
+  }
+  const children=new Map(people.map(e=>[e.id,[]]));
+  const roots=[];
   for(const e of people){
-    // Invalid imported cycles are made visible as roots; never recurse indefinitely.
-    const seen=new Set([e.id]);let cursor=e,cycle=false;
-    while(byId.has(cursor.manager_id)){if(seen.has(cursor.manager_id)){cycle=true;break;}seen.add(cursor.manager_id);cursor=byId.get(cursor.manager_id);}
-    if(!cycle&&byId.has(e.manager_id))children.get(e.manager_id).push(e);else roots.push(e);
+    const manager=directManager.get(e.id);
+    if(manager)children.get(manager).push(e);else roots.push(e);
   }
-  const weight=e=>children.get(e.id).reduce((sum,c)=>sum+weight(c),0)||1;
-  const leaves=departments.reduce((sum,d)=>sum+Math.max(1,roots.filter(e=>e.department_id===d.id).reduce((n,e)=>n+weight(e),0)),0)||1;
-  // Each leaf gets a 280px arc. Depth rings separate managers and their reports.
-  const inner=Math.max(700,leaves*280/(2*Math.PI)), step=420;
-  const raw=[], edges=[];let cursor=-Math.PI/2;
-  function place(e,start,span,depth){
-    const angle=start+span/2, radius=inner+depth*step;
-    raw.push({...e,key:'employee:'+e.id,type:'employee',angle,radius});
-    edges.push({from:byId.has(e.manager_id)&&!roots.includes(e)?'employee:'+e.manager_id:(departments.some(d=>d.id===e.department_id)?'department:'+e.department_id:'founder'),to:'employee:'+e.id});
-    let offset=start;for(const child of children.get(e.id)){const width=span*weight(child)/weight(e);place(child,offset,width,depth+1);offset+=width;}
+  for(const group of children.values())group.sort(order);
+  const existingDepartments=[...departments].sort(order);
+  const groups=existingDepartments.map(d=>({
+    department:d,roots:roots.filter(e=>e.department_id===d.id).sort(order)
+  }));
+  const ungrouped=roots.filter(e=>!existingDepartments.some(d=>d.id===e.department_id));
+  if(ungrouped.length)groups.push({department:null,roots:ungrouped.sort(order)});
+  // Preserve empty departments, expose missing managers as a separate root.
+  let maxDepth=0;
+  const weight=e=>Math.max(1,children.get(e.id).reduce((sum,c)=>sum+weight(c),0));
+  const slot=280,groupGap=160;
+  const widths=groups.map(g=>Math.max(slot,g.roots.reduce((sum,e)=>sum+weight(e)*slot,0)));
+  const drawingWidth=widths.reduce((a,b)=>a+b,0)+Math.max(0,groups.length-1)*groupGap;
+  const raw=[],edges=[];
+  const positions=new Map();
+  let x=0;
+  const founderY=0,deptY=315,firstEmployeeY=665,levelGap=305;
+  function place(e,left,width,depth,groupKey){
+    const centerX=left+width/2,y=firstEmployeeY+depth*levelGap;
+    maxDepth=Math.max(maxDepth,depth);
+    const node={...e,key:'employee:'+e.id,type:'employee',x:centerX,y,depth:depth+1};
+    raw.push(node);positions.set(node.key,node);
+    const manager=directManager.get(e.id);
+    edges.push({from:manager?'employee:'+manager:groupKey||'founder',to:node.key,
+      kind:manager?'reporting':'grouping'});
+    let childLeft=left;
+    for(const child of children.get(e.id)){
+      const childWidth=weight(child)*slot;
+      place(child,childLeft,childWidth,depth+1,groupKey);
+      childLeft+=childWidth;
+    }
   }
-  for(const d of departments){
-    const team=roots.filter(e=>e.department_id===d.id), size=team.reduce((sum,e)=>sum+weight(e),0);
-    const span=(size||1)/leaves*2*Math.PI;
-    {raw.push({...d,key:'department:'+d.id,type:'department',angle:cursor+span/2,radius:Math.max(360,inner-350)});edges.push({from:'founder',to:'department:'+d.id});}
-    if(!size)cursor+=span;
-    for(const e of team){const width=weight(e)/leaves*2*Math.PI;place(e,cursor,width,0);cursor+=width;}
+  for(let index=0;index<groups.length;index++){
+    const group=groups[index],width=widths[index],mid=x+width/2;
+    const groupKey=group.department?'department:'+group.department.id:null;
+    if(group.department){
+      const node={...group.department,key:groupKey,type:'department',x:mid,y:deptY};
+      raw.push(node);positions.set(groupKey,node);
+      edges.push({from:'founder',to:groupKey,kind:'grouping'});
+    }
+    const used=group.roots.reduce((sum,e)=>sum+weight(e)*slot,0);
+    let rootLeft=x+(width-used)/2;
+    for(const e of group.roots){
+      const w=weight(e)*slot;
+      place(e,rootLeft,w,0,groupKey);
+      rootLeft+=w;
+    }
+    x+=width+groupGap;
   }
-  const extent=Math.max(1000,...raw.map(n=>n.radius))+250, center=extent,size=extent*2;
-  return {size,center,nodes:raw.map(n=>({...n,x:center+Math.cos(n.angle)*n.radius,y:center+Math.sin(n.angle)*n.radius})),edges};
+  // All coordinates are centered in a square scene; the viewport deliberately
+  // starts centered on the Founder and lets users zoom or focus a department.
+  const height=firstEmployeeY+(maxDepth+1)*levelGap+340;
+  const size=Math.ceil(Math.max(1800,drawingWidth+360,height+300));
+  const shiftX=(size-drawingWidth)/2,shiftY=(size-height)/2+140;
+  const founder={x:size/2,y:founderY+shiftY};
+  const nodes=raw.map(n=>({...n,x:n.x+shiftX,y:n.y+shiftY}));
+  const coords=new Map(nodes.map(n=>[n.key,n]));
+  // Department and real manager links remain distinct and inspectable.
+  // Prevent visually misleading zero-length links and keep every node in bounds.
+  const dangling=edges.filter(e=>e.from!=='founder'&&!coords.has(e.from));
+  if(dangling.length)throw new Error('Reporting graph has an unresolved visual link');
+  return {size,center:size/2,founder,nodes,edges,
+    reportingEdges:edges.filter(e=>e.kind==='reporting').length,
+    groupingEdges:edges.filter(e=>e.kind==='grouping').length};
 }
 
 /** Highlight the recorded assignment chain up to the founder, never invented routes. */
