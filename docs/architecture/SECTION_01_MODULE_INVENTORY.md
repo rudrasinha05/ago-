@@ -35,7 +35,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [calendar_store](../../apps/backend/ago/calendar_store.py) | operations | persistence | backend_contracts, enterprise_domains, governance, security, security_controls |
 | [company_chat](../../apps/backend/ago/company_chat.py) | workforce | persistence | backend_contracts, governance, organization_store |
 | [company_engineering](../../apps/backend/ago/company_engineering.py) | workforce | service | github_adapter |
-| [company_engineering_preflight](../../apps/backend/ago/company_engineering_preflight.py) | workforce | persistence | agent_runtime_queries, company_ollama_chain_queries |
+| [company_engineering_preflight](../../apps/backend/ago/company_engineering_preflight.py) | workforce | persistence | agent_runtime_queries, backend_contracts, company_ollama_chain_queries |
 | [company_ollama_chain](../../apps/backend/ago/company_ollama_chain.py) | workforce | service | company_engineering |
 | [company_ollama_chain_queries](../../apps/backend/ago/company_ollama_chain_queries.py) | workforce | persistence | backend_contracts |
 | [console_api](../../apps/backend/ago/console_api.py) | transport | transport | api_m2, backend_contracts, repository_ports, security |

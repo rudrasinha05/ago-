@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from uuid import UUID
 
 from ago.agent_runtime_queries import AgentRuntimeQueries
+from ago.backend_contracts import RepositoryScope
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 
 BLOCKER_CODES = {
@@ -34,10 +35,14 @@ BLOCKER_CODES = {
 
 
 def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
-                             task_id: str) -> dict:
+                             task_id: str, set_read_only: bool = False) -> dict:
     """Return only safe statuses; never expose project briefs or source drafts."""
     for value in (tenant_id, founder_id, task_id):
         UUID(str(value))
+    if set_read_only:
+        # Called inside a transaction opened by the founder-only GET endpoint.
+        db.execute("SET TRANSACTION READ ONLY")
+    repositories = RepositoryScope(db)
     report = {
         "kind": "ago_founder_engineering_preflight_v1",
         "task_id": str(task_id),
@@ -94,7 +99,7 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
         )
     if not report["linked_matching_approval"]:
         report["blocking_checks"].append("matching_approval_not_approved")
-    context = AgentRuntimeQueries(db).select_ago_founder_project_12(
+    context = repositories.resolve(AgentRuntimeQueries).select_ago_founder_project_12(
         (task_id, tenant_id),
     ).fetchone()
     report["founder_discovery_link"] = context is not None
@@ -102,7 +107,7 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
         report["blocking_checks"].append("founder_discovery_link_missing")
     elif report["action_internal_brief"]:
         try:
-            participants = CompanyOllamaChainQueries(db).assignments(
+            participants = repositories.resolve(CompanyOllamaChainQueries).assignments(
                 tenant_id=tenant_id, actor_id=founder_id,
                 task=SimpleNamespace(
                     id=task_id,

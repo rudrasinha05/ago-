@@ -323,6 +323,7 @@
       "layer": "persistence",
       "imports": [
         "agent_runtime_queries",
+        "backend_contracts",
         "company_ollama_chain_queries"
       ]
     },

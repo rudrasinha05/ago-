@@ -82,10 +82,9 @@ def engineering_preflight(
     ):
         raise HTTPException(403, "Local engineering diagnostics require development mode")
     with db.transaction():
-        db.execute("SET TRANSACTION READ ONLY")
         return inspect_engineering_task(
             db, tenant_id=actor.tenant_id, founder_id=actor.subject,
-            task_id=str(task_id),
+            task_id=str(task_id), set_read_only=True,
         )
 
 
