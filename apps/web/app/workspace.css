@@ -377,3 +377,44 @@
 .brain-volume.webgl-active .brain-svg{visibility:hidden}
 .brain-volume.webgl-active{min-height:295px}
 @media(prefers-reduced-motion:reduce){.ago-real-3d-brain{animation:none}}
+
+
+/* AGO hierarchy V2: distinguish truthful manager edges from department grouping.
+   Avoid rendering a 51-person workforce as unreadable radial spaghetti. */
+.company-world line.company-link{stroke-width:3.5;stroke:#559cc7;stroke-linecap:round;opacity:.76}
+.company-world line.company-link.department-link{stroke:#7e91a9;stroke-width:2.8;stroke-dasharray:9 13;opacity:.50}
+.company-world line.company-link.manager-link{stroke:#4baad5;stroke-width:5;opacity:.94}
+.company-world line.company-link.edge-live{stroke:#fa395e;stroke-width:9;stroke-dasharray:22 12;opacity:1;filter:drop-shadow(0 0 10px #ff2e63);animation:agoRouteDash 1.3s linear infinite}
+.company-world line.company-link.edge-pending{stroke:#fd7087;stroke-width:7;stroke-dasharray:11 13;opacity:1;filter:drop-shadow(0 0 6px #e43266)}
+.company-world .map-node-wrap .map-node{border-color:#406f96;background:linear-gradient(145deg,#132c47,#0b1f36);box-shadow:0 9px 24px #0007}
+.company-world .map-node-wrap .map-node.department{border:2px dashed #af8be0;background:#252042}
+.company-world .map-node-wrap .map-node.working{border:4px solid #ff2e55}
+.map-controls{flex-wrap:wrap;max-width:min(100%,720px);box-shadow:0 8px 35px #0008}
+.map-controls button[aria-pressed="true"]{background:#23618c;border-color:#87d0ef;box-shadow:inset 0 0 0 1px #87d0ef}
+.map-controls span{color:#d3f4ff;font-size:11px}
+.map-legend{z-index:5;max-height:108px;overflow:auto;box-shadow:0 0 20px #01081288}
+.company-canvas{background-image:radial-gradient(#395b78 1px,transparent 1px),linear-gradient(165deg,#07182b,#061323);background-size:26px 26px,100% 100%}
+@media(max-width:760px){.map-controls{right:10px;max-width:calc(100% - 20px);gap:3px}.map-controls button{padding:7px;font-size:11px}.map-legend{font-size:10px}}
+
+/* WebGL cortical observatory: large centered brain, no fake overlapping discs. */
+.brain-stage{grid-template-columns:minmax(195px,1fr) minmax(410px,2.5fr) minmax(195px,1fr);min-height:475px}
+.brain-hologram{min-height:455px;background:radial-gradient(ellipse at 50% 42%,#13407565,#080f25 70%)}
+.brain-hologram:before{opacity:.52}
+.brain-volume,.brain-volume-active{width:min(98%,650px);min-height:400px;transform:none;perspective:none;filter:none;overflow:visible}
+.brain-volume:before,.brain-volume:after{opacity:.18}
+.brain-volume .ago-real-3d-brain{position:absolute;top:0;left:0;width:100%;height:400px;z-index:4;touch-action:none;cursor:grab}
+.brain-volume.webgl-active .brain-depth-stack,
+.brain-volume.webgl-active .brain-svg{display:none}
+.brain-volume .brain-svg{width:100%;height:400px}
+.brain-volume .brain-depth-slice{height:400px}
+.brain-orbit{width:63%;height:25%;opacity:.46}
+.brain-rotate-controls{bottom:49px}
+.brain-label{pointer-events:none;font-size:10px;opacity:.86}
+.label-analyze{left:8%;top:18%}
+.label-plan{right:8%;top:18%}
+.label-delegate{right:7%;top:55%}
+.label-review{left:8%;top:64%}
+@media(max-width:1450px){.brain-stage{grid-template-columns:minmax(155px,1fr) minmax(330px,1.7fr) minmax(155px,1fr)}}
+@media(max-width:1020px){.brain-stage{grid-template-columns:1fr 1fr}.brain-hologram{grid-column:1/-1;grid-row:1;min-height:400px}}
+@media(max-width:650px){.brain-stage{display:flex;flex-direction:column}.brain-hologram{min-height:360px}.brain-volume,.brain-volume-active{min-height:330px}.brain-volume .ago-real-3d-brain,.brain-volume .brain-svg{height:330px}.brain-rotate-controls{bottom:36px}}
+@media(prefers-reduced-motion:reduce){.brain-orbit,.company-world line.company-link.edge-live{animation:none}}
