@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 from uuid import UUID
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
@@ -167,11 +168,46 @@ class CompanyOllamaChainQueries:
             # Lock the exact governed task so two callbacks/retries cannot
             # duplicate a notification or forge work for a nonexistent task.
             task = self.db.execute("""
-                SELECT id FROM ago_governed_tasks
-                WHERE tenant_id=%s AND id=%s FOR UPDATE
-            """, (tenant_id, task_id)).fetchone()
+                SELECT t.id, i.id AS intake_id
+                FROM ago_governed_tasks t
+                JOIN ago_plan_steps ps ON ps.tenant_id=t.tenant_id
+                  AND ps.task_id=t.id
+                JOIN ago_founder_intake_stages s ON s.tenant_id=ps.tenant_id
+                  AND s.plan_step_id=ps.id AND s.stage='discovery'
+                JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id
+                  AND i.id=s.intake_id AND i.founder_id=%s
+                JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id
+                  AND p.id=i.plan_id AND p.status='active'
+                WHERE t.tenant_id=%s AND t.id=%s
+                  AND t.action='internal:brief'
+                FOR UPDATE OF t
+            """, (founder_id, tenant_id, task_id)).fetchone()
             if task is None:
-                raise PermissionError("Verified worker event requires a real task")
+                raise PermissionError(
+                    "Verified worker event requires a real Founder-approved discovery task"
+                )
+            # An ordered caller-provided list is NOT proof of an appointment.
+            # Re-read the actual Founder, Board, PM and worker assignments
+            # under the task lock before recording an apparent completion.
+            # This prevents an old/stolen roster, cross-project callback, or
+            # forged AI employee ID from inflating the visible work counter.
+            bound_task = SimpleNamespace(
+                id=task_id,
+                project_context={"intake_id":str(task["intake_id"])},
+            )
+            appointed = self.assignments(
+                tenant_id=tenant_id, actor_id=founder_id, task=bound_task,
+            )
+            presented = tuple(
+                (p.get("role"),p.get("employee_id")) for p in participants
+            )
+            verified = tuple(
+                (p["role"],p["employee_id"]) for p in appointed
+            )
+            if presented != verified:
+                raise PermissionError(
+                    "Role handoff does not match currently appointed AI employees"
+                )
             # Strictly ordered, durable handoff: a crashed/replayed worker
             # must never claim later roles before earlier model inferences.
             # A Board objection has no normal completion receipt, so it
