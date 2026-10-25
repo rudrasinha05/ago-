@@ -67,6 +67,46 @@ QA ya connection reconciliation chahiye. Inko roz chalana Founder ka
 normal kaam nahi. Jo actual device/provider access missing hai usko
 ChatGPT ke GitHub source-code commits se replace nahi kiya ja sakta.
 
+## Real Ollama run se Docker QA — naya Founder shortcut
+
+Prerequisites: active Founder-approved AGO implementation stage, correctly appointed seven AI roles, manually started local Ollama + AGO backend, and an existing offline Docker `python:3.11-slim` image. No auto-install/download/service startup.
+
+Server terminal (use the model you actually installed):
+
+```powershell
+$env:AGO_ENVIRONMENT='development'
+$env:AGO_LLM_PROVIDER='ollama_local'
+$env:AGO_ENABLE_LOCAL_MODELS='true'
+$env:AGO_ENABLE_PAID_MODELS='false'
+$env:AGO_LOCAL_COMPANY_CHAIN='true'
+$env:AGO_LOCAL_FULL_BOARD_REVIEW='true'
+$env:AGO_LOCAL_ENGINEERING_CANDIDATES='true'
+$env:AGO_LLM_MODEL='qwen2.5-coder:1.5b'
+.\scripts\ago.ps1 serve
+```
+
+Separate PowerShell terminal: run a **previously approved** task, then enter its actual completed run UUID at the bridge prompt.
+
+```powershell
+.\scripts\ago.ps1 run-approved-engineering
+.\scripts\ago.ps1 handoff-live-to-qa
+```
+
+The bridge uses a signed Founder session to preview the exact persisted Board-cleared run without writing files, prints the candidate SHA-256, then asks you to inspect the actual source and tests in AGO. To continue, retype that SHA-256 and provide two **separate** exact consent phrases for private export and offline Docker testing. Changed run identity or source digest blocks execution.
+
+Raw candidate source is saved privately in `~/.ago/candidate_exports`; staging and original Docker test evidence remain in `~/.ago/delivery_runs`, outside the Git checkout. Docker is network-disabled, read-only and non-root. Failed tests produce **no** QA request. Passing tests produce only a **pending human QA packet**, never self-approval or GitHub write.
+
+Independent human review and governed GitHub submission remain separate:
+
+```powershell
+.\scripts\ago.ps1 review-tested-candidate
+.\scripts\ago.ps1 prepare-github-draft
+.\scripts\ago.ps1 submit-github-proposal
+.\scripts\ago.ps1 apply-github-proposal
+.\scripts\ago.ps1 execute-github-commit
+```
+
+These operations require the authenticated separately appointed reviewer, exact source/QA receipts, Founder credentials and independently approved GitHub scope. A commit is NOT a verified Draft PR or published release. Local synthetic fixtures and GitHub CI do not establish one real Ollama-produced market-ready delivery; the owner must verify the actual device evidence and final provider SHA/PR.
 ## Kya complete hone ka claim **nahi** hai
 
 - Local owner laptop par real end-to-end model coding run **not verified**.
