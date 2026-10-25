@@ -95,39 +95,34 @@ try {
     Write-Host "AGO visual frontend: packaging the saved circular Company Map and Company Brain."
     # An existing node_modules directory is not proof that its packages match Git.
     # In particular, a stale local Next.js can survive a git pull unchanged.
-    $lockPath = Join-Path $root "package-lock.json"
-    $webPackagePath = Join-Path $web "package.json"
-    $installedNextPath = Join-Path $root "node_modules\next\package.json"
-    if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
-        throw "package-lock.json missing. Refusing an unpinned frontend install."
+    # Check the npm lockfile in Node: Windows PowerShell 5.1's ConvertFrom-Json
+    # rejects some valid lockfiles containing special npm package keys.
+    $nextCheck = Join-Path $root "scripts\ago_next_dependency_state.mjs"
+    if (-not (Test-Path -LiteralPath $nextCheck -PathType Leaf)) {
+        throw "Pinned Next.js dependency verifier missing."
     }
-    $expectedNext = (Get-Content -LiteralPath $webPackagePath -Raw | ConvertFrom-Json).dependencies.next
-    $lockData = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
-    $lockedNextEntry = $lockData.packages.PSObject.Properties["node_modules/next"]
-    $lockedNext = if ($lockedNextEntry) { $lockedNextEntry.Value.version } else { $null }
-    if ([string]::IsNullOrWhiteSpace($expectedNext) -or $expectedNext -cne $lockedNext) {
-        throw "Next.js version in apps/web/package.json does not match package-lock.json. Refusing to install."
+    $stateLine = & node $nextCheck
+    if ($LASTEXITCODE -ne 0) {
+        throw "Pinned Next.js dependency verification failed. No installation or database change was attempted."
     }
-    $installedNext = $null
-    if (Test-Path -LiteralPath $installedNextPath -PathType Leaf) {
-        try {
-            $installedNext = (Get-Content -LiteralPath $installedNextPath -Raw | ConvertFrom-Json).version
-        } catch {
-            Write-Host "Installed Next.js manifest is invalid; restoring pinned dependencies."
-        }
+    $stateParts = [string]$stateLine -split '\|', 2
+    if ($stateParts.Count -ne 2 -or
+        $stateParts[0] -notmatch '^\d+\.\d+\.\d+' -or
+        $stateParts[1] -notmatch '^(missing|\d+\.\d+\.\d+)') {
+        throw "Next.js verifier returned unexpected version data."
     }
+    $lockedNext = $stateParts[0]
+    $installedNext = $stateParts[1]
     if ($installedNext -cne $lockedNext) {
         Write-Host "Next.js installation is missing or outdated (installed: $installedNext; pinned: $lockedNext)."
         Write-Host "Restoring pinned frontend dependencies from package-lock.json with npm ci..."
         & npm.cmd ci
         if ($LASTEXITCODE -ne 0) { throw "npm ci failed; frontend was not packaged." }
-        if (-not (Test-Path -LiteralPath $installedNextPath -PathType Leaf)) {
-            throw "npm ci completed without the pinned Next.js package."
-        }
-        $installedNext = (Get-Content -LiteralPath $installedNextPath -Raw | ConvertFrom-Json).version
-        if ($installedNext -cne $lockedNext) {
+        $afterState = & node $nextCheck
+        if ($LASTEXITCODE -ne 0 -or [string]$afterState -cne "$lockedNext|$lockedNext") {
             throw "Installed Next.js still does not match package-lock.json after npm ci."
         }
+        $installedNext = $lockedNext
     }
     Write-Host "Next.js dependency verified: $installedNext (matches Git lockfile)."
     & npm.cmd run build --workspace "@ago/web"
