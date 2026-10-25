@@ -33,6 +33,9 @@ def _private_paths(export: Path, staged: Path, qa_packet: Path) -> None:
     resolved = [p.resolve() for p in paths]
     if len(set(resolved)) != 3:
         raise PermissionError("Distinct private export, stage and QA paths required")
+    if (resolved[0].is_relative_to(resolved[1])
+            or resolved[2].is_relative_to(resolved[1])):
+        raise PermissionError("Export and QA packet must stay outside untrusted stage")
     for path, exact in zip(paths, resolved, strict=True):
         if exact.is_relative_to(repo) or path.is_symlink():
             raise PermissionError("Delivery artifacts must stay outside AGO checkout")
@@ -40,9 +43,6 @@ def _private_paths(export: Path, staged: Path, qa_packet: Path) -> None:
             raise ValueError("Pre-existing private output parent directory required")
         if path.exists():
             raise FileExistsError("Never overwrite or replay an existing receipt")
-    if (resolved[0].is_relative_to(resolved[1])
-            or resolved[2].is_relative_to(resolved[1])):
-        raise PermissionError("Export and QA packet must stay outside untrusted stage")
 
 
 def bridge(
