@@ -141,10 +141,13 @@ def test_opt_in_model_handler_records_only_validated_plan_as_structured(monkeypa
     class FakeProvider:
         next_output = json.dumps(valid_five_stage_plan())
         def __init__(self, **kwargs):
-            assert kwargs["max_output_tokens"] == 1024
+            self.token_ceiling = kwargs["max_output_tokens"]
             assert kwargs["timeout_seconds"] == 60
             assert kwargs["keep_alive"] == "90s"
         def generate(self, prompt):
+            # The general research provider is initialized at 384 tokens;
+            # only the separately approved project plan call needs 1024.
+            assert self.token_ceiling == 1024
             assert "No Markdown fences" in prompt
             assert len(prompt) <= 4000
             return self.next_output
