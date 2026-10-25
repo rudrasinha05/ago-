@@ -65,6 +65,7 @@
     "GET /v1/operations/enterprise/capacity": "ef6bd6a9fe57eff0a76b2cf29c76e64a4221e90bf2ac7534f6a2604472ad4b06",
     "GET /v1/operations/enterprise/costs": "a4f6ca49055b4606c094f54f63b883c50773ed4a31044642d94b0d8fc5b0ba8f",
     "GET /v1/operations/enterprise/evidence": "886462b72d04f2e2a2bd1f3663c5265246b67fb3557150a73fcd7e6c52300307",
+    "GET /v1/operations/enterprise/evidence/{evidence_id}": "7204060cbafc53e556c64a382ef35cadd63c56014fc50164f84bb0e1a8ad43b1",
     "GET /v1/operations/enterprise/evolution/reviews": "3591aac485252e256a23436b7fd85da62adb634c6e1d88a606ae60c3a3bc413d",
     "GET /v1/operations/enterprise/lifecycle": "6c099687720d4231f01af0203517c930c45e220367ccd96d5c4e071e935c0678",
     "GET /v1/operations/enterprise/marketplace": "0b2c48f5faa2526840d309866c23f1e0888de4a6224e67406143108f4f26f86d",
