@@ -179,8 +179,13 @@ test('circular hierarchy anchors are finite, clipped and prevent card overlaps a
  for(const a of graph.nodes){
    assert.ok(a.x>0&&a.y>0&&a.x<graph.size&&a.y<graph.size);
    for(const b of graph.nodes){
-     if(a.key!==b.key)assert.ok(Math.abs(a.x-b.x)>210||Math.abs(a.y-b.y)>130,
-       'Circular cards overlap: '+a.key+' / '+b.key);
+     if(a.key!==b.key){
+       const bothStaff=a.type==='employee'&&b.type==='employee';
+       const bothDepartments=a.type==='department'&&b.type==='department';
+       const width=bothStaff?230:225,height=bothStaff?300:bothDepartments?170:230;
+       assert.ok(Math.abs(a.x-b.x)>=width||Math.abs(a.y-b.y)>=height,
+         'Visible circular cards overlap: '+a.key+' / '+b.key);
+     }
    }
  }
  const coords=new Map([['founder',graph.founder],...graph.nodes.map(n=>[n.key,n])]);
