@@ -200,6 +200,32 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
             for role, employee_id in zip(full_roles, full_people, strict=True)
         ],
     )
+    # Real Postgres rejects fabricated Founder, tenant, task and arbitrary
+    # employee claims, including an otherwise valid-looking four/seven role
+    # chain. No fake progress notification may be inserted by these calls.
+    negative_cases = (
+        {"founder_id": str(uuid4())},
+        {"tenant_id": str(uuid4())},
+        {"task_id": str(uuid4())},
+        {"participants": [
+            {**member, "employee_id":str(uuid4())}
+            if member["role"] == "cto" else dict(member)
+            for member in evidence_args["participants"]
+        ]},
+    )
+    for overrides in negative_cases:
+        with pytest.raises(PermissionError):
+            recorded.record_verified_handoff(
+                **{**evidence_args, **overrides},
+                role="ceo", employee_id=ceo, blocked=False,
+            )
+    before = info["db"].execute("""
+        SELECT count(*) AS total FROM ago_company_chat
+        WHERE tenant_id=%s AND task_id=%s AND kind='status'
+          AND body LIKE %s
+    """, (info["tenant"], task_id, "AGO verified local inference for %")).fetchone()
+    assert before["total"] == expected_count
+
     recorded.record_verified_handoff(
         **evidence_args, role="ceo", employee_id=ceo, blocked=False,
     )
