@@ -531,6 +531,13 @@ jobs:
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium firefox webkit
           python -m pip install -e 'apps/backend[dev,postgres]' 'playwright==1.55.0'
+          # The Python tests_next suite is pinned to Playwright 1.55, while
+          # npm's @playwright/test uses 1.56. Each version has a different
+          # browser executable revision; installing only Node's Chromium
+          # leaves Python's required headless_shell missing after 66/66 JS
+          # tests pass. Provision BOTH tested revisions rather than skipping
+          # independent signed-session and human-review browser journeys.
+          python -m playwright install chromium
       - name: Build and package actual Next.js export
         run: |
           npm run build --workspace @ago/web
