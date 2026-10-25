@@ -84,7 +84,15 @@ try {
     }
     if ($Action -eq "diagnose-approved-engineering") {
         $TaskId = Read-Host "Previously attempted AGO internal:brief task UUID (read-only)"
-        if ($TaskId -notmatch '^[0-9a-fA-F-]{36}        Write-Host "Read-only reconciliation; never replay a previous HTTPError task."
+        if ($TaskId -notmatch '^[0-9a-fA-F-]{36}$') {
+            throw "A valid task UUID is required for read-only inspection."
+        }
+        Write-Host "Checking stored approval, active project and seven actual employee identities only."
+        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --diagnose-task $TaskId
+        exit $LASTEXITCODE
+    }
+    if ($Action -eq "reconcile-approved-engineering") {
+        Write-Host "Read-only reconciliation; never replay a previous HTTPError task."
         & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --reconcile-only
         exit $LASTEXITCODE
     }
