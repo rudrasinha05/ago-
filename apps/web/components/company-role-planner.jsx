@@ -5,12 +5,34 @@ import {buildCompanyRolePlan,buildLeadershipPlan} from '@ago/sdk/company-roles';
 const BASE='/v1/organization/company';
 export function CompanyRolePlanner({api,me,employees,departments,profiles,board=[],onSaved}){
  const [expanded,setExpanded]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[failed,setFailed]=useState('');
+ const [hierarchyOpen,setHierarchyOpen]=useState(false),[managerChoices,setManagerChoices]=useState({}),[linkSaving,setLinkSaving]=useState(null);
  const eligible=me.roles?.includes('founder')&&me.permissions?.includes('organization:manage');
  const profilesReady=Array.isArray(profiles);
  const plan=useMemo(()=>profilesReady?buildCompanyRolePlan(employees,departments,profiles,me.id):[],[employees,departments,profiles,me.id,profilesReady]);
  const candidates=plan.filter(p=>p.status==='proposed');
  const executivePlan=useMemo(()=>buildLeadershipPlan(employees,profiles,board,me.id,departments),[employees,profiles,board,me.id,departments]);
  const [executiveBusy,setExecutiveBusy]=useState(false);
+ const byId=new Map(employees.map(e=>[e.id,e]));
+ const chiefId=executivePlan[0]?.employee_id;
+ const chiefIds=new Set(executivePlan.filter(e=>e.employee_id).map(e=>e.employee_id));
+ const unreviewedCeoReports=employees.filter(e=>e.id!==me.id&&e.manager_id===chiefId&&!chiefIds.has(e.id));
+ const currentManagerName=id=>id===me.id?'Founder':byId.get(id)?.name||'Department root / unresolved';
+ async function saveReviewedManager(employee){
+   if(!eligible||linkSaving||!profilesReady)return;
+   const target=managerChoices[employee.id];
+   if(!target||target===employee.id||target===employee.manager_id)return;
+   if(!employees.some(e=>e.id===target))return;
+   setLinkSaving(employee.id);setFailed('');setMessage('');
+   try{
+     await api.request(BASE+'/employees/'+encodeURIComponent(employee.id)+'/manager',{
+       method:'PUT',body:{manager_id:target}
+     });
+     setMessage('Founder-reviewed manager link saved for '+employee.name+'.');
+     setManagerChoices(old=>({...old,[employee.id]:undefined}));
+     await onSaved?.();
+   }catch(e){setFailed('Reporting change refused: '+e.message);}
+   finally{setLinkSaving(null);}
+ }
  async function apply(){
   if(busy||!eligible||!profilesReady||!candidates.length)return;
   setBusy(true);setFailed('');setMessage('');
@@ -60,22 +82,19 @@ export function CompanyRolePlanner({api,me,employees,departments,profiles,board=
       savedRoles++;
     }
     if(ceo?.employee_id){
-      for(const employee of employees){
-        if(employee.id===me.id)continue;
-        if(employee.id===ceo.employee_id){
-          if(employee.manager_id!==me.id){
-           await api.request(BASE+'/employees/'+encodeURIComponent(employee.id)+'/manager',{
-            method:'PUT',body:{manager_id:me.id}
-           });reporting++;
-          }
-        }else if(!employee.manager_id){
-          await api.request(BASE+'/employees/'+encodeURIComponent(employee.id)+'/manager',{
-           method:'PUT',body:{manager_id:ceo.employee_id}
+      // Never blanket-attach staff from unrelated departments to CEO.
+      for(const item of executivePlan){
+        if(!item.employee_id)continue;
+        const worker=employees.find(e=>e.id===item.employee_id);
+        const managerId=item.seat==='Strategy & Vision'?me.id:ceo.employee_id;
+        if(worker&&!worker.manager_id&&worker.id!==managerId){
+          await api.request(BASE+'/employees/'+encodeURIComponent(worker.id)+'/manager',{
+            method:'PUT',body:{manager_id:managerId}
           });reporting++;
         }
       }
     }
-    setMessage('Saved '+savedRoles+' real employee roles, '+savedSeats+' board seats and '+reporting+' missing reporting links. No AI task was executed.');
+    setMessage('Saved '+savedRoles+' profiles, '+savedSeats+' Board seats and '+reporting+' executive links. Other manager links remain subject to individual Founder review; no AI task executed.');
    }catch(e){
     setFailed('Some records were saved before interruption: '+savedRoles+' roles, '+savedSeats+' seats, '+reporting+' reporting links. '+e.message+'. Refresh and inspect; repeated board appointments are idempotent.');
    }finally{setExecutiveBusy(false);await onSaved?.();}
@@ -96,6 +115,28 @@ export function CompanyRolePlanner({api,me,employees,departments,profiles,board=
    </tbody></table></div>
    <button type="button" disabled={!profilesReady||!executivePlan[0]?.employee_id||executiveBusy||busy} onClick={establishHierarchy}>{executiveBusy?'Recording actual company roles…':'Apply workforce roles + CEO/CTO/Board hierarchy'}</button>
    <small>Explicit founder action overwrites executive job titles selected above; other meaningful existing profiles are preserved. Vacant roles remain visible, never fake-staffed.</small>
+  </section>
+  <section className="company-reporting-audit" aria-label="Recorded reporting link audit">
+   <h4>Reporting audit — current manager links</h4>
+   <p>{unreviewedCeoReports.length} non-Board employees currently report directly to CEO. These are recorded links, not proof the assignment is correct. A previous bulk action may have connected unrelated workers. Review each before changing.</p>
+   <button type="button" aria-expanded={hierarchyOpen} onClick={()=>setHierarchyOpen(v=>!v)}>{hierarchyOpen?'Hide reporting audit':'Review employee reporting links'}</button>
+   {hierarchyOpen&&<div className="role-table-wrap" role="region" aria-label="Employee manager review" tabIndex={0}>
+    <table><thead><tr><th>Employee / role</th><th>Recorded manager</th><th>Choose actual manager</th><th>Founder action</th></tr></thead>
+     <tbody>{employees.filter(e=>e.id!==me.id).map(e=>{
+       const picked=managerChoices[e.id]??e.manager_id??'';
+       return <tr key={e.id}><td><strong>{e.name}</strong><small>{profiles?.find(p=>p.id===e.id)?.role_title||'Role unassigned'}</small></td>
+         <td>{currentManagerName(e.manager_id)}</td>
+         <td><select aria-label={'Reviewed manager for '+e.name} value={picked}
+          onChange={event=>setManagerChoices(old=>({...old,[e.id]:event.target.value}))}>
+           <option value="">No manager chosen</option>
+           {employees.filter(b=>b.id!==e.id).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+         </select></td>
+         <td><button type="button" onClick={()=>saveReviewedManager(e)}
+           disabled={!picked||picked===e.manager_id||linkSaving!==null}>{linkSaving===e.id?'Saving…':'Save reviewed link'}</button></td>
+       </tr>;
+     })}</tbody>
+    </table>
+   </div>}
   </section>
   <small>Existing assigned responsibility profiles are preserved. This records duties only, not board seats, RBAC, verified competence, tasks or an always-on AI worker.</small>
   {message&&<p role="status">{message}</p>}{failed&&<p role="alert">{failed}</p>}
