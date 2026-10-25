@@ -23,7 +23,30 @@ if ($RunId -notmatch '^[0-9a-fA-F-]{36}$' -or
     $CommitProposal -notmatch '^[0-9a-fA-F-]{36}$') {
     throw "Original run, commit operation and commit approval proposal UUID required."
 }
-$Export = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
+$PrivateExports = Join-Path $HOME ".ago\candidate_exports"
+$LegacyExport = Join-Path $PrivateExports ("ago-run-" + $RunId + ".json")
+$Export = Read-Host "Exact private source receipt path (Enter for legacy ago-run-UUID export)"
+if ([string]::IsNullOrWhiteSpace($Export)) {
+    $Export = $LegacyExport
+}
+if (-not (Test-Path -LiteralPath $PrivateExports -PathType Container) -or
+    -not (Test-Path -LiteralPath $Export -PathType Leaf)) {
+    throw "Original reviewed AI export is required."
+}
+$PrivateRoot = (Resolve-Path -LiteralPath $PrivateExports).Path
+$Export = (Resolve-Path -LiteralPath $Export).Path
+if (-not $Export.StartsWith(
+    $PrivateRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar,
+    [StringComparison]::OrdinalIgnoreCase)) {
+    throw "PR source receipt must stay in the private AGO candidate exports."
+}
+$SourceRecord = Get-Content -LiteralPath $Export -Raw | ConvertFrom-Json
+if ($SourceRecord.id -cne $RunId -or
+    $SourceRecord.source -cne "ago_authenticated_founder_run" -or
+    $SourceRecord.status -cne "completed" -or
+    $SourceRecord.result.board_review_cleared -ne $true) {
+    throw "Draft PR source must match the original completed full-Board run."
+}
 $CommitDraft = Join-Path $HOME (".ago\delivery_runs\github-draft-" + $CommitId + ".json")
 $Stage = Read-Host "Original successful offline Docker stage path"
 $QA = Read-Host "Matching independently reviewed QA packet path"
