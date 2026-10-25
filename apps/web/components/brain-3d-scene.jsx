@@ -113,47 +113,81 @@ function initialize(gl) {
     working:gl.getUniformLocation(program,"working")};
 }
 
+// Rendering policy: draw on demand (state change, drag, resize). The decorative
+// idle sway runs only while motion is allowed AND the canvas is on screen in a
+// visible tab. A continuous 60 fps redraw of this mesh starved the main thread
+// and crashed WebKit content processes on GPU-less machines (Issue #3), and
+// ignored prefers-reduced-motion. The WebGL context is released on unmount.
+const IDLE_FRAME_MS=66;
 export function Brain3DScene({running,rotation=0,onReady}) {
-  const canvas=useRef(null),drag=useRef(null);
+  const canvas=useRef(null),drag=useRef(null),requestDraw=useRef(()=>{});
   const dragAngle=useRef(0),rotationRef=useRef(rotation),runningRef=useRef(running);
-  useEffect(()=>{rotationRef.current=rotation;},[rotation]);
-  useEffect(()=>{runningRef.current=running;},[running]);
+  useEffect(()=>{rotationRef.current=rotation;requestDraw.current();},[rotation]);
+  useEffect(()=>{runningRef.current=running;requestDraw.current();},[running]);
   useEffect(()=>{
-    let frame=0,gl=null,objects=null,alive=true;
+    let frame=0,idle=0,gl=null,objects=null,alive=true,onScreen=true;
+    const element=canvas.current;
+    const motion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    const animate=()=>!motion?.matches&&onScreen&&document.visibilityState==='visible';
+    let resize=null,visibility=null;
+    const schedule=()=>{if(alive&&!frame&&objects)frame=requestAnimationFrame(draw);};
+    function draw(){
+      frame=0;
+      if(!alive||!element||!objects)return;
+      const deviceRatio=Math.min(window.devicePixelRatio||1,2);
+      const displayWidth=Math.min(1024,Math.max(1,Math.floor(element.clientWidth*deviceRatio)));
+      const displayHeight=Math.min(600,Math.max(1,Math.floor(element.clientHeight*deviceRatio)));
+      if(element.width!==displayWidth||element.height!==displayHeight){
+        element.width=displayWidth;element.height=displayHeight;
+      }
+      gl.viewport(0,0,displayWidth,displayHeight);
+      gl.clearColor(0,0,0,0);
+      gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+      gl.useProgram(objects.program);
+      const idleYaw=animate()?Math.sin(performance.now()*.00022)*.06:0;
+      gl.uniform1f(objects.yaw,Math.PI*(rotationRef.current+dragAngle.current)/180+idleYaw);
+      gl.uniform1f(objects.pitch,-.12);
+      gl.uniform1f(objects.working,Math.max(0,runningRef.current));
+      gl.drawArrays(gl.TRIANGLES,0,objects.count);
+      // The sway completes one cycle in about 28 s, so ~15 fps is visually
+      // smooth and costs a quarter of a 60 fps loop.
+      if(animate()&&!idle)idle=setTimeout(()=>{idle=0;schedule();},IDLE_FRAME_MS);
+    }
+    const onVisibility=()=>schedule();
     try{
-      gl=canvas.current?.getContext("webgl",{alpha:true,antialias:true});
+      gl=element?.getContext("webgl",{alpha:true,antialias:true});
       if(!gl)throw Error("WebGL unavailable");
       objects=initialize(gl);
+      requestDraw.current=schedule;
+      if(typeof ResizeObserver==='function'){resize=new ResizeObserver(schedule);resize.observe(element);}
+      if(typeof IntersectionObserver==='function'){
+        visibility=new IntersectionObserver(entries=>{
+          onScreen=entries.some(entry=>entry.isIntersecting);schedule();
+        });
+        visibility.observe(element);
+      }
+      motion?.addEventListener?.('change',schedule);
+      document.addEventListener('visibilitychange',onVisibility);
       onReady?.(true);
-      const draw=()=>{
-        if(!alive||!canvas.current)return;
-        const deviceRatio=Math.min(window.devicePixelRatio||1,2);
-        const displayWidth=Math.min(1024,Math.max(1,Math.floor(canvas.current.clientWidth*deviceRatio)));
-        const displayHeight=Math.min(600,Math.max(1,Math.floor(canvas.current.clientHeight*deviceRatio)));
-        if(canvas.current.width!==displayWidth||canvas.current.height!==displayHeight){
-          canvas.current.width=displayWidth;canvas.current.height=displayHeight;
-        }
-        gl.viewport(0,0,displayWidth,displayHeight);
-        gl.clearColor(0,0,0,0);
-        gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-        gl.useProgram(objects.program);
-        const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-        const idleYaw=reduced?0:Math.sin(performance.now()*.00022)*.06;
-        gl.uniform1f(objects.yaw,Math.PI*(rotationRef.current+dragAngle.current)/180+idleYaw);
-        gl.uniform1f(objects.pitch,-.12);
-        gl.uniform1f(objects.working,Math.max(0,runningRef.current));
-        gl.drawArrays(gl.TRIANGLES,0,objects.count);
-        frame=requestAnimationFrame(draw);
-      };
-      frame=requestAnimationFrame(draw);
+      schedule();
     }catch{
       // Existing layered SVG remains a usable, keyboard-accessible fallback.
+      objects=null;
       onReady?.(false);
     }
     return()=>{
       alive=false;
-      cancelAnimationFrame(frame);
-      if(gl&&objects){gl.deleteBuffer(objects.buffer);gl.deleteProgram(objects.program);}
+      requestDraw.current=()=>{};
+      if(frame)cancelAnimationFrame(frame);
+      if(idle)clearTimeout(idle);
+      resize?.disconnect();visibility?.disconnect();
+      motion?.removeEventListener?.('change',schedule);
+      document.removeEventListener('visibilitychange',onVisibility);
+      if(gl){
+        if(objects){gl.deleteBuffer(objects.buffer);gl.deleteProgram(objects.program);}
+        // Free the GPU context now instead of waiting for garbage collection.
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+      }
     };
   },[onReady]);
   return <canvas ref={canvas} className="ago-real-3d-brain"
@@ -163,6 +197,7 @@ export function Brain3DScene({running,rotation=0,onReady}) {
       event.currentTarget.setPointerCapture?.(event.pointerId);}}
     onPointerMove={event=>{if(drag.current){
       dragAngle.current=Math.max(-75,Math.min(75,drag.current.angle+(event.clientX-drag.current.x)*.3));
+      requestDraw.current();
     }}}
     onPointerUp={event=>{drag.current=null;if(event.currentTarget.hasPointerCapture?.(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}}
     onPointerCancel={()=>{drag.current=null;}}

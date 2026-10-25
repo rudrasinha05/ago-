@@ -261,3 +261,81 @@ test('P1 WebGL company brain reflects persisted active task, not simulated AI th
   await expect(page.locator('.brain-work-detail')).toContainText('Actual persisted test project');
   expect(errors).toEqual([]);
 });
+
+test('3D company brain draws on demand under reduced motion and releases its GPU context',async({page})=>{
+ // Issue #3: a continuous 60 fps WebGL redraw starved the main thread and
+ // crashed WebKit content processes on GPU-less runners. Count real WebGL
+ // calls made by the shipped page; no rendering code is mocked.
+ await page.addInitScript(()=>{
+  const stats={draws:0,contexts:0,lost:0};window.__agoBrainGl=stats;
+  const original=HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext=function(type,...rest){
+   const gl=original.call(this,type,...rest);
+   if(gl&&type==='webgl'&&!gl.__agoCounted){
+    gl.__agoCounted=true;stats.contexts++;
+    const drawArrays=gl.drawArrays.bind(gl);gl.drawArrays=(...args)=>{stats.draws++;return drawArrays(...args);};
+    const getExtension=gl.getExtension.bind(gl);
+    gl.getExtension=name=>{const ext=getExtension(name);
+     if(ext&&name==='WEBGL_lose_context'){const lose=ext.loseContext.bind(ext);return {...ext,loseContext:()=>{stats.lost++;return lose();},restoreContext:ext.restoreContext.bind(ext)};}
+     return ext;};
+   }
+   return gl;
+  };
+ });
+ // Set explicitly: this test is about the reduced-motion contract itself.
+ await page.emulateMedia({reducedMotion:'reduce'});
+ const {errors}=await fixtures(page);
+ await login(page);await navigate(page,'Organization');
+ await expect(page.locator('.ago-real-3d-brain')).toBeVisible();
+ expect(await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches)).toBeTruthy();
+ await page.waitForTimeout(800);
+ const settled=await page.evaluate(()=>({...window.__agoBrainGl}));
+ await page.waitForTimeout(1500);
+ const later=await page.evaluate(()=>({...window.__agoBrainGl}));
+ // Without WebGL the keyboard-accessible SVG fallback is used and nothing is drawn.
+ expect(later.draws).toBe(settled.draws);
+ if(settled.contexts>0){
+  expect(settled.draws).toBeGreaterThan(0);
+  await navigate(page,'Overview');
+  await expect.poll(()=>page.evaluate(()=>window.__agoBrainGl.lost)).toBe(settled.contexts);
+ }
+ expect(errors).toEqual([]);
+});
+
+test('3D company brain idle motion is throttled when motion is allowed',async({page})=>{
+ // Decorative sway only: it must stay far below a 60 fps loop.
+ await page.addInitScript(()=>{
+  const stats={draws:0,contexts:0,lost:0};window.__agoBrainGl=stats;
+  const original=HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext=function(type,...rest){
+   const gl=original.call(this,type,...rest);
+   if(gl&&type==='webgl'&&!gl.__agoCounted){
+    gl.__agoCounted=true;stats.contexts++;
+    const drawArrays=gl.drawArrays.bind(gl);gl.drawArrays=(...args)=>{stats.draws++;return drawArrays(...args);};
+    const getExtension=gl.getExtension.bind(gl);
+    gl.getExtension=name=>{const ext=getExtension(name);
+     if(ext&&name==='WEBGL_lose_context'){const lose=ext.loseContext.bind(ext);return {...ext,loseContext:()=>{stats.lost++;return lose();},restoreContext:ext.restoreContext.bind(ext)};}
+     return ext;};
+   }
+   return gl;
+  };
+ });
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ const {errors}=await fixtures(page);
+ await login(page);await navigate(page,'Organization');
+ await expect(page.locator('.ago-real-3d-brain')).toBeVisible();
+ // Off-screen the scene does not animate at all (phone layouts start below it).
+ await page.locator('.ago-real-3d-brain').scrollIntoViewIfNeeded();
+ await page.waitForTimeout(500);
+ const before=await page.evaluate(()=>window.__agoBrainGl.draws);
+ await page.waitForTimeout(1500);
+ const drawn=await page.evaluate(()=>window.__agoBrainGl.draws)-before;
+ if(await page.evaluate(()=>window.__agoBrainGl.contexts)>0){
+  expect(drawn).toBeGreaterThan(0);
+  // >=66 ms between idle frames allows at most ~22 draws in 1.5 s on any
+  // machine. An unthrottled loop draws ~90 at 60 fps; on a slow software
+  // renderer it may also stay low, so this is an upper-bound guard only.
+  expect(drawn).toBeLessThanOrEqual(25);
+ } else expect(drawn).toBe(0);
+ expect(errors).toEqual([]);
+});
