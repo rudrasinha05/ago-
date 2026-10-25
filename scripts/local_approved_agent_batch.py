@@ -14,6 +14,7 @@ import json
 import os
 import time
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from uuid import UUID
@@ -56,6 +57,20 @@ class DurableAttemptJournal:
             file.flush()
             os.fsync(file.fileno())
         return True
+
+    def has_claim(self, task_id: str) -> bool:
+        """Read-only matching of a recorded UUID against the no-replay journal."""
+        task_uuid = UUID(str(task_id))
+        directory = self.directory
+        if directory.is_symlink() or directory.parent.is_symlink():
+            raise PermissionError("Attempt journal symlink is not allowed")
+        if not directory.is_dir():
+            return False
+        digest = hashlib.sha256(task_uuid.bytes).hexdigest()
+        target = directory / (digest + ".attempt")
+        if target.is_symlink():
+            raise PermissionError("Attempt receipt symlink is not allowed")
+        return target.is_file()
 
 
 CONFIRM="EXECUTE_APPROVED_INTERNAL_TASKS"
@@ -301,6 +316,100 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
 
 
 
+
+def http_failure_report(exc: HTTPError) -> dict:
+    """Only HTTP status and coarse category, never raw HTML/JSON/credentials."""
+    code = exc.code
+    reason = (
+        "authorization_or_preflight_blocked" if code == 403 else
+        "execution_handler_failed_or_upstream" if code == 502 else
+        "session_invalid" if code == 401 else
+        "task_state_conflict" if code in (409, 422) else
+        "local_backend_request_rejected"
+    )
+    return {
+        "status": "stopped_without_retry",
+        "error_type": "HTTPError",
+        "http_status": code if type(code) is int and 100 <= code <= 599 else None,
+        "possible_stage": reason,
+        "automated_replay": False,
+        "next_step": "Use read-only reconcile-approved-engineering; do not rerun the attempted task",
+    }
+
+
+def reconcile_attempts(journal: DurableAttemptJournal, tasks, runs) -> dict:
+    """Join founder's local no-replay claims with recent authenticated DB rows.
+
+    Does not write/read a model response, print AI output or assert that an
+    absent run means no request reached the server. Both API lists are bounded.
+    """
+    if not isinstance(tasks, list) or not isinstance(runs, list):
+        raise TypeError("Authenticated task and run lists required")
+    by_task = {}
+    for item in runs:
+        if not isinstance(item, dict):
+            continue
+        try:
+            task_id = str(UUID(str(item["task_id"])))
+        except (ValueError, KeyError, TypeError):
+            continue
+        if task_id not in by_task:
+            by_task[task_id] = item  # API returns most recent first.
+    by_task_state = {}
+    for item in tasks:
+        if not isinstance(item, dict):
+            continue
+        try:
+            task_id = str(UUID(str(item["id"])))
+        except (ValueError, KeyError, TypeError):
+            continue
+        by_task_state[task_id] = item
+    matched = []
+    for task_id in list(dict.fromkeys([*by_task_state, *by_task])):
+        if not journal.has_claim(task_id):
+            continue
+        task_row = by_task_state.get(task_id, {})
+        agent_run = by_task.get(task_id)
+        result = agent_run.get("result") if agent_run else None
+        result = result if isinstance(result, dict) else {}
+        run_status = agent_run.get("status") if agent_run else None
+        task_status = task_row.get("status")
+        if run_status not in ("running", "failed", "completed"):
+            run_status = None
+        if task_status not in ("proposed", "waiting_approval", "ready",
+                               "running", "completed", "failed"):
+            task_status = None
+        failure_code = agent_run.get("failure_code") if agent_run else None
+        failure_code = (failure_code if failure_code in
+                        ("handler_error", "worker_timeout") else None)
+        roles = result.get("roles_completed")
+        matched.append({
+            "task_id": task_id,
+            "task_status": task_status,
+            "agent_run_id": agent_run.get("id") if agent_run else None,
+            "agent_run_status": run_status,
+            "agent_failure_code": failure_code,
+            "roles_completed": roles if type(roles) is int and 0 <= roles <= 7 else None,
+            "board_blocked": result.get("board_blocked") is True,
+            "outcome": (
+                "persisted_run_found" if agent_run else
+                "no_run_in_recent_history_preflight_or_history_window_unknown"
+            ),
+        })
+    return {
+        "kind": "ago_local_attempt_reconciliation",
+        "mode": "read_only",
+        "matched_attempts": matched[:25],
+        "total_matches_in_recent_history": len(matched),
+        "recent_task_rows_considered": len(tasks),
+        "recent_agent_runs_considered": len(runs),
+        "history_is_bounded": True,
+        "no_replay": True,
+        "database_modified": False,
+        "next_step": "Inspect existing project/Board and run evidence; a new separately approved task is required for a fresh attempt",
+    }
+
+
 def interactive_batch(records, approvals, dispatch, *, limit: int, claim,
                       require_engineering: bool, prompt=input, emit=print) -> dict:
     """Preview -> one explicit founder confirmation -> at most `limit` POSTs.
@@ -376,6 +485,8 @@ def main(argv=None) -> int:
     parser.add_argument("--apply",action="store_true")
     parser.add_argument("--interactive-apply", action="store_true",
                         help="One founder login: inspect approved tasks, explicitly confirm, then run once")
+    parser.add_argument("--reconcile-only", action="store_true",
+                        help="Read-only inspect previous durable attempts vs signed task and run history")
     parser.add_argument("--confirm")
     parser.add_argument("--login",action="store_true",help="Prompt for founder credentials instead of copying a browser token")
     parser.add_argument("--require-engineering",action="store_true",
@@ -390,8 +501,11 @@ def main(argv=None) -> int:
         if args.apply and args.confirm!=CONFIRM:
             raise PermissionError("Exact founder confirmation required")
         if args.interactive_apply and (args.apply or args.confirm is not None
-                                       or args.watch_minutes):
+                                       or args.watch_minutes or args.reconcile_only):
             raise PermissionError("Interactive approval is exclusive to one-shot preview mode")
+        if args.reconcile_only and (args.apply or args.confirm is not None
+                                    or args.watch_minutes):
+            raise PermissionError("Reconciliation must be read-only")
         if args.watch_minutes and args.require_engineering:
             raise PermissionError("Seven-role engineering verification requires one-shot mode")
         if args.watch_minutes and not args.apply:
@@ -428,7 +542,7 @@ def main(argv=None) -> int:
         principal=request("GET","/v1/console/me")
         if not isinstance(principal,dict) or "founder" not in principal.get("roles",[]):
             raise PermissionError("Active founder session required")
-        if args.require_engineering:
+        if args.require_engineering and not args.reconcile_only:
             require_engineering_capability(
                 request("GET","/v1/agents/engineering-capabilities")
             )
@@ -441,7 +555,15 @@ def main(argv=None) -> int:
         claim = DurableAttemptJournal(
             args.attempt_journal or Path.home()/".ago"/"approved_attempts"
         ).claim if (args.apply or args.interactive_apply) else None
-        if args.watch_minutes:
+        if args.reconcile_only:
+            result=reconcile_attempts(
+                DurableAttemptJournal(
+                    args.attempt_journal or Path.home()/".ago"/"approved_attempts"
+                ),
+                request("GET", "/v1/organization/company/activity"),
+                request("GET", "/v1/agents/runs"),
+            )
+        elif args.watch_minutes:
             result=watch(fetch,dispatch,minutes=args.watch_minutes,
                          max_tasks=args.limit,interval=args.interval_seconds,
                          confirm=args.confirm,claim=claim)
@@ -461,6 +583,11 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         print(json.dumps({"status":"stopped_by_founder","automated_replay":False}))
         return 130
+    except HTTPError as exc:
+        # HTTP 403 is preflight/authorization; 502 might be a persisted failed
+        # run. Neither is safe to retry just because the transport failed.
+        print(json.dumps(http_failure_report(exc), sort_keys=True))
+        return 2
     except (OSError, EOFError, ValueError, PermissionError, TypeError, RuntimeError) as exc:
         # Do not print tokens, endpoint messages, project content or traceback.
         print(json.dumps({"status":"stopped_without_retry",

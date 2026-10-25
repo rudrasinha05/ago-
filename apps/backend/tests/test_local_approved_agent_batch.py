@@ -525,3 +525,84 @@ def test_single_login_interactive_engineering_rejects_stub(tmp_path):
             prompt=lambda *_: module.CONFIRM, emit=lambda *_: None,
         )
     assert len(list(attempts.directory.glob("*.attempt"))) == 1
+
+
+
+def test_http_failure_reports_exact_code_but_never_api_detail():
+    from urllib.error import HTTPError
+    for code, stage in [(403, "authorization_or_preflight_blocked"),
+                        (502, "execution_handler_failed_or_upstream"),
+                        (401, "session_invalid"), (409, "task_state_conflict")]:
+        exc = HTTPError("http://127.0.0.1:8000/secret", code,
+                        "password SUPER_SECRET", {}, None)
+        output = module.http_failure_report(exc)
+        assert output["http_status"] == code
+        assert output["possible_stage"] == stage
+        assert output["automated_replay"] is False
+        assert "SUPER_SECRET" not in str(output)
+        assert "/secret" not in str(output)
+
+
+def test_reconciliation_correlates_prior_claim_without_any_write(tmp_path):
+    claimed_id = str(uuid4())
+    other_id = str(uuid4())
+    journal = module.DurableAttemptJournal(tmp_path / "attempts")
+    assert journal.claim(claimed_id)
+    calls = []
+    original_claim = journal.claim
+    def no_write(*_args):
+        calls.append("would write")
+        raise AssertionError("Reconciliation must never call claim")
+    journal.claim = no_write
+    records = [
+        {"id": claimed_id, "status": "failed",
+         "action": "internal:brief", "project_name": "SECRET_FOUNDER_BRIEF"},
+        {"id": other_id, "status": "completed"},
+    ]
+    runs = [
+        {"id": str(uuid4()), "task_id": claimed_id, "status": "failed",
+         "failure_code": "handler_error",
+         "result": {"draft": "SECRET_MODEL_OUTPUT", "board_blocked": False}},
+        {"id": str(uuid4()), "task_id": other_id, "status": "completed",
+         "result": {"draft": "OTHER_PRIVATE"}},
+    ]
+    report = module.reconcile_attempts(journal, records, runs)
+    assert report["database_modified"] is False
+    assert report["mode"] == "read_only"
+    assert report["total_matches_in_recent_history"] == 1
+    assert report["matched_attempts"][0]["task_id"] == claimed_id
+    assert report["matched_attempts"][0]["agent_failure_code"] == "handler_error"
+    assert "SECRET_FOUNDER_BRIEF" not in str(report)
+    assert "SECRET_MODEL_OUTPUT" not in str(report)
+    assert "OTHER_PRIVATE" not in str(report)
+    assert not calls
+    journal.claim = original_claim
+
+
+def test_reconciliation_handles_preflight_rejection_with_no_recorded_run(tmp_path):
+    task_id = str(uuid4())
+    journal = module.DurableAttemptJournal(tmp_path / "journal")
+    journal.claim(task_id)
+    report = module.reconcile_attempts(
+        journal, [{"id": task_id, "status": "waiting_approval"}], [])
+    assert report["matched_attempts"][0]["agent_run_id"] is None
+    assert report["matched_attempts"][0]["outcome"].startswith("no_run_in_recent_history")
+    assert report["no_replay"] is True
+
+
+def test_reconciliation_does_not_create_journal_and_rejects_fake_history(tmp_path):
+    directory = tmp_path / "journal"
+    journal = module.DurableAttemptJournal(directory)
+    assert module.reconcile_attempts(journal, [{"id": str(uuid4())}], [])[
+        "total_matches_in_recent_history"] == 0
+    assert not directory.exists()
+    with pytest.raises(TypeError):
+        module.reconcile_attempts(journal, {}, [])
+
+
+def test_operator_has_separate_explicit_readonly_reconciliation_command():
+    ps = (SCRIPT.parents[1] / "ago.ps1").read_text(encoding="utf-8")
+    assert '"reconcile-approved-engineering"' in ps
+    assert '--login --reconcile-only' in ps
+    assert 'run-approved-engineering' in ps
+    assert 'EXECUTE_APPROVED_INTERNAL_TASKS' in ps

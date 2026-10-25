@@ -44,6 +44,22 @@ distinct employee UUIDs, five advisory Board APPROVE lines and actual bounded
 per-role inference durations, linked by one real AGO run ID. Private draft
 text, founder briefs and generated source are not printed in that receipt.
 
+If an older attempt ends in `HTTPError`, do NOT launch engineering again to
+repeat it. Instead keep AGO server running and invoke:
+
+```powershell
+.\\scripts\\ago.ps1 reconcile-approved-engineering
+```
+
+Sign in once. The read-only command matches the saved hashed attempt receipts
+in `~/.ago/approved_attempts` against the newest 100 founder-visible agent
+runs and company task rows. It prints safe statuses, failure codes, and run IDs,
+never model drafts or founder briefs. A missing run in these bounded results
+**cannot prove the task was never started**. The next confirmed attempt needs
+a separately approved new task; do not delete attempt records to force replay.
+The upgraded execution CLI also prints an HTTP status (e.g., 403 preflight or
+502 agent handler failure), without exposing potentially sensitive server bodies.
+
 An unverified Board vote, veto, model JSON/schema failure or incomplete
 employee staffing is a genuine blocking result, not seven-role success.
 After ambiguous network outcome, do not retry the same task; the local

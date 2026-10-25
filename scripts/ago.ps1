@@ -10,6 +10,7 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 safe-reconcile  # manual stale-run recovery, no replay
 .\scripts\ago.ps1 run-approved-internal  # only previously approved local internal AI briefs
 .\scripts\ago.ps1 run-approved-engineering  # refuse non-Ollama fallback; real 7-role AI coding
+.\scripts\ago.ps1 reconcile-approved-engineering  # read-only inspection of failed/no-replay attempts
 .\scripts\ago.ps1 watch-approved-internal  # up to 60 minutes or 10 tasks; Ctrl+C stops
 .\scripts\ago.ps1 export-candidate  # exact completed Board-cleared AI run -> new local source review
 .\scripts\ago.ps1 test-exported-candidate  # reviewed source -> Docker -> pending independent QA
@@ -20,7 +21,7 @@ AGO local Windows operator console (never fetches Git or touches production).
 .\scripts\ago.ps1 execute-github-commit  # after approved apply; explicit real GitHub commit
 #>
 param(
-    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate", "prepare-github-draft", "submit-github-proposal", "apply-github-proposal", "execute-github-commit")]
+    [ValidateSet("doctor", "tenants", "init", "init-solo", "serve", "migrate", "test", "market-watch", "company-pulse", "safe-reconcile", "run-approved-internal", "run-approved-engineering", "reconcile-approved-engineering", "watch-approved-internal", "export-candidate", "test-exported-candidate", "review-tested-candidate", "prepare-github-draft", "submit-github-proposal", "apply-github-proposal", "execute-github-commit")]
     [string]$Action = "doctor",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000
@@ -78,6 +79,11 @@ try {
             throw "Specify the existing AGO_MARKET_TENANT_ID for a tenant-scoped read-only pulse."
         }
         & python ../../scripts/company_readiness_audit.py --tenant-id $env:AGO_MARKET_TENANT_ID
+        exit $LASTEXITCODE
+    }
+    if ($Action -eq "reconcile-approved-engineering") {
+        Write-Host "Read-only reconciliation; never replay a previous HTTPError task."
+        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --reconcile-only
         exit $LASTEXITCODE
     }
     if ($Action -in @("run-approved-internal", "run-approved-engineering", "watch-approved-internal")) {
