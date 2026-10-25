@@ -1,6 +1,4 @@
 """Read-only migration diagnostics are safe even with private DSN values."""
-import os
-import sys
 from pathlib import Path
 from importlib.util import module_from_spec, spec_from_file_location
 
