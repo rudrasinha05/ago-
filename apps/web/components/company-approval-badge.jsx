@@ -2,7 +2,7 @@
 import {useState} from 'react';
 import {decideFounderScope} from './company-founder-decision';
 export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone,zoom=1}){
- const [open,setOpen]=useState(false),[busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [open,setOpen]=useState(false),[pinned,setPinned]=useState(false),[busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const pending=(approvals||[]).filter(a=>a.status==='pending'&&
   (a.requester_id===employee.id||a.task_assignee_id===employee.id));
  const count=updates+pending.length;
@@ -20,13 +20,13 @@ export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone
   }catch(e){setError(e.message||'Decision was not recorded');}
   finally{setBusy('');}
  }
- return <div className="employee-approval-zone" style={{'--employee-popup-zoom':Math.min(5,Math.max(.75,1/zoom))}} onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}
-  onFocus={()=>setOpen(true)} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOpen(false)}} onKeyDown={e=>{if(e.key==='Escape'){setOpen(false);e.stopPropagation();}}}>
+ return <div className="employee-approval-zone" style={{'--employee-popup-zoom':Math.min(5,Math.max(.75,1/zoom))}} onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>{if(!pinned)setOpen(false)}}
+  onFocus={()=>setOpen(true)} onBlur={e=>{if(!pinned&&!e.currentTarget.contains(e.relatedTarget))setOpen(false)}} onKeyDown={e=>{if(e.key==='Escape'){setPinned(false);setOpen(false);e.stopPropagation();}}}>
   <button className="employee-approval-counter" type="button" aria-label={count+' notifications for '+employee.name}
-   aria-expanded={open} onClick={()=>setOpen(true)}>{count}</button>
+   aria-expanded={open} onClick={()=>{setPinned(true);setOpen(true)}}>{count}</button>
   {open&&<section className="employee-approval-flyout" aria-label={employee.name+' notification actions'}>
    <strong>{employee.name} · {count} update(s)</strong>
-   <button type="button" className="employee-approval-close" aria-label={'Close '+employee.name+' notifications'} onClick={()=>setOpen(false)}>×</button>
+   <button type="button" className="employee-approval-close" aria-label={'Close '+employee.name+' notifications'} onClick={()=>{setPinned(false);setOpen(false)}}>×</button>
    {!!updates&&<p>{updates} recorded work updates. Select the employee for details.</p>}
    {!pending.length&&<p>No pending Founder decisions.</p>}
    {pending.map(a=><article key={a.id}><p><b>{a.action}</b> · pending</p>
@@ -34,7 +34,7 @@ export function CompanyApprovalBadge({employee,approvals,updates=0,api,me,onDone
       onClick={()=>decide(a,true)}>Approve</button><button type="button" disabled={!!busy}
       onClick={()=>decide(a,false)}>Deny</button></div>:<p>CEO verifies routine work within the Founder-approved scope.</p>}
    </article>)}
-   {notice&&<div role="status"><p>{notice}</p><button type="button" onClick={()=>{setNotice('');setOpen(false);}}>Dismiss confirmation</button></div>}
+   {notice&&<div role="status"><p>{notice}</p><button type="button" onClick={()=>{setNotice('');setPinned(false);setOpen(false);}}>Dismiss confirmation</button></div>}
    {error&&<p role="alert">{error}</p>}
   </section>}
  </div>;
