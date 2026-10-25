@@ -200,7 +200,9 @@ try{
  assert.ok(await page.evaluate(()=>document.querySelector('.company-shell.company-fullscreen').getBoundingClientRect().height>=window.innerHeight-2));
  await page.keyboard.press('Escape');
  await page.locator('.company-shell.company-fullscreen').waitFor({state:'detached'});
- assert.ok(await page.locator('.company-world .edge-live').count()>=2,'Entire assigned hierarchy glows red');
+ assert.equal(await page.locator('.company-world line.manager-link.edge-live').count(),1,'Only actual reporting routes glow red');
+ assert.equal(await page.locator('.company-world line.department-link.edge-live').count(),0,'Grouping is not task authority');
+ assert.ok(await page.locator('.company-world .company-orbit-ring').count()>0,'Circular guides must remain visible');
  assert.match(await page.locator('.map-node.employee').filter({hasText:'Developer'}).innerText(),/Orchestration research/);
  assert.match(await page.locator('.employee-inspector').innerText(),/Additional responsibilities/);
  await page.getByRole('heading',{name:'Board of Directors'}).waitFor();
