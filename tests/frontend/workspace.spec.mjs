@@ -73,6 +73,10 @@ test('Control Center redirects to authenticated Company Map and internal links p
     await expect.poll(()=>new URL(page.url()).pathname).toBe('/workspace/organization/');
     await expect(page.locator('#login-form')).toBeVisible();
   }
+  // TEMPORARY Issue #3 diagnostic (remove once known): does the configured
+  // reducedMotion emulation reach the page in CI? Printed as a check notice.
+  if(process.env.CI)console.log('::notice title=reduced-motion '+test.info().project.name+'::'
+    +await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches));
   await page.getByLabel('Organization ID').fill(tenant);
   await page.getByLabel('Work email').fill('fixture@example.test');
   await page.getByLabel('Password',{exact:true}).fill('fixture-only-password');
