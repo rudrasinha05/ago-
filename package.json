@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "test": "node --test packages/sdk/tests/client.test.mjs packages/sdk/tests/company-model.test.mjs packages/sdk/tests/company-roles.test.mjs packages/sdk/tests/company-execution.test.mjs packages/sdk/tests/company-first-run.test.mjs packages/sdk/tests/platform.test.mjs packages/sdk/tests/security.test.mjs packages/sdk/tests/workspace.test.mjs",
+    "test": "node --test packages/sdk/tests/client.test.mjs packages/sdk/tests/company-model.test.mjs packages/sdk/tests/company-roles.test.mjs packages/sdk/tests/company-execution.test.mjs packages/sdk/tests/company-first-run.test.mjs packages/sdk/tests/platform.test.mjs packages/sdk/tests/security.test.mjs packages/sdk/tests/workspace.test.mjs scripts/test_ago_next_dependency_state.mjs",
     "check:boundaries": "python scripts/check_monorepo.py",
     "dev:web": "npm run dev --workspace @ago/web",
     "dev:admin": "npm run dev --workspace @ago/admin",
