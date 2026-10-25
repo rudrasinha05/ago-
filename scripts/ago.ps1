@@ -335,6 +335,8 @@ try {
         # Founder starts this foreground server and decides when to shut it down.
         # Research is NEVER implicitly started by setting a tenant variable.
         # To run research, the founder launches 'market-watch' separately.
+        # Visual Company Map: actual URL is printed only after Python preflight passes.
+        # Old /console/ redirects to the visual Company Map; no duplicate UI.
         Write-Host "Checking local PostgreSQL, migrations, and secure settings (no secrets printed)."
         & python -m ago.local_ops doctor
         if ($LASTEXITCODE -ne 0) {
