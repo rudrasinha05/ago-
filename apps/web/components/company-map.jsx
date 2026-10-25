@@ -38,14 +38,37 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [portfolioMap,setPortfolioMap]=useState([]);
   const [centerDraft,setCenterDraft]=useState('');
   const [draft,setDraft]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState(''),[sending,setSending]=useState(false);
-  const [zoom,setZoom]=useState(.42),[pan,setPan]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
+  const [zoom,setZoom]=useState(.72),[pan,setPan]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
+  const [mapMode,setMapMode]=useState('leadership');
   const [fullscreen,setFullscreen]=useState(false),[inspectorOpen,setInspectorOpen]=useState(true);
   const [addingDepartment,setAddingDepartment]=useState(false);
   const [updated,setUpdated]=useState(null),[popup,setPopup]=useState(null),[loading,setLoading]=useState(false);
   const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null),[governanceData,setGovernanceData]=useState(null);const lastEvent=useRef(null);
   const viewport=useRef(null),drag=useRef(null),previous=useRef(null),sequence=useRef(0),alive=useRef(false),retry=useRef(null),feed=useRef(null),staffKey=useRef(null);
-  const layout=useMemo(()=>companyLayout(departments,employees,me.id),[departments,employees,me.id]);
-  const points=new Map([['founder',{x:layout.center,y:layout.center}],...layout.nodes.map(n=>[n.key,n])]);
+  const pendingFocus=useRef(null),mapInitialized=useRef(false);
+  const visibleEmployees=useMemo(()=>{
+    if(mapMode==='all')return employees;
+    const byId=new Map(employees.map(e=>[e.id,e]));
+    const managerialIds=new Set(employees.filter(e=>employees.some(x=>x.manager_id===e.id)).map(e=>e.id));
+    const included=new Set([
+      ...(governanceData?.board||[]).map(b=>b.employee_id),
+      ...managerialIds,
+      ...employees.filter(e=>/chief |project manager|director|head of |founder/i.test(String(e.role_title||'')+' '+String(e.name||''))).map(e=>e.id),
+      ...(Array.isArray(tasks)?tasks.filter(t=>['running','ready','waiting_approval','proposed'].includes(t.status)).map(t=>t.assignee_id):[]),
+      ...(selected?[selected]:[]),
+    ]);
+    // Never draw a false department-root link when a real manager is hidden.
+    for(const id of [...included]){
+      let current=byId.get(id),seen=new Set();
+      while(current?.manager_id&&byId.has(current.manager_id)&&!seen.has(current.manager_id)){
+        seen.add(current.manager_id);included.add(current.manager_id);
+        current=byId.get(current.manager_id);
+      }
+    }
+    return employees.filter(e=>included.has(e.id)||e.id===me.id);
+  },[employees,governanceData,mapMode,tasks,selected,me.id]);
+  const layout=useMemo(()=>companyLayout(departments,visibleEmployees,me.id),[departments,visibleEmployees,me.id]);
+  const points=new Map([['founder',layout.founder],...layout.nodes.map(n=>[n.key,n])]);
   const title=channel==='global'?'Global timeline':layout.nodes.find(n=>n.key===channel)?.name||'Conversation';
   const selectedEmployee=employees.find(e=>e.id===selected);
   const status=employeeStatus(selected,tasks);
@@ -164,7 +187,25 @@ export function CompanyMap({api,me,data,onRefresh}) {
   useEffect(()=>{refreshGitHub();const timer=setInterval(refreshGitHub,45000);return()=>clearInterval(timer);},[refreshGitHub]);
   useEffect(()=>{if(!popup&&eventQueue.length){setPopup(eventQueue[0]);setEventQueue(old=>old.slice(1));}},[popup,eventQueue]);
   useEffect(()=>{if(!popup)return;const timer=setTimeout(()=>setPopup(null),6500);return()=>clearTimeout(timer);},[popup]);
-  function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));const node=layout.nodes.find(n=>n.key===key);if(node){setZoom(.85);setPan(boundedPan((layout.center-node.x)*.85,(layout.center-node.y)*.85,.85));}}
+  function focusMap(key,scale=.8){
+    const target=key==='founder'?layout.founder:layout.nodes.find(n=>n.key===key);
+    if(!target)return false;
+    setZoom(scale);
+    setPan(boundedPan((layout.center-target.x)*scale,(layout.center-target.y)*scale,scale));
+    return true;
+  }
+  useEffect(()=>{
+    if(pendingFocus.current){
+      if(layout.nodes.some(n=>n.key===pendingFocus.current)){
+        focusMap(pendingFocus.current,.82);
+        pendingFocus.current=null;
+      }
+    }else if(!mapInitialized.current){
+      mapInitialized.current=true;
+      focusMap('founder',.72);
+    }
+  },[layout]);
+  function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));if(!focusMap(key,.84)&&key.startsWith('employee:')){pendingFocus.current=key;setMapMode('all');}}
   function boundedPan(x,y,z=zoom){
     const w=viewport.current?.clientWidth||700,h=viewport.current?.clientHeight||700;
     const maxX=Math.max(0,(layout.size*z-w)/2)+30;
@@ -172,14 +213,14 @@ export function CompanyMap({api,me,data,onRefresh}) {
     return {x:Math.max(-maxX,Math.min(maxX,x)),y:Math.max(-maxY,Math.min(maxY,y))};
   }
   function zoomOn(next,cx=null,cy=null){
-    next=Math.max(.18,Math.min(1.65,next));
+    next=Math.max(.055,Math.min(1.65,next));
     const rect=viewport.current?.getBoundingClientRect();
     const dx=rect&&cx!==null?cx-rect.left-rect.width/2:0;
     const dy=rect&&cy!==null?cy-rect.top-rect.height/2:0;
     setPan(p=>boundedPan(dx-(dx-p.x)*next/zoom,dy-(dy-p.y)*next/zoom,next));
     setZoom(next);
   }
-  function center(){setZoom(.42);setPan({x:0,y:0});}
+  function center(){focusMap('founder',.72);}
   async function older(){const version=sequence.current;setLoading(true);try{
     const result=await api.request(BASE+'/chat?channel='+encodeURIComponent(channel)+'&before='+before);
     if(version!==sequence.current)return;
@@ -267,10 +308,34 @@ export function CompanyMap({api,me,data,onRefresh}) {
         <p className="channel-note">Global chat is shared. Department and employee conversations are restricted to the founder and authorized members. AGO enforces access on every read and write.</p>
       </aside>
       <div className="company-canvas" ref={viewport} onPointerDown={e=>{if(e.target.closest('button,textarea,input,a,form,[data-route-target],.employee-approval-zone,.map-node-wrap'))return;drag.current={x:e.clientX,y:e.clientY,startX:pan.x,startY:pan.y};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current)setPan(boundedPan(drag.current.startX+(e.clientX-drag.current.x),drag.current.startY+(e.clientY-drag.current.y)));}} onPointerUp={e=>{drag.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}} onPointerCancel={()=>{drag.current=null;}} onWheel={e=>{if(e.ctrlKey||e.target.closest('textarea'))return;zoomOn(zoom-e.deltaY*.0007);}}>
-        <div className="map-controls"><button aria-label="Zoom in" onClick={()=>zoomOn(zoom+.1)}>+</button><button aria-label="Zoom out" onClick={()=>zoomOn(zoom-.1)}>−</button><button onClick={center}>Founder</button><button aria-label={fullscreen?"Exit full screen":"Full screen map"} aria-pressed={fullscreen} onClick={()=>setFullscreen(v=>!v)}>{fullscreen?"Exit full screen":"⛶ Full screen"}</button><button onClick={()=>{setZoom(Math.min((viewport.current?.clientWidth||600)/layout.size,(viewport.current?.clientHeight||700)/layout.size)*.9);setPan({x:0,y:0});}}>Fit all</button><span>{Math.round(zoom*100)}%</span></div>
+        <div className="map-controls">
+          <button aria-label="Zoom in" onClick={()=>zoomOn(zoom+.1)}>+</button>
+          <button aria-label="Zoom out" onClick={()=>zoomOn(zoom-.1)}>−</button>
+          <button onClick={center}>Founder</button>
+          <button type="button" aria-pressed={mapMode==='leadership'} onClick={()=>{setMapMode('leadership');pendingFocus.current='founder';}}>Leadership</button>
+          <button type="button" aria-pressed={mapMode==='all'} onClick={()=>{setMapMode('all');pendingFocus.current='founder';}}>All employees</button>
+          <button aria-label={fullscreen?"Exit full screen":"Full screen map"} aria-pressed={fullscreen} onClick={()=>setFullscreen(v=>!v)}>{fullscreen?"Exit full screen":"⛶ Full screen"}</button>
+          <button onClick={()=>{setZoom(Math.min((viewport.current?.clientWidth||600)/layout.size,(viewport.current?.clientHeight||700)/layout.size)*.90);setPan({x:0,y:0});}}>Fit all</button>
+          <span>{layout.nodes.filter(n=>n.type==='employee').length}/{employees.filter(e=>e.id!==me.id).length} staff · {Math.round(zoom*100)}%</span>
+        </div>
         <div className="company-world" style={{width:layout.size,height:layout.size,transform:`translate(calc(-50% + ${pan.x}px),calc(-50% + ${pan.y}px)) scale(${zoom})`}}>
-          <svg width={layout.size} height={layout.size} aria-label="Reporting links: bright red means running work; dashed red means pending assignment">{layout.edges.map((edge,i)=>{const a=points.get(edge.from),b=points.get(edge.to),key=edge.from+'>'+edge.to;const mode=routing.routes.has(key)?'running':routing.waitingRoutes.has(key)?'pending':null;const open=()=>choose(edge.to);return a&&b?<g key={i}><line className={mode==='running'?'edge-live':mode==='pending'?'edge-pending':''} x1={a.x} y1={a.y} x2={b.x} y2={b.y} data-route-target={mode?edge.to:undefined} onClick={mode?open:undefined}/>{mode&&<circle className={'route-hit-target '+mode} cx={(a.x+b.x)/2} cy={(a.y+b.y)/2} r={27} data-route-target={edge.to} role="button" tabIndex={0} aria-label={(mode==='running'?'Running route to ':'Pending route to ')+(b.name||'team')} onClick={open} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}}}/>}</g>:null;})}</svg>
-          <form className="map-founder" style={{left:layout.center,top:layout.center,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><CompanyApprovalBadge employee={{id:me.id,name:'Founder'}} approvals={approvalList} updates={0} api={api} me={me} onDone={async()=>{setApprovalRefresh(v=>v+1);await refreshActivity();await refreshEvents();}}/><strong>♛ Founder · Human authority</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
+          <svg width={layout.size} height={layout.size} aria-label="Solid reporting lines show recorded employee managers. Dotted links group departments; red indicates running tasks">
+           <defs><marker id="ago-report-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9Z" fill="#65bfe8"/></marker></defs>
+           {layout.edges.map((edge,i)=>{
+             const a=points.get(edge.from),b=points.get(edge.to),key=edge.from+'>'+edge.to;
+             const mode=routing.routes.has(key)?'running':routing.waitingRoutes.has(key)?'pending':null;
+             const open=()=>choose(edge.to);
+             const grouping=edge.kind==='grouping';
+             return a&&b?<g key={i}><line data-link-kind={edge.kind}
+               className={['company-link',grouping?'department-link':'manager-link',mode==='running'?'edge-live':mode==='pending'?'edge-pending':''].filter(Boolean).join(' ')}
+               x1={a.x} y1={a.y+60} x2={b.x} y2={b.y-65}
+               markerEnd={grouping?undefined:'url(#ago-report-arrow)'}
+               data-route-target={mode?edge.to:undefined} onClick={mode?open:undefined}>
+               <title>{grouping?'Grouping only (not a management reporting line)':'Recorded manager reporting link'}{mode?' · '+mode+' task route':''}</title></line>
+               {mode&&<circle className={'route-hit-target '+mode} cx={(a.x+b.x)/2} cy={(a.y+b.y)/2} r={27} data-route-target={edge.to} role="button" tabIndex={0} aria-label={(mode==='running'?'Running route to ':'Pending route to ')+(b.name||'team')} onClick={open} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}}}/>}
+             </g>:null;
+           })}</svg>
+          <form className="map-founder" style={{left:layout.founder.x,top:layout.founder.y,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><CompanyApprovalBadge employee={{id:me.id,name:'Founder'}} approvals={approvalList} updates={0} api={api} me={me} onDone={async()=>{setApprovalRefresh(v=>v+1);await refreshActivity();await refreshEvents();}}/><strong>♛ Founder · Human authority</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
           {layout.nodes.map(n=>{const state=employeeStatus(n.id,tasks);
              const project=displayProjects(n.id);const eventCount=eventData?.by_employee?.[n.id]??0;
              const recordedRole=governanceData?.employees?.find(e=>e.id===n.id)?.role_title;
@@ -289,7 +354,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
                 onDone={async()=>{setApprovalRefresh(v=>v+1);await refreshActivity();await refreshEvents();}}/>}
              </div>;})}
         </div>
-        <div className="map-legend"><span><i className="presence idle"/>Idle</span><span><i className="presence busy"/>Busy</span><span><i className="presence waiting"/>Waiting</span><span><i className="presence blocked"/>Blocked</span><span><i className="presence failed"/>Failure recorded</span><span><i className="presence unknown"/>Unknown</span><span className="legend-live">━ Bright red: running (click line)</span><span className="legend-pending">┄ Red dashed: assigned / waiting</span><span>{liveTaskCount} running · {pendingTaskCount} waiting</span><small>{updated?'Checked '+updated.toLocaleTimeString():'Activity unavailable'}</small></div>
+        <div className="map-legend"><span><i className="presence idle"/>Idle</span><span><i className="presence busy"/>Busy</span><span><i className="presence waiting"/>Waiting</span><span><i className="presence blocked"/>Blocked</span><span><i className="presence failed"/>Failure recorded</span><span><i className="presence unknown"/>Unknown</span><span className="legend-live">━ Bright red: verified running task</span><span className="legend-pending">┄ Red dashed: assigned / waiting</span><span>━ Blue: real manager link</span><span>┄ Grey: department grouping, not management</span><span>{liveTaskCount} running · {pendingTaskCount} waiting</span><small>{updated?'Checked '+updated.toLocaleTimeString():'Activity unavailable'}</small></div>
         {!employees.length&&<div className="map-empty">{grouped===null?'People data unavailable. Check your permissions or refresh.':'Add a role when your project needs one. It will appear in its department.'}</div>}
         {popup&&<div className="activity-pop" role="status"><button aria-label="Dismiss update" onClick={()=>setPopup(null)}>×</button><strong>Update #{popup.id} · {employees.find(e=>e.id===popup.employee_id)?.name||'Employee'}</strong><p>{popup.body}</p><small>Saved work event · {eventQueue.length} more queued</small></div>}
       </div>
