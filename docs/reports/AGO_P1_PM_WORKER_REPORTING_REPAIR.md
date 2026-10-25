@@ -52,3 +52,24 @@ approves work, adds employees, fabricates QA or writes GitHub.
 The previous confirmed engineering attempt already has a no-replay receipt.
 **Do not run that original task.** Even with seven-role hierarchy verified,
 a new separately approved linked task is required for the future live run.
+
+
+## Authentication and outdated-server triage
+
+Repeated browser GET 401 messages after a foreground AGO server restart mean
+that the browser bearer session is no longer accepted by the backend.
+Reauthenticate in the AGO browser sign-in screen. Do not manually copy tokens
+or post passwords in logs. A CLI HTTP 401 may be an invalid Founder login
+or a rejected session after login; the upgraded script prints failure_stage
+to distinguish these cases.
+
+If read-only preflight says worker_pm_reporting_path_missing but does not
+contain reporting_repair_evidence, the old Python code is still running (or
+the scoped identity record is not available). The new script reports a safe
+reason_code backend_missing_reporting_repair_evidence_restart_updated_server.
+The remedy is to stop the old AGO backend process, pull develop, then launch
+it again using the existing local database config. Running git pull alone does
+not reload Python in an existing server process.
+
+There is no need to recreate Board employees, migrate the database or
+repeat the old task.

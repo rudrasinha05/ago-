@@ -105,3 +105,26 @@ def test_one_confirmed_put_and_actual_readback_never_dispatch():
     assert result["seven_role_hierarchy_verified"] is True
     assert len([x for x in calls if x[0]=="PUT"])==1
     assert all("/run" not in x[1] for x in calls)
+
+
+def test_failure_summary_reports_safe_stage_not_password_or_project():
+    from urllib.error import HTTPError
+    unauthorized=HTTPError("http://localhost:8000/private",401,"SECRET",{},None)
+    # HTTPError uses numeric status in actual requests.
+    unauthorized.code=401
+    report=mod.failure_summary(unauthorized,"founder_login")
+    assert report["reason_code"]=="credentials_rejected_or_invalid"
+    assert report["failure_stage"]=="founder_login"
+    assert "SECRET" not in str(report) and "/private" not in str(report)
+    missing=mod.failure_summary(
+        PermissionError("Reporting identities not available from scoped preflight"),
+        "validate_pm_worker_preview",
+    )
+    assert missing["reason_code"]=="backend_missing_reporting_repair_evidence_restart_updated_server"
+    assert missing["task_replayed"] is False
+    assert missing["database_modified_by_this_preview"] is True
+    custom=mod.failure_summary(
+        PermissionError("Private founder project details should never print"),
+        "validate_pm_worker_preview",
+    )
+    assert "Private founder project" not in str(custom)

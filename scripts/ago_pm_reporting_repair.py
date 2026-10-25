@@ -17,6 +17,58 @@ from ago_company_setup import fetch
 
 CONFIRM = "LINK_AGO_WORKER_TO_ACCOUNTABLE_PM"
 
+# Never return backend raw error bodies: they may contain sensitive project data.
+SAFE_PERMISSION_REASONS = {
+    "Founder permission required for reporting repair": "founder_organization_manage_missing",
+    "Reporting identities not available from scoped preflight":
+        "backend_missing_reporting_repair_evidence_restart_updated_server",
+    "Not the one valid scoped reporting-only repair case":
+        "preflight_is_not_single_reporting_blocker",
+    "AGO governance roster does not confirm both AI identities":
+        "existing_worker_or_pm_identity_not_in_roster",
+    "Worker manager changed since database preflight":
+        "stale_worker_manager_record",
+    "PM and worker must remain distinct from five Board employees":
+        "pm_or_worker_conflicts_with_board",
+    "Exactly five distinct appointed Board members required":
+        "five_board_appointments_not_verified",
+    "Two distinct existing AI PM/worker identities required":
+        "invalid_ai_worker_or_pm_identity",
+    "Already directly reporting to PM; refresh server preflight":
+        "direct_reporting_already_set_check_again",
+    "Current manager is nonempty; preview --reparent first":
+        "existing_manager_requires_explicit_reparent",
+    "Actual PM or worker assignment changed; no write":
+        "company_state_changed_since_preview",
+}
+
+
+def failure_summary(exc, stage):
+    """Bounded, nonsecret diagnostic for exactly one failed local call."""
+    code = SAFE_PERMISSION_REASONS.get(str(exc)) if isinstance(exc, PermissionError) else None
+    if isinstance(exc, HTTPError):
+        if exc.code == 401:
+            code = ("credentials_rejected_or_invalid" if stage == "founder_login"
+                    else "signed_session_invalid_or_revoked")
+        elif exc.code == 403:
+            code = "endpoint_permission_denied"
+        else:
+            code = "backend_request_failed"
+    return {
+        "status": "stopped_without_retry",
+        "failure_stage": stage,
+        "reason_code": code or "preflight_validation_failed",
+        "error_type": type(exc).__name__,
+        **({"http_status": exc.code} if isinstance(exc, HTTPError) else {}),
+        "task_replayed": False,
+        "database_modified_by_this_preview": stage != "apply_verified_link",
+        "next_step": (
+            "Restart the AGO server after git pull, then repeat read-only preview"
+            if code == "backend_missing_reporting_repair_evidence_restart_updated_server"
+            else "Inspect current signed session and PM/worker preflight; do not blindly retry"
+        ),
+    }
+
 
 def uuid(value):
     return str(UUID(str(value)))
@@ -128,43 +180,47 @@ def main(argv=None):
     parser.add_argument("--apply", action="store_true",
                         help="Ask exact Founder confirmation for one verified PUT")
     args = parser.parse_args(argv)
+    stage = "validate_arguments"
     try:
         base, task_id = local_url(args.local_url), uuid(args.task_id)
+        stage = "founder_login"
         tenant=input("AGO organization ID: ").strip()
         email=input("Founder work email: ").strip()
         password=getpass.getpass("Founder password (hidden): ")
         token=founder_login(base,tenant,email,password)
         del password
         req=lambda method,path,body=None:fetch(base,token,method,path,body)
+        stage = "founder_permission_lookup"
         me=req("GET", "/v1/console/me")
+        stage = "review_founder_permissions"
         if ("founder" not in me.get("roles",[])
                 or "organization:manage" not in me.get("permissions",[])):
             raise PermissionError("Founder permission required for reporting repair")
         endpoint="/v1/agents/tasks/"+task_id+"/engineering-preflight"
+        stage = "read_current_task_preflight"
         report=req("GET", endpoint)
+        stage = "read_current_governance"
         gov=req("GET", "/v1/organization/company/governance")
+        stage = "validate_pm_worker_preview"
         preview=make_preview(report,gov,allow_reparent=args.reparent)
         print(json.dumps(preview,indent=2,sort_keys=True))
         if not args.apply:
             return 0
+        stage = "review_reparent_option"
         if preview["decision"] != "link_worker_to_existing_pm":
             raise PermissionError("Current manager is nonempty; preview --reparent first")
+        stage = "founder_write_confirmation"
         answer=input("Review exact WORKER and PM IDs, then type "+CONFIRM+": ").strip()
         if answer != CONFIRM:
             print(json.dumps({"status":"cancelled","database_modified":False}))
             return 2
+        stage = "apply_verified_link"
         result=apply(req,preview)
         print(json.dumps(result,indent=2,sort_keys=True))
         return 0 if result["direct_reporting_verified"] else 2
-    except HTTPError as exc:
-        print(json.dumps({"status":"stopped_without_retry","error_type":"HTTPError",
-                          "http_status":exc.code,"task_replayed":False}))
-    except (ValueError,TypeError,RuntimeError,PermissionError,URLError,OSError,
-            EOFError,KeyboardInterrupt) as exc:
-        print(json.dumps({"status":"stopped_without_retry",
-                          "error_type":type(exc).__name__,
-                          "task_replayed":False,
-                          "next_step":"Inspect current roster and new preflight evidence, never blindly retry"}))
+    except (HTTPError,ValueError,TypeError,RuntimeError,PermissionError,URLError,
+            OSError,EOFError,KeyboardInterrupt) as exc:
+        print(json.dumps(failure_summary(exc, stage), sort_keys=True))
     return 2
 
 

@@ -290,9 +290,9 @@ try{
  assert.match(await page.getByRole('dialog',{name:'Approval details'}).innerText(),/Founder only/i);
  assert.equal(await page.getByRole('dialog',{name:'Approval details'}).getByRole('button',{name:'Approve',exact:true}).count(),1);
  await page.getByRole('button',{name:'Close approval details'}).click();
- await page.getByLabel('Appoint Technology Oversight').selectOption(cto);
- await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'Approve seat'}).click();
- await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'View member'}).waitFor();
+ await page.getByLabel('Appoint AI CTO · Chief Technology Officer').selectOption(cto);
+ await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'Appoint AI officer'}).click();
+ await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'View officer profile'}).waitFor();
  await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
  await page.getByRole('button',{name:'Edit employee accountability'}).click();
  await page.getByLabel('Official role title').fill('Backend Engineer');
