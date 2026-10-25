@@ -251,7 +251,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   async function hire(event){event.preventDefault();const form=new FormData(event.currentTarget);
     const values={department_id:department,manager_id:form.get('manager')||null,name:form.get('name'),requirement:form.get('requirement')};
     const signature=JSON.stringify(values);if(staffKey.current?.signature!==signature)staffKey.current={signature,key:crypto.randomUUID()};
-    setSending(true);try{await api.request(BASE+'/staffing',{method:'POST',body:{...values,operation_key:staffKey.current.key}});staffKey.current=null;setStaffing(false);await onRefresh();}
+    setSending(true);try{const hired=await api.request(BASE+'/staffing',{method:'POST',body:{...values,operation_key:staffKey.current.key}});staffKey.current=null;setStaffing(false);if(hired?.id){pendingFocus.current='employee:'+hired.id;setMapMode('all');}await onRefresh();}
     catch(e){setError(e.message);}finally{setSending(false);}}
   async function createDepartment(event){
     event.preventDefault();
