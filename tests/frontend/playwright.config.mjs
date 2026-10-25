@@ -1,6 +1,10 @@
 import {defineConfig} from '@playwright/test';
 export default defineConfig({
-  testDir: '.', testMatch: '*.spec.mjs', timeout:45000, workers:2,
+  testDir: '.', testMatch: '*.spec.mjs', timeout:45000,
+  // WebKit browser processes occasionally crashed when competing for memory
+  // with other browser projects on GitHub's shared runner. Keep all projects,
+  // assertions, and zero retries; serialize only the CI browser executions.
+  workers: process.env.CI ? 1 : 2, retries: 0,
   use:{baseURL:'http://127.0.0.1:18776',reducedMotion:'reduce',trace:'retain-on-failure'},
   // In CI the github reporter also writes each failure as a check annotation,
   // so the failing test and error are visible without downloading artifacts.
