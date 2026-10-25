@@ -54,8 +54,12 @@ class ApprovedProjectDb:
 
     def execute(self, sql, parameters):
         self.queries.append((sql,parameters))
-        if "SELECT id FROM ago_governed_tasks" in sql:
-            return Cursor([{"id": self.task_id}])
+        if "SELECT t.id, i.id AS intake_id" in sql:
+            founder_id, tenant_id, task_id = parameters
+            if (tenant_id != self.tenant or task_id != self.task_id
+                    or founder_id != self.founder or not self.active):
+                return Cursor([])
+            return Cursor([{"id":self.task_id,"intake_id":self.intake}])
         if "SELECT id FROM ago_company_chat" in sql:
             prior = any(
                 item[0] == parameters[0] and item[-1] == parameters[1]
@@ -75,6 +79,10 @@ class ApprovedProjectDb:
             self.events.append(parameters)
             return Cursor([])
         if "FROM ago_founder_intakes i" in sql:
+            if (parameters[0] != self.tenant or parameters[1] != self.intake
+                    or parameters[2] != self.founder
+                    or parameters[3] != self.task_id):
+                return Cursor([])
             return Cursor([{
                 "id":self.intake,"title":"Local company project",
                 "founder_id":self.founder,
@@ -579,4 +587,61 @@ def test_verified_handoff_rejects_forged_stage_lists(role_order):
             role="ceo", employee_id=db.ceo, blocked=False,
             participants=participants,
         )
+    assert db.events == []
+
+
+def test_verified_receipts_recheck_live_founder_task_and_current_ai_roster():
+    db=ApprovedProjectDb()
+    queries=CompanyOllamaChainQueries(db)
+    actual=queries.assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task()
+    )
+    base=dict(
+        tenant_id=db.tenant, founder_id=db.founder, task_id=db.task_id,
+        role="ceo", employee_id=db.ceo, blocked=False,
+        participants=actual,
+    )
+
+    # A caller cannot attach a completion badge to another Founder's
+    # approved task or a different tenant, even when the IDs are UUIDs.
+    with pytest.raises(PermissionError, match="Founder-approved discovery task"):
+        queries.record_verified_handoff(**{**base,"founder_id":uid()})
+    with pytest.raises(PermissionError, match="Founder-approved discovery task"):
+        queries.record_verified_handoff(**{**base,"tenant_id":uid()})
+    with pytest.raises(PermissionError, match="Founder-approved discovery task"):
+        queries.record_verified_handoff(**{**base,"task_id":uid()})
+    assert db.events == []
+
+    # A forged CTO with valid-looking role order is NOT an appointment.
+    fake=[dict(member) for member in actual]
+    fake[1]["employee_id"]=uid()
+    with pytest.raises(PermissionError, match="currently appointed"):
+        queries.record_verified_handoff(**{**base,"participants":fake})
+    assert db.events == []
+
+    # Role holders can change between task authorization and the callback.
+    # The old CEO's late completion must never become a real notification.
+    db.ceo=uid()
+    with pytest.raises(PermissionError, match="currently appointed"):
+        queries.record_verified_handoff(**base)
+    assert db.events == []
+
+
+def test_verified_receipts_reject_revoked_plan_and_board_after_preflight():
+    db=ApprovedProjectDb()
+    queries=CompanyOllamaChainQueries(db)
+    roster=queries.assignments(
+        tenant_id=db.tenant,actor_id=db.founder,task=db.task()
+    )
+    details=dict(
+        tenant_id=db.tenant,founder_id=db.founder,task_id=db.task_id,
+        role="ceo",employee_id=db.ceo,blocked=False,participants=roster,
+    )
+    db.active=False
+    with pytest.raises(PermissionError, match="Founder-approved discovery task"):
+        queries.record_verified_handoff(**details)
+    db.active=True
+    db.ceo_missing=True
+    with pytest.raises(PermissionError, match="Board seats"):
+        queries.record_verified_handoff(**details)
     assert db.events == []
