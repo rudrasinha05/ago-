@@ -7,7 +7,7 @@ from typing import Literal
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import Field
 
 from ago.repository_ports import EnterpriseOperationsStorePort, ApprovalRepositoryPort, SecurityControlsPort
@@ -1322,10 +1322,10 @@ def enterprise_evidence_source(
 ):
     """Founder-only source inspection; bulk evidence listing stays redacted."""
     allowed(repositories, actor, "organization:manage")
-    # organization:manage alone is not synonymous with Founder identity:
-    # another manager granted this permission must not read private prompts.
-    if "founder" not in actor.roles:
-        raise HTTPException(403, "Only the Founder may inspect exact source evidence")
+    # Recheck actual active human Founder status in the database. A signed
+    # session's cached roles can outlive a revoked Founder appointment, and
+    # organization:manage can be granted to other management roles.
+    allowed(repositories, actor, "approval:founder")
     with db.transaction():
         record = enterprise_call(lambda: repositories.resolve(
             EnterpriseOperationsStorePort).evidence_item(
