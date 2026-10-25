@@ -158,6 +158,10 @@ def run_four_role_chain(
         "project_id":str(project["intake_id"]),
         "task_id":task.id,
         "engineering_candidate":engineering_candidate,
+        "engineering_authorization":(
+            "implementation_stage_verified" if engineering_candidates
+            else "not_requested"
+        ),
         "engineering_candidate_status":(
             "syntax_reviewed" if engineering_candidate else "not_requested"
         ),
