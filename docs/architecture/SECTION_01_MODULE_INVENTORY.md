@@ -11,7 +11,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, company_ollama_chain_queries, enterprise_store, organizational_dna, task_store |
 | [agent_runtime_queries](../../apps/backend/ago/agent_runtime_queries.py) | workforce | persistence | backend_contracts |
 | [analytics_store](../../apps/backend/ago/analytics_store.py) | strategy | persistence | architecture_guard, backend_contracts, graph_store, reviewed_changes, security, security_controls |
-| [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, model_handlers, repository_ports, security |
+| [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, company_engineering_preflight, model_handlers, repository_ports, security |
 | [api_brain](../../apps/backend/ago/api_brain.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
 | [api_company_chat](../../apps/backend/ago/api_company_chat.py) | transport | transport | api_contracts, api_m2, repository_ports |
 | [api_contracts](../../apps/backend/ago/api_contracts.py) | transport | transport | None |
@@ -35,6 +35,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [calendar_store](../../apps/backend/ago/calendar_store.py) | operations | persistence | backend_contracts, enterprise_domains, governance, security, security_controls |
 | [company_chat](../../apps/backend/ago/company_chat.py) | workforce | persistence | backend_contracts, governance, organization_store |
 | [company_engineering](../../apps/backend/ago/company_engineering.py) | workforce | service | github_adapter |
+| [company_engineering_preflight](../../apps/backend/ago/company_engineering_preflight.py) | workforce | persistence | agent_runtime_queries, company_ollama_chain_queries |
 | [company_ollama_chain](../../apps/backend/ago/company_ollama_chain.py) | workforce | service | company_engineering |
 | [company_ollama_chain_queries](../../apps/backend/ago/company_ollama_chain_queries.py) | workforce | persistence | backend_contracts |
 | [console_api](../../apps/backend/ago/console_api.py) | transport | transport | api_m2, backend_contracts, repository_ports, security |

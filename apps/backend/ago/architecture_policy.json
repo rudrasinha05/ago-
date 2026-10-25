@@ -98,6 +98,7 @@
         "agent_handlers",
         "api_m2",
         "backend_contracts",
+        "company_engineering_preflight",
         "model_handlers",
         "repository_ports",
         "security"
@@ -315,6 +316,14 @@
       "layer": "service",
       "imports": [
         "github_adapter"
+      ]
+    },
+    "company_engineering_preflight": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "agent_runtime_queries",
+        "company_ollama_chain_queries"
       ]
     },
     "company_ollama_chain": {
