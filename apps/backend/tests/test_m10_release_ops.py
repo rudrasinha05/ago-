@@ -162,3 +162,49 @@ def test_release_preflight_output_cannot_expose_connection_secrets(monkeypatch):
     report = release_ops.check_release()
     assert report["passed"] is False
     assert "sensitive-pass" not in json.dumps(report)
+
+
+def test_backup_files_are_owner_only_on_posix(tmp_path):
+    import stat
+    output = tmp_path / "private.dump"
+    release_ops.create_backup(SOURCE, output, confirmed=True, runner=fake_dump)
+    manifest = output.with_suffix(".dump.manifest.json")
+    for path in (output, manifest):
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_windows_private_file_gets_owner_only_acl(tmp_path, monkeypatch):
+    calls = []
+
+    class Done:
+        returncode = 0
+
+    def fake_icacls(args, **kwargs):
+        calls.append(args)
+        return Done()
+
+    target = tmp_path / "private.dump"
+    target.write_bytes(b"PGDMP")
+    monkeypatch.setenv("USERNAME", "founder")
+    monkeypatch.setenv("USERDOMAIN", "LAPTOP")
+    protection = release_ops.restrict_to_owner(
+        target, acl_runner=fake_icacls, platform_name="nt")
+    assert protection == "windows-owner-only-acl"
+    assert calls == [["icacls", str(target), "/inheritance:r",
+                      "/grant:r", "LAPTOP\\founder:F"]]
+
+
+def test_windows_acl_failure_or_unknown_user_fails_closed(tmp_path, monkeypatch):
+    class Failed:
+        returncode = 5
+
+    target = tmp_path / "private.dump"
+    target.write_bytes(b"PGDMP")
+    monkeypatch.setenv("USERNAME", "founder")
+    with pytest.raises(PermissionError, match="restrict"):
+        release_ops.restrict_to_owner(
+            target, acl_runner=lambda *a, **k: Failed(), platform_name="nt")
+    monkeypatch.delenv("USERNAME")
+    with pytest.raises(PermissionError, match="unknown"):
+        release_ops.restrict_to_owner(
+            target, acl_runner=lambda *a, **k: Failed(), platform_name="nt")

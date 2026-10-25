@@ -7,6 +7,18 @@ from uuid import UUID, uuid4
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 
 
+CONFIDENTIAL_TITLE = "Confidential founder project"
+
+
+def _confidential_view(row: dict, *fields: str) -> dict:
+    """Replace private founder-intake text for readers who are not its founder."""
+    if row.get("founder_confidential"):
+        row["title"] = CONFIDENTIAL_TITLE
+        for field in fields:
+            row[field] = None
+    return row
+
+
 class GoalStore:
     def __init__(self, db: DatabaseConnection, *, repositories: RepositoryScope | None = None):
         self.db = db
@@ -88,15 +100,3 @@ class GoalStore:
             (reader_id, tenant_id),
         ).fetchall()
         return [_confidential_view(dict(row), "description") for row in rows]
-
-
-CONFIDENTIAL_TITLE = "Confidential founder project"
-
-
-def _confidential_view(row: dict, *fields: str) -> dict:
-    """Replace private founder-intake text for readers who are not its founder."""
-    if row.get("founder_confidential"):
-        row["title"] = CONFIDENTIAL_TITLE
-        for field in fields:
-            row[field] = None
-    return row

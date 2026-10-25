@@ -174,7 +174,7 @@ def test_reviewed_prospective_experiment_actual_variant_output_and_later_qa(case
     # Agent results are founder-only; evidence keeps only a digest and the
     # experiment metadata the measurement needs.
     outcomes = after["source_outcomes"]
-    assert len(outcomes) == 4
+    assert {str(o["id"]) for o in outcomes} == set(tasks)
     assert all("result" not in o and len(o["result_sha256"]) == 64 for o in outcomes)
     assert {o["experiment"]["variant"] for o in outcomes} == {"baseline", "candidate"}
     listed = client.get(BASE + "/evidence?kind=experiment_measurement", headers=f)

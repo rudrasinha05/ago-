@@ -342,7 +342,12 @@ class IntegrationStore:
                 return p["applied"]
             spec = p["specification"]
             self._validate(actor, p["command"], spec)
-            if digest(self._integration_source(actor, p["command"], spec)) != digest(p["source"]):
+            stored = digest(p["source"])
+            if digest(self._integration_source(actor, p["command"], spec)) != stored and not (
+                p["command"] == "github_project"
+                and digest(self._integration_source(
+                    actor, p["command"], spec, legacy_goal_row=True)) == stored
+            ):
                 raise PermissionError("Integration source changed")
             self.db.execute(
                 "INSERT INTO ago_integration_settings(tenant_id,id,revision,kind,payload,proposal_id) VALUES(%s,%s,%s,%s,%s::jsonb,%s)",
@@ -885,15 +890,29 @@ class IntegrationStore:
             "next_cursor": str(rows[-1]["id"]) if rows else after,
         }
 
-    def _integration_source(self, actor, command, specification):
+    def _integration_source(self, actor, command, specification, *, legacy_goal_row=False):
+        """Tamper-evidence snapshot shown to reviewers with the proposal.
+
+        The goal of a founder project holds the private brief in its
+        description, so the snapshot pins the description by SHA-256 instead
+        of copying it. ``legacy_goal_row`` rebuilds the older full-row shape
+        only to verify proposals stored before this change.
+        """
         source = {"prior": self._settings(actor.tenant_id, command, specification["id"])}
         if command == "github_operation":
             source["project"] = self._github_project(actor, specification["project_id"])
         if command == "github_project":
+            query = (
+                "SELECT * FROM ago_goals WHERE tenant_id=%s AND id=%s"
+                if legacy_goal_row else
+                """SELECT id,tenant_id,parent_id,created_by,title,status,created_at,
+                          encode(sha256(convert_to(description,'UTF8')),'hex')
+                            AS description_sha256
+                   FROM ago_goals WHERE tenant_id=%s AND id=%s"""
+            )
             source["goal"] = dict(
                 self.db.execute(
-                    "SELECT * FROM ago_goals WHERE tenant_id=%s AND id=%s",
-                    (actor.tenant_id, specification["goal_id"]),
+                    query, (actor.tenant_id, specification["goal_id"]),
                 ).fetchone()
             )
         return source

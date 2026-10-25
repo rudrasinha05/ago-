@@ -76,6 +76,32 @@ def check_release() -> dict:
     return report
 
 
+def restrict_to_owner(path: Path, *, acl_runner=subprocess.run,
+                      platform_name: str | None = None) -> str:
+    """Make a private file readable only by the current account.
+
+    POSIX ``chmod 0600`` does not restrict other accounts on Windows (it only
+    sets the read-only flag), and the founder runs AGO on Windows. There the
+    inherited ACL is removed and only the current user is granted access.
+    Fails closed: an unprotected private file is an error, not a warning.
+    """
+    if (platform_name or os.name) != "nt":
+        os.chmod(path, 0o600)
+        return "posix-0600"
+    user = os.environ.get("USERNAME", "").strip()
+    if not user:
+        raise PermissionError("Windows user unknown; cannot protect private file")
+    domain = os.environ.get("USERDOMAIN", "").strip()
+    account = domain + "\\" + user if domain else user
+    result = acl_runner(
+        ["icacls", str(path), "/inheritance:r", "/grant:r", account + ":F"],
+        capture_output=True, check=False, timeout=30,
+    )
+    if result.returncode != 0:
+        raise PermissionError("Could not restrict private file to the current Windows user")
+    return "windows-owner-only-acl"
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -106,7 +132,7 @@ def verify_archive(archive: Path, manifest: Path | None = None) -> dict:
 
 
 def create_backup(dsn: str, output: Path, *, confirmed: bool = False,
-                  runner=subprocess.run) -> dict:
+                  runner=subprocess.run, acl_runner=subprocess.run) -> dict:
     if not confirmed:
         raise PermissionError("Backup requires explicit operator consent")
     parts, env = _connection_parts(dsn)
@@ -119,9 +145,9 @@ def create_backup(dsn: str, output: Path, *, confirmed: bool = False,
     output.parent.mkdir(parents=True, exist_ok=True)
     # Reserve an exclusive path, prevent clobber, protect at-rest permissions.
     with output.open("xb") as handle:
-        os.chmod(output, 0o600)
         handle.write(b"")
     try:
+        restrict_to_owner(output, acl_runner=acl_runner)
         result = runner(
             ["pg_dump", "--format=custom", "--no-owner", "--no-privileges",
              "--file", str(output), *_pg_args(parts)],
@@ -141,8 +167,8 @@ def create_backup(dsn: str, output: Path, *, confirmed: bool = False,
             "created_utc": datetime.now(timezone.utc).isoformat(),
         }
         with manifest.open("x", encoding="utf-8") as handle:
-            os.chmod(manifest, 0o600)
             json.dump(record, handle, indent=2)
+        restrict_to_owner(manifest, acl_runner=acl_runner)
         return verify_archive(output, manifest)
     except Exception:
         output.unlink(missing_ok=True)

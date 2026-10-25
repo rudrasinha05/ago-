@@ -650,6 +650,14 @@ def test_github_project_approval_exact_dispatch_idempotency_and_tenant_binding(c
         "enabled": True,
     }
     item, _ = propose(c, f, "integration", "github_project", project)
+    # Reviewers see a tamper-evident goal snapshot, not the goal description
+    # (founder project goals hold the private brief there).
+    pending = c.get(BASE + "/reviews/integration", headers=r)
+    assert pending.status_code == 200, pending.text
+    proposal = next(p for p in pending.json()["proposals"] if p["id"] == item["id"])
+    assert "description" not in proposal["source"]["goal"]
+    assert len(proposal["source"]["goal"]["description_sha256"]) == 64
+    assert "Reviewed plan" not in pending.text
     apply(c, f, r, "integration", item)
     operation = {
         "id": str(uuid4()),
