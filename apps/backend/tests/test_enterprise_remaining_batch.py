@@ -262,7 +262,7 @@ def document(client, f, identifier, kind, key, raw=None):
 
 
 def test_financial_sources_require_independent_review_and_deny_duplicate_bytes(case):
-    client, headers, _ = case
+    client, headers, info = case
     f, r = headers["founder"], headers["reviewer"]
     identifier = cost(client, f, "cost")
     invoice = document(client, f, identifier, "invoice", "invoice")
@@ -274,6 +274,23 @@ def test_financial_sources_require_independent_review_and_deny_duplicate_bytes(c
     assert {x["id"] for x in listed.json()} >= {invoice["id"], bank["id"]}
     assert all("content_base64" not in x["payload"] and x["payload"]["content_withheld"]
                for x in listed.json())
+    # F3: bulk stays redacted even to the Founder. Exact one-item bytes are
+    # privileged and must leave a redacted access audit.
+    source_url=BASE+"/evidence/"+invoice["id"]
+    exact=client.get(source_url,headers=f)
+    assert exact.status_code==200,exact.text
+    assert exact.json()["payload"]["content_base64"]==raw_invoice
+    assert exact.json()["digest"]==invoice["digest"]
+    assert client.get(source_url,headers=r).status_code==403
+    assert client.get(BASE+"/evidence/"+str(uuid4()),headers=f).status_code==404
+    audit=info["db"].execute("""
+        SELECT actor_id,outcome,metadata FROM ago_security_audit
+        WHERE tenant_id=%s AND action=%s ORDER BY id DESC LIMIT 1
+    """,(info["tenant"],"enterprise:evidence:source_read")).fetchone()
+    assert audit and str(audit["actor_id"])==info["founder_id"]
+    assert audit["outcome"]=="allowed"
+    assert audit["metadata"].get("record_id")==invoice["id"]
+    assert raw_invoice not in str(audit["metadata"])
     params = {
         "operation_key": "match",
         "matches": [{"invoice_id": invoice["id"], "bank_id": bank["id"]}],
