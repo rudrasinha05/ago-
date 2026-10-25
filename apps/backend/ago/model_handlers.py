@@ -178,6 +178,20 @@ def optional_model_handlers(
 
     def project_plan(task):
         prompt=project_plan_prompt(task)
+        # A five-stage typed JSON proposal takes more output tokens than
+        # ordinary internal brief text. Keep the already bounded 60-second
+        # model call, but allocate the provider's permitted 1024-token ceiling
+        # to this one explicitly approved project-planning action.
+        planning_provider=(
+            OllamaLocalTextProvider(
+                model=model, timeout_seconds=60, max_output_tokens=1024,
+                keep_alive="90s",
+            )
+            if mode == "ollama_local" else
+            ResponsesTextProvider(
+                api_key=api_key, model=model, max_output_tokens=1024,
+            )
+        )
         repositories.resolve(CreditBudget).charge(
             tenant_id=actor.tenant_id,
             actor_id=actor.subject,
@@ -185,7 +199,7 @@ def optional_model_handlers(
             amount="1",
             category=usage_category,
         )
-        text=provider.generate(prompt)
+        text=planning_provider.generate(prompt)
         # Existing plain-text drafts remain visible as historical advice.
         # Only strict, bounded five-stage JSON can become a schema-reviewed
         # *candidate*; neither result may materialize tasks or grant authority.
