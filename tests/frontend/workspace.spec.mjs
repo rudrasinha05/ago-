@@ -39,20 +39,15 @@ async function login(page) {
   // All original logout, reload, privacy and sign-in assertions still run.
   const onLoginPage = new URL(page.url()).pathname === '/workspace/'
     && await page.locator('#login-form').isVisible();
-  if (!onLoginPage) {
-    // Issue #3: every app load sends /v1/security/sso/session, which the
-    // fixtures intercept. Starting page.goto() while that intercepted request
-    // from a just-reloaded page is still in flight crashed WebKit's content
-    // process. Let the loaded page settle first; the navigation itself and
-    // every assertion still run.
-    if (page.url() !== 'about:blank') await page.waitForLoadState('networkidle');
-    await page.goto('/workspace/');
-  }
+  if (!onLoginPage) await page.goto('/workspace/');
+  await signInHere(page,'Your organization at a glance');
+}
+async function signInHere(page,heading) {
   await page.getByLabel('Organization ID').fill(tenant);
   await page.getByLabel('Work email').fill('fixture@example.test');
   await page.getByLabel('Password',{exact:true}).fill('fixture-only-password');
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  await expect(page.locator('#screen h1')).toHaveText('Your organization at a glance');
+  await expect(page.locator('#screen h1')).toHaveText(heading);
 }
 async function navigate(page,label) {
   if(await page.getByRole('button',{name:'Menu',exact:true}).isVisible())await page.getByRole('button',{name:'Menu',exact:true}).click();
@@ -133,7 +128,14 @@ test('keyboard dialog, escaped mutations, logout and reload privacy',async({page
   expect(calls.find(x=>x.path==='/v1/brain/goals'&&x.method==='POST').auth).toBe('Bearer browser-fixture-only-token');
   await page.reload();await expect(page.locator('#login-form')).toBeVisible();
   expect(await page.evaluate(()=>({local:localStorage.length,session:sessionStorage.length}))).toEqual({local:0,session:0});
-  await login(page);await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.locator('#login-form')).toBeVisible();
+  // Issue #3: sign in again on the form the reload already shows, which also
+  // proves the reloaded deep link returns to Strategy. Navigating from this
+  // reloaded page to /workspace/ crashed WebKit's content process on CI on
+  // every run (also after waiting for network idle); it is not what this
+  // privacy test verifies, and plain navigation is covered by other tests.
+  await expect(page).toHaveURL(/\/workspace\/strategy\/$/);
+  await signInHere(page,'Strategy & execution');
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.locator('#login-form')).toBeVisible();
   await expect.poll(()=>calls.some(x=>x.path==='/v1/console/logout'&&x.auth==='Bearer browser-fixture-only-token')).toBeTruthy();
 });
 test('direct route refresh, expired session and failed resource isolation',async({page})=>{
