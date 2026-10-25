@@ -5,6 +5,7 @@
     "GET /health/ready": "f79e533c81bc6a37deca64c533ca29ac5c787ddf6865cf777d911f41b0ee6aeb",
     "GET /v1/agents/engineering-capabilities": "2b6553482d280aa92fabda40522f5525d2b009ff3c07649106e6b943be2d1a6b",
     "GET /v1/agents/runs": "b8cee4c44f7857803894b7e6b9dc768a9ea0b12e70c3562194188bbb99f587b3",
+    "GET /v1/agents/tasks/{task_id}/engineering-preflight": "1da565fa638bd14935b1dacd6d2268667d26762ed5d51994bf096cda36613e86",
     "GET /v1/brain/goals": "29168077b70eee495c322c2956c4636f92953871744e9723ea39924062505005",
     "GET /v1/brain/plans": "8aeff1b63a0f2147d5f2b70750b7612442b6a4155e7e1ebcd89eae64233cda9f",
     "GET /v1/brain/plans/{plan_id}/steps": "57870dc3c5179e8f51f05f0548088043ca43d8527e09b971942387ebea7bb093",
@@ -98,6 +99,7 @@
     "GET /v1/organization/company/projects/{project_id}/delegations": "3ac93c7cc9caa013bcc8cf949ff6887e401f0790875cbf827ee698ccff4d045d",
     "GET /v1/organization/company/projects/{project_id}/documents": "47d2974bea74919069d890607bbd60ef79917560894d37873f885b2215c2fdb7",
     "GET /v1/organization/company/projects/{project_id}/documents/eligible": "a067d4a74688d358b6a2d338eae5691e7afb89cfe2a3d2b07d765db339ef5d58",
+    "GET /v1/organization/company/projects/{project_id}/staffing-proposals": "29659f76d81376f04592b94e2c8f317f802a3b8c6b08b9024065f398b51eb4d4",
     "GET /v1/organization/company/reports": "baed08f952988b2b3ecef04b05740bab9c5c0a2b94fe531af5ea736d93c0bf94",
     "GET /v1/organization/departments": "27133f9ebbaeba4560c26ecae4bac36d68c43b9096009663262170e8b2408865",
     "GET /v1/organization/employees": "d0f163cd96d42f5fd9a70a33bbe02d2c627bab6e2f0d86a7bafc20fd83a98ed0",
@@ -304,8 +306,7 @@
     "POST /v1/tools/runs/recover-stale": "28f01e3c031785f079749274d10ae1a1ee6e37ddbfc7b8dfb68e2c883ed8bce6",
     "POST /v1/tools/tasks/{task_id}/run": "dd47e08b423ec283e80a04dfd8a7909a17e90234d311035dcb254a9cdbcff02d",
     "PUT /v1/organization/company/employees/{employee_id}/manager": "0181556702d8acf8d5f5d8a49829952af1265ced23c901897661b7b7d845491c",
-    "PUT /v1/organization/company/employees/{employee_id}/role": "2e63f9d19d5edd1b6ceb2ab161109d07f64ff2f5555e2110542abace8c11b794",
-    "GET /v1/organization/company/projects/{project_id}/staffing-proposals": "29659f76d81376f04592b94e2c8f317f802a3b8c6b08b9024065f398b51eb4d4"
+    "PUT /v1/organization/company/employees/{employee_id}/role": "2e63f9d19d5edd1b6ceb2ab161109d07f64ff2f5555e2110542abace8c11b794"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",
