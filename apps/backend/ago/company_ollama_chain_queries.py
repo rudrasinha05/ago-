@@ -74,6 +74,28 @@ class CompanyOllamaChainQueries:
         """,(tenant_id,row["accountable_manager_id"])).fetchone()
         if not pm or not worker or worker["action"]!="internal:brief":
             raise PermissionError("Real accountable PM and discovery assignee required")
+        if os.getenv("AGO_LOCAL_ENGINEERING_CANDIDATES")=="true":
+            # Discovery is authorized by the research task, but engineering
+            # belongs to its OWN separately approved implementation stage.
+            # The model cannot promote the discovery researcher into a coder.
+            implementation=self.db.execute("""
+                SELECT e.id,e.name,e.kind
+                FROM ago_project_stage_delegation_activations a
+                JOIN ago_founder_intake_stages s
+                  ON s.tenant_id=a.tenant_id AND s.intake_id=a.intake_id
+                  AND s.stage='implementation'
+                  AND s.suggested_assignee_id=a.assignee_id
+                JOIN ago_employees e
+                  ON e.tenant_id=a.tenant_id AND e.id=a.assignee_id
+                WHERE a.tenant_id=%s AND a.intake_id=%s
+                  AND a.stage='implementation'
+                LIMIT 1
+            """,(tenant_id,str(project["intake_id"]))).fetchone()
+            if not implementation or str(implementation["id"])==str(worker["id"]):
+                raise PermissionError(
+                    "Engineering needs an independently activated implementation-stage AI developer"
+                )
+            worker={**dict(implementation),"action":"internal:brief"}
         if full_board:
             # A real corporate hierarchy requires the worker to report up to
             # this exact accountable PM; display titles alone are not enough.
