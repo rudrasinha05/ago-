@@ -86,7 +86,11 @@ test('Control Center redirects to authenticated Company Map and internal links p
   for(let i=0;i<await links.count();i++){
     const fragment=await links.nth(i).getAttribute('href');
     await expect(page.locator(fragment)).toHaveCount(1);
-    await links.nth(i).click();
+    // Async Company Map data may re-render/reorder conditional nav links
+    // between reading nth(i) and clicking it. Select by stable href so the
+    // tested destination is always the link actually activated; do not
+    // weaken the hash navigation assertion or skip a browser project.
+    await nav.locator('a[href="'+fragment+'"]').click();
     await expect.poll(()=>new URL(page.url()).hash,{timeout:15000}).toBe(fragment);
   }
   await expect(nav.locator('a[href="#ago-workforce"]')).toHaveCount(0);
