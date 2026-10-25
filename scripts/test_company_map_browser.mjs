@@ -369,7 +369,11 @@ try{
  assert.equal(await founderDialog.getByRole('button',{name:'Approve',exact:true}).count(),0,
   'CEO-scoped operational work cannot demand a second Founder decision');
  await founderDialog.getByRole('button',{name:'Close approval details'}).click();
+ // After a fresh Founder login the map defaults to Leadership, which hides
+ // ordinary contributors. Explicitly enter All employees to inspect their counters.
+ await page.getByRole('button',{name:'All employees',exact:true}).click();
  const developerCard=page.locator('.map-node-wrap').filter({hasText:'Developer'}).first();
+ await developerCard.waitFor({state:'visible'});
  await developerCard.locator('.employee-approval-counter').click();
  await developerCard.locator('.employee-approval-flyout')
   .getByText('CEO verifies routine work',{exact:false}).waitFor();
