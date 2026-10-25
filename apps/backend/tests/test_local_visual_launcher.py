@@ -21,7 +21,7 @@ def test_launcher_repairs_stale_nextjs_without_touching_postgres():
     """Use Node for npm JSON: Windows PowerShell 5.1 cannot parse all lockfile keys."""
     root = Path(__file__).resolve().parents[3]
     script = (root / "scripts" / "ago-visual.ps1").read_text(encoding="utf-8")
-    start = script.index('$nextCheck = Join-Path $root "scripts\ago_next_dependency_state.mjs"')
+    start = script.index('$nextCheck = Join-Path $root "scripts\\ago_next_dependency_state.mjs"')
     verify = script.index('Write-Host "Next.js dependency verified:')
     build = script.index('npm.cmd run build --workspace "@ago/web"')
     guards = script[start:verify]
