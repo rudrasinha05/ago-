@@ -212,6 +212,14 @@ def serve_local(*, port: int = 8000, run_server=None) -> None:
         raise ValueError("Port must be between 1024 and 65535")
     diagnosis = doctor()
     if not diagnosis.ready:
+        # Safe startup diagnostics. Never print the DSN, password or database
+        # exception: database/migration failures share a redacted boolean.
+        print(json.dumps({
+            "kind": "ago_local_startup_preflight",
+            "status": "blocked",
+            "checks": diagnosis.as_dict(),
+            "next_step": "Run ago.ps1 doctor; restore the existing local DB settings",
+        }, sort_keys=True))
         raise RuntimeError("AGO doctor failed; fix local DB/schema/environment first")
     if diagnosis.signing_secret == "ephemeral_on_serve":
         os.environ["AGO_SESSION_SECRET"] = secrets.token_urlsafe(48)

@@ -335,15 +335,13 @@ try {
         # Founder starts this foreground server and decides when to shut it down.
         # Research is NEVER implicitly started by setting a tenant variable.
         # To run research, the founder launches 'market-watch' separately.
+        Write-Host "Checking local PostgreSQL, migrations, and secure settings (no secrets printed)."
+        & python -m ago.local_ops doctor
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "AGO server NOT started; fix failed doctor checks above."
+            exit $LASTEXITCODE
+        }
         Write-Host "AGO local server only. Market watcher is not auto-started."
-        $VisualRoute = Join-Path $BackendPath "ago\frontend\organization\index.html"
-        if (Test-Path -LiteralPath $VisualRoute -PathType Leaf) {
-            Write-Host "Visual Company Map: http://127.0.0.1:$Port/workspace/organization/"
-        }
-        else {
-            Write-Host "Company Map React frontend is not packaged. From repo root use .\\scripts\\ago-visual.ps1"
-            Write-Host "Old /console/ redirects to the visual Company Map; no duplicate UI."
-        }
         & python -m ago.local_ops serve --port $Port
     }
     else {

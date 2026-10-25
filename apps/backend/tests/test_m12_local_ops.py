@@ -88,7 +88,7 @@ def test_serve_only_listens_on_loopback_and_ephemeral_secret_is_not_saved(
 
 
 def test_serve_fails_closed_without_schema_and_rejects_reserved_ports(
-    local_environment, monkeypatch,
+    local_environment, monkeypatch, capsys,
 ):
     monkeypatch.setattr(local_ops, "doctor", lambda: local_ops.LocalDiagnosis(
         True, True, True, False, "ephemeral_on_serve", False,
@@ -96,6 +96,11 @@ def test_serve_fails_closed_without_schema_and_rejects_reserved_ports(
     called = []
     with pytest.raises(RuntimeError):
         local_ops.serve_local(run_server=lambda *a, **kw: called.append(1))
+    output = capsys.readouterr().out
+    assert '"kind": "ago_local_startup_preflight"' in output
+    assert '"migrations_applied": false' in output
+    assert '"ready": false' in output
+    assert "UNSAFE_PRIVATE_VALUE" not in output
     with pytest.raises(ValueError):
         local_ops.serve_local(port=80, run_server=lambda *_a, **_kw: called.append(1))
     assert not called
