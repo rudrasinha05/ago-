@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
+import re
 import sys
 from pathlib import Path
 from urllib.request import urlopen
@@ -48,7 +49,8 @@ def _private_paths(export: Path, staged: Path, qa_packet: Path) -> None:
 def bridge(
     run_id: str, export: Path, staged: Path, qa_packet: Path,
     *, base: str, token: str, apply: bool = False,
-    confirm_export: str = "", confirm_docker: str = "", opener=urlopen,
+    confirm_export: str = "", confirm_docker: str = "",
+    expected_candidate_sha256: str | None = None, opener=urlopen,
 ) -> dict:
     """A bounded one-run operation; fail closed before every write."""
     UUID(run_id)
@@ -56,6 +58,9 @@ def bridge(
     if apply and (confirm_export != EXPORT_CONFIRM
                   or confirm_docker != DOCKER_CONFIRM):
         raise PermissionError("Separate export and Docker confirmations required")
+    if apply and (not isinstance(expected_candidate_sha256, str)
+                  or re.fullmatch(r"[0-9a-f]{64}", expected_candidate_sha256) is None):
+        raise PermissionError("Exact reviewed candidate SHA-256 required")
     _private_paths(export, staged, qa_packet)
     preview = export_from_founder_session(
         base, token, run_id, export, opener=opener,
@@ -76,6 +81,8 @@ def bridge(
     }
     if not apply:
         return report
+    if preview["candidate_sha256"] != expected_candidate_sha256:
+        raise PermissionError("Previously reviewed candidate SHA-256 differs from persisted run")
     # Export only a *real*, server-persisted 7-role Board-cleared run.
     exported = export_from_founder_session(
         base, token, run_id, export, apply=True,
@@ -112,6 +119,7 @@ def main(argv=None) -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-export", default="")
     parser.add_argument("--confirm-docker", default="")
+    parser.add_argument("--expected-candidate-sha256")
     a = parser.parse_args(argv)
     try:
         # Wrong write confirmations never even prompt for credentials or
@@ -130,6 +138,7 @@ def main(argv=None) -> int:
             base=base, token=token, apply=a.apply,
             confirm_export=a.confirm_export,
             confirm_docker=a.confirm_docker,
+            expected_candidate_sha256=a.expected_candidate_sha256,
         )
     except KeyboardInterrupt:
         print(json.dumps({"status": "cancelled", "github_committed": False}))
