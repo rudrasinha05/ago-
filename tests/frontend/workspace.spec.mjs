@@ -407,7 +407,7 @@ test('server read cursor drives unread badge and Mark all read',async({page})=>{
  expect(errors).toEqual([]);
 });
 
-test('map views re-arrange the same recorded links: circular, tree and department lanes',async({page})=>{
+test('map views keep the same reporting links and join every employee to its department',async({page})=>{
  const {errors}=await fixtures(page);
  const lead='10000000-0000-4000-8000-000000000041',worker='10000000-0000-4000-8000-000000000042';
  await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
@@ -420,17 +420,26 @@ test('map views re-arrange the same recorded links: circular, tree and departmen
  await login(page);await navigate(page,'Organization');
  const world=page.locator('.company-world'),views=page.getByRole('group',{name:'Map view'});
  await expect(views.getByRole('button',{name:'Circular'})).toHaveAttribute('aria-pressed','true');
- const count=async()=>({live:await world.locator('.company-link.edge-live').count(),links:await world.locator('.company-link').count()});
- const circular=await count();
- expect(circular.live).toBe(2); // Founder→lead and lead→worker carry the running task
- for(const [name,cls] of [['Tree','view-tree'],['Departments','view-departments'],['Circular','view-circular']]){
-  await views.getByRole('button',{name}).click();
-  await expect(views.getByRole('button',{name})).toHaveAttribute('aria-pressed','true');
-  await expect(world).toHaveClass(new RegExp(cls));
-  // Same graph in every view: no link added, removed or re-routed.
-  expect(await count()).toEqual(circular);
-  if(name!=='Circular')await expect(world.locator('path.company-link.edge-live')).toHaveCount(2);
- }
+ const reporting=async()=>({links:await world.locator('.company-link.manager-link').count(),live:await world.locator('.company-link.edge-live').count()});
+ // Founder→lead and lead→worker are the recorded reporting lines carrying the running task.
+ expect(await reporting()).toEqual({links:2,live:2});
+ // Circular: the department owns a coloured sector and links to each of its members.
+ await expect(world.locator('.department-wedge')).toHaveCount(1);
+ await expect(world.locator('.department-wedge text')).toHaveText('Research');
+ await expect(world.locator('.company-link.member-link')).toHaveCount(2);
+ // Membership is never a task route.
+ await expect(world.locator('.company-link.member-link.edge-live')).toHaveCount(0);
+ await views.getByRole('button',{name:'Tree'}).click();
+ await expect(world).toHaveClass(/view-tree/);
+ expect(await reporting()).toEqual({links:2,live:2});
+ // Reporting chart: the department is on every card instead of a separate box.
+ await expect(world.locator('.map-node.department')).toHaveCount(0);
+ await expect(world.locator('.map-node.employee .map-dept')).toHaveText(['Research','Research']);
+ await views.getByRole('button',{name:'Departments'}).click();
+ await expect(world).toHaveClass(/view-departments/);
+ expect(await reporting()).toEqual({links:2,live:2});
+ await expect(world.locator('path.company-link.member-link')).toHaveCount(2);
+ await expect(world.locator('.map-node.department')).toContainText('3 members');
  await views.getByRole('button',{name:'Tree'}).click();
  await page.getByRole('button',{name:'Fit all'}).click();
  await world.locator('circle.route-hit-target.running').last().click();

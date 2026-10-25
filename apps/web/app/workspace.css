@@ -517,3 +517,18 @@
  .brain-rotate-controls{max-width:calc(100% - 20px)}
  .brain-running{align-self:center}
 }
+/* Department membership: one colour per department on hubs, members and their links. */
+.company-world :is(line,path).company-link.member-link{stroke:var(--dept);stroke-width:4;stroke-dasharray:none;opacity:.7}
+.company-world :is(line,path).company-link.unassigned-link{stroke:#8b9bb0;stroke-width:3;stroke-dasharray:6 10;opacity:.55}
+.company-world .map-node-wrap .map-node{border-left:5px solid var(--dept,#406f96)}
+.company-world .map-node-wrap .map-node.department{border:2px solid var(--dept,#af8be0);background:color-mix(in srgb,var(--dept,#af8be0) 18%,#0b1830);box-shadow:0 0 0 4px color-mix(in srgb,var(--dept,#af8be0) 18%,transparent),0 9px 24px #0007}
+.company-world .map-node-wrap .map-node.department strong{font-size:15px}
+.map-dept{display:inline-block;justify-self:start;margin-top:2px;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--dept,#7e91a9) 22%,transparent);color:#eaf3ff;font-weight:700;font-size:10.5px}
+.company-world .map-node-wrap .map-node.working{border-left-color:#ff2e55}
+.legend-member{color:#b48cff}
+.company-world .department-wedge path{fill:color-mix(in srgb,var(--dept) 9%,transparent);stroke:color-mix(in srgb,var(--dept) 45%,transparent);stroke-width:3;pointer-events:none}
+.company-world .department-wedge text{fill:var(--dept);font-size:46px;font-weight:800;letter-spacing:1px;opacity:.85;pointer-events:none;text-transform:uppercase}
+/* Badge keeps a constant on-screen size: undo the card's far-zoom enlargement. */
+.company-world .employee-approval-zone{transform:scale(calc(var(--employee-popup-zoom,1) / var(--lod,1)))}
+.company-world svg.company-route-layer{position:absolute;left:0;top:0;z-index:20;pointer-events:none;overflow:visible}
+.company-world svg.company-route-layer .route-hit-target{pointer-events:all}
