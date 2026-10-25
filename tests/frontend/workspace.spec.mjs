@@ -147,20 +147,22 @@ test('hypothetical thresholds reach simulation without applying live policy',asy
   await accessibility(page);
 });
 
-test('red routed task follows founder, department and employee and opens actual worker',async({page})=>{
+test('red routed task follows the recorded manager line and opens actual worker',async({page})=>{
  const {errors}=await fixtures(page);
+ // Since d2ac902 a route is drawn only over a recorded reporting line, never
+ // over department grouping, so the worker needs a real manager record.
  await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
   {id:user,name:'Test member',department_id:department,kind:'human'},
-  {id:other,name:'Delivery specialist',department_id:department,kind:'ai'}
+  {id:other,name:'Delivery specialist',department_id:department,kind:'ai',manager_id:user}
  ]}));
  await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
   {id:'20000000-0000-4000-8000-000000000020',assignee_id:other,action:'internal:brief',status:'running',project_name:'Real reviewed project'}
  ]}));
  await login(page);await navigate(page,'Organization');
- await expect(page.locator('.company-world line.edge-live')).toHaveCount(2);
+ await expect(page.locator('.company-world line.edge-live')).toHaveCount(1);
  await expect(page.locator('.company-world line.edge-pending')).toHaveCount(0);
  await page.getByRole('button',{name:'Fit all'}).click();
- await expect(page.locator('.company-world circle.route-hit-target.running')).toHaveCount(2);
+ await expect(page.locator('.company-world circle.route-hit-target.running')).toHaveCount(1);
  await page.locator('.company-world circle.route-hit-target.running').last().click();
  await expect(page.locator('.employee-inspector')).toContainText('Delivery specialist');
  await expect(page.locator('.employee-inspector')).toContainText('Real reviewed project');
