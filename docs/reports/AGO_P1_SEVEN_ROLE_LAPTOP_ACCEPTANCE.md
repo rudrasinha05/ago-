@@ -33,8 +33,12 @@ cd C:\Users\rudra\Projects\ago-
 .\scripts\ago.ps1 run-approved-engineering
 ```
 
-This command prompts privately for founder login, previews eligible tasks
-without changes, then separately requires an explicit typed confirmation.
+This command prompts privately for founder login **once**, previews at most
+one eligible task without any write, then asks for the exact typed confirmation
+in the same authenticated process. If zero eligible tasks exist, it stops
+without attempting an AI inference or creating a journal record. Cancellation
+also performs no task POST. Each confirmed run retains a durable no-replay
+attempt claim before network I/O.
 Its success must contain a `verified_seven_role_handoffs` receipt with seven
 distinct employee UUIDs, five advisory Board APPROVE lines and actual bounded
 per-role inference durations, linked by one real AGO run ID. Private draft

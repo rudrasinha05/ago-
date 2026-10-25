@@ -301,6 +301,30 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
 
 
 
+def interactive_batch(records, approvals, dispatch, *, limit: int, claim,
+                      require_engineering: bool, prompt=input, emit=print) -> dict:
+    """Preview -> one explicit founder confirmation -> at most `limit` POSTs.
+
+    A cancelled or empty preview never makes a task attempt receipt or calls
+    dispatch. One authenticated process owns both phases; no second login or
+    misleading automated success on a zero-task batch.
+    """
+    preview = batch(records, approvals, dispatch, limit=limit, apply=False,
+                    confirm=None, require_engineering=require_engineering)
+    emit(json.dumps(preview, sort_keys=True))
+    if not preview["eligible_task_ids"]:
+        return {"status": "no_eligible_approved_tasks", "task_count": 0,
+                "tasks_dispatched": 0, "automated_replay": False,
+                "next_step": preview["eligibility"]["suggested_next_step"]}
+    answer = prompt("Execute the exact previewed tasks? Type " + CONFIRM + ": ").strip()
+    if answer != CONFIRM:
+        return {"status": "cancelled_by_founder", "task_count": 0,
+                "tasks_dispatched": 0, "automated_replay": False}
+    return batch(records, approvals, dispatch, limit=limit, apply=True,
+                 confirm=answer, claim=claim,
+                 require_engineering=require_engineering)
+
+
 def watch(fetch, dispatch, *, minutes: int, max_tasks: int, interval: int,
           confirm: str, clock=None, pause=None, claim=None) -> dict:
     """Single founder-controlled session: approved internal tasks, one at a time.
@@ -350,6 +374,8 @@ def main(argv=None) -> int:
     parser.add_argument("--local-url",default="http://127.0.0.1:8000")
     parser.add_argument("--limit",type=int,default=3)
     parser.add_argument("--apply",action="store_true")
+    parser.add_argument("--interactive-apply", action="store_true",
+                        help="One founder login: inspect approved tasks, explicitly confirm, then run once")
     parser.add_argument("--confirm")
     parser.add_argument("--login",action="store_true",help="Prompt for founder credentials instead of copying a browser token")
     parser.add_argument("--require-engineering",action="store_true",
@@ -363,6 +389,9 @@ def main(argv=None) -> int:
         base=local_url(args.local_url)
         if args.apply and args.confirm!=CONFIRM:
             raise PermissionError("Exact founder confirmation required")
+        if args.interactive_apply and (args.apply or args.confirm is not None
+                                       or args.watch_minutes):
+            raise PermissionError("Interactive approval is exclusive to one-shot preview mode")
         if args.watch_minutes and args.require_engineering:
             raise PermissionError("Seven-role engineering verification requires one-shot mode")
         if args.watch_minutes and not args.apply:
@@ -411,7 +440,7 @@ def main(argv=None) -> int:
         # A dry-run never creates a receipt folder.
         claim = DurableAttemptJournal(
             args.attempt_journal or Path.home()/".ago"/"approved_attempts"
-        ).claim if args.apply else None
+        ).claim if (args.apply or args.interactive_apply) else None
         if args.watch_minutes:
             result=watch(fetch,dispatch,minutes=args.watch_minutes,
                          max_tasks=args.limit,interval=args.interval_seconds,
@@ -420,20 +449,26 @@ def main(argv=None) -> int:
             records,approvals=fetch()
             if not isinstance(records,list) or not isinstance(approvals,list):
                 raise TypeError("Authenticated task/approval evidence unavailable")
-            result=batch(records,approvals,dispatch,
-                         limit=args.limit,apply=args.apply,confirm=args.confirm,
-                         claim=claim, require_engineering=args.require_engineering)
+            if args.interactive_apply:
+                result=interactive_batch(
+                    records, approvals, dispatch, limit=args.limit, claim=claim,
+                    require_engineering=args.require_engineering,
+                )
+            else:
+                result=batch(records,approvals,dispatch,
+                             limit=args.limit,apply=args.apply,confirm=args.confirm,
+                             claim=claim, require_engineering=args.require_engineering)
     except KeyboardInterrupt:
         print(json.dumps({"status":"stopped_by_founder","automated_replay":False}))
         return 130
-    except (OSError, ValueError, PermissionError, TypeError, RuntimeError) as exc:
+    except (OSError, EOFError, ValueError, PermissionError, TypeError, RuntimeError) as exc:
         # Do not print tokens, endpoint messages, project content or traceback.
         print(json.dumps({"status":"stopped_without_retry",
                          "error_type":type(exc).__name__,
                          "automated_replay":False}))
         return 2
     print(json.dumps(result,sort_keys=True))
-    return 0
+    return 2 if result.get("status") == "cancelled_by_founder" else 0
 
 
 if __name__=="__main__":

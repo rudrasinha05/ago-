@@ -127,8 +127,11 @@ def test_approved_local_launcher_uses_hidden_founder_login_not_copied_browser_to
     script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
     approved = [line for line in script.splitlines()
                 if "python ../../scripts/local_approved_agent_batch.py" in line]
-    assert len(approved) == 3
+    assert len(approved) == 4
     assert all("--login" in line for line in approved)
+    engineering = [line for line in approved if "--require-engineering" in line]
+    assert len(engineering) == 1
+    assert "--interactive-apply --limit 1" in engineering[0]
     assert "Bearer " not in script
 
 

@@ -83,10 +83,14 @@ try {
     if ($Action -in @("run-approved-internal", "run-approved-engineering", "watch-approved-internal")) {
         $Continuous = $Action -eq "watch-approved-internal"
         $Coding = $Action -eq "run-approved-engineering"
-        $CodingCheck = @()
-        if ($Coding) { $CodingCheck += "--require-engineering" }
+        if ($Coding) {
+            Write-Host "Single founder login: preview one approved engineering task, then confirm explicitly."
+            Write-Host "No task POST without consent. No automatic repeat or GitHub write."
+            & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --require-engineering --interactive-apply --limit 1
+            exit $LASTEXITCODE
+        }
         Write-Host "Preview of authenticated, founder-approved internal brief tasks only."
-        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login @CodingCheck
+        & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         if ($Continuous) {
             Write-Host "Watch will poll for at most 60 minutes / 10 approved tasks, only while this terminal is open."
@@ -101,7 +105,7 @@ try {
             & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --watch-minutes 60 --limit 10 --interval-seconds 15 --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
         }
         else {
-            & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login @CodingCheck --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
+            & python ../../scripts/local_approved_agent_batch.py --local-url "http://127.0.0.1:$Port" --login --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS
         }
         exit $LASTEXITCODE
     }

@@ -451,3 +451,77 @@ def test_engineering_dispatch_does_not_accept_stub_completion():
                             require_engineering=True)
     assert verified["completed_task_ids"] == [task]
     assert len(verified["verified_seven_role_handoffs"]) == 1
+
+
+def test_single_login_interactive_preview_never_executes_without_confirm(tmp_path):
+    task_id = str(uuid4())
+    records = [{"id": task_id, "action": "internal:brief",
+                "status": "waiting_approval", "approval_id": "approved"}]
+    approvals = [{"id": "approved", "action": "internal:brief",
+                  "status": "approved"}]
+    journal = module.DurableAttemptJournal(tmp_path / "attempts")
+    calls, previews = [], []
+
+    def dispatch(identity):
+        calls.append(identity)
+        return module.sample_live_board_payload(identity) if hasattr(
+            module, "sample_live_board_payload") else {"task_id": identity,
+                                                        "status": "completed"}
+
+    cancelled = module.interactive_batch(
+        records, approvals, dispatch, limit=1, claim=journal.claim,
+        require_engineering=False, prompt=lambda *_: "CANCEL",
+        emit=previews.append,
+    )
+    assert cancelled["status"] == "cancelled_by_founder"
+    assert cancelled["tasks_dispatched"] == 0
+    assert calls == []
+    assert not journal.directory.exists()
+    assert len(previews) == 1
+    assert task_id in previews[0]
+
+    confirmed = module.interactive_batch(
+        records, approvals, dispatch, limit=1, claim=journal.claim,
+        require_engineering=False, prompt=lambda *_: module.CONFIRM,
+        emit=previews.append,
+    )
+    assert confirmed["completed_task_ids"] == [task_id]
+    assert calls == [task_id]
+    assert len(list(journal.directory.glob("*.attempt"))) == 1
+    replay = module.interactive_batch(
+        records, approvals, dispatch, limit=1, claim=journal.claim,
+        require_engineering=False, prompt=lambda *_: module.CONFIRM,
+        emit=previews.append,
+    )
+    assert replay["completed_task_ids"] == []
+    assert replay["skipped_previously_attempted"] == [task_id]
+    assert calls == [task_id]
+
+
+def test_single_login_interactive_empty_preview_is_read_only(tmp_path):
+    journal = module.DurableAttemptJournal(tmp_path / "attempts")
+    def never(*_):
+        pytest.fail("No founder confirmation, claim or dispatch on empty preview")
+    result = module.interactive_batch(
+        [], [], never, limit=1, claim=journal.claim,
+        require_engineering=True, prompt=never, emit=lambda *_: None,
+    )
+    assert result["status"] == "no_eligible_approved_tasks"
+    assert result["tasks_dispatched"] == 0
+    assert not journal.directory.exists()
+
+
+def test_single_login_interactive_engineering_rejects_stub(tmp_path):
+    task_id = str(uuid4())
+    task = [{"id": task_id, "action": "internal:brief",
+             "status": "waiting_approval", "approval_id": "approved"}]
+    approved = [{"id": "approved", "status": "approved", "action": "internal:brief"}]
+    attempts = module.DurableAttemptJournal(tmp_path / "attempts")
+    with pytest.raises((RuntimeError, TypeError)):
+        module.interactive_batch(
+            task, approved, lambda identity: {"task_id": identity,
+                                              "status": "completed"},
+            limit=1, claim=attempts.claim, require_engineering=True,
+            prompt=lambda *_: module.CONFIRM, emit=lambda *_: None,
+        )
+    assert len(list(attempts.directory.glob("*.attempt"))) == 1
