@@ -16,6 +16,44 @@ def test_visual_launcher_is_local_only_and_targets_real_react_company_map():
     assert "ollama pull" not in script
 
 
+
+def test_launcher_repairs_stale_nextjs_without_touching_postgres():
+    """An existing node_modules/next at an older version must not bypass npm ci."""
+    root = Path(__file__).resolve().parents[3]
+    script = (root / "scripts" / "ago-visual.ps1").read_text(encoding="utf-8")
+    start = script.index('$lockPath = Join-Path $root "package-lock.json"')
+    verify = script.index('Write-Host "Next.js dependency verified:')
+    build = script.index('npm.cmd run build --workspace "@ago/web"')
+    guards = script[start:verify]
+
+    assert start < verify < build
+    assert '"node_modules\\next\\package.json"' in guards
+    assert '$expectedNext -cne $lockedNext' in guards
+    assert '$installedNext -cne $lockedNext' in guards
+    assert '"node_modules/next"' in guards
+    assert "npm.cmd ci" in guards
+    assert 'if ($LASTEXITCODE -ne 0)' in guards
+    assert 'if ($installedNext -cne $lockedNext)' in guards
+    assert 'throw "Installed Next.js still does not match' in guards
+    assert "python -m ago.event_runtime migrate" not in script
+    assert "git reset" not in script
+
+
+def test_launcher_expected_nextjs_version_matches_all_workspace_lock_entries():
+    """Keep pinned web/admin/docs dependencies aligned with the tested lockfile."""
+    import json
+    root = Path(__file__).resolve().parents[3]
+    lock = json.loads((root / "package-lock.json").read_text(encoding="utf-8"))
+    version = lock["packages"]["node_modules/next"]["version"]
+    for workspace in ("web", "admin", "docs"):
+        manifest = json.loads(
+            (root / "apps" / workspace / "package.json").read_text(encoding="utf-8")
+        )
+        assert manifest["dependencies"]["next"] == version
+        assert lock["packages"][f"apps/{workspace}"]["dependencies"]["next"] == version
+    assert version != "16.4.0"
+
+
 def test_existing_ago_operator_labels_basic_and_visual_ui_separately():
     root = Path(__file__).resolve().parents[3]
     source = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
