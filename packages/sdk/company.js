@@ -57,8 +57,11 @@ export function companyLayout(departments, employees, founderId) {
     const node={...e,key:'employee:'+e.id,type:'employee',x:centerX,y,depth:depth+1};
     raw.push(node);positions.set(node.key,node);
     const manager=directManager.get(e.id);
-    edges.push({from:manager?'employee:'+manager:groupKey||'founder',to:node.key,
-      kind:manager?'reporting':'grouping'});
+    const founderIsManager=e.manager_id===founderId;
+    edges.push({
+      from:manager?'employee:'+manager:founderIsManager?'founder':groupKey||'founder',
+      to:node.key,kind:manager||founderIsManager?'reporting':'grouping'
+    });
     let childLeft=left;
     for(const child of children.get(e.id)){
       const childWidth=weight(child)*slot;
