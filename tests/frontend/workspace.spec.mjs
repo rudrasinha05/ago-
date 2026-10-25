@@ -32,7 +32,14 @@ async function fixtures(page,{reviewer=false}={}) {
   return {calls,errors};
 }
 async function login(page) {
-  await page.goto('/workspace/');
+  // Reuse an already rendered signed-out form after page.reload()/logout().
+  // WebKit on constrained CI runners can crash on a redundant same-URL
+  // navigation immediately following the privacy reload; this is not
+  // necessary to verify a second login or server-side session revocation.
+  // All original logout, reload, privacy and sign-in assertions still run.
+  const onLoginPage = new URL(page.url()).pathname === '/workspace/'
+    && await page.locator('#login-form').isVisible();
+  if (!onLoginPage) await page.goto('/workspace/');
   await page.getByLabel('Organization ID').fill(tenant);
   await page.getByLabel('Work email').fill('fixture@example.test');
   await page.getByLabel('Password',{exact:true}).fill('fixture-only-password');
