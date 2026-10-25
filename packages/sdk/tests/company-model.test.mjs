@@ -71,3 +71,56 @@ test('failed and blocked persisted task states are never shown as idle',()=>{
  assert.equal(employeeStatus('e',[{assignee_id:'somebody-else',status:'failed'}]).tone,'idle');
  assert.equal(employeeStatus('e',undefined).tone,'unknown');
 });
+
+
+test('hierarchy graph draws recorded managers as reporting, department as grouping',()=>{
+ const departments=[{id:'dA',name:'Strategy'},{id:'dB',name:'Engineering'}];
+ const people=[
+  {id:'ceo',name:'CEO',department_id:'dA',manager_id:'founder'},
+  {id:'cto',name:'CTO',department_id:'dB',manager_id:'ceo'},
+  {id:'pm',name:'PM',department_id:'dB',manager_id:'cto'},
+  {id:'dev',name:'Engineer',department_id:'dB',manager_id:'pm'},
+  {id:'isolated',name:'Unassigned',department_id:'dB',manager_id:null},
+ ];
+ const layout=companyLayout(departments,people,'founder');
+ assert.equal(layout.edges.find(e=>e.to==='employee:cto').from,'employee:ceo');
+ assert.equal(layout.edges.find(e=>e.to==='employee:pm').kind,'reporting');
+ assert.equal(layout.edges.find(e=>e.to==='employee:dev').from,'employee:pm');
+ assert.equal(layout.edges.find(e=>e.to==='employee:ceo').kind,'grouping');
+ assert.equal(layout.edges.find(e=>e.to==='employee:isolated').kind,'grouping');
+ assert.equal(layout.edges.find(e=>e.to==='department:dB').from,'founder');
+ assert.ok(layout.nodes.find(n=>n.key==='employee:cto').y < layout.nodes.find(n=>n.key==='employee:pm').y);
+ assert.ok(layout.founder.y < layout.nodes.find(n=>n.key==='department:dA').y);
+ assert.ok(layout.nodes.every(n=>n.x>0&&n.y>0&&n.x<layout.size&&n.y<layout.size));
+});
+
+test('unknown manager and cycles never draw invented employee reporting paths',()=>{
+ const deps=[{id:'d',name:'Support'}];
+ const staff=[
+  {id:'a',name:'A',department_id:'d',manager_id:'b'},
+  {id:'b',name:'B',department_id:'d',manager_id:'a'},
+  {id:'c',name:'C',department_id:'d',manager_id:'missing'},
+ ];
+ const layout=companyLayout(deps,staff,'founder');
+ assert.equal(layout.edges.filter(e=>e.kind==='reporting').length,0);
+ assert.equal(layout.nodes.filter(n=>n.type==='employee').length,3);
+ assert.equal(layout.edges.filter(e=>e.from==='department:d').length,3);
+});
+
+test('51 staff are laid out as a non-overlapping reporting tree',()=>{
+ const deps=Array.from({length:9},(_,i)=>({id:'dept'+i,name:'Team '+i}));
+ const people=deps.flatMap((dep,i)=>Array.from({length:i<6?6:5},(_,j)=>({
+  id:dep.id+'-'+j,name:'Employee '+i+' '+j,department_id:dep.id,
+  manager_id:j?dep.id+'-0':null,
+ })));
+ assert.equal(people.length,51);
+ const layout=companyLayout(deps,people,'founder');
+ for(const a of layout.nodes){
+  for(const b of layout.nodes){
+   if(a.key===b.key)continue;
+   assert.ok(Math.abs(a.x-b.x)>210||Math.abs(a.y-b.y)>110,'Cards overlapping: '+a.key+' / '+b.key);
+  }
+ }
+ assert.equal(layout.reportingEdges,42);
+ assert.equal(layout.groupingEdges,18);
+});
