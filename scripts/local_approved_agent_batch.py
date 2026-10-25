@@ -196,7 +196,7 @@ def verify_real_board_handoffs(response, task_id):
            for k, v in expected.items()):
         raise TypeError("Missing real Board, model or safety evidence")
     if not isinstance(result.get("engineering_candidate"), dict):
-        raise RuntimeError("Reviewable candidate missing")
+        raise TypeError("Reviewable candidate missing")
     handoffs = result.get("handoffs")
     votes = result.get("board_recommendations")
     if (not isinstance(handoffs, list) or len(handoffs) != 7
