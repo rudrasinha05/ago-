@@ -2175,6 +2175,25 @@ class EnterpriseOperationsStore:
             (str(UUID(tenant_id)), kind, kind, kind),
         ).fetchall()]
 
+    def evidence_item(self, *, tenant_id: str, evidence_id: str) -> dict:
+        """Exact tenant-bound source read; caller must enforce Founder RBAC.
+
+        The dashboard's evidence() remains redacted even for the Founder.
+        A privileged single-item read is the only way to inspect stored source
+        bytes without exposing the next 99 records in a bulk response.
+        """
+        row = self.connection.execute("""
+            SELECT e.id,e.kind,e.operation_key,e.payload,e.digest,e.created_at,
+                   r.approval_id,r.created_at AS reviewed_at
+            FROM ago_enterprise_evidence e
+            LEFT JOIN ago_enterprise_evidence_reviews r
+              ON r.tenant_id=e.tenant_id AND r.evidence_id=e.id
+            WHERE e.tenant_id=%s AND e.id=%s
+        """,(str(UUID(tenant_id)),str(UUID(evidence_id)))).fetchone()
+        if row is None:
+            raise LookupError("Evidence not found for organization")
+        return dict(row)
+
     def _save_evidence(self, *, actor: Principal, kind: str,
                        operation_key: str, payload: dict) -> dict:
         from hashlib import sha256
