@@ -2,7 +2,9 @@ import {defineConfig} from '@playwright/test';
 export default defineConfig({
   testDir: '.', testMatch: '*.spec.mjs', timeout:45000, workers:2,
   use:{baseURL:'http://127.0.0.1:18776',reducedMotion:'reduce',trace:'retain-on-failure'},
-  reporter:[['list'],['html',{outputFolder:'artifacts/report',open:'never'}]],
+  // In CI the github reporter also writes each failure as a check annotation,
+  // so the failing test and error are visible without downloading artifacts.
+  reporter:[['list'],...(process.env.CI?[['github']]:[]),['html',{outputFolder:'artifacts/report',open:'never'}]],
   outputDir:'artifacts/results',
   webServer:{command:'AGO_ENVIRONMENT=development python -m uvicorn ago.main:app --host 127.0.0.1 --port 18776 --no-proxy-headers',url:'http://127.0.0.1:18776/health/live',reuseExistingServer:!process.env.CI,timeout:30000},
   projects:[
