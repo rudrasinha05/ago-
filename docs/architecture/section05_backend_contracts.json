@@ -894,6 +894,10 @@
           "arguments": "self, *, tenant_id: str, kind: str | None=None",
           "returns": "list[dict]"
         },
+        "evidence_item": {
+          "arguments": "self, *, tenant_id: str, evidence_id: str",
+          "returns": "dict"
+        },
         "evidence_action": {
           "arguments": "self, *, tenant_id: str, evidence_id: str",
           "returns": "str"
