@@ -487,6 +487,8 @@ def main(argv=None) -> int:
                         help="One founder login: inspect approved tasks, explicitly confirm, then run once")
     parser.add_argument("--reconcile-only", action="store_true",
                         help="Read-only inspect previous durable attempts vs signed task and run history")
+    parser.add_argument("--diagnose-task", default=None,
+                        help="Founder-scoped GET inspection of one exact task ID (never executes)")
     parser.add_argument("--confirm")
     parser.add_argument("--login",action="store_true",help="Prompt for founder credentials instead of copying a browser token")
     parser.add_argument("--require-engineering",action="store_true",
@@ -504,8 +506,12 @@ def main(argv=None) -> int:
                                        or args.watch_minutes or args.reconcile_only):
             raise PermissionError("Interactive approval is exclusive to one-shot preview mode")
         if args.reconcile_only and (args.apply or args.confirm is not None
-                                    or args.watch_minutes):
+                                    or args.watch_minutes or args.diagnose_task):
             raise PermissionError("Reconciliation must be read-only")
+        if args.diagnose_task is not None:
+            UUID(args.diagnose_task)
+            if args.apply or args.confirm is not None or args.watch_minutes:
+                raise PermissionError("Engineering preflight must be read-only")
         if args.watch_minutes and args.require_engineering:
             raise PermissionError("Seven-role engineering verification requires one-shot mode")
         if args.watch_minutes and not args.apply:
@@ -542,7 +548,7 @@ def main(argv=None) -> int:
         principal=request("GET","/v1/console/me")
         if not isinstance(principal,dict) or "founder" not in principal.get("roles",[]):
             raise PermissionError("Active founder session required")
-        if args.require_engineering and not args.reconcile_only:
+        if args.require_engineering and not (args.reconcile_only or args.diagnose_task):
             require_engineering_capability(
                 request("GET","/v1/agents/engineering-capabilities")
             )
@@ -555,7 +561,12 @@ def main(argv=None) -> int:
         claim = DurableAttemptJournal(
             args.attempt_journal or Path.home()/".ago"/"approved_attempts"
         ).claim if (args.apply or args.interactive_apply) else None
-        if args.reconcile_only:
+        if args.diagnose_task:
+            result=request(
+                "GET", "/v1/agents/tasks/" + str(UUID(args.diagnose_task))
+                + "/engineering-preflight"
+            )
+        elif args.reconcile_only:
             result=reconcile_attempts(
                 DurableAttemptJournal(
                     args.attempt_journal or Path.home()/".ago"/"approved_attempts"

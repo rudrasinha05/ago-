@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from ago.agent_handlers import BUILTIN_HANDLERS
+from ago.company_engineering_preflight import inspect_engineering_task
 from ago.api_m2 import allowed, authenticated, db_connection, repository_scope, translate_error
 from ago.backend_contracts import RepositoryScope
 from ago.model_handlers import optional_model_handlers
@@ -64,6 +65,28 @@ def runs(
     # agent:read role must never expose other confidential projects.
     allowed(repositories, actor, "approval:founder")
     return repositories.resolve(AgentRuntimePort).list(tenant_id=actor.tenant_id)
+
+
+@router.get("/tasks/{task_id}/engineering-preflight")
+def engineering_preflight(
+    task_id: UUID,
+    db=Depends(db_connection),
+    actor: Principal = Depends(authenticated),
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    """Founder-only GET; SQL read-only transaction and no model/task dispatch."""
+    allowed(repositories, actor, "agent:read")
+    allowed(repositories, actor, "approval:founder")
+    if os.getenv("AGO_ENVIRONMENT", "development").lower() not in (
+        "development", "test", "testing"
+    ):
+        raise HTTPException(403, "Local engineering diagnostics require development mode")
+    with db.transaction():
+        db.execute("SET TRANSACTION READ ONLY")
+        return inspect_engineering_task(
+            db, tenant_id=actor.tenant_id, founder_id=actor.subject,
+            task_id=str(task_id),
+        )
 
 
 @router.post("/tasks/{task_id}/run")
