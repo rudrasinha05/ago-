@@ -111,7 +111,7 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
      </section>
    </div>
    <section className="board-command" aria-label="Board governance functions">
-    <div><h3>AGO AI Executive Board</h3><small>{openBoardCount} of 5 seats unassigned · Software AI roles, not legal directors · Founder approval required</small></div>
+    <div><h3>Board of Directors</h3><small>{openBoardCount} of 5 seats unassigned · Software AI roles, not legal directors · Founder approval required</small></div>
     <div className="board-seats">{seats.map(s=>{
       const options=employees.filter(e=>e.kind==='ai'&&(!assignedToOtherSeat.has(e.id)||e.id===s.member?.id));
       const selected=choices[s.title]||s.member?.id||'';
