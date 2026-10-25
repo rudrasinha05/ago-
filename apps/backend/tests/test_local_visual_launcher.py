@@ -18,25 +18,26 @@ def test_visual_launcher_is_local_only_and_targets_real_react_company_map():
 
 
 def test_launcher_repairs_stale_nextjs_without_touching_postgres():
-    """An existing node_modules/next at an older version must not bypass npm ci."""
+    """Use Node for npm JSON: Windows PowerShell 5.1 cannot parse all lockfile keys."""
     root = Path(__file__).resolve().parents[3]
     script = (root / "scripts" / "ago-visual.ps1").read_text(encoding="utf-8")
-    start = script.index('$lockPath = Join-Path $root "package-lock.json"')
+    start = script.index('$nextCheck = Join-Path $root "scripts\ago_next_dependency_state.mjs"')
     verify = script.index('Write-Host "Next.js dependency verified:')
     build = script.index('npm.cmd run build --workspace "@ago/web"')
     guards = script[start:verify]
 
     assert start < verify < build
-    assert '"node_modules\\next\\package.json"' in guards
-    assert '$expectedNext -cne $lockedNext' in guards
+    assert "& node $nextCheck" in guards
+    assert "if ($LASTEXITCODE -ne 0)" in guards
     assert '$installedNext -cne $lockedNext' in guards
-    assert '"node_modules/next"' in guards
     assert "npm.cmd ci" in guards
-    assert 'if ($LASTEXITCODE -ne 0)' in guards
-    assert 'if ($installedNext -cne $lockedNext)' in guards
+    assert 'if ($LASTEXITCODE -ne 0 -or [string]$afterState -cne "$lockedNext|$lockedNext")' in guards
     assert 'throw "Installed Next.js still does not match' in guards
+    assert 'Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json' not in script
+    assert 'Get-Content -LiteralPath $installedNextPath -Raw | ConvertFrom-Json' not in script
     assert "python -m ago.event_runtime migrate" not in script
     assert "git reset" not in script
+
 
 
 def test_launcher_expected_nextjs_version_matches_all_workspace_lock_entries():
