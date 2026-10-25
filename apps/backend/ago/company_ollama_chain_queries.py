@@ -132,9 +132,20 @@ class CompanyOllamaChainQueries:
         UUID(founder_id)
         UUID(task_id)
         UUID(employee_id)
-        if role not in {"ceo", "cto", "finance", "risk", "quality", "pm", "employee"}:
-            raise PermissionError("Unknown company role cannot publish local work events")
-        if not isinstance(blocked, bool) or not any(
+        # A caller-supplied list cannot reorder/skip verified stages. The list
+        # itself originates from assignments(), and durable receipts must
+        # additionally prove that each preceding role completed in order.
+        roles = tuple(p.get("role") for p in participants)
+        if roles not in (
+            ("ceo", "cto", "pm", "employee"),
+            ("ceo", "cto", "finance", "risk", "quality", "pm", "employee"),
+        ) or len({p.get("employee_id") for p in participants}) != len(roles):
+            raise PermissionError("Unrecognized or duplicate AGO role chain")
+        if not isinstance(blocked, bool) or (
+            blocked and role not in {"ceo", "cto", "finance", "risk", "quality"}
+        ):
+            raise PermissionError("Only a Board member can block its own handoff")
+        if not any(
             p["role"] == role and p["employee_id"] == employee_id
             for p in participants
         ):
@@ -143,6 +154,14 @@ class CompanyOllamaChainQueries:
             "AGO verified local inference for " + role
             + ("; Board requested Founder resolution; independent QA pending."
                if blocked else "; task proposal only; independent QA pending.")
+        )
+        ordinary = (
+            "AGO verified local inference for " + role
+            + "; task proposal only; independent QA pending."
+        )
+        blocked_description = (
+            "AGO verified local inference for " + role
+            + "; Board requested Founder resolution; independent QA pending."
         )
         with self.db.transaction():
             # Lock the exact governed task so two callbacks/retries cannot
@@ -153,13 +172,43 @@ class CompanyOllamaChainQueries:
             """, (tenant_id, task_id)).fetchone()
             if task is None:
                 raise PermissionError("Verified worker event requires a real task")
+            # Strictly ordered, durable handoff: a crashed/replayed worker
+            # must never claim later roles before earlier model inferences.
+            # A Board objection has no normal completion receipt, so it
+            # cannot be ignored by downstream PM/engineer callbacks.
+            position = roles.index(role)
+            if position:
+                predecessor = participants[position - 1]
+                predecessor_body = (
+                    "AGO verified local inference for " + predecessor["role"]
+                    + "; task proposal only; independent QA pending."
+                )
+                previous = self.db.execute("""
+                    SELECT id FROM ago_company_chat
+                    WHERE tenant_id=%s AND task_id=%s AND employee_id=%s
+                      AND kind='status' AND body=%s
+                    LIMIT 1
+                """, (tenant_id, task_id, predecessor["employee_id"],
+                      predecessor_body)).fetchone()
+                if previous is None:
+                    raise PermissionError(
+                        "Prior real AI role handoff is absent or blocked"
+                    )
+            # Exactly one outcome for a particular task+employee+role. An
+            # identical retry is harmless; an opposing Board outcome cannot
+            # create a second unread event or silently undo a veto.
             existing = self.db.execute("""
-                SELECT id FROM ago_company_chat
+                SELECT body FROM ago_company_chat
                 WHERE tenant_id=%s AND task_id=%s AND employee_id=%s
-                  AND kind='status' AND body=%s
+                  AND kind='status' AND body IN (%s,%s)
                 LIMIT 1
-            """, (tenant_id, task_id, employee_id, description)).fetchone()
+            """, (tenant_id, task_id, employee_id, ordinary,
+                  blocked_description)).fetchone()
             if existing:
+                if existing["body"] != description:
+                    raise PermissionError(
+                        "Conflicting completed AI role evidence"
+                    )
                 return
             self.db.execute("""
                 INSERT INTO ago_company_chat
