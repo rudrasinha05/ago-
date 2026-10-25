@@ -354,6 +354,7 @@
       "ago_founder_project_lead",
       "ago_governed_tasks",
       "ago_plan_steps",
+      "ago_project_stage_delegation_activations",
       "ago_strategy_plans"
     ],
     "console_api": [],
