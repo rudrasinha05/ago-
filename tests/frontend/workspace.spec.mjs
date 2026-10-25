@@ -39,7 +39,15 @@ async function login(page) {
   // All original logout, reload, privacy and sign-in assertions still run.
   const onLoginPage = new URL(page.url()).pathname === '/workspace/'
     && await page.locator('#login-form').isVisible();
-  if (!onLoginPage) await page.goto('/workspace/');
+  if (!onLoginPage) {
+    // Issue #3: every app load sends /v1/security/sso/session, which the
+    // fixtures intercept. Starting page.goto() while that intercepted request
+    // from a just-reloaded page is still in flight crashed WebKit's content
+    // process. Let the loaded page settle first; the navigation itself and
+    // every assertion still run.
+    if (page.url() !== 'about:blank') await page.waitForLoadState('networkidle');
+    await page.goto('/workspace/');
+  }
   await page.getByLabel('Organization ID').fill(tenant);
   await page.getByLabel('Work email').fill('fixture@example.test');
   await page.getByLabel('Password',{exact:true}).fill('fixture-only-password');
