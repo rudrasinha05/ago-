@@ -182,8 +182,10 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         assert "Founder resolution" in visible[-1]["body"]
     # A delayed duplicate completion callback is idempotent; every badge
     # represents one recorded employee inference, not every network retry.
+    founder_identity = client.get("/v1/console/me", headers=founder)
+    assert founder_identity.status_code == 200
     CompanyOllamaChainQueries(info["db"]).record_verified_handoff(
-        tenant_id=info["tenant"], founder_id=info["founder"],
+        tenant_id=info["tenant"], founder_id=founder_identity.json()["id"],
         task_id=task_id, role=expected_roles[0],
         employee_id=expected_people[0], blocked=False,
         participants=[
