@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [develop]
-    paths: [.github/workflows/ago-npm-audit-diagnostic.yml]
+    paths: [package.json, package-lock.json, .github/workflows/ago-npm-audit-diagnostic.yml]
 permissions:
   contents: read
 jobs:
@@ -34,5 +34,9 @@ jobs:
               range:v.range,fixAvailable:v.fixAvailable,via,
               effects:v.effects,
             }));
+          }
+          if((report.metadata?.vulnerabilities?.high || 0)+(report.metadata?.vulnerabilities?.critical || 0)>0){
+            console.error('AGO SECURITY AUDIT FAILED: high/critical package vulnerabilities remain');
+            process.exitCode=1;
           }
           NODE

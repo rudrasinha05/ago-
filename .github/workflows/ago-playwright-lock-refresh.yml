@@ -1,0 +1,52 @@
+name: AGO audited Playwright lockfile refresh
+on:
+  push:
+    branches: [develop]
+    paths: [package.json]
+permissions:
+  contents: write
+concurrency:
+  group: ago-audited-playwright-lock-update
+  cancel-in-progress: false
+jobs:
+  lock-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Refresh lockfile from official npm registry
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Validate patched versions and registry integrity
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs'),assert=require('node:assert/strict');
+          const p=JSON.parse(fs.readFileSync('package.json','utf8'));
+          const lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+          assert.equal(p.devDependencies['@playwright/test'],'1.56.0');
+          assert.equal(lock.packages[''].devDependencies['@playwright/test'],'1.56.0');
+          for(const id of ['node_modules/@playwright/test','node_modules/playwright','node_modules/playwright-core']){
+            assert.equal(lock.packages[id]?.version,'1.56.0',id);
+            assert.ok(lock.packages[id]?.integrity?.startsWith('sha512-'),id+' lacks integrity');
+            assert.ok(lock.packages[id]?.resolved?.startsWith('https://registry.npmjs.org/'),id+' bad registry');
+          }
+          for(const id of ['node_modules/next','node_modules/@next/env']){
+            assert.equal(lock.packages[id]?.version,'16.4.3',id);
+          }
+          NODE
+      - name: Verify repeatable npm ci without install scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Enforce no high or critical vulnerabilities
+        run: npm audit --audit-level=high --no-fund
+      - name: Commit lockfile to develop
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(security): npm-resolved Playwright 1.56.0 lockfile"
+            git push origin HEAD:develop
+          fi

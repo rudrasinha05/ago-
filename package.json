@@ -22,7 +22,7 @@
     "dev:docs": "npm run dev --workspace @ago/docs"
   },
   "devDependencies": {
-    "@playwright/test": "1.55.0",
+    "@playwright/test": "1.56.0",
     "axe-core": "4.10.3"
   }
 }
