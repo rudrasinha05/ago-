@@ -1,4 +1,4 @@
-name: AGO npm audit diagnostics
+name: AGO dependency security audit
 on:
   workflow_dispatch:
   push:
@@ -18,7 +18,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - name: Validate lock integrity (immutable install)
         run: npm ci --ignore-scripts --no-fund --no-audit
-      - name: Report bounded audit data without printing auth tokens or paths
+      - name: Audit all root and transitive dependencies, blocking high-risk advisories
         run: |
           npm audit --json > "$RUNNER_TEMP/ago-npm-audit.json" || true
           node - "$RUNNER_TEMP/ago-npm-audit.json" <<'NODE'
