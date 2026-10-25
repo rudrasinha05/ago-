@@ -313,7 +313,14 @@ def test_qa_verified_github_proposal_operator_never_pushes_remote_code():
     assert 'ago_submit_github_proposal.py' in text
     assert '--apply --confirm SUBMIT_QA_VERIFIED_GITHUB_PROPOSAL' in text
     assert "GitHub remains unchanged" in text
-    assert 'Join-Path $HOME (".ago\\candidate_exports\\ago-run-" + $RunId + ".json")' in text
+    # Legacy exports remain available, but the newer live-to-Docker bridge
+    # exports a uniquely named private run receipt. All downstream phases
+    # must re-bind to the authenticated exact run, never silently pick latest.
+    assert 'function Resolve-AGOExportReceipt {' in text
+    assert '$Chosen = Read-Host "Exact private export JSON path' in text
+    assert '$Receipt.id -cne $RunId' in text
+    assert '$Receipt.result.board_review_cleared -ne $true' in text
+    assert text.count('Resolve-AGOExportReceipt -RunId $RunId') == 5
     assert "git push" not in text
     assert text.count("finally {") == 1
 
