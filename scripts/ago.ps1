@@ -37,10 +37,9 @@ function Resolve-AGOExportReceipt {
     param([string]$RunId)
     $Base = Join-Path $HOME ".ago\candidate_exports"
     $Legacy = Join-Path $Base ("ago-run-" + $RunId + ".json")
-    if (Test-Path -LiteralPath $Legacy -PathType Leaf) {
+    $Chosen = Read-Host "Exact private export JSON path (Enter for legacy ago-run-UUID export)"
+    if ([string]::IsNullOrWhiteSpace($Chosen)) {
         $Chosen = $Legacy
-    } else {
-        $Chosen = Read-Host "Exact private export JSON from the live-to-QA bridge"
     }
     if (-not (Test-Path -LiteralPath $Base -PathType Container) -or
         -not (Test-Path -LiteralPath $Chosen -PathType Leaf)) {
