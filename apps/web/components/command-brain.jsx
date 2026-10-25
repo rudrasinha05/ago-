@@ -1,6 +1,6 @@
 "use client";
 import {useCallback,useMemo,useState} from 'react';
-import {Brain3DScene} from './brain-3d-scene';
+import {Brain3DScene,BRAIN_ZOOM} from './brain-3d-scene';
 import {brainNetwork} from './brain-network';
 import {boardFunctionSeats} from '@ago/sdk/company';
 
@@ -36,6 +36,8 @@ export function CommandBrain({tasks,notifications,employees,departments=[],found
  const neurons=network.nodes.filter(n=>neuronFilter==='all'||(neuronFilter==='working'&&n.running)
    ||(neuronFilter==='waiting'&&!n.running&&n.waiting)||(neuronFilter==='signals'&&n.signals>0));
  const [rotation,setRotation]=useState(0);
+ const [pitch,setPitch]=useState(0),[zoom,setZoom]=useState(1),[autoRotate,setAutoRotate]=useState(true),[resetSignal,setResetSignal]=useState(0);
+ const preset=(yaw,tilt)=>{setRotation(yaw);setPitch(tilt);setAutoRotate(false);};
  const [gpuReady,setGpuReady]=useState(false);
  const updateGpuReady=useCallback(ready=>setGpuReady(ready),[]);
  const known=Array.isArray(tasks);
@@ -75,7 +77,7 @@ export function CommandBrain({tasks,notifications,employees,departments=[],found
        <div className={'brain-volume '+(active.length?'brain-volume-active':'')+(gpuReady?' webgl-active':'')}
          role="img" aria-label={'Layered 3D company work brain: '+active.length+' verified running tasks, '+queued.length+' awaiting action; not a simulated conscious AI'}
          style={{'--brain-rotation':rotation+'deg'}}>
-        <Brain3DScene network={network} running={active.length} rotation={rotation}
+        <Brain3DScene network={network} running={active.length} rotation={rotation} pitch={pitch} zoom={zoom} autoRotate={autoRotate} resetSignal={resetSignal} onZoom={setZoom}
           selectedId={selectedId} highlightId={highlight} onPick={id=>onSelect(id)} onReady={updateGpuReady}/>
         <div className="brain-depth-stack" aria-hidden="true">
           {CORTEX_DEPTHS.map((depth,index)=><svg key={depth} viewBox="0 0 420 300" className="brain-depth-slice"
@@ -111,10 +113,17 @@ export function CommandBrain({tasks,notifications,employees,departments=[],found
         <path d="M209 244 Q216 265 202 281 M228 243 Q234 265 225 282" fill="none" stroke="#64cffa" strokeWidth="6" opacity=".8"/>
         </svg>
        </div>
-       <div className="brain-rotate-controls" aria-label="Rotate work brain">
-         <button type="button" aria-label="Rotate brain left" onClick={()=>setRotation(x=>Math.max(-68,x-15))}>↶</button>
-         <button type="button" aria-label="Reset brain rotation" onClick={()=>setRotation(0)}>Front view</button>
-         <button type="button" aria-label="Rotate brain right" onClick={()=>setRotation(x=>Math.min(68,x+15))}>↷</button>
+       {gpuReady&&<p className="brain-hint">Drag to rotate · Shift/right-drag to move · Scroll, pinch or double-click to zoom</p>}
+       <div className="brain-rotate-controls" role="group" aria-label="Rotate work brain">
+         <button type="button" aria-label="Rotate brain left" onClick={()=>{setAutoRotate(false);setRotation(x=>x-15);}}>↶</button>
+         <button type="button" aria-label="Reset brain rotation" onClick={()=>{preset(0,0);setZoom(1);setResetSignal(v=>v+1);}}>Reset view</button>
+         <button type="button" aria-label="Show brain from the side" onClick={()=>preset(-55,-12)}>Side</button>
+         <button type="button" aria-label="Show brain from above" onClick={()=>preset(36,48)}>Top</button>
+         <button type="button" aria-label="Rotate brain right" onClick={()=>{setAutoRotate(false);setRotation(x=>x+15);}}>↷</button>
+         <span className="brain-control-divider" aria-hidden="true"/>
+         <button type="button" aria-label="Zoom brain out" disabled={zoom<=BRAIN_ZOOM.min} onClick={()=>setZoom(z=>Math.max(BRAIN_ZOOM.min,+(z/1.25).toFixed(3)))}>−</button>
+         <button type="button" aria-label="Zoom brain in" disabled={zoom>=BRAIN_ZOOM.max} onClick={()=>setZoom(z=>Math.min(BRAIN_ZOOM.max,+(z*1.25).toFixed(3)))}>+</button>
+         <button type="button" aria-pressed={autoRotate} aria-label="Auto-rotate brain" title="Turns only when reduced motion is off" onClick={()=>setAutoRotate(v=>!v)}>⟳ Auto</button>
        </div>
        <div className="brain-running"><span className={'brain-led '+(known?'connected':'')}/>{known?(active.length?'Recorded work is running · '+active.length+' active':queued.length?'Awaiting authorization / worker action':'Monitoring task records'):'Waiting for activity API'}</div>
      </div>

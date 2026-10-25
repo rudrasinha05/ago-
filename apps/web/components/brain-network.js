@@ -136,12 +136,12 @@ export function brainNetwork({employees=[],departments=[],tasks,notifications,fo
 }
 
 /** Same projection as the vertex shader, for hit-testing and DOM labels. */
-export function projectPoint([x,y,z],{yaw,pitch,aspect,scale}){
+export function projectPoint([x,y,z],{yaw,pitch,aspect,scale,offset=[0,0]}){
   const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
   const rx=cy*x+sy*z,rz=-sy*x+cy*z;
   const py=cp*y-sp*rz,pz=sp*y+cp*rz;
   const perspective=2.8/(3.8-pz);
-  return {x:rx*perspective*scale/aspect,y:py*perspective*scale,z:pz,perspective};
+  return {x:rx*perspective*scale/aspect+offset[0],y:py*perspective*scale+offset[1],z:pz,perspective};
 }
 
 export const TONE_COLORS=Object.freeze({

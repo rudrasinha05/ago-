@@ -58,7 +58,7 @@
 .board-seat strong{font-size:12px}.board-seat small{color:#9aaef2}.board-seat span{font-size:10px;color:#aab5d8;line-height:1.5}
 .board-seat:disabled{opacity:1;cursor:default}
 .company-shell{border-color:#234370;box-shadow:0 18px 35px #0006}
-.company-world line.edge-live{stroke:#ff3f60;stroke-width:8;filter:drop-shadow(0 0 9px #ff204c);stroke-dasharray:22 12;animation:agoRouteDash 1.3s linear infinite}
+.company-world :is(line,path).edge-live{stroke:#ff3f60;stroke-width:8;filter:drop-shadow(0 0 9px #ff204c);stroke-dasharray:22 12;animation:agoRouteDash 1.3s linear infinite}
 .map-node.working{border:4px solid #ff2e55;box-shadow:0 0 10px #ff285b,0 0 32px #f8195d8a,inset 0 0 15px #f8195d39;animation:agoWorkerPulse 2.5s ease-in-out infinite}
 .map-node.assigned:not(.working){border-color:#ef9d55;box-shadow:0 0 16px #fb744c5e}
 .map-node .map-count{position:absolute;top:-14px;right:-12px;min-width:25px;height:25px;border-radius:15px;padding:3px 6px;background:#ff3156;color:white;font-weight:900;display:grid;place-items:center;box-shadow:0 0 13px #f62759;font-size:13px}
@@ -89,7 +89,7 @@
 @media(max-width:1450px){.board-seats{grid-template-columns:repeat(3,minmax(135px,1fr))}.brain-stage{grid-template-columns:1fr 1.7fr 1fr}}
 @media(max-width:1020px){.brain-stage{grid-template-columns:1fr 1fr}.brain-hologram{grid-column:1/-1;grid-row:1}.board-seats{grid-template-columns:repeat(2,minmax(135px,1fr))}.command-delivery{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.command-head{align-items:flex-start;flex-direction:column}.brain-stage{display:flex;flex-direction:column}.brain-hologram{min-height:290px}.brain-svg{height:255px}.brain-activity,.brain-stats{border:0}.board-seats,.command-delivery{grid-template-columns:1fr}.map-node{min-height:120px}}
-@media(prefers-reduced-motion:reduce){.brain-svg,.company-world line.edge-live,.map-node.working{animation:none}}
+@media(prefers-reduced-motion:reduce){.brain-svg,.company-world :is(line,path).edge-live,.map-node.working{animation:none}}
 
 
 /* Founder-approved accountability & protected hierarchical reporting */
@@ -235,7 +235,7 @@
 .company-heading-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.company-add-department{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#10273a;border:1px solid var(--map-border);border-radius:12px;padding:12px;margin-bottom:16px}.company-add-department label{font-size:13px}.company-add-department input{flex:1;min-width:160px;max-width:380px}
 
 /* A red connector is reserved for observed running work; amber is pending. */
-.company-world line.edge-pending{stroke:#ff6681;stroke-width:7;stroke-dasharray:12 13;filter:drop-shadow(0 0 6px #c12346)}
+.company-world :is(line,path).edge-pending{stroke:#ff6681;stroke-width:7;stroke-dasharray:12 13;filter:drop-shadow(0 0 6px #c12346)}
 .company-world svg line[data-route-target]{pointer-events:stroke;cursor:pointer;outline:none}
 .company-world svg line[data-route-target]:hover,.company-world svg line[data-route-target]:focus-visible{stroke-width:13;filter:drop-shadow(0 0 12px #ff6688)}
 .legend-pending{color:#ffa2b4;font-weight:bold}
@@ -377,11 +377,11 @@
 
 /* AGO hierarchy V2: distinguish truthful manager edges from department grouping.
    Avoid rendering a 51-person workforce as unreadable radial spaghetti. */
-.company-world line.company-link{stroke-width:3.5;stroke:#559cc7;stroke-linecap:round;opacity:.76}
-.company-world line.company-link.department-link{stroke:#7e91a9;stroke-width:2.8;stroke-dasharray:9 13;opacity:.50}
-.company-world line.company-link.manager-link{stroke:#4baad5;stroke-width:5;opacity:.94}
-.company-world line.company-link.edge-live{stroke:#fa395e;stroke-width:9;stroke-dasharray:22 12;opacity:1;filter:drop-shadow(0 0 10px #ff2e63);animation:agoRouteDash 1.3s linear infinite}
-.company-world line.company-link.edge-pending{stroke:#fd7087;stroke-width:7;stroke-dasharray:11 13;opacity:1;filter:drop-shadow(0 0 6px #e43266)}
+.company-world :is(line,path).company-link{stroke-width:3.5;stroke:#559cc7;stroke-linecap:round;opacity:.76}
+.company-world :is(line,path).company-link.department-link{stroke:#7e91a9;stroke-width:2.8;stroke-dasharray:9 13;opacity:.50}
+.company-world :is(line,path).company-link.manager-link{stroke:#4baad5;stroke-width:5;opacity:.94}
+.company-world :is(line,path).company-link.edge-live{stroke:#fa395e;stroke-width:9;stroke-dasharray:22 12;opacity:1;filter:drop-shadow(0 0 10px #ff2e63);animation:agoRouteDash 1.3s linear infinite}
+.company-world :is(line,path).company-link.edge-pending{stroke:#fd7087;stroke-width:7;stroke-dasharray:11 13;opacity:1;filter:drop-shadow(0 0 6px #e43266)}
 .company-world .map-node-wrap .map-node{border-color:#406f96;background:linear-gradient(145deg,#132c47,#0b1f36);box-shadow:0 9px 24px #0007}
 .company-world .map-node-wrap .map-node.department{border:2px dashed #af8be0;background:#252042}
 .company-world .map-node-wrap .map-node.working{border:4px solid #ff2e55}
@@ -392,12 +392,12 @@
 .company-canvas{background-image:radial-gradient(#395b78 1px,transparent 1px),linear-gradient(165deg,#07182b,#061323);background-size:26px 26px,100% 100%}
 @media(max-width:760px){.map-controls{right:10px;max-width:calc(100% - 20px);gap:3px}.map-controls button{padding:7px;font-size:11px}.map-legend{font-size:10px}}
 
-@media(prefers-reduced-motion:reduce){.company-world line.company-link.edge-live{animation:none}}
+@media(prefers-reduced-motion:reduce){.company-world :is(line,path).company-link.edge-live{animation:none}}
 
 /* AGO circular hierarchy: faint concentric guides clarify levels without
    implying authority. Only authenticated reporting records receive blue lines. */
 .company-world svg .company-orbit-ring{fill:none;stroke:#6ba1c8;stroke-width:2.2;stroke-dasharray:6 20;opacity:.25;pointer-events:none}
-.company-world line.company-link.edge-pending{stroke:#f6c362;stroke-width:6;stroke-dasharray:10 13;opacity:.96;filter:drop-shadow(0 0 5px #df9c40)}
+.company-world :is(line,path).company-link.edge-pending{stroke:#f6c362;stroke-width:6;stroke-dasharray:10 13;opacity:.96;filter:drop-shadow(0 0 5px #df9c40)}
 .map-reporting-warning{color:#ffd2a0;font-weight:700}
 
 /* Company Brain v2 — holographic glass cortex. Neurons are employee records,
@@ -481,3 +481,39 @@
 .notification-kind.kind-qa{color:#b8a2ff}.notification-kind.kind-github{color:#9ee6c0}.notification-kind.kind-report{color:#ffd88a}
 .notification-empty,.notification-error{margin:0;padding:16px;font-size:12.5px;color:#9db6d2}.notification-error{color:#ffb4c2}
 @media(max-width:650px){.notification-panel{position:fixed;left:16px;right:16px;top:72px;width:auto}}
+/* 3D brain view controls */
+.brain-rotate-controls{flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);padding:5px;border:1px solid #23466f;border-radius:12px;background:#061329d9}
+.brain-rotate-controls button{min-height:32px;min-width:34px}
+.brain-rotate-controls button[aria-pressed="true"]{background:#e6f1ff;color:#08152e;border-color:#e6f1ff}
+.brain-rotate-controls button:disabled{opacity:.45;cursor:not-allowed}
+.brain-control-divider{width:1px;align-self:stretch;background:#2b4d78;margin:2px 3px}
+.brain-volume.webgl-active:after{display:block;content:"";position:absolute;left:22%;right:22%;bottom:62px;top:auto;height:26px;border:0;border-radius:50%;background:radial-gradient(ellipse at center,#3f8cff33,transparent 70%);transform:none;box-shadow:none;opacity:1;pointer-events:none}
+@media(max-width:650px){.brain-rotate-controls{bottom:34px}.brain-rotate-controls button{min-height:36px;padding:4px 9px}}
+/* Map navigation: drag from any point, wheel/pinch zoom at the pointer. */
+.company-canvas{touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.company-canvas:active{cursor:grabbing}
+.company-canvas textarea,.company-canvas input{user-select:text;-webkit-user-select:text;cursor:auto}
+.brain-volume .ago-real-3d-brain{touch-action:none}
+.brain-hint{position:absolute;z-index:6;top:52px;left:12px;margin:0;font-size:10.5px;color:#8fb0d4;pointer-events:none}
+@media(max-width:650px){.brain-hint{display:none}}
+/* Map views (circular / tree / departments) and readable far zoom. */
+.map-view-switch{display:inline-flex;gap:0;border:1px solid #3a608b;border-radius:9px;overflow:hidden}
+.map-view-switch button{border:0!important;border-radius:0!important;border-right:1px solid #3a608b!important}
+.map-view-switch button:last-child{border-right:0!important}
+.map-view-switch button[aria-pressed="true"],.map-controls button[aria-pressed="true"]{background:#e6f1ff;color:#08152e}
+.company-world .map-node-wrap{transform:translate(-50%,-50%) scale(var(--lod,1))}
+.company-world .map-node-wrap:hover,.company-world .map-node-wrap:focus-within{transform:translate(-50%,-50%) scale(calc(var(--lod,1) * 1.12))}
+.company-world.lod-far .map-node-wrap{width:170px}
+.company-world.lod-far .map-node-wrap>.map-node{min-height:0;padding:10px 12px}
+.company-world.lod-far .map-node :is(.map-role,.map-project,.map-task,.node-action){display:none}
+.company-world.lod-far .map-node strong{font-size:15px}
+.company-world.view-tree .map-node-wrap,.company-world.view-departments .map-node-wrap{width:190px}
+.company-world.view-departments.lod-far .map-node-wrap{width:200px}
+/* Phones: legend, controls and status sit in the flow around the brain, never over it. */
+@media(max-width:650px){
+ .brain-hologram{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:10px 0 12px}
+ .brain-legend,.brain-rotate-controls,.brain-running{position:static;margin:0 auto}
+ .brain-legend{padding:0 12px;justify-content:center}
+ .brain-rotate-controls{max-width:calc(100% - 20px)}
+ .brain-running{align-self:center}
+}

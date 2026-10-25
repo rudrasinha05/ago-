@@ -407,6 +407,104 @@ test('server read cursor drives unread badge and Mark all read',async({page})=>{
  expect(errors).toEqual([]);
 });
 
+test('map views re-arrange the same recorded links: circular, tree and department lanes',async({page})=>{
+ const {errors}=await fixtures(page);
+ const lead='10000000-0000-4000-8000-000000000041',worker='10000000-0000-4000-8000-000000000042';
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},
+  {id:lead,name:'Lane lead',department_id:department,kind:'ai',manager_id:user},
+  {id:worker,name:'Lane worker',department_id:department,kind:'ai',manager_id:lead},
+ ]}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
+  {id:'20000000-0000-4000-8000-000000000041',assignee_id:worker,action:'internal:build',status:'running',project_name:'Lane project'}]}));
+ await login(page);await navigate(page,'Organization');
+ const world=page.locator('.company-world'),views=page.getByRole('group',{name:'Map view'});
+ await expect(views.getByRole('button',{name:'Circular'})).toHaveAttribute('aria-pressed','true');
+ const count=async()=>({live:await world.locator('.company-link.edge-live').count(),links:await world.locator('.company-link').count()});
+ const circular=await count();
+ expect(circular.live).toBe(2); // Founder→lead and lead→worker carry the running task
+ for(const [name,cls] of [['Tree','view-tree'],['Departments','view-departments'],['Circular','view-circular']]){
+  await views.getByRole('button',{name}).click();
+  await expect(views.getByRole('button',{name})).toHaveAttribute('aria-pressed','true');
+  await expect(world).toHaveClass(new RegExp(cls));
+  // Same graph in every view: no link added, removed or re-routed.
+  expect(await count()).toEqual(circular);
+  if(name!=='Circular')await expect(world.locator('path.company-link.edge-live')).toHaveCount(2);
+ }
+ await views.getByRole('button',{name:'Tree'}).click();
+ await page.getByRole('button',{name:'Fit all'}).click();
+ await world.locator('circle.route-hit-target.running').last().click();
+ await expect(page.locator('.employee-inspector')).toContainText('Lane worker');
+ expect(errors).toEqual([]);
+});
+
+test('map zooms at the pointer and pans from any point without opening the card under the drag',async({page,isMobile})=>{
+ test.skip(isMobile,'Wheel and mouse-drag gestures; touch pinch is exercised manually on devices.');
+ const {errors}=await fixtures(page);
+ const worker='10000000-0000-4000-8000-000000000051';
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},
+  {id:worker,name:'Pan target',department_id:department,kind:'ai',manager_id:user},
+ ]}));
+ await login(page);await navigate(page,'Organization');
+ const canvas=page.locator('.company-canvas');await canvas.scrollIntoViewIfNeeded();
+ await page.getByRole('button',{name:'All employees'}).click();
+ const card=page.locator('.map-node.employee').filter({hasText:'Pan target'});
+ await expect(card).toBeVisible();
+ await page.waitForTimeout(300); // let the automatic fit for the new mode settle
+ const zoomText=async()=>Number((await page.locator('.map-controls span').last().innerText()).match(/(\d+)%/)[1]);
+ const centre=async()=>{const b=await card.boundingBox();return {x:b.x+b.width/2,y:b.y+b.height/2};};
+ const before=await centre(),z0=await zoomText();
+ const scrollY=await page.evaluate(()=>scrollY);
+ // Fit keeps cards clear of the floating controls and legend.
+ expect(await page.evaluate(([x,y])=>Boolean(document.elementFromPoint(x,y)?.closest('.map-node')),[before.x,before.y])).toBeTruthy();
+ await page.mouse.move(before.x,before.y);
+ await page.mouse.wheel(0,-300);
+ await expect.poll(zoomText).toBeGreaterThan(z0);
+ // The card under the pointer stays under the pointer and the page does not scroll.
+ await expect.poll(async()=>{const a=await centre();return Math.round(Math.hypot(a.x-before.x,a.y-before.y));}).toBeLessThan(8);
+ const after=await centre();
+ expect(await page.evaluate(()=>scrollY)).toBe(scrollY);
+ // Drag that starts ON the card pans the map and does not open the card.
+ await page.mouse.move(after.x,after.y);await page.mouse.down();
+ await page.mouse.move(after.x-120,after.y+60,{steps:8});await page.mouse.up();
+ // Continuous pointer events may commit a frame later under load: poll the final position.
+ await expect.poll(async()=>{const m=await centre();return Math.round(Math.hypot(m.x-(after.x-120),m.y-(after.y+60)));}).toBeLessThan(8);
+ await expect(page.locator('.employee-inspector')).toHaveCount(0);
+ // A plain click still opens it (re-fit first so no floating panel covers it).
+ await page.getByRole('button',{name:'Fit all'}).click();
+ await card.click();
+ await expect(page.locator('.employee-inspector')).toContainText('Pan target');
+ expect(errors).toEqual([]);
+});
+
+test('3D brain wheel zoom keeps the point under the cursor and Reset view restores framing',async({page,isMobile})=>{
+ test.skip(isMobile,'Wheel gesture; pinch is the touch equivalent.');
+ const {errors}=await fixtures(page);
+ const worker='10000000-0000-4000-8000-000000000061';
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},
+  {id:worker,name:'Brain zoom worker',department_id:department,kind:'ai',manager_id:user}]}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
+  {id:'20000000-0000-4000-8000-000000000061',assignee_id:worker,action:'internal:build',status:'running',project_name:'Zoom project'}]}));
+ await login(page);await navigate(page,'Organization');
+ test.skip(!(await page.locator('.brain-volume.webgl-active').count()),'No WebGL in this browser: SVG fallback has no zoom.');
+ const scene=page.locator('canvas.ago-real-3d-brain');await scene.scrollIntoViewIfNeeded();
+ const founder=page.locator('.brain-neuron-label[data-node="founder"]'),neuron=page.locator(`.brain-neuron-label[data-node="${worker}"]`);
+ await expect(neuron).toHaveAttribute('data-x',/\d/);
+ const point=async l=>({x:Number(await l.getAttribute('data-x')),y:Number(await l.getAttribute('data-y'))});
+ const box=await scene.boundingBox(),n0=await point(neuron),f0=await point(founder);
+ const gap0=Math.hypot(n0.x-f0.x,n0.y-f0.y);
+ await page.mouse.move(box.x+n0.x,box.y+n0.y);
+ await page.mouse.wheel(0,-300);
+ await expect.poll(async()=>{const f=await point(founder);return Math.hypot(n0.x-f.x,n0.y-f.y);}).toBeGreaterThan(gap0*1.08);
+ const n1=await point(neuron);
+ expect(Math.hypot(n1.x-n0.x,n1.y-n0.y)).toBeLessThan(6);
+ await page.getByRole('button',{name:'Reset brain rotation'}).click();
+ await expect.poll(async()=>{const f=await point(founder),n=await point(neuron);return Math.round(Math.hypot(n.x-f.x,n.y-f.y));}).toBeLessThan(gap0*1.04);
+ expect(errors).toEqual([]);
+});
+
 test('3D company brain draws on demand under reduced motion and releases its GPU context',async({page})=>{
  // Issue #3: a continuous 60 fps WebGL redraw starved the main thread and
  // crashed WebKit content processes on GPU-less runners. Count real WebGL

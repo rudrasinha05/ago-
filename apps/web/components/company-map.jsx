@@ -14,6 +14,7 @@ import {CompanyGithubDelivery} from './company-github-delivery';
 import {CompanyRolePlanner} from './company-role-planner';
 import {OpportunityRadar} from './company-opportunities';
 import {CompanyNotificationCenter,mergeNotificationPage} from './company-notification-center';
+import {treeCompanyLayout,departmentCompanyLayout,MAP_VIEWS} from './company-layouts';
 const BASE='/v1/organization/company';
 const time=value=>new Date(value).toLocaleString();
 export function CompanyMap({api,me,data,onRefresh}) {
@@ -39,14 +40,18 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [portfolioMap,setPortfolioMap]=useState([]);
   const [centerDraft,setCenterDraft]=useState('');
   const [draft,setDraft]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState(''),[sending,setSending]=useState(false);
-  const [zoom,setZoom]=useState(.72),[pan,setPan]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
-  const [mapMode,setMapMode]=useState('leadership');
+  const [zoom,setZoomState]=useState(.72),[pan,setPanState]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
+  const [mapMode,setMapMode]=useState('leadership'),[mapView,setMapView]=useState('circular');
   const [fullscreen,setFullscreen]=useState(false),[inspectorOpen,setInspectorOpen]=useState(true);
   const [addingDepartment,setAddingDepartment]=useState(false);
   const [updated,setUpdated]=useState(null),[popup,setPopup]=useState(null),[loading,setLoading]=useState(false);
   const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null),[governanceData,setGovernanceData]=useState(null);const lastEvent=useRef(null);
   const viewport=useRef(null),drag=useRef(null),previous=useRef(null),sequence=useRef(0),alive=useRef(false),retry=useRef(null),feed=useRef(null),staffKey=useRef(null);
   const pendingFocus=useRef(null),mapInitialized=useRef(false),userMoved=useRef(false);
+  // Live zoom/pan for wheel, pinch and drag handlers that fire faster than renders.
+  const zoomRef=useRef(.72),panRef=useRef({x:0,y:0}),pointers=useRef(new Map()),gesture=useRef(null),suppressClick=useRef(false);
+  const setZoom=useCallback(value=>{const next=typeof value==='function'?value(zoomRef.current):value;zoomRef.current=next;setZoomState(next);},[]);
+  const setPan=useCallback(value=>{const next=typeof value==='function'?value(panRef.current):value;panRef.current=next;setPanState(next);},[]);
   const visibleEmployees=useMemo(()=>{
     if(mapMode==='all')return employees;
     const byId=new Map(employees.map(e=>[e.id,e]));
@@ -68,7 +73,11 @@ export function CompanyMap({api,me,data,onRefresh}) {
     }
     return employees.filter(e=>included.has(e.id)||e.id===me.id);
   },[employees,governanceData,mapMode,tasks,selected,me.id]);
-  const layout=useMemo(()=>companyLayout(departments,visibleEmployees,me.id),[departments,visibleEmployees,me.id]);
+  const layout=useMemo(()=>{
+    // Every view re-positions the same validated graph; links never change.
+    const base=companyLayout(departments,visibleEmployees,me.id);
+    return mapView==='tree'?treeCompanyLayout(base):mapView==='departments'?departmentCompanyLayout(base):base;
+  },[departments,visibleEmployees,me.id,mapView]);
   const points=new Map([['founder',layout.founder],...layout.nodes.map(n=>[n.key,n])]);
   const title=channel==='global'?'Global timeline':layout.nodes.find(n=>n.key===channel)?.name||'Conversation';
   const selectedEmployee=employees.find(e=>e.id===selected);
@@ -81,7 +90,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       .map(stage=>p.title+' ('+stage.stage+' proposed)')),
   ])];
   const routing=useMemo(()=>activeRouteKeys(layout,employees,tasks),[layout,employees,tasks]);
-  const orbitRadii=useMemo(()=>[...new Set(layout.nodes.map(n=>Math.round(n.radius)))].sort((a,b)=>a-b),[layout]);
+  const orbitRadii=useMemo(()=>layout.layout==='circular'?[...new Set(layout.nodes.map(n=>Math.round(n.radius)))].sort((a,b)=>a-b):[],[layout]);
   const selectedReportingIssue=layout.reportingIssues?.find(issue=>issue.employee_id===selected);
   const liveTaskCount=Array.isArray(tasks)?tasks.filter(t=>t.status==='running').length:0;
   const pendingTaskCount=Array.isArray(tasks)?tasks.filter(t=>['proposed','ready','waiting_approval'].includes(t.status)).length:0;
@@ -207,10 +216,14 @@ export function CompanyMap({api,me,data,onRefresh}) {
     const margin=170;
     const xs=placed.map(n=>n.x),ys=placed.map(n=>n.y);
     const minX=Math.min(...xs)-margin,maxX=Math.max(...xs)+margin,minY=Math.min(...ys)-margin,maxY=Math.max(...ys)+margin;
-    const fit=placed.length?Math.max(.055,Math.min(.9,w/(maxX-minX)*.94,h/(maxY-minY)*.94))
-      :Math.max(.055,Math.min(1,Math.min(w,h)/layout.size*.92));
+    // The control bar and legend float over the map: fit into the clear area between them.
+    const top=(viewport.current?.querySelector('.map-controls')?.offsetHeight||0)+12;
+    const bottom=(viewport.current?.querySelector('.map-legend')?.offsetHeight||0)+12;
+    const clear=Math.max(120,h-top-bottom),shiftY=(top-bottom)/2;
+    const fit=placed.length?Math.max(.055,Math.min(.9,w/(maxX-minX)*.94,clear/(maxY-minY)*.94))
+      :Math.max(.055,Math.min(1,Math.min(w,clear)/layout.size*.92));
     setZoom(fit);
-    setPan(placed.length?boundedPan((layout.center-(minX+maxX)/2)*fit,(layout.center-(minY+maxY)/2)*fit,fit):{x:0,y:0});
+    setPan(placed.length?boundedPan((layout.center-(minX+maxX)/2)*fit,(layout.center-(minY+maxY)/2)*fit+shiftY,fit):{x:0,y:shiftY});
   }
   useEffect(()=>{
     if(pendingFocus.current==='overview'){
@@ -228,22 +241,87 @@ export function CompanyMap({api,me,data,onRefresh}) {
     }
   },[layout]);
   function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));if(!focusMap(key,.84)&&key.startsWith('employee:')){pendingFocus.current=key;setMapMode('all');}}
-  function boundedPan(x,y,z=zoom){
+  function boundedPan(x,y,z=zoomRef.current){
     const w=viewport.current?.clientWidth||700,h=viewport.current?.clientHeight||700;
-    // Allow up to half the drawn canvas off-centre so an off-centre cluster
-    // (fit to occupied area) can be centred; still never lose the map.
-    const maxX=Math.max(0,(layout.size*z-w)/2)+Math.max(30,layout.size*z/2);
-    const maxY=Math.max(0,(layout.size*z-h)/2)+Math.max(30,layout.size*z/2);
+    // Allow up to half the drawn canvas off-centre so any part can be brought
+    // to the middle at any zoom; still never lose the map entirely.
+    const maxX=Math.max(0,(layout.size*z-w)/2)+Math.max(w/2,layout.size*z/2);
+    const maxY=Math.max(0,(layout.size*z-h)/2)+Math.max(h/2,layout.size*z/2);
     return {x:Math.max(-maxX,Math.min(maxX,x)),y:Math.max(-maxY,Math.min(maxY,y))};
   }
+  /** Zoom keeping the world point under (cx,cy) fixed; centre when no point. */
   function zoomOn(next,cx=null,cy=null){
-    userMoved.current=true;
-    next=Math.max(.055,Math.min(1.65,next));
+    // The person took control: never let a queued automatic fit undo it.
+    userMoved.current=true;pendingFocus.current=null;
+    const current=zoomRef.current;
+    next=Math.max(.05,Math.min(2.5,next));
+    if(next===current)return;
     const rect=viewport.current?.getBoundingClientRect();
     const dx=rect&&cx!==null?cx-rect.left-rect.width/2:0;
     const dy=rect&&cy!==null?cy-rect.top-rect.height/2:0;
-    setPan(p=>boundedPan(dx-(dx-p.x)*next/zoom,dy-(dy-p.y)*next/zoom,next));
+    const p=panRef.current;
+    setPan(boundedPan(dx-(dx-p.x)*next/current,dy-(dy-p.y)*next/current,next));
     setZoom(next);
+  }
+  const zoomOnRef=useRef(zoomOn);zoomOnRef.current=zoomOn;
+  // Native non-passive wheel listener: zoom at the cursor without scrolling the
+  // page. Attached through a callback ref so it follows the real canvas node.
+  const wheelCleanup=useRef(null);
+  const canvasRef=useCallback(element=>{
+    wheelCleanup.current?.();wheelCleanup.current=null;
+    viewport.current=element;
+    if(!element)return;
+    const onWheel=e=>{
+      if(e.target.closest?.('textarea,.map-legend'))return;
+      e.preventDefault();
+      const factor=Math.exp(-Math.max(-60,Math.min(60,e.deltaMode===1?e.deltaY*16:e.deltaY))*.0022);
+      zoomOnRef.current(zoomRef.current*factor,e.clientX,e.clientY);
+    };
+    element.addEventListener('wheel',onWheel,{passive:false});
+    wheelCleanup.current=()=>element.removeEventListener('wheel',onWheel);
+  },[]);
+  const INTERACTIVE='textarea,input,select,label,form button,.map-controls,.map-legend,.employee-approval-zone';
+  function mapPointerDown(e){
+    if(e.button!==undefined&&e.button!==0&&e.pointerType==='mouse')return;
+    if(e.target.closest(INTERACTIVE))return;
+    pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.current.size===2){
+      const [a,b]=[...pointers.current.values()];
+      gesture.current={type:'pinch',distance:Math.hypot(a.x-b.x,a.y-b.y)||1,zoom:zoomRef.current};
+      suppressClick.current=true;
+    }else if(pointers.current.size===1){
+      gesture.current={type:'pending',x:e.clientX,y:e.clientY,startX:panRef.current.x,startY:panRef.current.y,id:e.pointerId};
+    }
+  }
+  function mapPointerMove(e){
+    if(!pointers.current.has(e.pointerId))return;
+    pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const g=gesture.current;if(!g)return;
+    if(g.type==='pinch'&&pointers.current.size>=2){
+      const [a,b]=[...pointers.current.values()];
+      const distance=Math.hypot(a.x-b.x,a.y-b.y)||1;
+      zoomOn(g.zoom*distance/g.distance,(a.x+b.x)/2,(a.y+b.y)/2);
+      return;
+    }
+    if(g.type==='pending'&&Math.hypot(e.clientX-g.x,e.clientY-g.y)>5){
+      // Became a drag: pan from any point, including over employee cards.
+      g.type='pan';userMoved.current=true;pendingFocus.current=null;suppressClick.current=true;
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    }
+    if(g.type==='pan')setPan(boundedPan(g.startX+(e.clientX-g.x),g.startY+(e.clientY-g.y)));
+  }
+  function mapPointerEnd(e){
+    pointers.current.delete(e.pointerId);
+    if(e.currentTarget.hasPointerCapture?.(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
+    if(pointers.current.size===1&&gesture.current?.type==='pinch'){
+      // Continue as a pan with the remaining finger.
+      const [[id,point]]=[...pointers.current.entries()];
+      gesture.current={type:'pan',x:point.x,y:point.y,startX:panRef.current.x,startY:panRef.current.y,id};
+    }else if(!pointers.current.size)gesture.current=null;
+  }
+  function mapClickCapture(e){
+    // A drag or pinch must not also open the card it ended on.
+    if(suppressClick.current){suppressClick.current=false;e.preventDefault();e.stopPropagation();}
   }
   function center(){focusMap('founder',.72);}
   async function older(){const version=sequence.current;setLoading(true);try{
@@ -336,19 +414,22 @@ export function CompanyMap({api,me,data,onRefresh}) {
           return <details key={d.id} open><summary>{d.name}</summary><button onClick={()=>choose('department:'+d.id)} className={channel==='department:'+d.id?'chosen':''}>Open {d.name} chat</button><ul>{members.filter(e=>!members.some(x=>x.id===e.manager_id)).map(e=>branch(e))}</ul></details>;})}
         <p className="channel-note">Global chat is shared. Department and employee conversations are restricted to the founder and authorized members. AGO enforces access on every read and write.</p>
       </aside>
-      <div className="company-canvas" ref={viewport} onPointerDown={e=>{if(e.target.closest('button,textarea,input,a,form,[data-route-target],.employee-approval-zone,.map-node-wrap'))return;drag.current={x:e.clientX,y:e.clientY,startX:pan.x,startY:pan.y};userMoved.current=true;e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current)setPan(boundedPan(drag.current.startX+(e.clientX-drag.current.x),drag.current.startY+(e.clientY-drag.current.y)));}} onPointerUp={e=>{drag.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}} onPointerCancel={()=>{drag.current=null;}} onWheel={e=>{if(e.ctrlKey||e.target.closest('textarea'))return;zoomOn(zoom-e.deltaY*.0007);}}>
+      <div className="company-canvas" ref={canvasRef} onPointerDown={mapPointerDown} onPointerMove={mapPointerMove} onPointerUp={mapPointerEnd} onPointerCancel={mapPointerEnd} onClickCapture={mapClickCapture} onDoubleClick={e=>{if(!e.target.closest('.map-node-wrap,.map-founder,.map-controls,.map-legend'))zoomOn(zoomRef.current*1.6,e.clientX,e.clientY);}}>
         <div className="map-controls">
-          <button aria-label="Zoom in" onClick={()=>zoomOn(zoom+.1)}>+</button>
-          <button aria-label="Zoom out" onClick={()=>zoomOn(zoom-.1)}>−</button>
+          <button aria-label="Zoom in" onClick={()=>zoomOn(zoomRef.current*1.25)}>+</button>
+          <button aria-label="Zoom out" onClick={()=>zoomOn(zoomRef.current/1.25)}>−</button>
+          <span className="map-view-switch" role="group" aria-label="Map view">{MAP_VIEWS.map(([key,label,hint])=>
+            <button key={key} type="button" title={hint} aria-pressed={mapView===key}
+              onClick={()=>{if(mapView===key)return;setMapView(key);userMoved.current=false;pendingFocus.current='overview';}}>{label}</button>)}</span>
           <button onClick={center}>Founder</button>
-          <button type="button" aria-pressed={mapMode==='leadership'} onClick={()=>{setMapMode('leadership');pendingFocus.current='overview';}}>Leadership</button>
-          <button type="button" aria-pressed={mapMode==='all'} onClick={()=>{setMapMode('all');pendingFocus.current='overview';}}>All employees</button>
+          <button type="button" aria-pressed={mapMode==='leadership'} onClick={()=>{if(mapMode==='leadership')return;setMapMode('leadership');pendingFocus.current='overview';}}>Leadership</button>
+          <button type="button" aria-pressed={mapMode==='all'} onClick={()=>{if(mapMode==='all')return;setMapMode('all');pendingFocus.current='overview';}}>All employees</button>
           <button aria-label={fullscreen?"Exit full screen":"Full screen map"} aria-pressed={fullscreen} onClick={()=>setFullscreen(v=>!v)}>{fullscreen?"Exit full screen":"⛶ Full screen"}</button>
           <button onClick={()=>{userMoved.current=false;fitMap();}}>Fit all</button>
           <span>{layout.nodes.filter(n=>n.type==='employee').length}/{employees.filter(e=>e.id!==me.id).length} staff · {Math.round(zoom*100)}%</span>
         </div>
-        <div className="company-world" style={{width:layout.size,height:layout.size,transform:`translate(calc(-50% + ${pan.x}px),calc(-50% + ${pan.y}px)) scale(${zoom})`}}>
-          <svg width={layout.size} height={layout.size} aria-label="Circular organizational hierarchy. Blue links are actual recorded reporting lines; grey dotted links show grouping only. Red marks running tasks on recorded reporting routes.">
+        <div className={'company-world view-'+layout.layout+(zoom<.38?' lod-far':'')} style={{width:layout.size,height:layout.size,'--lod':zoom<.38?Math.min(layout.layout==='tree'?1.25:layout.layout==='departments'?1.45:2.2,.4/zoom):1,transform:`translate(calc(-50% + ${pan.x}px),calc(-50% + ${pan.y}px)) scale(${zoom})`}}>
+          <svg width={layout.size} height={layout.size} aria-label={(layout.layout==='tree'?'Tree organisation chart.':layout.layout==='departments'?'Department lanes.':'Circular organizational hierarchy.')+" Blue links are actual recorded reporting lines; grey dotted links show grouping only. Red marks running tasks on recorded reporting routes."}>
            <defs><marker id="ago-report-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9Z" fill="#65bfe8"/></marker></defs>
            {orbitRadii.map(radius=><circle key={radius} className="company-orbit-ring" cx={layout.center} cy={layout.center} r={radius}/>)}
            {layout.edges.map((edge,i)=>{
@@ -357,13 +438,14 @@ export function CompanyMap({api,me,data,onRefresh}) {
              const open=()=>choose(edge.to);
              const grouping=edge.kind==='grouping';
              if(!a||!b)return null;
-             const anchor=companyLinkAnchors(a,b,edge.from==='founder'?'founder':a.type,b.type);
-             return <g key={i}><line data-link-kind={edge.kind}
-               className={['company-link',grouping?'department-link':'manager-link',mode==='running'?'edge-live':mode==='pending'?'edge-pending':''].filter(Boolean).join(' ')}
-               x1={anchor.x1} y1={anchor.y1} x2={anchor.x2} y2={anchor.y2}
-               markerEnd={grouping?undefined:'url(#ago-report-arrow)'}
-               data-route-target={mode?edge.to:undefined} onClick={mode?open:undefined}>
-               <title>{grouping?'Grouping only (not a management reporting line)':'Recorded manager reporting link'}{mode?' · '+mode+' task route':''}</title></line>
+             const anchor=edge.path?{cx:edge.mid.x,cy:edge.mid.y}:companyLinkAnchors(a,b,edge.from==='founder'?'founder':a.type,b.type);
+             const linkProps={'data-link-kind':edge.kind,
+               className:['company-link',grouping?'department-link':'manager-link',mode==='running'?'edge-live':mode==='pending'?'edge-pending':''].filter(Boolean).join(' '),
+               markerEnd:grouping?undefined:'url(#ago-report-arrow)',
+               'data-route-target':mode?edge.to:undefined,onClick:mode?open:undefined};
+             const linkTitle=<title>{grouping?'Grouping only (not a management reporting line)':'Recorded manager reporting link'}{mode?' · '+mode+' task route':''}</title>;
+             return <g key={i}>{edge.path?<path {...linkProps} d={edge.path} fill="none">{linkTitle}</path>
+               :<line {...linkProps} x1={anchor.x1} y1={anchor.y1} x2={anchor.x2} y2={anchor.y2}>{linkTitle}</line>}
                {mode&&<circle className={'route-hit-target '+mode} cx={anchor.cx} cy={anchor.cy} r={27} data-route-target={edge.to} role="button" tabIndex={0} aria-label={(mode==='running'?'Running route to ':'Pending route to ')+(b.name||'team')} onClick={open} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}}}/>}
              </g>;
            })}</svg>

@@ -7,6 +7,9 @@ import {BRAIN_SHAPE,FOUNDER_POSITION,TONE_COLORS,projectPoint} from "./brain-net
 // every synapse a recorded manager link, and red routes exist only while a
 // persisted task is running along that recorded chain (see brain-network.js).
 
+// Shell: lit glass. Drawn twice — back faces first, then lit front faces —
+// with neurons behind the brain's centre drawn in between, so depth reads
+// correctly while every neuron stays visible through the glass.
 const SHELL_VERTEX=`
 attribute vec4 position;
 attribute vec3 normal;
@@ -14,9 +17,12 @@ uniform float yaw;
 uniform float pitch;
 uniform float aspect;
 uniform float scale;
+uniform vec2 offset;
 varying float fresnel;
 varying float ridge;
 varying float facing;
+varying float diffuse;
+varying float specular;
 void main(){
  float cy=cos(yaw),sy=sin(yaw),cp=cos(pitch),sp=sin(pitch);
  vec3 p=vec3(cy*position.x+sy*position.z,position.y,-sy*position.x+cy*position.z);
@@ -24,25 +30,36 @@ void main(){
  p=vec3(p.x,cp*p.y-sp*p.z,sp*p.y+cp*p.z);
  n=normalize(vec3(n.x,cp*n.y-sp*n.z,sp*n.y+cp*n.z));
  float perspective=2.8/(3.8-p.z);
- gl_Position=vec4(p.x*perspective*scale/aspect,p.y*perspective*scale,0.0,1.0);
+ gl_Position=vec4(p.x*perspective*scale/aspect+offset.x,p.y*perspective*scale+offset.y,0.0,1.0);
+ vec3 light=normalize(vec3(-.45,.75,.85));
  fresnel=1.0-abs(n.z);
  facing=step(0.0,n.z);
+ diffuse=max(dot(n,light),0.0);
+ specular=pow(max(dot(reflect(-light,n),vec3(0.0,0.0,1.0)),0.0),28.0);
  ridge=position.w;
 }`;
 const SHELL_FRAGMENT=`
 precision mediump float;
 uniform float active;
+uniform float pass;
 varying float fresnel;
 varying float ridge;
 varying float facing;
+varying float diffuse;
+varying float specular;
 void main(){
- float rim=pow(fresnel,2.2);
- float gyri=smoothstep(.62,.97,ridge);
- vec3 cool=mix(vec3(.10,.30,.78),vec3(.42,.86,1.0),rim);
- vec3 warm=mix(vec3(.45,.12,.42),vec3(1.0,.42,.66),rim);
- vec3 color=mix(cool,warm,active*.38);
- float alpha=(.018+.30*rim+.16*gyri*(.35+.65*facing))*(.55+.45*facing);
- gl_FragColor=vec4(color+gyri*vec3(.10,.22,.30),alpha);
+ if(pass<.5&&facing>.5)discard;
+ if(pass>.5&&facing<.5)discard;
+ float rim=pow(fresnel,2.0);
+ float gyri=smoothstep(.55,.95,ridge);
+ float sulci=smoothstep(-.35,-.9,ridge);
+ vec3 deep=mix(vec3(.05,.13,.36),vec3(.30,.08,.30),active*.5);
+ vec3 lit=mix(vec3(.30,.66,1.0),vec3(1.0,.45,.66),active*.35);
+ vec3 color=mix(deep,lit,.25+.75*diffuse)+vec3(.55,.80,1.0)*specular*.9+gyri*vec3(.10,.20,.28);
+ float alpha=pass<.5
+   ?.035+.16*rim+.05*gyri
+   :(.07+.30*rim+.20*diffuse*(1.0-sulci*.6)+.14*gyri+.35*specular);
+ gl_FragColor=vec4(color,alpha);
 }`;
 const PARTICLE_VERTEX=`
 attribute vec3 position;
@@ -52,7 +69,9 @@ uniform float yaw;
 uniform float pitch;
 uniform float aspect;
 uniform float scale;
+uniform vec2 offset;
 uniform float ratio;
+uniform float layer;
 varying vec4 tint;
 varying float ring;
 void main(){
@@ -60,10 +79,12 @@ void main(){
  vec3 p=vec3(cy*position.x+sy*position.z,position.y,-sy*position.x+cy*position.z);
  p=vec3(p.x,cp*p.y-sp*p.z,sp*p.y+cp*p.z);
  float perspective=2.8/(3.8-p.z);
- gl_Position=vec4(p.x*perspective*scale/aspect,p.y*perspective*scale,0.0,1.0);
- gl_PointSize=abs(size)*perspective*ratio;
+ gl_Position=vec4(p.x*perspective*scale/aspect+offset.x,p.y*perspective*scale+offset.y,0.0,1.0);
+ // layer -1: only points behind the centre plane; +1: only in front; 0: all.
+ if(layer*p.z<0.0||(layer>0.5&&p.z==0.0))gl_Position=vec4(2.0,2.0,2.0,1.0);
+ gl_PointSize=abs(size)*perspective*ratio*clamp(scale/1.1,.75,1.6);
  ring=step(size,0.0);
- float depthFade=mix(.5,1.0,clamp((p.z+1.0)*.5,0.0,1.0));
+ float depthFade=mix(.45,1.0,clamp((p.z+1.0)*.5,0.0,1.0));
  tint=vec4(color.rgb,color.a*depthFade);
 }`;
 const PARTICLE_FRAGMENT=`
@@ -80,32 +101,53 @@ void main(){
  gl_FragColor=vec4(tint.rgb+vec3(.25)*smoothstep(.2,.0,d)*(1.0-ring),tint.a*shape);
 }`;
 
-/** Two hemispheres with smooth normals and low-frequency gyri. */
-function shellVertices() {
- const out=[],lat=46,lon=72,step=1e-3;
- const surface=(side,u,v)=>{
-   const fold=Math.sin(8*v+1.8*Math.sin(3*u))*Math.cos(9*u+Math.sin(4*v));
-   const bump=1+.03*fold;
+/** Ellipsoid surface with smooth (finite-difference) normals. */
+function ellipsoid(out,{center,radii,lat,lon,fold,shape}){
+ const step=1e-3;
+ const surface=(u,v)=>{
+   const f=fold(u,v);
    let x=Math.cos(u)*Math.sin(v),y=Math.sin(u),z=Math.cos(u)*Math.cos(v);
-   if(x*side<0)x*=.42;           // flatter medial wall leaves a clear fissure
-   if(y<0)y*=.74;                // flatter base
-   const taper=1-.12*Math.max(0,-z); // narrower occipital end
-   return [side*.43+x*.42*bump*taper*BRAIN_SHAPE.x/.8, y*.70*bump*BRAIN_SHAPE.y/.66+.04, z*1.02*bump*BRAIN_SHAPE.z, fold];
+   [x,y,z]=shape?shape(x,y,z):[x,y,z];
+   const bump=1+.03*f;
+   return [center[0]+x*radii[0]*bump,center[1]+y*radii[1]*bump,center[2]+z*radii[2]*bump,f];
  };
- const vertex=(side,a,b)=>{
+ const vertex=(a,b)=>{
    const u=-Math.PI/2+.04+(a/lat)*(Math.PI-.08),v=(b/lon)*2*Math.PI;
-   const p=surface(side,u,v),pu=surface(side,u+step,v),pv=surface(side,u,v+step);
+   const p=surface(u,v),pu=surface(u+step,v),pv=surface(u,v+step);
    const du=[pu[0]-p[0],pu[1]-p[1],pu[2]-p[2]],dv=[pv[0]-p[0],pv[1]-p[1],pv[2]-p[2]];
    let n=[du[1]*dv[2]-du[2]*dv[1],du[2]*dv[0]-du[0]*dv[2],du[0]*dv[1]-du[1]*dv[0]];
-   const out=[p[0]-side*.43,p[1],p[2]];
-   if(n[0]*out[0]+n[1]*out[1]+n[2]*out[2]<0)n=n.map(x=>-x);
+   const radial=[p[0]-center[0],p[1]-center[1],p[2]-center[2]];
+   if(n[0]*radial[0]+n[1]*radial[1]+n[2]*radial[2]<0)n=n.map(x=>-x);
    const len=Math.hypot(...n)||1;
    return [...p,...n.map(x=>x/len)];
  };
- for(const side of [-1,1])for(let a=0;a<lat;a++)for(let b=0;b<lon;b++){
-   const p=vertex(side,a,b),q=vertex(side,a+1,b),r=vertex(side,a+1,b+1),t=vertex(side,a,b+1);
+ for(let a=0;a<lat;a++)for(let b=0;b<lon;b++){
+   const p=vertex(a,b),q=vertex(a+1,b),r=vertex(a+1,b+1),t=vertex(a,b+1);
    out.push(...p,...q,...t,...q,...r,...t);
  }
+}
+/** Cerebrum (two hemispheres), cerebellum and brainstem. */
+function shellVertices() {
+ const out=[];
+ const gyri=(u,v)=>Math.sin(8*v+1.8*Math.sin(3*u))*Math.cos(9*u+Math.sin(4*v));
+ for(const side of [-1,1])ellipsoid(out,{
+   center:[side*.31,.04,0],radii:[.42*BRAIN_SHAPE.x/.8,.70*BRAIN_SHAPE.y/.66,1.02*BRAIN_SHAPE.z],lat:46,lon:72,fold:gyri,
+   shape:(x,y,z)=>{
+     if(x*side<0)x*=.55;            // flatter medial wall leaves a narrow fissure
+     if(y<0)y*=.74;                 // flatter base
+     const taper=1-.12*Math.max(0,-z);// narrower occipital end
+     // temporal lobe: bulge low and to the side, toward the front
+     const temporal=.10*Math.max(0,-y)*Math.max(0,z+.2)*(x*side>0?1:0);
+     return [x*taper+side*temporal,y,z];
+   },
+ });
+ // Cerebellum tucked under the occipital lobes: fine horizontal folia.
+ for(const side of [-1,1])ellipsoid(out,{
+   center:[side*.17,-.34,-.62],radii:[.22,.15,.21],lat:22,lon:36,
+   fold:(u)=>Math.sin(26*u)*.9,
+ });
+ // Brainstem.
+ ellipsoid(out,{center:[0,-.5,-.25],radii:[.12,.30,.12],lat:16,lon:24,fold:()=>0});
  return new Float32Array(out);
 }
 
@@ -156,7 +198,7 @@ function compile(gl,vertexCode,fragmentCode){
   gl.deleteShader(vertex);gl.deleteShader(fragment);
   if(!gl.getProgramParameter(program,gl.LINK_STATUS)){gl.deleteProgram(program);throw Error("3D scene program unavailable");}
   const uniforms={};
-  for(const name of ['yaw','pitch','aspect','scale','ratio','active','points'])uniforms[name]=gl.getUniformLocation(program,name);
+  for(const name of ['yaw','pitch','aspect','scale','ratio','active','points','pass','layer','offset'])uniforms[name]=gl.getUniformLocation(program,name);
   return {program,uniforms};
 }
 function initialize(gl) {
@@ -184,22 +226,56 @@ function bindParticles(gl,objects,buffer){
 }
 
 // Rendering policy (Issue #3): draw on demand — data change, drag, resize.
-// Idle sway and route pulses run only while motion is allowed AND the canvas
-// is on screen in a visible tab, throttled to ~15 fps. The WebGL context is
-// released on unmount.
+// Auto-rotation, idle sway and route pulses run only while motion is allowed
+// AND the canvas is on screen in a visible tab, throttled to ~15 fps. The
+// WebGL context is released on unmount.
 const IDLE_FRAME_MS=66;
 // Fill the stage: as large as the height allows without clipping the width.
-const BASE_YAW=-.62,BASE_PITCH=-.34,MAX_SCALE=1.5,WIDTH_FIT=1.15;
-export function Brain3DScene({network,running,rotation=0,selectedId=null,highlightId=null,onPick,onReady}) {
+const BASE_YAW=-.62,BASE_PITCH=.30,MAX_SCALE=1.5,WIDTH_FIT=1.15;
+const AUTO_SPIN=.00011; // radians per ms (~6°/s)
+export const BRAIN_ZOOM=Object.freeze({min:.6,max:3});
+// Keep at least part of the brain on screen however far it is moved.
+const clampOffset=([x,y],zoom)=>{const limit=.6+zoom*.9;return [Math.max(-limit,Math.min(limit,x)),Math.max(-limit,Math.min(limit,y))];};
+export function Brain3DScene({network,running,rotation=0,pitch=0,zoom=1,autoRotate=false,resetSignal=0,selectedId=null,highlightId=null,onPick,onZoom,onReady}) {
   const canvas=useRef(null),labels=useRef(null),drag=useRef(null),requestDraw=useRef(()=>{});
-  const dragAngle=useRef({yaw:0,pitch:0}),rotationRef=useRef(rotation),projected=useRef([]);
+  const dragAngle=useRef({yaw:0,pitch:0}),projected=useRef([]),offset=useRef([0,0]),pointers=useRef(new Map()),zoomNow=useRef(zoom);
+  const viewRef=useRef({rotation,pitch,zoom,autoRotate});
   const state=useRef({network,selectedId,highlightId,dirty:true});
   const [hovered,setHovered]=useState(null);
-  useEffect(()=>{rotationRef.current=rotation;requestDraw.current();},[rotation]);
+  useEffect(()=>{
+    // A new preset replaces any free drag so the chosen view is exact.
+    const preset=viewRef.current.rotation!==rotation||viewRef.current.pitch!==pitch;
+    if(preset){dragAngle.current={yaw:0,pitch:0};offset.current=[0,0];}
+    zoomNow.current=zoom;
+    viewRef.current={...viewRef.current,rotation,pitch,zoom,autoRotate,reset:preset||viewRef.current.reset};
+    requestDraw.current();
+  },[rotation,pitch,zoom,autoRotate]);
+  useEffect(()=>{
+    // "Front view" always returns to the exact default framing.
+    if(!resetSignal)return;
+    dragAngle.current={yaw:0,pitch:0};offset.current=[0,0];viewRef.current.reset=true;requestDraw.current();
+  },[resetSignal]);
   useEffect(()=>{state.current={network,selectedId,highlightId,dirty:true};requestDraw.current();},[network,selectedId,highlightId]);
+  const onZoomRef=useRef(onZoom);onZoomRef.current=onZoom;
+  /** Zoom keeping the scene point under (clientX, clientY) fixed. */
+  function zoomAt(next,clientX,clientY){
+    const element=canvas.current;if(!element)return;
+    next=Math.max(BRAIN_ZOOM.min,Math.min(BRAIN_ZOOM.max,next));
+    const k=next/zoomNow.current;if(!Number.isFinite(k)||k===1)return;
+    const box=element.getBoundingClientRect();
+    const cx=((clientX-box.left)/box.width)*2-1,cy=1-((clientY-box.top)/box.height)*2;
+    offset.current=clampOffset([cx-(cx-offset.current[0])*k,cy-(cy-offset.current[1])*k],next);
+    zoomNow.current=next;onZoomRef.current?.(next);requestDraw.current();
+  }
+  function panBy(dx,dy){
+    const element=canvas.current;if(!element)return;
+    const box=element.getBoundingClientRect();
+    offset.current=clampOffset([offset.current[0]+dx/box.width*2,offset.current[1]-dy/box.height*2],zoomNow.current);
+    requestDraw.current();
+  }
   useEffect(()=>{requestDraw.current();},[hovered]);
   useEffect(()=>{
-    let frame=0,idle=0,gl=null,objects=null,alive=true,onScreen=true,routes=[];
+    let frame=0,idle=0,gl=null,objects=null,alive=true,onScreen=true,routes=[],spin=0,lastTick=null;
     const element=canvas.current;
     const motion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
     const animate=()=>!motion?.matches&&onScreen&&document.visibilityState==='visible';
@@ -222,36 +298,57 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
       if(element.width!==width||element.height!==height){element.width=width;element.height=height;}
       gl.viewport(0,0,width,height);
       gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
-      const moving=animate(),now=performance.now();
+      const moving=animate(),now=performance.now(),settings=viewRef.current;
+      if(settings.reset){spin=0;settings.reset=false;}
+      const spinning=moving&&settings.autoRotate&&!drag.current;
+      if(spinning&&lastTick!==null)spin=(spin+(now-lastTick)*AUTO_SPIN)%(Math.PI*2);
+      lastTick=spinning?now:null;
       const view={
-        yaw:BASE_YAW+Math.PI*(rotationRef.current)/180+dragAngle.current.yaw+(moving?Math.sin(now*.00022)*.07:0),
-        pitch:BASE_PITCH+dragAngle.current.pitch,aspect:width/height,
-        scale:Math.min(MAX_SCALE,WIDTH_FIT*width/height),
+        yaw:BASE_YAW+Math.PI*settings.rotation/180+dragAngle.current.yaw+spin
+          +(moving&&!settings.autoRotate?Math.sin(now*.00022)*.07:0),
+        pitch:BASE_PITCH+Math.PI*settings.pitch/180+dragAngle.current.pitch,aspect:width/height,
+        scale:Math.min(MAX_SCALE,WIDTH_FIT*width/height)*zoomNow.current,offset:offset.current,
       };
       const network=state.current.network;
       const set=(program)=>{gl.useProgram(program.program);
         gl.uniform1f(program.uniforms.yaw,view.yaw);gl.uniform1f(program.uniforms.pitch,view.pitch);
-        gl.uniform1f(program.uniforms.aspect,view.aspect);gl.uniform1f(program.uniforms.scale,view.scale);};
-      // 1. Glass cortex.
-      set(objects.shell);
-      gl.uniform1f(objects.shell.uniforms.active,network.counts.running?1:0);
-      gl.bindBuffer(gl.ARRAY_BUFFER,objects.shellBuffer);
-      gl.enableVertexAttribArray(objects.shell.position);gl.enableVertexAttribArray(objects.shell.normal);
-      gl.vertexAttribPointer(objects.shell.position,4,gl.FLOAT,false,28,0);
-      gl.vertexAttribPointer(objects.shell.normal,3,gl.FLOAT,false,28,16);
-      gl.drawArrays(gl.TRIANGLES,0,objects.shellCount);
-      gl.disableVertexAttribArray(objects.shell.normal);
-      // 2. Recorded reporting links, then neurons.
-      set(objects.particles);
-      gl.uniform1f(objects.particles.uniforms.ratio,ratio);
-      for(const name of ['position','color','size'])gl.enableVertexAttribArray(objects.particles[name]);
+        gl.uniform1f(program.uniforms.aspect,view.aspect);gl.uniform1f(program.uniforms.scale,view.scale);
+        gl.uniform2f(program.uniforms.offset,view.offset[0],view.offset[1]);};
+      const shell=pass=>{
+        set(objects.shell);
+        gl.uniform1f(objects.shell.uniforms.active,network.counts.running?1:0);
+        gl.uniform1f(objects.shell.uniforms.pass,pass);
+        gl.bindBuffer(gl.ARRAY_BUFFER,objects.shellBuffer);
+        gl.enableVertexAttribArray(objects.shell.position);gl.enableVertexAttribArray(objects.shell.normal);
+        gl.vertexAttribPointer(objects.shell.position,4,gl.FLOAT,false,28,0);
+        gl.vertexAttribPointer(objects.shell.normal,3,gl.FLOAT,false,28,16);
+        gl.drawArrays(gl.TRIANGLES,0,objects.shellCount);
+        gl.disableVertexAttribArray(objects.shell.normal);
+      };
+      const particles=()=>{
+        set(objects.particles);
+        gl.uniform1f(objects.particles.uniforms.ratio,ratio);
+        for(const name of ['position','color','size'])gl.enableVertexAttribArray(objects.particles[name]);
+      };
+      const neurons=layer=>{
+        gl.uniform1f(objects.particles.uniforms.layer,layer);
+        gl.uniform1f(objects.particles.uniforms.points,1);
+        bindParticles(gl,objects,objects.pointBuffer);gl.drawArrays(gl.POINTS,0,objects.pointCount);
+      };
+      // 1. Far side of the cortex, 2. links and neurons behind the centre,
+      // 3. lit near side of the cortex, 4. neurons in front and route pulses.
+      shell(0);
+      particles();
       if(objects.lineCount){
-        gl.uniform1f(objects.particles.uniforms.points,0);
+        gl.uniform1f(objects.particles.uniforms.layer,0);gl.uniform1f(objects.particles.uniforms.points,0);
         bindParticles(gl,objects,objects.lineBuffer);gl.drawArrays(gl.LINES,0,objects.lineCount);
       }
-      gl.uniform1f(objects.particles.uniforms.points,1);
-      bindParticles(gl,objects,objects.pointBuffer);gl.drawArrays(gl.POINTS,0,objects.pointCount);
-      // 3. Moving pulses only on running routes and only while motion is allowed.
+      neurons(-1);
+      for(const name of ['color','size'])gl.disableVertexAttribArray(objects.particles[name]);
+      shell(1);
+      particles();
+      neurons(1);
+      // Moving pulses only on running routes and only while motion is allowed.
       if(moving&&routes.length){
         const pulses=[];
         routes.forEach((route,index)=>{
@@ -263,6 +360,7 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
           }
         });
         if(pulses.length){
+          gl.uniform1f(objects.particles.uniforms.layer,0);
           gl.bindBuffer(gl.ARRAY_BUFFER,objects.pulseBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pulses),gl.DYNAMIC_DRAW);
           bindParticles(gl,objects,objects.pulseBuffer);gl.drawArrays(gl.POINTS,0,pulses.length/8);
         }
@@ -277,6 +375,7 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
       const founder=projectPoint(FOUNDER_POINT,view);
       const positions=new Map(projected.current.map(p=>[p.id,p]));
       positions.set('founder',{x:(founder.x*.5+.5)*w,y:(.5-founder.y*.5)*h});
+      const placed=[];
       for(const label of labels.current?.children||[]){
         const point=positions.get(label.dataset.node);
         if(!point)continue;
@@ -285,6 +384,9 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
         let x=point.x+12,y=point.y-lh-10;
         if(x+lw>w-6)x=point.x-12-lw;
         x=Math.max(6,Math.min(x,w-lw-6));y=Math.max(40,Math.min(y,h-lh-6));
+        // Nudge down past labels already placed so names never sit on each other.
+        for(let tries=0;tries<6&&placed.some(r=>x<r.x+r.w+4&&r.x<x+lw+4&&y<r.y+r.h+4&&r.y<y+lh+4);tries++)y+=lh+6;
+        placed.push({x,y,w:lw,h:lh});
         label.style.transform=`translate(${Math.round(x)}px,${Math.round(y)}px)`;
         // The neuron's own screen point, so tests and tools can target it.
         label.dataset.x=String(Math.round(point.x));label.dataset.y=String(Math.round(point.y));
@@ -292,6 +394,12 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
       if(moving&&!idle)idle=setTimeout(()=>{idle=0;schedule();},IDLE_FRAME_MS);
     }
     const onVisibility=()=>schedule();
+    // Wheel zoom anchored at the cursor; the page does not scroll meanwhile.
+    const onWheel=event=>{
+      event.preventDefault();
+      const factor=Math.exp(-Math.max(-60,Math.min(60,event.deltaMode===1?event.deltaY*16:event.deltaY))*.0022);
+      zoomAt(zoomNow.current*factor,event.clientX,event.clientY);
+    };
     try{
       gl=element?.getContext("webgl",{alpha:true,antialias:true,premultipliedAlpha:true});
       if(!gl)throw Error("WebGL unavailable");
@@ -304,6 +412,7 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
       }
       motion?.addEventListener?.('change',schedule);
       document.addEventListener('visibilitychange',onVisibility);
+      element.addEventListener('wheel',onWheel,{passive:false});
       onReady?.(true);
       schedule();
     }catch{
@@ -319,6 +428,7 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
       resize?.disconnect();visibility?.disconnect();
       motion?.removeEventListener?.('change',schedule);
       document.removeEventListener('visibilitychange',onVisibility);
+      element?.removeEventListener('wheel',onWheel);
       if(gl){
         if(objects){
           for(const buffer of [objects.shellBuffer,objects.lineBuffer,objects.pointBuffer,objects.pulseBuffer])gl.deleteBuffer(buffer);
@@ -347,15 +457,36 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
     <canvas ref={canvas} className="ago-real-3d-brain"
       aria-label={"Interactive 3D company brain. Verified running tasks: "+Math.max(0,running)+". Employees: "+network.nodes.length}
       role="img"
-      onPointerDown={event=>{drag.current={x:event.clientX,y:event.clientY,start:{...dragAngle.current},moved:false};
-        event.currentTarget.setPointerCapture?.(event.pointerId);}}
+      onPointerDown={event=>{
+        pointers.current.set(event.pointerId,{x:event.clientX,y:event.clientY});
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        if(pointers.current.size===2){
+          const [a,b]=[...pointers.current.values()];
+          drag.current={mode:'pinch',distance:Math.hypot(a.x-b.x,a.y-b.y)||1,zoom:zoomNow.current,mid:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},moved:true};
+          return;
+        }
+        // Left drag rotates; Shift/right/middle drag moves the brain.
+        const move=event.shiftKey||event.button===1||event.button===2;
+        drag.current={mode:move?'pan':'rotate',x:event.clientX,y:event.clientY,start:{...dragAngle.current},moved:false};
+      }}
+      onContextMenu={event=>event.preventDefault()}
       onPointerMove={event=>{
-        if(drag.current){
-          const dx=event.clientX-drag.current.x,dy=event.clientY-drag.current.y;
-          if(Math.abs(dx)+Math.abs(dy)>4)drag.current.moved=true;
+        if(pointers.current.has(event.pointerId))pointers.current.set(event.pointerId,{x:event.clientX,y:event.clientY});
+        const d=drag.current;
+        if(d?.mode==='pinch'&&pointers.current.size>=2){
+          const [a,b]=[...pointers.current.values()];
+          const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+          panBy(mid.x-d.mid.x,mid.y-d.mid.y);d.mid=mid;
+          zoomAt(d.zoom*(Math.hypot(a.x-b.x,a.y-b.y)||1)/d.distance,mid.x,mid.y);
+          return;
+        }
+        if(d){
+          const dx=event.clientX-d.x,dy=event.clientY-d.y;
+          if(Math.abs(dx)+Math.abs(dy)>4)d.moved=true;
+          if(d.mode==='pan'){panBy(event.clientX-(d.lastX??d.x),event.clientY-(d.lastY??d.y));d.lastX=event.clientX;d.lastY=event.clientY;return;}
           dragAngle.current={
-            yaw:Math.max(-1.6,Math.min(1.6,drag.current.start.yaw+dx*.008)),
-            pitch:Math.max(-.6,Math.min(.5,drag.current.start.pitch+dy*.005)),
+            yaw:d.start.yaw+dx*.008, // free 360° turn
+            pitch:Math.max(-1.1,Math.min(1.1,d.start.pitch+dy*.006)),
           };
           requestDraw.current();
         }else{
@@ -365,11 +496,17 @@ export function Brain3DScene({network,running,rotation=0,selectedId=null,highlig
       }}
       onPointerLeave={()=>setHovered(null)}
       onPointerUp={event=>{
-        const wasClick=drag.current&&!drag.current.moved;drag.current=null;
+        pointers.current.delete(event.pointerId);
+        const d=drag.current,wasClick=d&&d.mode==='rotate'&&!d.moved;
         if(event.currentTarget.hasPointerCapture?.(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
+        if(d?.mode==='pinch'&&pointers.current.size===1){
+          const [point]=[...pointers.current.values()];
+          drag.current={mode:'pan',x:point.x,y:point.y,lastX:point.x,lastY:point.y,moved:true};
+        }else if(!pointers.current.size)drag.current=null;
         if(wasClick){const id=pick(event);if(id)onPick?.(id);}
       }}
-      onPointerCancel={()=>{drag.current=null;}}
+      onPointerCancel={event=>{pointers.current.delete(event.pointerId);if(!pointers.current.size)drag.current=null;}}
+      onDoubleClick={event=>zoomAt(zoomNow.current*1.5,event.clientX,event.clientY)}
       style={{cursor:hovered?'pointer':undefined}}
     />
     <div className="brain-neuron-labels" ref={labels} aria-hidden="true">
