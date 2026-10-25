@@ -261,6 +261,49 @@ def document(client, f, identifier, kind, key, raw=None):
     )
 
 
+def test_exact_evidence_source_requires_live_founder_even_after_role_revocation(case):
+    client, headers, info = case
+    founder = headers["founder"]
+    identifier = cost(client, founder, "cost")
+    item = document(client, founder, identifier, "invoice", "private")
+    url = BASE + "/evidence/" + item["id"]
+    assert client.get(url, headers=founder).status_code == 200
+
+    # A cached signed session still contains the old Founder role. Give the
+    # same user organization:manage through another REAL management role,
+    # revoke the database Founder role, and prove the independent live
+    # Founder check rejects raw source access. No data is exported.
+    db, tenant, founder_id = (
+        info["db"], info["tenant"], info["founder_id"]
+    )
+    db.execute("""
+        INSERT INTO ago_role_permissions(tenant_id,role,permission)
+        VALUES(%s,'evidence_auditor','organization:manage')
+        ON CONFLICT DO NOTHING
+    """, (tenant,))
+    db.execute("""
+        INSERT INTO ago_user_roles(tenant_id,user_id,role)
+        VALUES(%s,%s,'evidence_auditor') ON CONFLICT DO NOTHING
+    """, (tenant,founder_id))
+    db.execute("""
+        DELETE FROM ago_user_roles
+        WHERE tenant_id=%s AND user_id=%s AND role='founder'
+    """, (tenant,founder_id))
+    from ago.security import Principal
+    from ago.security_controls import SecurityControls
+    caller = Principal(founder_id,tenant,("founder",))
+    gate = SecurityControls(db)
+    assert gate.permitted(caller,"organization:manage",tenant)
+    assert not gate.permitted(caller,"approval:founder",tenant)
+    assert client.get(url,headers=founder).status_code == 403
+
+    from ago.enterprise_store import EnterpriseOperationsStore
+    with pytest.raises(LookupError,match="Evidence not found"):
+        EnterpriseOperationsStore(db).evidence_item(
+            tenant_id=str(uuid4()), evidence_id=item["id"]
+        )
+
+
 def test_financial_sources_require_independent_review_and_deny_duplicate_bytes(case):
     client, headers, info = case
     f, r = headers["founder"], headers["reviewer"]
