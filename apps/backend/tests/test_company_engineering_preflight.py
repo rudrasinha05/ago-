@@ -129,3 +129,44 @@ def test_no_founder_private_details_in_diagnostic(monkeypatch):
     assert "PRIVATE_LEAK" not in str(report)
     assert "PRIVATE_PROJECT_CONTENT" not in str(report)
     assert "company_hierarchy_not_verified" in report["blocking_checks"]
+
+
+def test_worker_pm_blocker_exposes_real_scoped_identities_no_fake_status(monkeypatch):
+    tenant, founder, task_id = (str(uuid4()) for _ in range(3))
+    worker, pm, intake = (str(uuid4()) for _ in range(3))
+    manager = str(uuid4())
+    class ReportingDB(DB):
+        def execute(self, query, params=None):
+            if "AS worker_id" in query and "ago_founder_project_lead" in query:
+                self.commands.append(query.strip())
+                assert params == (tenant, founder, intake, task_id)
+                return Cursor({
+                    "worker_id":worker, "worker_name":"Software Worker",
+                    "worker_kind":"ai", "worker_manager_id":manager,
+                    "worker_manager_name":"Previous Manager",
+                    "pm_id":pm, "pm_name":"Project Manager", "pm_kind":"ai",
+                })
+            return super().execute(query, params)
+    class BrokenHierarchy:
+        def __init__(self, db):
+            self.db = db
+        def assignments(self, **_):
+            raise PermissionError(
+                "Full Board execution requires actual employee-to-PM reporting hierarchy"
+            )
+    monkeypatch.setattr(p, "CompanyOllamaChainQueries", BrokenHierarchy)
+    db = ReportingDB(
+        task={"action":"internal:brief", "status":"waiting_approval",
+              "approval_id":str(uuid4()), "assignee_id":worker},
+        approval={"action":"internal:brief","status":"approved"},
+        project={"id":intake},
+    )
+    report = p.inspect_engineering_task(
+        db, tenant_id=tenant, founder_id=founder, task_id=task_id,
+    )
+    assert report["blocking_checks"] == ["worker_pm_reporting_path_missing"]
+    assert report["reporting_repair_evidence"]["worker_manager_id"] == manager
+    assert report["reporting_repair_evidence"]["accountable_pm_id"] == pm
+    assert report["task_post_authorized"] is False
+    assert report["database_modified"] is False
+    assert not any("UPDATE " in x or "INSERT " in x for x in db.commands)

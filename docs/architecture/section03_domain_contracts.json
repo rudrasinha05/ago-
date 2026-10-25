@@ -336,7 +336,13 @@
     "company_engineering_preflight": [
       "ago_agent_runs",
       "ago_approval_requests",
-      "ago_governed_tasks"
+      "ago_employees",
+      "ago_founder_intake_stages",
+      "ago_founder_intakes",
+      "ago_founder_project_lead",
+      "ago_governed_tasks",
+      "ago_plan_steps",
+      "ago_strategy_plans"
     ],
     "company_ollama_chain": [],
     "company_ollama_chain_queries": [
