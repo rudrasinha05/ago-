@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {employeeStatus,companyLayout,activeRouteKeys,employeeProjects,boardFunctionSeats} from '../company.js';
+import {employeeStatus,companyLayout,companyLinkAnchors,activeRouteKeys,employeeProjects,boardFunctionSeats} from '../company.js';
 test('missing activity stays unknown; running outranks waiting; idle is not online',()=>{
  assert.equal(employeeStatus('a',null).label,'Unknown');
  assert.equal(employeeStatus('a',[]).tone,'idle');
@@ -34,9 +34,10 @@ test('assigned employees highlight entire actual reporting route; completed work
  const employees=[{id:'lead',department_id:'d'},{id:'dev',department_id:'d',manager_id:'lead'}];
  const layout=companyLayout([{id:'d'}],employees,'founder');
  const live=activeRouteKeys(layout,employees,[{assignee_id:'dev',status:'running'}]);
- assert.ok(live.routes.has('founder>department:d'));
- assert.ok(live.routes.has('department:d>employee:lead'));
+ assert.equal(layout.layout,'circular');
  assert.ok(live.routes.has('employee:lead>employee:dev'));
+ assert.equal(live.routes.has('founder>department:d'),false,'Grouping cannot be an approval path');
+ assert.equal(live.routes.has('department:d>employee:lead'),false,'Department is not the assigned manager');
  assert.equal(activeRouteKeys(layout,employees,[{assignee_id:'dev',status:'completed'}]).routes.size,0);
  assert.deepEqual(employeeProjects('dev',[{assignee_id:'dev',project_name:'Alpha'},{assignee_id:'dev',project_name:'Alpha'},{assignee_id:'dev',project_name:'Beta'}]),['Alpha','Beta']);
 });
@@ -50,11 +51,11 @@ test('red routes require running tasks; pending routes are amber and include dep
  const staff=[{id:'lead',department_id:'d'},{id:'dev',department_id:'d',manager_id:'lead'}],map=companyLayout([{id:'d'}],staff,'founder');
  const pending=activeRouteKeys(map,staff,[{assignee_id:'dev',status:'waiting_approval'}]);
  assert.equal(pending.routes.size,0);
- for(const edge of ['founder>department:d','department:d>employee:lead','employee:lead>employee:dev'])assert.ok(pending.waitingRoutes.has(edge),edge);
+ assert.deepEqual([...pending.waitingRoutes],['employee:lead>employee:dev'],'Only actual reporting goes amber');
  const mixed=activeRouteKeys(map,staff,[{assignee_id:'dev',status:'running'},{assignee_id:'lead',status:'proposed'}]);
- assert.ok(mixed.routes.has('founder>department:d'));
+ assert.equal(mixed.routes.has('founder>department:d'),false);
  assert.ok(mixed.routes.has('employee:lead>employee:dev'));
- assert.ok(!mixed.waitingRoutes.has('founder>department:d'));
+ assert.equal(mixed.waitingRoutes.size,0,'Groupings do not inherit running task colours');
  assert.ok(mixed.running.has('dev'));
  assert.equal(activeRouteKeys(map,staff,[{assignee_id:'dev',status:'completed'}]).routes.size,0);
  assert.equal(activeRouteKeys(map,staff,null).routes.size,0);
@@ -90,8 +91,10 @@ test('hierarchy graph draws recorded managers as reporting, department as groupi
  assert.equal(layout.edges.find(e=>e.to==='employee:dev').from,'employee:pm');
  assert.equal(layout.edges.find(e=>e.to==='employee:isolated').kind,'grouping');
  assert.equal(layout.edges.find(e=>e.to==='department:dB').from,'founder');
- assert.ok(layout.nodes.find(n=>n.key==='employee:cto').y < layout.nodes.find(n=>n.key==='employee:pm').y);
- assert.ok(layout.founder.y < layout.nodes.find(n=>n.key==='department:dA').y);
+ assert.ok(layout.nodes.find(n=>n.key==='employee:cto').radius < layout.nodes.find(n=>n.key==='employee:pm').radius);
+ assert.equal(layout.founder.x,layout.center);
+ assert.equal(layout.founder.y,layout.center);
+ assert.equal(layout.layout,'circular');
  assert.ok(layout.nodes.every(n=>n.x>0&&n.y>0&&n.x<layout.size&&n.y<layout.size));
 });
 
@@ -124,4 +127,68 @@ test('51 staff are laid out as a non-overlapping reporting tree',()=>{
  }
  assert.equal(layout.reportingEdges,42);
  assert.equal(layout.groupingEdges,18);
+});
+
+
+test('one recorded CEO and its executive reports form outward circular sectors',()=>{
+ const departments=[{id:'strategy',name:'Strategy'}];
+ const employees=[{id:'ceo',name:'CEO',department_id:'strategy',manager_id:'founder'},
+   ...['cto','cfo','ciso','cqo','coo'].map(id=>({id,name:id,department_id:'strategy',manager_id:'ceo'}))];
+ const graph=companyLayout(departments,employees,'founder');
+ const ceo=graph.nodes.find(n=>n.key==='employee:ceo');
+ const direct=graph.nodes.filter(n=>n.type==='employee'&&n.id!=='ceo');
+ assert.equal(graph.reportingEdges,6);
+ assert.equal(graph.groupingEdges,1);
+ assert.ok(direct.every(n=>n.radius>ceo.radius));
+ assert.ok(direct.every(n=>Math.abs(n.angle-ceo.angle)<=1.201),
+   'Subordinates must never be scattered opposite their CEO across Founder');
+ assert.equal(graph.nodes.filter(n=>n.type==='employee').length,6);
+ const running=activeRouteKeys(graph,employees,[{assignee_id:'cto',status:'running'}]);
+ assert.deepEqual([...running.routes],['employee:ceo>employee:cto','founder>employee:ceo']);
+ assert.equal([...running.routes].some(k=>k.includes('department:')),false);
+});
+
+test('unassigned, missing and cyclic managers remain visible but not fabricated as reports',()=>{
+ const departments=[{id:'one',name:'People'}];
+ const staff=[
+  {id:'none',department_id:'one',manager_id:null},
+  {id:'missing',department_id:'one',manager_id:'not-in-roster'},
+  {id:'a',department_id:'one',manager_id:'b'},
+  {id:'b',department_id:'one',manager_id:'a'},
+  {id:'valid',department_id:'one',manager_id:'founder'},
+ ];
+ const graph=companyLayout(departments,staff,'founder');
+ assert.equal(graph.nodes.filter(n=>n.type==='employee').length,5);
+ assert.equal(graph.reportingEdges,1);
+ assert.equal(graph.reportingIssues.length,4);
+ assert.ok(graph.edges.find(e=>e.to==='employee:valid'&&e.from==='founder'&&e.kind==='reporting'));
+ for(const id of ['none','missing','a','b']){
+   assert.equal(graph.edges.find(e=>e.to==='employee:'+id).kind,'grouping');
+   assert.equal(activeRouteKeys(graph,staff,[{assignee_id:id,status:'running'}]).routes.size,0);
+ }
+});
+
+test('circular hierarchy anchors are finite, clipped and prevent card overlaps at scale',()=>{
+ const departments=Array.from({length:12},(_,i)=>({id:'d'+i,name:'Dept '+i}));
+ const employees=Array.from({length:100},(_,i)=>({
+  id:'employee'+i,name:'Employee '+i,department_id:departments[i%12].id,
+  manager_id:i%11===0?'founder':i%5===0?null:'employee'+Math.floor((i-1)/4)
+ }));
+ const graph=companyLayout(departments,employees,'founder');
+ assert.equal(graph.nodes.length,112);
+ for(const a of graph.nodes){
+   assert.ok(a.x>0&&a.y>0&&a.x<graph.size&&a.y<graph.size);
+   for(const b of graph.nodes){
+     if(a.key!==b.key)assert.ok(Math.abs(a.x-b.x)>210||Math.abs(a.y-b.y)>130,
+       'Circular cards overlap: '+a.key+' / '+b.key);
+   }
+ }
+ const coords=new Map([['founder',graph.founder],...graph.nodes.map(n=>[n.key,n])]);
+ for(const edge of graph.edges){
+   assert.ok(coords.has(edge.from)&&coords.has(edge.to));
+   const a=coords.get(edge.from),b=coords.get(edge.to);
+   const anchors=companyLinkAnchors(a,b,edge.from==='founder'?'founder':a.type,b.type);
+   assert.ok(Object.values(anchors).every(Number.isFinite),'Invalid radial link: '+edge.to);
+   assert.ok(Math.hypot(anchors.x1-anchors.x2,anchors.y1-anchors.y2)>0);
+ }
 });
