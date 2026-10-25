@@ -161,6 +161,9 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     response=post(client,"/v1/agents/tasks/"+task_id+"/run",founder)
     result=response["result"]
     assert result["kind"]=="local_company_governed_handoff"
+    assert result["engineering_authorization"] == (
+        "implementation_stage_verified" if engineering else "not_requested"
+    )
     expected_count=4 if deny_risk else (7 if full_board else 4)
     expected_people=(
         [ceo,cto,finance,risk] if deny_risk
