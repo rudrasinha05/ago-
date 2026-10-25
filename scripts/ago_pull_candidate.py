@@ -50,6 +50,7 @@ def choose_run(runs: list, run_id: str) -> dict:
         or result.get("roles_expected") != 7
         or result.get("roles_completed") != 7
         or result.get("engineering_candidate_status") != "syntax_reviewed"
+        or result.get("engineering_authorization") != "implementation_stage_verified"
         or result.get("requires_human_qa") is not True
         or result.get("task_id") != task_id
     ):
