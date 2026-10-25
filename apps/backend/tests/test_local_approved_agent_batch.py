@@ -357,3 +357,97 @@ def test_operator_engineering_preflight_is_before_task_dispatch():
     assert content.index('require_engineering_capability(\n                request(') < content.index(
         'dispatch=lambda task_id:request("POST"'
     )
+
+
+def sample_live_board_payload(task_id):
+    roles = ("ceo", "cto", "finance", "risk", "quality", "pm", "employee")
+    seats = ("Strategy & Vision", "Technology Oversight", "Finance & Budget",
+             "Risk & Compliance", "Quality & Release")
+    ids = [str(uuid4()) for _ in roles]
+    return {"id": str(uuid4()), "task_id": task_id, "status": "completed",
+            "delivery_status": "completed", "result": {
+                "kind": "local_company_governed_handoff",
+                "task_id": task_id, "project_id": str(uuid4()),
+                "provider_mode": "ollama_local", "board_review_mode": "full_five_seat",
+                "roles_completed": 7, "roles_expected": 7,
+                "board_review_cleared": True, "handoff_complete": True,
+                "board_blocked": False, "requires_founder_resolution": False,
+                "requires_human_qa": True, "board_recommendations_binding": False,
+                "engineering_candidate_status": "syntax_reviewed",
+                "engineering_candidate": {"files": []},
+                "github_commits_created": False, "project_released": False,
+                "external_tools_called": False, "runtime_elapsed_ms": 7000,
+                "handoffs": [{"role": role, "employee_id": ids[i],
+                              "model_inference_completed": True,
+                              "human_qa_approved": False,
+                              "elapsed_ms": 1000, "draft": "Sensitive draft"}
+                             for i, role in enumerate(roles)],
+                "board_recommendations": [{"seat": seat, "employee_id": ids[i],
+                                           "recommendation": "approve",
+                                           "verifiable_model_output": True,
+                                           "binding_authorization": False}
+                                          for i, seat in enumerate(seats)],
+            }}
+
+
+def test_real_seven_role_acceptance_redacts_drafts_and_requires_seven_employees():
+    task_id = str(uuid4())
+    receipt = module.verify_real_board_handoffs(sample_live_board_payload(task_id), task_id)
+    assert len(set(receipt["employee_ids"])) == 7
+    assert receipt["board_votes"] == ["approve"] * 5
+    assert receipt["independent_human_qa"] is False
+    assert "Sensitive draft" not in str(receipt)
+
+
+@pytest.mark.parametrize("reason", [
+    "stub", "not_seven", "same_person", "board_veto", "vote_unverified",
+    "missing_inference", "fake_qa", "wrong_task", "overrun",
+    "missing_candidate", "wrong_role", "fake_github",
+])
+def test_seven_role_fake_success_is_rejected(reason):
+    task_id = str(uuid4())
+    outcome = sample_live_board_payload(task_id)
+    p = outcome["result"]
+    if reason == "stub":
+        outcome = {"status": "completed", "task_id": task_id}
+    elif reason == "not_seven":
+        p["handoffs"].pop()
+    elif reason == "same_person":
+        p["handoffs"][-1]["employee_id"] = p["handoffs"][0]["employee_id"]
+    elif reason == "board_veto":
+        p["board_blocked"] = True
+    elif reason == "vote_unverified":
+        p["board_recommendations"][1]["recommendation"] = "unverified"
+    elif reason == "missing_inference":
+        p["handoffs"][2]["model_inference_completed"] = False
+    elif reason == "fake_qa":
+        p["handoffs"][0]["human_qa_approved"] = True
+    elif reason == "wrong_task":
+        p["task_id"] = str(uuid4())
+    elif reason == "overrun":
+        p["handoffs"][4]["elapsed_ms"] = 90000
+    elif reason == "missing_candidate":
+        p["engineering_candidate"] = None
+    elif reason == "wrong_role":
+        p["handoffs"][0]["role"] = "worker"
+    elif reason == "fake_github":
+        p["github_commits_created"] = True
+    with pytest.raises(RuntimeError):
+        module.verify_real_board_handoffs(outcome, task_id)
+
+
+def test_engineering_dispatch_does_not_accept_stub_completion():
+    task = str(uuid4())
+    work = [{"id": task, "action": "internal:brief",
+             "status": "waiting_approval", "approval_id": "ok"}]
+    approvals = [{"id": "ok", "status": "approved", "action": "internal:brief"}]
+    with pytest.raises(RuntimeError):
+        module.batch(work, approvals,
+                     lambda _: {"task_id": task, "status": "completed"},
+                     limit=1, apply=True, confirm=module.CONFIRM,
+                     require_engineering=True)
+    verified = module.batch(work, approvals, lambda _: sample_live_board_payload(task),
+                            limit=1, apply=True, confirm=module.CONFIRM,
+                            require_engineering=True)
+    assert verified["completed_task_ids"] == [task]
+    assert len(verified["verified_seven_role_handoffs"]) == 1

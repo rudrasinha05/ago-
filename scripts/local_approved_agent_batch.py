@@ -168,8 +168,89 @@ def confirmed_local_delivery(result, expected_task_id: str) -> bool:
     return True
 
 
+
+SEVEN_ROLES = ("ceo", "cto", "finance", "risk", "quality", "pm", "employee")
+FIVE_SEATS = ("Strategy & Vision", "Technology Oversight", "Finance & Budget",
+              "Risk & Compliance", "Quality & Release")
+
+
+def verify_real_board_handoffs(response, task_id):
+    """Verify scoped actual inference receipts; never expose private model text."""
+    if not confirmed_local_delivery(response, task_id):
+        raise RuntimeError("Actual completed AGO task required")
+    result = response.get("result")
+    if not isinstance(result, dict):
+        raise RuntimeError("Seven-role result missing")
+    expected = {
+        "kind": "local_company_governed_handoff", "task_id": task_id,
+        "provider_mode": "ollama_local", "board_review_mode": "full_five_seat",
+        "roles_completed": 7, "roles_expected": 7,
+        "board_review_cleared": True, "handoff_complete": True,
+        "board_blocked": False, "requires_founder_resolution": False,
+        "requires_human_qa": True, "board_recommendations_binding": False,
+        "engineering_candidate_status": "syntax_reviewed",
+        "github_commits_created": False, "project_released": False,
+        "external_tools_called": False,
+    }
+    if any(type(result.get(k)) is not type(v) or result[k] != v
+           for k, v in expected.items()):
+        raise RuntimeError("Missing real Board, model or safety evidence")
+    if not isinstance(result.get("engineering_candidate"), dict):
+        raise RuntimeError("Reviewable candidate missing")
+    handoffs = result.get("handoffs")
+    votes = result.get("board_recommendations")
+    if (not isinstance(handoffs, list) or len(handoffs) != 7
+            or not isinstance(votes, list) or len(votes) != 5):
+        raise RuntimeError("Seven handoffs and five advisory votes required")
+    worker_ids = []
+    times = []
+    for role, receipt in zip(SEVEN_ROLES, handoffs, strict=True):
+        if not isinstance(receipt, dict) or receipt.get("role") != role:
+            raise RuntimeError("Incorrect actual AI employee role order")
+        try:
+            identity = str(UUID(receipt["employee_id"]))
+        except (ValueError, KeyError, TypeError) as exc:
+            raise RuntimeError("Actual AI employee ID absent") from exc
+        duration = receipt.get("elapsed_ms")
+        if (receipt.get("model_inference_completed") is not True
+                or receipt.get("human_qa_approved") is not False
+                or type(duration) is not int or not 0 <= duration <= 60000
+                or not isinstance(receipt.get("draft"), str)
+                or not receipt["draft"].strip()):
+            raise RuntimeError("Real bounded inference receipt failed")
+        worker_ids.append(identity)
+        times.append(duration)
+    if len(set(worker_ids)) != 7:
+        raise RuntimeError("Each Board and delivery employee must be distinct")
+    for index, (seat, vote) in enumerate(zip(FIVE_SEATS, votes, strict=True)):
+        if (not isinstance(vote, dict) or vote.get("seat") != seat
+                or vote.get("employee_id") != worker_ids[index]
+                or vote.get("recommendation") != "approve"
+                or vote.get("verifiable_model_output") is not True
+                or vote.get("binding_authorization") is not False):
+            raise RuntimeError("Independent AI Board advice is not verified")
+    total = result.get("runtime_elapsed_ms")
+    if type(total) is not int or not 0 <= total <= 450000:
+        raise RuntimeError("Total runtime bound was not verified")
+    try:
+        run_id = str(UUID(response["id"]))
+        project_id = str(UUID(result["project_id"]))
+    except (ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError("Real run/project identity missing") from exc
+    return {
+        "kind": "ago_seven_role_model_handoff_receipt",
+        "run_id": run_id, "project_id": project_id, "task_id": task_id,
+        "roles_verified": list(SEVEN_ROLES),
+        "employee_ids": worker_ids, "elapsed_ms": times,
+        "board_votes": ["approve"] * 5,
+        "source_status": "syntax_checked_not_tested",
+        "independent_human_qa": False, "github_write_authorized": False,
+        "private_model_content_printed": False,
+    }
+
+
 def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, apply: bool,
-          confirm: str | None, claim=None) -> dict:
+          confirm: str | None, claim=None, require_engineering: bool = False) -> dict:
     if not 1<=limit<=10:
         raise ValueError("No more than ten approved tasks in a batch")
     if apply and confirm!=CONFIRM:
@@ -193,6 +274,7 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
             break
     completed=[]
     skipped=[]
+    real_receipts=[]
     if apply:
         # Atomically persist before network I/O. Unknown remote outcomes are
         # never replayed by a fresh script invocation.
@@ -201,7 +283,9 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
                 skipped.append(task_id)
                 continue
             result=dispatch(task_id)
-            if not confirmed_local_delivery(result, task_id):
+            if require_engineering:
+                real_receipts.append(verify_real_board_handoffs(result, task_id))
+            elif not confirmed_local_delivery(result, task_id):
                 raise RuntimeError("AGO did not confirm an exact unblocked completed task")
             completed.append(task_id)
     result={"mode":"founder_approved_single_batch" if apply else "dry_run",
@@ -209,6 +293,8 @@ def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, a
             "skipped_previously_attempted":skipped,
             "external_actions_authorized":False,
             "task_count":len(completed),"next_step":"Independent human QA required"}
+    if require_engineering:
+        result["verified_seven_role_handoffs"] = real_receipts
     if not apply:
         result["eligibility"]=inspection_summary(records,approvals)
     return result
@@ -334,7 +420,7 @@ def main(argv=None) -> int:
                 raise TypeError("Authenticated task/approval evidence unavailable")
             result=batch(records,approvals,dispatch,
                          limit=args.limit,apply=args.apply,confirm=args.confirm,
-                         claim=claim)
+                         claim=claim, require_engineering=args.require_engineering)
     except KeyboardInterrupt:
         print(json.dumps({"status":"stopped_by_founder","automated_replay":False}))
         return 130
