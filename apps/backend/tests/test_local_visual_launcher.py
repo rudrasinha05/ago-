@@ -181,8 +181,9 @@ def test_operator_has_separate_fail_closed_real_engineering_dispatch():
     script = (root / "scripts" / "ago.ps1").read_text(encoding="utf-8")
     assert '"run-approved-engineering"' in script
     assert '$Coding = $Action -eq "run-approved-engineering"' in script
-    assert '$CodingCheck += "--require-engineering"' in script
-    assert '--login @CodingCheck --apply' in script
+    assert '--login --require-engineering --interactive-apply --limit 1' in script
+    assert '--login --reconcile-only' in script
+    assert 'EXECUTE_APPROVED_INTERNAL_TASKS' in script
 
 
 def test_windows_operator_has_single_reachable_complete_action_chain():
