@@ -145,6 +145,7 @@ def test_real_persisted_run_export_is_minimal_and_stages_with_existing_pipeline(
     "not_completed", "missing_board", "unverified_vote", "veto",
     "duplicate_employee", "wrong_task", "tampered_code", "missing_quality",
     "incomplete_roles", "different_run", "unknown_status",
+    "missing_implementation_provenance",
 ])
 def test_denied_incomplete_or_tampered_board_work_cannot_export(
     exporter, tmp_path, alter
@@ -173,6 +174,8 @@ def test_denied_incomplete_or_tampered_board_work_cannot_export(
         record["id"] = str(uuid4())
     elif alter == "unknown_status":
         record["status"] = "failed"
+    elif alter == "missing_implementation_provenance":
+        result["engineering_authorization"] = "not_requested"
     destination = tmp_path / "nope.json"
     with pytest.raises((PermissionError, ValueError)):
         exporter.choose_run([record], str(uuid4()) if alter=="different_run" else record["id"])
