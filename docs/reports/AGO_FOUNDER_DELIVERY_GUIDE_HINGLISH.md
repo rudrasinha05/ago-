@@ -89,7 +89,17 @@ Separate PowerShell terminal: run a **previously approved** task, then enter its
 
 ```powershell
 .\scripts\ago.ps1 run-approved-engineering
-.\scripts\ago.ps1 handoff-live-to-qa
+# After the real AGO run reports its completed run UUID:
+$run = 'PASTE_COMPLETED_RUN_UUID'
+$attempt = [guid]::NewGuid().ToString('N')
+New-Item -ItemType Directory -Force "$HOME\.ago\candidate_exports", "$HOME\.ago\delivery_runs" | Out-Null
+$export = "$HOME\.ago\candidate_exports\run-$attempt.json"
+$stage = "$HOME\.ago\delivery_runs\stage-$attempt"
+$qa = "$HOME\.ago\delivery_runs\qa-$attempt.json"
+python scripts/ago_live_to_qa.py --run-id $run --export $export --staged-directory $stage --qa-packet $qa
+# Inspect the exact generated source and tests in AGO, then copy the preview SHA-256:
+$sha = 'PASTE_PREVIEW_CANDIDATE_SHA256'
+python scripts/ago_live_to_qa.py --run-id $run --export $export --staged-directory $stage --qa-packet $qa --apply --expected-candidate-sha256 $sha --confirm-export EXPORT_APPROVED_AI_CANDIDATE --confirm-docker STAGE_TEST_AND_PREPARE_QA
 ```
 
 The bridge uses a signed Founder session to preview the exact persisted Board-cleared run without writing files, prints the candidate SHA-256, then asks you to inspect the actual source and tests in AGO. To continue, retype that SHA-256 and provide two **separate** exact consent phrases for private export and offline Docker testing. Changed run identity or source digest blocks execution.
