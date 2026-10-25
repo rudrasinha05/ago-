@@ -76,7 +76,7 @@ export function circularCompanyLayout(departments,employees,founderId){
     cursor=end;
   });
   const departmentCount=depts.length;
-  const departmentRadius=departmentCount?Math.max(600,departmentCount>1?275/(2*Math.sin(Math.PI/departmentCount)):0):0;
+  const departmentRadius=departmentCount?Math.max(600,departmentCount>1?340/(2*Math.sin(Math.PI/departmentCount)):0):0;
   depts.forEach((department,index)=>{
     // Distinct orbit; never insert a department as an employee's manager.
     const angle=-Math.PI/2+TAU*index/departmentCount;
