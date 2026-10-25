@@ -601,7 +601,7 @@ def test_reconciliation_does_not_create_journal_and_rejects_fake_history(tmp_pat
 
 
 def test_operator_has_separate_explicit_readonly_reconciliation_command():
-    ps = (SCRIPT.parents[1] / "ago.ps1").read_text(encoding="utf-8")
+    ps = (SCRIPT.parent / "ago.ps1").read_text(encoding="utf-8")
     assert '"reconcile-approved-engineering"' in ps
     assert '--login --reconcile-only' in ps
     assert 'run-approved-engineering' in ps
