@@ -123,6 +123,7 @@
     "calendar_store": "operations",
     "company_chat": "workforce",
     "company_engineering": "workforce",
+    "company_engineering_preflight": "workforce",
     "company_ollama_chain": "workforce",
     "company_ollama_chain_queries": "workforce",
     "console_api": "transport",
@@ -332,6 +333,11 @@
       "ago_users"
     ],
     "company_engineering": [],
+    "company_engineering_preflight": [
+      "ago_agent_runs",
+      "ago_approval_requests",
+      "ago_governed_tasks"
+    ],
     "company_ollama_chain": [],
     "company_ollama_chain_queries": [
       "ago_company_board_appointments",
