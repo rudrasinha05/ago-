@@ -74,7 +74,9 @@ def test_two_explicit_consents_run_one_isolated_test_and_stop_at_human_qa(
         source["id"], export, stage, qa,
         base="http://localhost:8000", token="session",
         apply=True, confirm_export=workflow.EXPORT_CONFIRM,
-        confirm_docker=workflow.DOCKER_CONFIRM, opener=opener,
+        confirm_docker=workflow.DOCKER_CONFIRM,
+        expected_candidate_sha256=source["result"]["engineering_candidate"]["candidate_sha256"],
+        opener=opener,
     )
     assert summary["mode"] == "pending_independent_human_qa"
     assert summary["docker_tests_executed"] is True
@@ -95,7 +97,9 @@ def test_two_explicit_consents_run_one_isolated_test_and_stop_at_human_qa(
             source["id"], export, stage, qa,
             base="http://127.0.0.1:8000", token="session",
             apply=True, confirm_export=workflow.EXPORT_CONFIRM,
-            confirm_docker=workflow.DOCKER_CONFIRM, opener=opener,
+            confirm_docker=workflow.DOCKER_CONFIRM,
+        expected_candidate_sha256=source["result"]["engineering_candidate"]["candidate_sha256"],
+        opener=opener,
         )
     assert len(calls) == 1
 
@@ -120,6 +124,25 @@ def test_missing_either_confirmation_blocks_before_reads_or_docker(
             )
     assert requests == [] and calls == []
     assert not export.exists() and not stage.exists() and not qa.exists()
+
+
+def test_sha_mismatch_prevents_export_and_docker_even_with_consents(
+    workflow, tmp_path, monkeypatch
+):
+    source = stored_run()
+    opener, requests = opener_for(source)
+    calls = fake_docker(monkeypatch)
+    export, stage, qa = paths(tmp_path)
+    with pytest.raises(PermissionError, match="SHA-256 differs"):
+        workflow.bridge(
+            source["id"], export, stage, qa,
+            base="http://127.0.0.1:8000", token="session",
+            apply=True, confirm_export=workflow.EXPORT_CONFIRM,
+            confirm_docker=workflow.DOCKER_CONFIRM,
+            expected_candidate_sha256="f" * 64, opener=opener,
+        )
+    assert [r[1] for r in requests] == ["GET", "GET"]
+    assert calls == [] and not export.exists() and not stage.exists()
 
 
 def test_failed_model_receipt_or_non_founder_does_not_stage(
@@ -156,7 +179,9 @@ def test_failed_docker_never_generates_qa_or_github_operation(
         source["id"], export, stage, qa,
         base="http://127.0.0.1:8000", token="session",
         apply=True, confirm_export=workflow.EXPORT_CONFIRM,
-        confirm_docker=workflow.DOCKER_CONFIRM, opener=opener,
+        confirm_docker=workflow.DOCKER_CONFIRM,
+        expected_candidate_sha256=source["result"]["engineering_candidate"]["candidate_sha256"],
+        opener=opener,
     )
     assert summary["docker_tests_passed"] is False
     assert summary["qa_packet_prepared"] is False
