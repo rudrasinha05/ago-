@@ -36,6 +36,8 @@ class ApprovedProjectDb:
             uid(), uid(), uid(), uid()
         )
         self.ceo, self.cto, self.pm, self.employee = (uid(),uid(),uid(),uid())
+        self.implementer=uid()
+        self.implementation_active=True
         self.finance,self.risk,self.quality=(uid(),uid(),uid())
         if duplicate:
             self.pm = self.cto
@@ -107,6 +109,12 @@ class ApprovedProjectDb:
                     result.append({"seat":"Quality & Release","id":self.quality,
                                    "name":"Quality AI","kind":"ai"})
             return Cursor(result)
+        if "FROM ago_project_stage_delegation_activations a" in sql:
+            if (not self.implementation_active or parameters[0]!=self.tenant
+                    or parameters[1]!=self.intake):
+                return Cursor([])
+            return Cursor([{"id":self.implementer,"name":"Software Developer",
+                            "kind":"ai"}])
         if "WITH RECURSIVE reporting_chain" in sql:
             return Cursor([{"reports_to_manager":not self.wrong_manager}])
         if "FROM ago_governed_tasks t" in sql:
@@ -645,3 +653,35 @@ def test_verified_receipts_reject_revoked_plan_and_board_after_preflight():
     with pytest.raises(PermissionError, match="Board seats"):
         queries.record_verified_handoff(**details)
     assert db.events == []
+
+
+def test_local_engineering_uses_approved_implementation_developer_not_researcher(
+    monkeypatch,
+):
+    monkeypatch.setenv("AGO_LOCAL_FULL_BOARD_REVIEW", "true")
+    monkeypatch.setenv("AGO_LOCAL_ENGINEERING_CANDIDATES", "true")
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    db=ApprovedProjectDb()
+    query=CompanyOllamaChainQueries(db)
+    db.implementation_active=False
+    with pytest.raises(PermissionError, match="activated implementation-stage"):
+        query.assignments(tenant_id=db.tenant,actor_id=db.founder,task=db.task())
+    assert db.events==[]
+    db.implementation_active=True
+    people=query.assignments(
+        tenant_id=db.tenant,actor_id=db.founder,task=db.task()
+    )
+    assert len(people)==7
+    assert people[-1]["role"]=="employee"
+    assert people[-1]["employee_id"]==db.implementer
+    assert people[-1]["employee_id"]!=db.employee
+    # A stale completion callback from the discovery researcher cannot claim
+    # the code-generation role even with a valid shape and task UUID.
+    forged=[dict(p) for p in people]
+    forged[-1]["employee_id"]=db.employee
+    with pytest.raises(PermissionError, match="currently appointed"):
+        query.record_verified_handoff(
+            tenant_id=db.tenant,founder_id=db.founder,task_id=db.task_id,
+            role="ceo",employee_id=db.ceo,blocked=False,participants=forged,
+        )
+    assert db.events==[]
