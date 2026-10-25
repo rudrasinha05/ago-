@@ -73,3 +73,18 @@ not reload Python in an existing server process.
 
 There is no need to recreate Board employees, migrate the database or
 repeat the old task.
+
+
+## Invalid project identities: do NOT reparent to a human/Board incumbent
+
+A 'blocked_invalid_project_staffing' preview now reveals the real recorded
+worker and project owner, their immutable kind values, and identity_blockers.
+An original project started before a separate AI Project Manager was appointed
+may have the human Founder as accountable project owner, or a Board CEO as owner,
+or the same employee may occupy both jobs. Seven-role inference requires two
+distinct non-Board AI worker/PM identities.
+
+Never change a human employee.kind to ai, overwrite an approved task's
+assignee, fabricate a PM, or blindly reparent to a Board executive to make a
+check go green. Preserve the original attempted task and plan a NEW Founder-
+approved project after dedicated AI PM staffing and verified reporting lines.

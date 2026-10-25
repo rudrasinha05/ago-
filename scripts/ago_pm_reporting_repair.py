@@ -61,7 +61,8 @@ def failure_summary(exc, stage):
         "error_type": type(exc).__name__,
         **({"http_status": exc.code} if isinstance(exc, HTTPError) else {}),
         "task_replayed": False,
-        "database_modified_by_this_preview": stage != "apply_verified_link",
+        "database_modified_by_this_preview": False if stage != "apply_verified_link" else None,
+        "write_may_have_been_attempted": stage == "apply_verified_link",
         "next_step": (
             "Restart the AGO server after git pull, then repeat read-only preview"
             if code == "backend_missing_reporting_repair_evidence_restart_updated_server"
@@ -94,24 +95,34 @@ def make_preview(report, governance, *, allow_reparent=False):
     if not isinstance(link, dict):
         raise PermissionError("Reporting identities not available from scoped preflight")
     worker_id, pm_id = uuid(link["worker_id"]), uuid(link["accountable_pm_id"])
-    if worker_id == pm_id or link.get("worker_kind") != "ai" or link.get("accountable_pm_kind") != "ai":
-        raise PermissionError("Two distinct existing AI PM/worker identities required")
     people = {uuid(e["id"]): e for e in governance.get("employees", [])}
     worker, pm = people.get(worker_id), people.get(pm_id)
-    if not worker or not pm or worker.get("kind") != "ai" or pm.get("kind") != "ai":
+    if not worker or not pm:
         raise PermissionError("AGO governance roster does not confirm both AI identities")
+    if (worker.get("kind") != link.get("worker_kind")
+            or pm.get("kind") != link.get("accountable_pm_kind")):
+        raise PermissionError("Worker manager changed since database preflight")
     current_manager = (uuid(worker["manager_id"]) if worker.get("manager_id") else None)
     seen_manager = (uuid(link["worker_manager_id"]) if link.get("worker_manager_id") else None)
     if current_manager != seen_manager:
         raise PermissionError("Worker manager changed since database preflight")
     board = [uuid(b["employee_id"]) for b in governance.get("board", [])]
-    if len(board) != len(set(board)) or worker_id in board or pm_id in board:
-        raise PermissionError("PM and worker must remain distinct from five Board employees")
-    if len(board) != 5:
+    if len(board) != len(set(board)) or len(board) != 5:
         raise PermissionError("Exactly five distinct appointed Board members required")
-    if current_manager == pm_id:
+    identity_blockers = []
+    if worker_id == pm_id:
+        identity_blockers.append("worker_and_project_leader_are_same_employee")
+    if worker.get("kind") != "ai":
+        identity_blockers.append("task_worker_is_not_ai")
+    if pm.get("kind") != "ai":
+        identity_blockers.append("accountable_project_leader_is_not_ai")
+    if worker_id in board or pm_id in board:
+        identity_blockers.append("project_pm_or_worker_also_holds_board_seat")
+    if identity_blockers:
+        decision = "blocked_invalid_project_staffing"
+    elif current_manager == pm_id:
         raise PermissionError("Already directly reporting to PM; refresh server preflight")
-    if current_manager and not allow_reparent:
+    elif current_manager and not allow_reparent:
         decision = "requires_explicit_reparent_opt_in"
     else:
         decision = "link_worker_to_existing_pm"
@@ -121,8 +132,12 @@ def make_preview(report, governance, *, allow_reparent=False):
         "task_id": task_id,
         "worker_id":worker_id,
         "worker_name":worker["name"],
+        "worker_kind":worker["kind"],
         "accountable_pm_id":pm_id,
         "accountable_pm_name":pm["name"],
+        "accountable_pm_kind":pm["kind"],
+        "identity_blockers": identity_blockers,
+        "original_task_requires_new_execution_approval": True,
         "worker_current_manager_id":current_manager,
         "worker_current_manager_name":link.get("worker_manager_name"),
         "decision":decision,
@@ -205,7 +220,7 @@ def main(argv=None):
         preview=make_preview(report,gov,allow_reparent=args.reparent)
         print(json.dumps(preview,indent=2,sort_keys=True))
         if not args.apply:
-            return 0
+            return 2 if preview["decision"] == "blocked_invalid_project_staffing" else 0
         stage = "review_reparent_option"
         if preview["decision"] != "link_worker_to_existing_pm":
             raise PermissionError("Current manager is nonempty; preview --reparent first")
