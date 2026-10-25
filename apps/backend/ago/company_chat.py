@@ -844,9 +844,45 @@ class CompanyChat:
                 leader = management[0] if management else next(
                     (e for e in employees if str(e['id']) == actor.subject),None
                 )
+                # The five reviewed Board members provide executive oversight;
+                # the seven-identity local AI workflow additionally needs an
+                # independent AI PROJECT manager. Never count CEO twice.
+                # This flag is explicit localhost-only engineering mode; normal
+                # CEO-owned project intake retains the existing contract.
+                import os
+                engineering_pm_mode = (
+                    os.getenv('AGO_LOCAL_FULL_BOARD_REVIEW','').lower() == 'true'
+                    and os.getenv('AGO_LOCAL_ENGINEERING_CANDIDATES','').lower() == 'true'
+                    and os.getenv('AGO_ENVIRONMENT','development').lower()
+                       in ('development','test','testing')
+                )
+                if engineering_pm_mode:
+                    ceo_seat=self.db.execute("""
+                        SELECT b.employee_id
+                        FROM ago_company_board_appointments b
+                        JOIN ago_employees ceo ON ceo.tenant_id=b.tenant_id
+                          AND ceo.id=b.employee_id AND ceo.kind='ai'
+                        WHERE b.tenant_id=%s AND b.seat='Strategy & Vision'
+                    """,(actor.tenant_id,)).fetchone()
+                    ceo_id=(str(ceo_seat['employee_id']) if ceo_seat else None)
+                    if ceo_id:
+                        pm_candidates=[
+                            e for e in available_ai
+                            if (e['role_title'] or '').strip().lower()
+                               in ('project manager','ai project manager',
+                                   'ai project manager (pm)',
+                                   'technical project manager')
+                            and str(e['id'])!=ceo_id
+                            and str(e['manager_id'] or '')==ceo_id
+                        ]
+                        if pm_candidates:
+                            leader=sorted(pm_candidates,key=lambda e:str(e['id']))[0]
                 if leader is None:
                     raise PermissionError('Founder must exist as an employee to own delivery')
-                owner_source = 'executive_manager' if management else 'founder_escalation'
+                owner_source = (
+                    'executive_manager' if str(leader['id']) != actor.subject
+                    else 'founder_escalation'
+                )
                 goal_id, plan_id, intake_id = str(uuid4()), str(uuid4()), str(uuid4())
                 self.db.execute("""
                     INSERT INTO ago_goals(id,tenant_id,created_by,title,description)

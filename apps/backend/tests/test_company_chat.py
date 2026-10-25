@@ -539,3 +539,64 @@ def test_opportunities_do_not_interrupt_running_delivery_and_founder_escalates(c
     post(client,'/v1/tasks/'+task['id']+'/start',founder)
     scanned=post(client,BASE+'/opportunities/scan',founder,{})
     assert scanned['created']==0 and scanned['reason']=='delivery_running'
+
+
+def test_local_seven_role_intake_uses_distinct_ai_pm_under_board_ceo(case,monkeypatch):
+    client,headers,info=case
+    founder=headers['founder']
+    dep=department(client,founder)
+    ceo=post(client,'/v1/organization/employees',founder,{
+        'department_id':dep,'name':'AGO AI CEO','kind':'ai'})['id']
+    client.put(BASE+'/employees/'+ceo+'/role',json={
+        'role_title':'Chief Executive Officer (CEO)',
+        'core_responsibilities':'Executive oversight of approved project milestones',
+        'extra_responsibilities':'Founder retains approval authority',
+    },headers=founder)
+    post(client,BASE+'/board/appoint',founder,
+         {'seat':'Strategy & Vision','employee_id':ceo})
+    pm=post(client,'/v1/organization/employees',founder,{
+        'department_id':dep,'name':'AGO AI Project Manager','kind':'ai',
+        'manager_id':ceo})['id']
+    result=client.put(BASE+'/employees/'+pm+'/role',json={
+        'role_title':'AI Project Manager (PM)',
+        'core_responsibilities':'Own accountable delivery and assigned worker tracking',
+        'extra_responsibilities':'No independent governance or release powers',
+    },headers=founder)
+    assert result.status_code==200,result.text
+    worker=post(client,'/v1/organization/employees',founder,{
+        'department_id':dep,'name':'AGO AI Discovery Analyst','kind':'ai',
+        'manager_id':pm})['id']
+    monkeypatch.setenv('AGO_LOCAL_FULL_BOARD_REVIEW','true')
+    monkeypatch.setenv('AGO_LOCAL_ENGINEERING_CANDIDATES','true')
+    monkeypatch.setenv('AGO_ENVIRONMENT','development')
+    project=post(client,BASE+'/projects/start',founder,{
+        'brief':'Research market and build an evidence-driven local AGO scheduling application with independent QA',
+        'operation_key':str(uuid4()),
+    })
+    assert project['accountable_manager_id']==pm
+    assert project['accountable_manager_id']!=ceo
+    assert project['assignment_source']=='executive_manager'
+    assert project['stages'][0]['suggested_assignee_id']==worker
+    assert worker!=pm!=ceo
+
+
+def test_local_engineering_intake_without_ai_pm_retains_escalation_not_fake_pm(
+    case,monkeypatch,
+):
+    client,headers,info=case
+    founder=headers['founder']
+    dep=department(client,founder)
+    ceo=post(client,'/v1/organization/employees',founder,{
+        'department_id':dep,'name':'CEO','kind':'ai'})['id']
+    post(client,BASE+'/board/appoint',founder,
+         {'seat':'Strategy & Vision','employee_id':ceo})
+    monkeypatch.setenv('AGO_LOCAL_FULL_BOARD_REVIEW','true')
+    monkeypatch.setenv('AGO_LOCAL_ENGINEERING_CANDIDATES','true')
+    monkeypatch.setenv('AGO_ENVIRONMENT','development')
+    project=post(client,BASE+'/projects/start',founder,{
+        'brief':'Draft separate scoped local engineering project requiring accountable project manager before release',
+        'operation_key':str(uuid4()),
+    })
+    assert project['accountable_manager_id']==ceo
+    assert project['assignment_source']=='executive_manager'
+    # AI PM is NOT fabricated just to pass the seven-role chain.
