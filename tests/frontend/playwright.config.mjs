@@ -5,7 +5,10 @@ export default defineConfig({
   // with other browser projects on GitHub's shared runner. Keep all projects,
   // assertions, and zero retries; serialize only the CI browser executions.
   workers: process.env.CI ? 1 : 2, retries: 0,
-  use:{baseURL:'http://127.0.0.1:18776',reducedMotion:'reduce',trace:'retain-on-failure'},
+  // reducedMotion is a browser-context option: as a top-level `use` key the
+  // test runner silently ignored it, so every suite ran with all animations
+  // (verified: prefers-reduced-motion was false in all six projects).
+  use:{baseURL:'http://127.0.0.1:18776',contextOptions:{reducedMotion:'reduce'},trace:'retain-on-failure'},
   // In CI the github reporter also writes each failure as a check annotation,
   // so the failing test and error are visible without downloading artifacts.
   reporter:[['list'],...(process.env.CI?[['github']]:[]),['html',{outputFolder:'artifacts/report',open:'never'}]],

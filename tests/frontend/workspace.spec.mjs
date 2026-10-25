@@ -73,10 +73,8 @@ test('Control Center redirects to authenticated Company Map and internal links p
     await expect.poll(()=>new URL(page.url()).pathname).toBe('/workspace/organization/');
     await expect(page.locator('#login-form')).toBeVisible();
   }
-  // TEMPORARY Issue #3 diagnostic (remove once known): does the configured
-  // reducedMotion emulation reach the page in CI? Printed as a check notice.
-  if(process.env.CI)console.log('::notice title=reduced-motion '+test.info().project.name+'::'
-    +await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches));
+  // The suite-wide reduced-motion setting must actually reach the page.
+  expect(await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
   await page.getByLabel('Organization ID').fill(tenant);
   await page.getByLabel('Work email').fill('fixture@example.test');
   await page.getByLabel('Password',{exact:true}).fill('fixture-only-password');
@@ -137,10 +135,11 @@ test('keyboard dialog, escaped mutations, logout and reload privacy',async({page
   await page.reload();await expect(page.locator('#login-form')).toBeVisible();
   expect(await page.evaluate(()=>({local:localStorage.length,session:sessionStorage.length}))).toEqual({local:0,session:0});
   // Issue #3: sign in again on the form the reload already shows, which also
-  // proves the reloaded deep link returns to Strategy. Navigating from this
-  // reloaded page to /workspace/ crashed WebKit's content process on CI on
-  // every run (also after waiting for network idle); it is not what this
-  // privacy test verifies, and plain navigation is covered by other tests.
+  // proves the reloaded deep link returns to Strategy. Do not navigate away
+  // here: in Playwright WebKit 26.0 (build 2215) any cross-document
+  // navigation after history.pushState() + reload() crashes the content
+  // process, even on a static JSON page without AGO code; Chromium and
+  // Firefox are unaffected. The SPA move to Strategy above is a pushState.
   await expect(page).toHaveURL(/\/workspace\/strategy\/$/);
   await signInHere(page,'Strategy & execution');
   await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.locator('#login-form')).toBeVisible();
