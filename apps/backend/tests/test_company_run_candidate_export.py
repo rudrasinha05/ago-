@@ -55,6 +55,7 @@ def stored_run():
             "handoff_complete": True, "requires_human_qa": True,
             "github_commits_created": False, "project_released": False,
             "engineering_candidate_status": "syntax_reviewed",
+            "engineering_authorization": "implementation_stage_verified",
             "engineering_candidate": real_candidate(),
             "board_recommendations": [
                 {"seat": name, "employee_id": employees[i],
