@@ -63,6 +63,14 @@ class ApprovedProjectDb:
                 for item in self.events
             )
             return Cursor([{"id": 1}] if prior else [])
+        if "SELECT body FROM ago_company_chat" in sql:
+            prior = next((
+                item[2] for item in self.events
+                if item[0] == parameters[0] and item[-1] == parameters[1]
+                and item[-2] == parameters[2]
+                and item[2] in parameters[3:]
+            ), None)
+            return Cursor([{"body": prior}] if prior is not None else [])
         if "INSERT INTO ago_company_chat" in sql:
             self.events.append(parameters)
             return Cursor([])
@@ -495,3 +503,80 @@ def test_duplicate_local_role_receipts_count_only_once_and_reject_nonparticipant
             **{**details, "employee_id": db.pm}
         )
     assert len(db.events) == 1
+
+
+def test_verified_handoff_enforces_real_predecessor_and_veto_without_phantom_events():
+    db = ApprovedProjectDb()
+    chain = CompanyOllamaChainQueries(db)
+    members = chain.assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task()
+    )
+    def record(role, employee, *, blocked=False, people=members):
+        return chain.record_verified_handoff(
+            tenant_id=db.tenant, founder_id=db.founder, task_id=db.task_id,
+            role=role, employee_id=employee, blocked=blocked,
+            participants=people,
+        )
+
+    # A forged out-of-order callback cannot inflate employee counters.
+    with pytest.raises(PermissionError, match="Prior real AI role"):
+        record("cto", db.cto)
+    assert db.events == []
+    record("ceo", db.ceo)
+    record("ceo", db.ceo)  # Idempotent duplicate.
+    assert len(db.events) == 1
+    with pytest.raises(PermissionError, match="Conflicting completed"):
+        record("ceo", db.ceo, blocked=True)
+    for role, identity in (
+        ("cto", db.cto), ("pm", db.pm), ("employee", db.employee)
+    ):
+        record(role, identity)
+    assert len(db.events) == 4
+
+    # A CEO veto is recorded exactly once and cannot be silently overwritten,
+    # nor can CTO claim work after a blocked predecessor.
+    veto_db = ApprovedProjectDb()
+    veto = CompanyOllamaChainQueries(veto_db)
+    veto_people = veto.assignments(
+        tenant_id=veto_db.tenant, actor_id=veto_db.founder,
+        task=veto_db.task()
+    )
+    props = dict(
+        tenant_id=veto_db.tenant, founder_id=veto_db.founder,
+        task_id=veto_db.task_id, participants=veto_people
+    )
+    veto.record_verified_handoff(
+        **props, role="ceo", employee_id=veto_db.ceo, blocked=True
+    )
+    with pytest.raises(PermissionError, match="Prior real AI role"):
+        veto.record_verified_handoff(
+            **props, role="cto", employee_id=veto_db.cto, blocked=False
+        )
+    with pytest.raises(PermissionError, match="Conflicting completed"):
+        veto.record_verified_handoff(
+            **props, role="ceo", employee_id=veto_db.ceo, blocked=False
+        )
+    assert len(veto_db.events) == 1
+
+
+@pytest.mark.parametrize("role_order", [
+    ("cto", "ceo", "pm", "employee"),
+    ("ceo", "cto", "employee"),
+    ("ceo", "cto", "pm", "pm"),
+])
+def test_verified_handoff_rejects_forged_stage_lists(role_order):
+    db = ApprovedProjectDb()
+    roster = {
+        "ceo": db.ceo, "cto": db.cto, "pm": db.pm,
+        "employee": db.employee
+    }
+    participants = [
+        {"role": role, "employee_id": roster[role]} for role in role_order
+    ]
+    with pytest.raises(PermissionError, match="Unrecognized or duplicate"):
+        CompanyOllamaChainQueries(db).record_verified_handoff(
+            tenant_id=db.tenant, founder_id=db.founder, task_id=db.task_id,
+            role="ceo", employee_id=db.ceo, blocked=False,
+            participants=participants,
+        )
+    assert db.events == []
