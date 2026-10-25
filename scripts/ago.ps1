@@ -31,6 +31,37 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BackendPath = Join-Path $RepoRoot "apps\backend"
+# Resolve legacy exports AND reviewed one-attempt live-to-QA bridge receipts.
+# Never guess the newest candidate or select a different run by filename.
+function Resolve-AGOExportReceipt {
+    param([string]$RunId)
+    $Base = Join-Path $HOME ".ago\candidate_exports"
+    $Legacy = Join-Path $Base ("ago-run-" + $RunId + ".json")
+    if (Test-Path -LiteralPath $Legacy -PathType Leaf) {
+        $Chosen = $Legacy
+    } else {
+        $Chosen = Read-Host "Exact private export JSON from the live-to-QA bridge"
+    }
+    if (-not (Test-Path -LiteralPath $Base -PathType Container) -or
+        -not (Test-Path -LiteralPath $Chosen -PathType Leaf)) {
+        throw "Original private exported AI source receipt is required."
+    }
+    $Full = (Resolve-Path -LiteralPath $Chosen).Path
+    $Root = (Resolve-Path -LiteralPath $Base).Path
+    if (-not $Full.StartsWith(
+        $Root.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase)) {
+        throw "AI source receipt must remain under the private AGO candidate_exports directory."
+    }
+    $Receipt = Get-Content -LiteralPath $Full -Raw | ConvertFrom-Json
+    if ($Receipt.id -cne $RunId -or
+        $Receipt.source -cne "ago_authenticated_founder_run" -or
+        $Receipt.status -cne "completed" -or
+        $Receipt.result.board_review_cleared -ne $true) {
+        throw "Private export does not match the exact completed Board-cleared AGO run."
+    }
+    return $Full
+}
 if (-not (Test-Path (Join-Path $BackendPath "ago\local_ops.py"))) {
     throw "AGO backend is missing. Run from the synced AGO repository."
 }
@@ -152,10 +183,7 @@ try {
         if ($RunId -notmatch '^[0-9a-fA-F-]{36}$') {
             throw "A valid run UUID is required."
         }
-        $InputFile = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
-        if (-not (Test-Path -LiteralPath $InputFile -PathType Leaf)) {
-            throw "Private run candidate is missing; use export-candidate first."
-        }
+        $InputFile = Resolve-AGOExportReceipt -RunId $RunId
         $DeliveryRoot = Join-Path $HOME ".ago\delivery_runs"
         if (-not (Test-Path -LiteralPath $DeliveryRoot -PathType Container)) {
             New-Item -ItemType Directory -Path $DeliveryRoot -Force | Out-Null
@@ -199,10 +227,7 @@ try {
         if ($RunId -notmatch '^[0-9a-fA-F-]{36}$') {
             throw "A valid completed run UUID is required."
         }
-        $ExportFile = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
-        if (-not (Test-Path -LiteralPath $ExportFile -PathType Leaf)) {
-            throw "Founder Board-cleared export not found."
-        }
+        $ExportFile = Resolve-AGOExportReceipt -RunId $RunId
         $Stage = Read-Host "Exact existing PASSED Docker staged directory"
         $Qa = Read-Host "Exact existing pending QA packet JSON path"
         if (-not (Test-Path -LiteralPath $Stage -PathType Container) -or -not (Test-Path -LiteralPath $Qa -PathType Leaf)) {
@@ -231,10 +256,7 @@ try {
         if ($RunId -notmatch '^[0-9a-fA-F-]{36}$') {
             throw "Recorded run UUID required."
         }
-        $Source = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
-        if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
-            throw "Private original AI export missing."
-        }
+        $Source = Resolve-AGOExportReceipt -RunId $RunId
         $Stage = Read-Host "Original PASSING offline Docker stage path"
         $Qa = Read-Host "Exact pending local QA packet path"
         if (-not (Test-Path -LiteralPath $Stage -PathType Container) -or -not (Test-Path -LiteralPath $Qa -PathType Leaf)) {
@@ -271,7 +293,7 @@ try {
         if ($RunId -notmatch '^[0-9a-fA-F-]{36}$' -or $OperationId -notmatch '^[0-9a-fA-F-]{36}$') {
             throw "Run and reviewed draft UUIDs are required."
         }
-        $ExportFile = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
+        $ExportFile = Resolve-AGOExportReceipt -RunId $RunId
         $DraftFile = Join-Path $HOME (".ago\delivery_runs\github-draft-" + $OperationId + ".json")
         $Stage = Read-Host "Original passing Docker stage directory"
         $Qa = Read-Host "Original independent QA handoff packet JSON"
@@ -300,7 +322,7 @@ try {
             $ProposalId -notmatch '^[0-9a-fA-F-]{36}$') {
             throw "Three exact original run, operation and approval proposal UUIDs required."
         }
-        $Export = Join-Path $HOME (".ago\candidate_exports\ago-run-" + $RunId + ".json")
+        $Export = Resolve-AGOExportReceipt -RunId $RunId
         $Draft = Join-Path $HOME (".ago\delivery_runs\github-draft-" + $OperationId + ".json")
         $Stage = Read-Host "Original passing offline Docker stage"
         $Qa = Read-Host "Original independent human QA packet"
