@@ -789,7 +789,13 @@ async function enterpriseAction(key,id,ctx) {
   if(key==="enterprise-evidence") {
     const record=records.find(x=>x.id===uuid(id));
     if(!record)throw new Error("Refresh to load the current evidence.");
-    showEvidence(ctx,"Evidence and provenance",record);return;
+    // The bulk list never carries raw source bytes. Only the Founder may load
+    // one item's exact bytes (audited, Founder-only endpoint); the response is
+    // shown once and not kept in shared view state. Others see the redacted
+    // list record, as before.
+    const founder=Array.isArray(state.me?.roles)&&state.me.roles.includes("founder");
+    const exact=founder?await api.request(enterpriseBase+"/evidence/"+uuid(id)):record;
+    showEvidence(ctx,"Evidence and provenance",exact);return;
   }
   if(key==="enterprise-apply-intent") {
     confirmation(ctx,"Apply reviewed operation","This applies exactly the saved parameters. The server rechecks independent approval.",

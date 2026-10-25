@@ -356,3 +356,43 @@ test('3D company brain idle motion is throttled when motion is allowed',async({p
  } else expect(drawn).toBe(0);
  expect(errors).toEqual([]);
 });
+
+test('Inspect evidence loads exact source bytes for the Founder only from the audited item endpoint',async({page})=>{
+ // Contract: GET /v1/operations/enterprise/evidence stays redacted; GET
+ // /v1/operations/enterprise/evidence/{id} is Founder-only (JARVIS, 180e0f8).
+ const evidenceId='40000000-0000-4000-8000-000000000041';
+ const source='Inspect this exact prompt <script>window.xss=true</script>';
+ const listed={id:evidenceId,kind:'quality_subject',operation_key:'subject',created_at:'2026-10-25T10:00:00Z',digest:'d'.repeat(64),
+  payload:{dimension:'prompt',content_digest:'c'.repeat(64),content_bytes:source.length,content_withheld:true}};
+ const exact={...listed,payload:{dimension:'prompt',content_digest:'c'.repeat(64),content_bytes:source.length,
+  content_base64:Buffer.from(source).toString('base64')}};
+ async function prepare(roles){
+  const {calls,errors}=await fixtures(page);
+  await page.route('**/v1/console/me',route=>route.fulfill({status:200,json:{id:user,tenant_id:tenant,display_name:'Test member',roles,permissions:[...permissions,'operations:read']}}));
+  await page.route('**/v1/operations/enterprise/evidence',route=>route.fulfill({status:200,json:[listed]}));
+  await page.route('**/v1/operations/enterprise/evidence/*',route=>{calls.push({path:new URL(route.request().url()).pathname,auth:route.request().headers().authorization});
+   return route.fulfill({status:200,json:exact});});
+  return {calls,errors};
+ }
+ let {calls,errors}=await prepare(['founder']);
+ await login(page);await navigate(page,'Operations & Tools');
+ await page.locator('tr').filter({hasText:'quality_subject'}).getByRole('button',{name:'Inspect evidence',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText(source);
+ await expect(page.getByRole('dialog').locator('script')).toHaveCount(0);
+ expect(await page.evaluate(()=>window.xss)).toBeUndefined();
+ const itemCalls=calls.filter(c=>c.path==='/v1/operations/enterprise/evidence/'+evidenceId);
+ expect(itemCalls).toHaveLength(1);expect(itemCalls[0].auth).toBe('Bearer browser-fixture-only-token');
+ await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toBeHidden();
+ expect(errors).toEqual([]);
+ // A manager with organization:manage but no Founder role gets the redacted record and no item request.
+ await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.locator('#login-form')).toBeVisible();
+ await page.unroute('**/v1/**');await page.unroute('**/v1/console/me');
+ await page.unroute('**/v1/operations/enterprise/evidence');await page.unroute('**/v1/operations/enterprise/evidence/*');
+ ({calls,errors}=await prepare(['manager']));
+ await login(page);await navigate(page,'Operations & Tools');
+ await page.locator('tr').filter({hasText:'quality_subject'}).getByRole('button',{name:'Inspect evidence',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('content_withheld');
+ await expect(page.getByRole('dialog')).not.toContainText('Inspect this exact prompt');
+ expect(calls.some(c=>c.path.startsWith('/v1/operations/enterprise/evidence/'))).toBeFalsy();
+ expect(errors).toEqual([]);
+});
