@@ -141,9 +141,12 @@ def test_opt_in_model_handler_records_only_validated_plan_as_structured(monkeypa
     class FakeProvider:
         next_output = json.dumps(valid_five_stage_plan())
         def __init__(self, **kwargs):
-            pass
+            assert kwargs["max_output_tokens"] == 1024
+            assert kwargs["timeout_seconds"] == 60
+            assert kwargs["keep_alive"] == "90s"
         def generate(self, prompt):
             assert "No Markdown fences" in prompt
+            assert len(prompt) <= 4000
             return self.next_output
 
     import ago.model_handlers as handlers
