@@ -184,15 +184,37 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     # represents one recorded employee inference, not every network retry.
     founder_identity = client.get("/v1/console/me", headers=founder)
     assert founder_identity.status_code == 200
-    CompanyOllamaChainQueries(info["db"]).record_verified_handoff(
+    # The verified appointment roster is the original full chain even when
+    # the model stopped after an explicit Risk veto; missing future callbacks
+    # are forbidden, not license to truncate/reorder the planned roster.
+    full_roles = (["ceo", "cto", "finance", "risk", "quality", "pm", "employee"]
+                  if full_board else ["ceo", "cto", "pm", "employee"])
+    full_people = ([ceo, cto, finance, risk, quality, pm, worker]
+                   if full_board else [ceo, cto, pm, worker])
+    recorded = CompanyOllamaChainQueries(info["db"])
+    evidence_args = dict(
         tenant_id=info["tenant"], founder_id=founder_identity.json()["id"],
-        task_id=task_id, role=expected_roles[0],
-        employee_id=expected_people[0], blocked=False,
+        task_id=task_id,
         participants=[
             {"role": role, "employee_id": employee_id}
-            for role, employee_id in zip(expected_roles, expected_people)
+            for role, employee_id in zip(full_roles, full_people, strict=True)
         ],
     )
+    recorded.record_verified_handoff(
+        **evidence_args, role="ceo", employee_id=ceo, blocked=False,
+    )
+    with pytest.raises(PermissionError, match="Conflicting completed"):
+        recorded.record_verified_handoff(
+            **evidence_args, role="ceo", employee_id=ceo, blocked=True,
+        )
+    if deny_risk:
+        # Durable veto prevents a late quality/PM/worker callback from
+        # fabricating downstream progress after risk execution stopped.
+        with pytest.raises(PermissionError, match="Prior real AI role"):
+            recorded.record_verified_handoff(
+                **evidence_args, role="quality",
+                employee_id=quality, blocked=False,
+            )
     duplicate_count = info["db"].execute("""
         SELECT count(*) AS n FROM ago_company_chat
         WHERE tenant_id=%s AND task_id=%s AND kind='status'
