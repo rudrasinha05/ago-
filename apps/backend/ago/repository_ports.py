@@ -901,6 +901,9 @@ class EnterpriseOperationsStorePort(Protocol):
     def evidence(self, *, tenant_id: str, kind: str | None=None) -> list[dict]:
         ...
 
+    def evidence_item(self, *, tenant_id: str, evidence_id: str) -> dict:
+        ...
+
     def evidence_action(self, *, tenant_id: str, evidence_id: str) -> str:
         ...
 
