@@ -197,3 +197,20 @@ test('circular hierarchy anchors are finite, clipped and prevent card overlaps a
    assert.ok(Math.hypot(anchors.x1-anchors.x2,anchors.y1-anchors.y2)>0);
  }
 });
+
+test('18 departments retain legible, collision-free circular grouping badges',()=>{
+ const departments=Array.from({length:18},(_,i)=>({id:'department'+i,name:'Department '+i}));
+ const employees=Array.from({length:126},(_,i)=>({
+   id:'person'+i,name:'Person '+i,department_id:departments[i%18].id,
+   manager_id:i%9===0?'founder':i%7===0?null:'person'+Math.floor((i-1)/3)
+ }));
+ const map=companyLayout(departments,employees,'founder');
+ const badges=map.nodes.filter(n=>n.type==='department');
+ assert.equal(badges.length,18);
+ for(const a of badges)for(const b of badges){
+   if(a===b)continue;
+   assert.ok(Math.abs(a.x-b.x)>=225||Math.abs(a.y-b.y)>=170,
+     'Department badges overlap: '+a.key+' / '+b.key);
+ }
+ assert.equal(map.edges.filter(e=>e.from==='founder'&&e.kind==='grouping').length,18);
+});
