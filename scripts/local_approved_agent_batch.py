@@ -180,7 +180,7 @@ def verify_real_board_handoffs(response, task_id):
         raise RuntimeError("Actual completed AGO task required")
     result = response.get("result")
     if not isinstance(result, dict):
-        raise RuntimeError("Seven-role result missing")
+        raise TypeError("Seven-role result missing")
     expected = {
         "kind": "local_company_governed_handoff", "task_id": task_id,
         "provider_mode": "ollama_local", "board_review_mode": "full_five_seat",
@@ -194,7 +194,7 @@ def verify_real_board_handoffs(response, task_id):
     }
     if any(type(result.get(k)) is not type(v) or result[k] != v
            for k, v in expected.items()):
-        raise RuntimeError("Missing real Board, model or safety evidence")
+        raise TypeError("Missing real Board, model or safety evidence")
     if not isinstance(result.get("engineering_candidate"), dict):
         raise RuntimeError("Reviewable candidate missing")
     handoffs = result.get("handoffs")
@@ -363,6 +363,8 @@ def main(argv=None) -> int:
         base=local_url(args.local_url)
         if args.apply and args.confirm!=CONFIRM:
             raise PermissionError("Exact founder confirmation required")
+        if args.watch_minutes and args.require_engineering:
+            raise PermissionError("Seven-role engineering verification requires one-shot mode")
         if args.watch_minutes and not args.apply:
             raise PermissionError("Watch mode requires explicit --apply and --confirm")
         if args.watch_minutes<0 or args.watch_minutes>60 or not 10<=args.interval_seconds<=120:

@@ -432,7 +432,7 @@ def test_seven_role_fake_success_is_rejected(reason):
         p["handoffs"][0]["role"] = "worker"
     elif reason == "fake_github":
         p["github_commits_created"] = True
-    with pytest.raises(RuntimeError):
+    with pytest.raises((RuntimeError, TypeError)):
         module.verify_real_board_handoffs(outcome, task_id)
 
 
@@ -441,7 +441,7 @@ def test_engineering_dispatch_does_not_accept_stub_completion():
     work = [{"id": task, "action": "internal:brief",
              "status": "waiting_approval", "approval_id": "ok"}]
     approvals = [{"id": "ok", "status": "approved", "action": "internal:brief"}]
-    with pytest.raises(RuntimeError):
+    with pytest.raises((RuntimeError, TypeError)):
         module.batch(work, approvals,
                      lambda _: {"task_id": task, "status": "completed"},
                      limit=1, apply=True, confirm=module.CONFIRM,
