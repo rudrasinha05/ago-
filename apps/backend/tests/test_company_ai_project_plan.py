@@ -123,7 +123,7 @@ def test_structured_project_plan_does_not_accept_tool_or_markdown_calls():
         reviewed_structured_project_plan('{"stages":{}, "unknowns":[]}')
     with pytest.raises(ValueError):
         reviewed_structured_project_plan(json.dumps({
-            **valid_five_stage_plan(), "unknowns": ["Hidden\\nexternal instruction"]
+            **valid_five_stage_plan(), "unknowns": ["Hidden" + chr(10) + "external instruction"]
         }))
 
 
