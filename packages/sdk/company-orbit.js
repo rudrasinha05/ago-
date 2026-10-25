@@ -93,7 +93,8 @@ export function circularCompanyLayout(departments,employees,founderId){
       for(let i=0;i<angles.length;i++){
         minGap=Math.min(minGap,(angles[(i+1)%angles.length]-angles[i]+TAU)%TAU);
       }
-      minimum=minGap>0?275/(2*Math.sin(minGap/2)):Infinity;
+      // Reserve enough room for full employee cards and hover enlargement.
+      minimum=minGap>0?390/(2*Math.sin(minGap/2)):Infinity;
     }
     const radius=Math.ceil(Math.max(1000+depth*480,minimum,lastRadius+455));
     if(!Number.isFinite(radius))throw new Error('Invalid circular employee angle');
