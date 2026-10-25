@@ -4,6 +4,13 @@ import {Brain3DScene} from './brain-3d-scene';
 import {boardFunctionSeats} from '@ago/sdk/company';
 
 const brief=(text,max=110)=>text?.length>max?text.slice(0,max)+'…':text;
+const BOARD_TITLES={
+ 'Strategy & Vision':'CEO · Chief Executive Officer',
+ 'Technology Oversight':'CTO · Chief Technology Officer',
+ 'Finance & Budget':'CFO · Chief Financial Officer',
+ 'Risk & Compliance':'CISO · Chief Information Security Officer',
+ 'Quality & Release':'CQO · Chief Quality Officer',
+};
 // These separate CSS 3D planes supply depth; only real running tasks illuminate nodes.
 const CORTEX_CONTOUR='M199 247 C176 258 137 238 136 209 C93 205 82 164 110 139 C84 107 107 74 143 80 C149 44 194 39 207 65 C229 36 270 47 284 73 C323 62 347 92 337 119 C373 148 351 188 320 197 C323 228 293 251 266 239 C249 259 222 255 208 241Z';
 const CORTEX_DEPTHS=[-75,-60,-45,-30,-15,0,15,30];
@@ -22,6 +29,8 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
  const employeeNames=new Map(employees.map(e=>[e.id,e.name]));
  const approved=(governance?.board||[]).map(s=>({...s,member_id:s.employee_id,approved:true}));
  const seats=boardFunctionSeats(employees,approved);
+ const assignedToOtherSeat=new Set((governance?.board||[]).map(a=>a.employee_id));
+ const openBoardCount=seats.filter(s=>!s.member).length;
  return <div className="command-overview">
    <div className="command-head"><div><small className="command-eyebrow">AGO · LIVE WORKFORCE OBSERVATORY</small><h2>AI Company Command Center</h2><p>Task assignment, governed activity and delivery evidence — not a simulated AI workforce.</p></div>
      <div className="command-metrics"><span><b>{known?tasks.length:'—'}</b>Tasks</span><span><b>{known?active.length:'—'}</b>Working</span><span><b>{known?queued.length:'—'}</b>Awaiting</span><span><b>{known?finished.length:'—'}</b>Finished</span></div>
@@ -102,18 +111,27 @@ export function CommandBrain({tasks,notifications,employees,onSelect,governance,
      </section>
    </div>
    <section className="board-command" aria-label="Board governance functions">
-    <div><h3>Board of Directors</h3><small>Strategic governance · seats are unassigned until explicitly appointed</small></div>
-    <div className="board-seats">{seats.map(s=><div key={s.title} className="board-seat">
-        <strong>{s.title}</strong><small>{s.member?s.member.name:'Not appointed'}</small>
-        <span>{s.responsibility}</span>
-        {s.member&&<button type="button" className="board-detail" onClick={()=>onSelect(s.member.id)}>View member ↗</button>}
+    <div><h3>AGO AI Executive Board</h3><small>{openBoardCount} of 5 seats unassigned · Software AI roles, not legal directors · Founder approval required</small></div>
+    <div className="board-seats">{seats.map(s=>{
+      const options=employees.filter(e=>e.kind==='ai'&&(!assignedToOtherSeat.has(e.id)||e.id===s.member?.id));
+      const selected=choices[s.title]||s.member?.id||'';
+      return <div key={s.title} className="board-seat">
+        <strong>{BOARD_TITLES[s.title]}</strong>
+        <small>{s.member?'Appointed: '+s.member.name:'Vacant · AI appointment required'}</small>
+        <span><b>{s.title}</b> · {s.responsibility}</span>
+        {s.member&&<button type="button" className="board-detail" onClick={()=>onSelect(s.member.id)}>View officer profile</button>}
         {canGovern&&<div className="board-appoint">
-          <select aria-label={'Appoint '+s.title} value={choices[s.title]||s.member?.id||''} onChange={e=>setChoices(old=>({...old,[s.title]:e.target.value}))}>
-             <option value="">Select employee</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+          <select aria-label={'Appoint AI '+BOARD_TITLES[s.title]} value={selected} disabled={Boolean(s.member)}
+            onChange={e=>setChoices(old=>({...old,[s.title]:e.target.value}))}>
+             <option value="">Select eligible AI employee</option>
+             {options.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
-          <button type="button" disabled={!(choices[s.title]||s.member?.id)} onClick={()=>onAppoint(s.title,choices[s.title]||s.member?.id)}>Approve seat</button>
+          <button type="button" disabled={Boolean(s.member)||!selected}
+            onClick={()=>onAppoint(s.title,selected)}>{s.member?'Seat appointed':'Appoint AI officer'}</button>
+          {!s.member&&!options.length&&<small>No eligible AI employee found. Add or explicitly assign a suitable AI role first.</small>}
         </div>}
-       </div>)}</div>
+      </div>;
+    })}</div>
    </section>
  </div>;
 }
