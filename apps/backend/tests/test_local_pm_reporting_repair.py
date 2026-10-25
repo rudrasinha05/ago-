@@ -165,8 +165,10 @@ def test_blocked_invalid_project_leader_cannot_mutate():
     observed=[]
     def req(method,path,body=None):
         observed.append((method,path))
-        if method=="GET" and path.endswith("engineering-preflight"):return report
-        if method=="GET" and path.endswith("governance"):return gov
+        if method=="GET" and path.endswith("engineering-preflight"):
+            return report
+        if method=="GET" and path.endswith("governance"):
+            return gov
         raise AssertionError("Blocked repair attempted a write")
     with pytest.raises(PermissionError):
         mod.apply(req,proposal)
