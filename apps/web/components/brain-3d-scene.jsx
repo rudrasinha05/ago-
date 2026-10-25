@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useRef,useState} from "react";
+import {useEffect,useRef} from "react";
 
 // Real 3D lobe surfaces, drawn through WebGL depth testing (no remote assets).
 // Highlighting is tied ONLY to actual persisted running task count.
@@ -115,7 +115,9 @@ function initialize(gl) {
 
 export function Brain3DScene({running,rotation=0,onReady}) {
   const canvas=useRef(null),drag=useRef(null);
-  const [dragAngle,setDragAngle]=useState(0);
+  const dragAngle=useRef(0),rotationRef=useRef(rotation),runningRef=useRef(running);
+  useEffect(()=>{rotationRef.current=rotation;},[rotation]);
+  useEffect(()=>{runningRef.current=running;},[running]);
   useEffect(()=>{
     let frame=0,gl=null,objects=null,alive=true;
     try{
@@ -135,9 +137,11 @@ export function Brain3DScene({running,rotation=0,onReady}) {
         gl.clearColor(0,0,0,0);
         gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
         gl.useProgram(objects.program);
-        gl.uniform1f(objects.yaw,Math.PI*(rotation+dragAngle)/180);
+        const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+        const idleYaw=reduced?0:Math.sin(performance.now()*.00022)*.06;
+        gl.uniform1f(objects.yaw,Math.PI*(rotationRef.current+dragAngle.current)/180+idleYaw);
         gl.uniform1f(objects.pitch,-.12);
-        gl.uniform1f(objects.working,Math.max(0,running));
+        gl.uniform1f(objects.working,Math.max(0,runningRef.current));
         gl.drawArrays(gl.TRIANGLES,0,objects.count);
         frame=requestAnimationFrame(draw);
       };
@@ -151,17 +155,16 @@ export function Brain3DScene({running,rotation=0,onReady}) {
       cancelAnimationFrame(frame);
       if(gl&&objects){gl.deleteBuffer(objects.buffer);gl.deleteProgram(objects.program);}
     };
-  },[running,rotation,dragAngle,onReady]);
+  },[onReady]);
   return <canvas ref={canvas} className="ago-real-3d-brain"
     aria-label={"Interactive 3D company brain. Verified running tasks: "+Math.max(0,running)}
     role="img"
-    onPointerDown={event=>{drag.current={x:event.clientX,angle:dragAngle};
+    onPointerDown={event=>{drag.current={x:event.clientX,angle:dragAngle.current};
       event.currentTarget.setPointerCapture?.(event.pointerId);}}
     onPointerMove={event=>{if(drag.current){
-      setDragAngle(Math.max(-75,Math.min(75,drag.current.angle+
-        (event.clientX-drag.current.x)*.3)));
+      dragAngle.current=Math.max(-75,Math.min(75,drag.current.angle+(event.clientX-drag.current.x)*.3));
     }}}
-    onPointerUp={()=>{drag.current=null;}}
+    onPointerUp={event=>{drag.current=null;if(event.currentTarget.hasPointerCapture?.(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}}
     onPointerCancel={()=>{drag.current=null;}}
   />;
 }
