@@ -461,3 +461,23 @@
 /* One-row cockpit bar; sections land below it when reached by anchor. */
 @media(pointer:coarse){.company-cockpit-nav a{min-height:44px}}
 .company-command [id^="ago-"],.company-command [id^="company-"]{scroll-margin-top:76px}
+/* Work notification center: recorded events; unread only with a server read cursor. */
+.notification-center{position:relative}
+.notification-toggle{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:8px 13px;border:1px solid #3a608b;border-radius:10px;background:#0f2746;color:#e3f1ff;font:inherit;font-size:13px;font-weight:600}
+.notification-toggle:hover{background:#163a63}.notification-toggle:focus-visible{outline:2px solid #e5c1ff;outline-offset:2px}
+.notification-toggle:disabled{opacity:.6;cursor:not-allowed}
+.notification-badge{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#ff3d63;color:#fff;font-size:11px;line-height:20px;text-align:center;box-shadow:0 0 10px #ff3d6388}
+.notification-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:min(420px,calc(100vw - 32px));max-height:min(560px,70vh);display:flex;flex-direction:column;border:1px solid #2e5584;border-radius:14px;background:#071730;box-shadow:0 18px 50px #000a;overflow:hidden}
+.notification-panel header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:14px 16px;border-bottom:1px solid #1f3d63}
+.notification-panel h2{font-size:15px;margin:0 0 4px;color:#eef6ff}.notification-panel header p{margin:0;font-size:11.5px;color:#9db6d2;line-height:1.45}
+.notification-panel ol{list-style:none;margin:0;padding:6px;overflow:auto;display:grid;gap:4px}
+.notification-panel li button{display:grid;grid-template-columns:1fr auto;gap:3px 10px;width:100%;padding:10px 11px;border:1px solid transparent;border-radius:10px;background:transparent;color:#e3f0ff;text-align:left;font:inherit}
+.notification-panel li button:hover:not(:disabled),.notification-panel li button:focus-visible{background:#0e2850;border-color:#33639b}
+.notification-panel li button:focus-visible{outline:2px solid #e5c1ff}
+.notification-panel li.unread button{background:#13284f;border-left:3px solid #ff3d63}
+.notification-panel li strong{font-size:13px}.notification-body{grid-column:1/-1;font-size:12px;color:#b4c9e2;overflow-wrap:anywhere}
+.notification-panel time{grid-column:1/-1;font-size:10.5px;color:#7f9cbe}
+.notification-kind{grid-column:2;grid-row:1;justify-self:end;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#8fd3ff}
+.notification-kind.kind-qa{color:#b8a2ff}.notification-kind.kind-github{color:#9ee6c0}.notification-kind.kind-report{color:#ffd88a}
+.notification-empty,.notification-error{margin:0;padding:16px;font-size:12.5px;color:#9db6d2}.notification-error{color:#ffb4c2}
+@media(max-width:650px){.notification-panel{position:fixed;left:16px;right:16px;top:72px;width:auto}}

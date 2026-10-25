@@ -334,6 +334,79 @@ test('company brain neurons, red routes and work signals come only from persiste
  expect(errors).toEqual([]);
 });
 
+test('work notifications keep earlier events across cursor pages and never invent unread state',async({page})=>{
+ const {errors,calls}=await fixtures(page);
+ const worker='10000000-0000-4000-8000-000000000021';
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},
+  {id:worker,name:'Report writer',department_id:department,kind:'ai',manager_id:user},
+ ]}));
+ const at=new Date().toISOString();
+ let served=false;
+ await page.route(/\/v1\/organization\/company\/notifications/,route=>{
+  const after=new URL(route.request().url()).searchParams.get('after_id');
+  if(after===null)return route.fulfill({status:200,json:{by_employee:{[worker]:2},event_type:'committed_work_event',
+   recent:[{id:2,employee_id:worker,body:'Second recorded update',kind:'report',created_at:at},{id:1,employee_id:worker,body:'First recorded update',kind:'status',created_at:at}]}});
+  // One new event arrives on the cursor page; earlier events are not repeated.
+  const fresh=served?[]:[{id:3,employee_id:worker,body:'Third recorded update',kind:'qa',created_at:at}];served=true;
+  return route.fulfill({status:200,json:{by_employee:{[worker]:3},event_type:'committed_work_event',recent:fresh}});
+ });
+ await login(page);await navigate(page,'Organization');
+ const toggle=page.getByRole('button',{name:/^Work notifications, \d+ recorded events$/});
+ await expect(toggle).toHaveAttribute('aria-label','Work notifications, 2 recorded events');
+ await expect(page.locator('.notification-badge')).toHaveCount(0);
+ await expect(toggle).toHaveAttribute('aria-label','Work notifications, 3 recorded events',{timeout:15000});
+ await toggle.click();
+ const panel=page.getByRole('region',{name:'Work notifications'});
+ await expect(panel).toContainText('Unread tracking is unavailable');
+ await expect(panel.getByRole('button',{name:'Mark all read'})).toHaveCount(0);
+ for(const text of ['First recorded update','Second recorded update','Third recorded update'])await expect(panel).toContainText(text);
+ await accessibility(page);
+ await panel.getByRole('button',{name:/Report writer — Third recorded update/}).click();
+ await expect(panel).toHaveCount(0);
+ await expect(page.locator('.employee-inspector')).toContainText('Report writer');
+ await expect(page.locator('.employee-inspector')).toContainText('First recorded update');
+ expect(calls.some(c=>c.path.endsWith('/notifications/read'))).toBeFalsy();
+ expect(errors).toEqual([]);
+});
+
+test('server read cursor drives unread badge and Mark all read',async({page})=>{
+ const {errors}=await fixtures(page);
+ const worker='10000000-0000-4000-8000-000000000022';
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},
+  {id:worker,name:'QA reviewer',department_id:department,kind:'ai',manager_id:user},
+ ]}));
+ let readThrough=1;const posted=[];
+ await page.route(/\/v1\/organization\/company\/notifications\/read$/,route=>{
+  posted.push(route.request().postDataJSON());readThrough=posted.at(-1).through_id;
+  return route.fulfill({status:200,json:{read_through_id:readThrough}});
+ });
+ await page.route(/\/v1\/organization\/company\/notifications(\?.*)?$/,route=>route.fulfill({status:200,json:{
+  by_employee:{[worker]:2},event_type:'committed_work_event',read_through_id:readThrough,
+  unread_count:readThrough>=2?0:1,unread_by_employee:{[worker]:readThrough>=2?0:1},
+  recent:new URL(route.request().url()).searchParams.get('after_id')===null?[
+   {id:2,employee_id:worker,body:'QA passed for stage',kind:'qa',created_at:new Date().toISOString()},
+   {id:1,employee_id:worker,body:'Review started',kind:'status',created_at:new Date().toISOString()}]:[],
+ }}));
+ await login(page);await navigate(page,'Organization');
+ const toggle=page.getByRole('button',{name:'Work notifications, 1 unread'});
+ await expect(toggle).toBeVisible();
+ await expect(page.locator('.notification-badge')).toHaveText('1');
+ await toggle.click();
+ const panel=page.getByRole('region',{name:'Work notifications'});
+ await expect(panel.getByRole('button',{name:/^Unread: QA reviewer — QA passed for stage/})).toBeVisible();
+ await expect(panel.getByRole('button',{name:/^QA reviewer — Review started/})).toBeVisible();
+ await panel.getByRole('button',{name:'Mark all read'}).click();
+ await expect.poll(()=>posted).toEqual([{through_id:2}]);
+ await expect(page.getByRole('button',{name:'Work notifications, 0 unread'})).toBeVisible();
+ await expect(page.locator('.notification-badge')).toHaveCount(0);
+ await page.keyboard.press('Escape');
+ await expect(panel).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Work notifications, 0 unread'})).toBeFocused();
+ expect(errors).toEqual([]);
+});
+
 test('3D company brain draws on demand under reduced motion and releases its GPU context',async({page})=>{
  // Issue #3: a continuous 60 fps WebGL redraw starved the main thread and
  // crashed WebKit content processes on GPU-less runners. Count real WebGL

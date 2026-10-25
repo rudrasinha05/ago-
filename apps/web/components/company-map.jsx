@@ -13,6 +13,7 @@ import {CompanyExecutionDesk} from './company-execution-desk';
 import {CompanyGithubDelivery} from './company-github-delivery';
 import {CompanyRolePlanner} from './company-role-planner';
 import {OpportunityRadar} from './company-opportunities';
+import {CompanyNotificationCenter,mergeNotificationPage} from './company-notification-center';
 const BASE='/v1/organization/company';
 const time=value=>new Date(value).toLocaleString();
 export function CompanyMap({api,me,data,onRefresh}) {
@@ -158,7 +159,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
         // events remain visible through the notification ledger and badges.
         lastEvent.current=next.recent?.[0]?.id||0;
       }
-      setEventData(next);
+      // Cursor pages hold only new events: merge so earlier events stay visible.
+      setEventData(old=>previousId===null?mergeNotificationPage(null,next):mergeNotificationPage(old,next));
     }catch{if(alive.current)setEventData(null);}
   },[api]);
   useEffect(()=>{refreshEvents();const timer=setInterval(refreshEvents,7000);return()=>clearInterval(timer);},[refreshEvents]);
@@ -288,7 +290,11 @@ export function CompanyMap({api,me,data,onRefresh}) {
     }catch(e){setError(e.message);}finally{setSending(false);}
   }
   return <section id="ago-unified-cockpit" className="company-command" aria-label="Company map and conversations">
-    <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div>{me.permissions.includes('organization:manage')&&<div className="company-heading-actions"><button type="button" className="btn" aria-expanded={addingDepartment} onClick={()=>setAddingDepartment(v=>!v)}>Add department</button><button type="button" className="btn" disabled={!departments.length} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></div>}</header>
+    <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><div className="company-heading-actions">
+      <CompanyNotificationCenter api={api} data={eventData} employees={employees} onSelect={id=>choose('employee:'+id)}
+        onRead={result=>{setEventData(old=>old&&Number.isInteger(result?.read_through_id)?{...old,read_through_id:result.read_through_id,
+          unread_count:(old.recent||[]).filter(e=>e.id>result.read_through_id).length}:old);refreshEvents();}}/>
+      {me.permissions.includes('organization:manage')&&<><button type="button" className="btn" aria-expanded={addingDepartment} onClick={()=>setAddingDepartment(v=>!v)}>Add department</button><button type="button" className="btn" disabled={!departments.length} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></>}</div></header>
     {addingDepartment&&me.permissions.includes('organization:manage')&&<form className="company-add-department" onSubmit={createDepartment}><label htmlFor="company-department-name">Department name</label><input id="company-department-name" name="name" autoFocus required maxLength={150} placeholder="e.g. Engineering"/><button className="btn" disabled={sending}>{sending?'Saving…':'Create department'}</button><button type="button" className="btn" onClick={()=>setAddingDepartment(false)}>Cancel</button></form>}
     <nav className="company-cockpit-nav" aria-label="Company control center sections"
       onClick={event=>{
