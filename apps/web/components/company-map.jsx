@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {resource} from '@ago/sdk/session';
-import {employeeStatus,companyLayout,activeRouteKeys,employeeProjects} from '@ago/sdk/company';
+import {employeeStatus,companyLayout,companyLinkAnchors,activeRouteKeys,employeeProjects} from '@ago/sdk/company';
 import {CommandBrain} from './command-brain';
 import {RoleEditor,UpwardReports} from './company-governance';
 import {FounderProjectIntake} from './founder-project-intake';
@@ -80,6 +80,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
       .map(stage=>p.title+' ('+stage.stage+' proposed)')),
   ])];
   const routing=useMemo(()=>activeRouteKeys(layout,employees,tasks),[layout,employees,tasks]);
+  const orbitRadii=useMemo(()=>[...new Set(layout.nodes.map(n=>Math.round(n.radius)))].sort((a,b)=>a-b),[layout]);
+  const selectedReportingIssue=layout.reportingIssues?.find(issue=>issue.employee_id===selected);
   const liveTaskCount=Array.isArray(tasks)?tasks.filter(t=>t.status==='running').length:0;
   const pendingTaskCount=Array.isArray(tasks)?tasks.filter(t=>['proposed','ready','waiting_approval'].includes(t.status)).length:0;
   // Keep each reply directly below its recorded parent when that parent is visible.
@@ -194,15 +196,22 @@ export function CompanyMap({api,me,data,onRefresh}) {
     setPan(boundedPan((layout.center-target.x)*scale,(layout.center-target.y)*scale,scale));
     return true;
   }
+  function fitMap(){
+    const w=viewport.current?.clientWidth||700,h=viewport.current?.clientHeight||700;
+    const fit=Math.max(.055,Math.min(1,Math.min(w,h)/layout.size*.92));
+    setZoom(fit);setPan({x:0,y:0});
+  }
   useEffect(()=>{
-    if(pendingFocus.current){
+    if(pendingFocus.current==='overview'){
+      fitMap();pendingFocus.current=null;
+    }else if(pendingFocus.current){
       if(pendingFocus.current==='founder'||layout.nodes.some(n=>n.key===pendingFocus.current)){
         focusMap(pendingFocus.current,.82);
         pendingFocus.current=null;
       }
     }else if(!mapInitialized.current&&employees.length>1){
       mapInitialized.current=true;
-      focusMap('founder',.72);
+      fitMap();
     }
   },[layout]);
   function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));if(!focusMap(key,.84)&&key.startsWith('employee:')){pendingFocus.current=key;setMapMode('all');}}
@@ -312,28 +321,31 @@ export function CompanyMap({api,me,data,onRefresh}) {
           <button aria-label="Zoom in" onClick={()=>zoomOn(zoom+.1)}>+</button>
           <button aria-label="Zoom out" onClick={()=>zoomOn(zoom-.1)}>−</button>
           <button onClick={center}>Founder</button>
-          <button type="button" aria-pressed={mapMode==='leadership'} onClick={()=>{setMapMode('leadership');pendingFocus.current='founder';}}>Leadership</button>
-          <button type="button" aria-pressed={mapMode==='all'} onClick={()=>{setMapMode('all');pendingFocus.current='founder';}}>All employees</button>
+          <button type="button" aria-pressed={mapMode==='leadership'} onClick={()=>{setMapMode('leadership');pendingFocus.current='overview';}}>Leadership</button>
+          <button type="button" aria-pressed={mapMode==='all'} onClick={()=>{setMapMode('all');pendingFocus.current='overview';}}>All employees</button>
           <button aria-label={fullscreen?"Exit full screen":"Full screen map"} aria-pressed={fullscreen} onClick={()=>setFullscreen(v=>!v)}>{fullscreen?"Exit full screen":"⛶ Full screen"}</button>
-          <button onClick={()=>{setZoom(Math.min((viewport.current?.clientWidth||600)/layout.size,(viewport.current?.clientHeight||700)/layout.size)*.90);setPan({x:0,y:0});}}>Fit all</button>
+          <button onClick={fitMap}>Fit all</button>
           <span>{layout.nodes.filter(n=>n.type==='employee').length}/{employees.filter(e=>e.id!==me.id).length} staff · {Math.round(zoom*100)}%</span>
         </div>
         <div className="company-world" style={{width:layout.size,height:layout.size,transform:`translate(calc(-50% + ${pan.x}px),calc(-50% + ${pan.y}px)) scale(${zoom})`}}>
-          <svg width={layout.size} height={layout.size} aria-label="Solid reporting lines show recorded employee managers. Dotted links group departments; red indicates running tasks">
+          <svg width={layout.size} height={layout.size} aria-label="Circular organizational hierarchy. Blue links are actual recorded reporting lines; grey dotted links show grouping only. Red marks running tasks on recorded reporting routes.">
            <defs><marker id="ago-report-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9Z" fill="#65bfe8"/></marker></defs>
+           {orbitRadii.map(radius=><circle key={radius} className="company-orbit-ring" cx={layout.center} cy={layout.center} r={radius}/>)}
            {layout.edges.map((edge,i)=>{
              const a=points.get(edge.from),b=points.get(edge.to),key=edge.from+'>'+edge.to;
              const mode=routing.routes.has(key)?'running':routing.waitingRoutes.has(key)?'pending':null;
              const open=()=>choose(edge.to);
              const grouping=edge.kind==='grouping';
-             return a&&b?<g key={i}><line data-link-kind={edge.kind}
+             if(!a||!b)return null;
+             const anchor=companyLinkAnchors(a,b,edge.from==='founder'?'founder':a.type,b.type);
+             return <g key={i}><line data-link-kind={edge.kind}
                className={['company-link',grouping?'department-link':'manager-link',mode==='running'?'edge-live':mode==='pending'?'edge-pending':''].filter(Boolean).join(' ')}
-               x1={a.x} y1={a.y+60} x2={b.x} y2={b.y-65}
+               x1={anchor.x1} y1={anchor.y1} x2={anchor.x2} y2={anchor.y2}
                markerEnd={grouping?undefined:'url(#ago-report-arrow)'}
                data-route-target={mode?edge.to:undefined} onClick={mode?open:undefined}>
                <title>{grouping?'Grouping only (not a management reporting line)':'Recorded manager reporting link'}{mode?' · '+mode+' task route':''}</title></line>
-               {mode&&<circle className={'route-hit-target '+mode} cx={(a.x+b.x)/2} cy={(a.y+b.y)/2} r={27} data-route-target={edge.to} role="button" tabIndex={0} aria-label={(mode==='running'?'Running route to ':'Pending route to ')+(b.name||'team')} onClick={open} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}}}/>}
-             </g>:null;
+               {mode&&<circle className={'route-hit-target '+mode} cx={anchor.cx} cy={anchor.cy} r={27} data-route-target={edge.to} role="button" tabIndex={0} aria-label={(mode==='running'?'Running route to ':'Pending route to ')+(b.name||'team')} onClick={open} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}}}/>}
+             </g>;
            })}</svg>
           <form className="map-founder" style={{left:layout.founder.x,top:layout.founder.y,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><CompanyApprovalBadge employee={{id:me.id,name:'Founder'}} approvals={approvalList} updates={0} api={api} me={me} onDone={async()=>{setApprovalRefresh(v=>v+1);await refreshActivity();await refreshEvents();}}/><strong>♛ Founder · Human authority</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
           {layout.nodes.map(n=>{const state=employeeStatus(n.id,tasks);
@@ -354,7 +366,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
                 onDone={async()=>{setApprovalRefresh(v=>v+1);await refreshActivity();await refreshEvents();}}/>}
              </div>;})}
         </div>
-        <div className="map-legend" role="region" tabIndex={0} aria-label="Company graph status and link legend"><span><i className="presence idle"/>Idle</span><span><i className="presence busy"/>Busy</span><span><i className="presence waiting"/>Waiting</span><span><i className="presence blocked"/>Blocked</span><span><i className="presence failed"/>Failure recorded</span><span><i className="presence unknown"/>Unknown</span><span className="legend-live">━ Bright red: verified running task</span><span className="legend-pending">┄ Red dashed: assigned / waiting</span><span>━ Blue: real manager link</span><span>┄ Grey: department grouping, not management</span><span>{liveTaskCount} running · {pendingTaskCount} waiting</span><small>{updated?'Checked '+updated.toLocaleTimeString():'Activity unavailable'}</small></div>
+        <div className="map-legend" role="region" tabIndex={0} aria-label="Company graph status and link legend"><span><i className="presence idle"/>Idle</span><span><i className="presence busy"/>Busy</span><span><i className="presence waiting"/>Waiting</span><span><i className="presence blocked"/>Blocked</span><span><i className="presence failed"/>Failure recorded</span><span><i className="presence unknown"/>Unknown</span><span className="legend-live">━ Bright red: verified running task</span><span className="legend-pending">┄ Red dashed: assigned / waiting</span><span>━ Blue: verified manager record</span><span>┄ Grey: grouping only, no task routing</span><span>{liveTaskCount} running · {pendingTaskCount} waiting</span>{layout.reportingIssues?.length>0&&<span className="map-reporting-warning">{layout.reportingIssues.length} reporting relationship(s) unassigned or invalid — review the employee details</span>}<small>{updated?'Checked '+updated.toLocaleTimeString():'Activity unavailable'}</small></div>
         {!employees.length&&<div className="map-empty">{grouped===null?'People data unavailable. Check your permissions or refresh.':'Add a role when your project needs one. It will appear in its department.'}</div>}
         {popup&&<div className="activity-pop" role="status"><button aria-label="Dismiss update" onClick={()=>setPopup(null)}>×</button><strong>Update #{popup.id} · {employees.find(e=>e.id===popup.employee_id)?.name||'Employee'}</strong><p>{popup.body}</p><small>Saved work event · {eventQueue.length} more queued</small></div>}
       </div>
@@ -365,7 +377,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
           <h3><span className={'presence '+status.tone}/>{selectedEmployee.name} <small>{status.label}</small></h3>
           <dl><dt>Type</dt><dd>{selectedEmployee.kind==='ai'?'AI role · runtime authorization separate':'Human member'}</dd>
            <dt>Department</dt><dd>{departments.find(d=>d.id===selectedEmployee.department_id)?.name||'Unknown'}</dd>
-           <dt>Reports to</dt><dd>{employees.find(e=>e.id===selectedEmployee.manager_id)?.name||'Founder / department root'}</dd>
+           <dt>Reports to</dt><dd>{selectedReportingIssue?.reason==='reporting_cycle'?'Invalid reporting cycle — review required':selectedReportingIssue?.reason==='self_reporting'?'Invalid self-reporting — review required':selectedReportingIssue?.reason==='manager_not_in_roster'?'Manager unavailable in roster — review required':selectedEmployee.manager_id===me.id?'Founder (recorded)':employees.find(e=>e.id===selectedEmployee.manager_id)?.name||'No manager assigned (not a Founder report)'}</dd>
            <dt>Current projects</dt><dd>{displayProjects(selected).join(', ')||'No project linked'}</dd>
            <dt>Recorded updates</dt><dd>{eventData?.by_employee?.[selected]??'Unavailable'}</dd>
            <dt>Core responsibility</dt><dd>{governanceData?.employees?.find(e=>e.id===selected)?.core_responsibilities||'Not configured — use Company Role Planner.'}</dd>
