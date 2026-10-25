@@ -347,6 +347,10 @@ def test_governed_draft_pr_operator_is_four_phase_and_never_merges():
     ps = (root / "scripts" / "ago-pr.ps1").read_text(encoding="utf-8")
     assert 'ValidateSet("prepare", "submit", "apply", "execute")' in ps
     assert "ago_draft_pull_request.py @Args" in ps
+    assert '$LegacyExport = Join-Path $PrivateExports' in ps
+    assert 'Exact private source receipt path' in ps
+    assert '$SourceRecord.id -cne $RunId' in ps
+    assert '$SourceRecord.result.board_review_cleared -ne $true' in ps
     assert "PREPARE_VERIFIED_DRAFT_PR" in ps
     assert "SUBMIT_VERIFIED_DRAFT_PR" in ps
     assert "APPLY_APPROVED_DRAFT_PR" in ps
