@@ -42,6 +42,7 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     cto=ai("Technology Agent")
     pm=ai("Delivery Manager")
     worker=ai("Research Worker",pm if full_board else None)
+    developer=ai("Software Developer",pm) if engineering else None
     finance=ai("Finance Director") if full_board else None
     risk=ai("Risk Director") if full_board else None
     quality=ai("Quality Director") if full_board else None
@@ -56,6 +57,10 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         "operation_key":str(uuid4())})
     assert project["accountable_manager_id"]==pm
     assert project["stages"][0]["suggested_assignee_id"]==worker
+    if engineering:
+        implementation=next(s for s in project["stages"]
+                            if s["stage"]=="implementation")
+        assert implementation["suggested_assignee_id"]==developer
 
     plan=post(client,"/v1/brain/plans/"+project["plan_id"]+"/submit",founder)
     post(client,"/v1/governance/approvals/"+plan["approval_id"]+"/decision",
@@ -136,7 +141,19 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     for seat,identity in seats:
         post(client,BASE+"/board/appoint",founder,{
             "seat":seat,"employee_id":identity})
+    if engineering:
+        # Board seats alone cannot authorize source generation. The separate
+        # implementation engineer stage must be genuinely activated first.
+        post(client,"/v1/agents/tasks/"+task_id+"/run",founder,expected=403)
+        assert calls==[]
     reconciled=post(client,BASE+"/projects/"+project["id"]+"/ceo/reconcile",founder)
+    if engineering:
+        assert "implementation" in reconciled["approved_stage_names"]
+        stage=info["db"].execute("""
+            SELECT assignee_id FROM ago_project_stage_delegation_activations
+            WHERE tenant_id=%s AND intake_id=%s AND stage='implementation'
+        """,(info["tenant"],project["id"])).fetchone()
+        assert str(stage["assignee_id"])==developer
     assert task_id in reconciled["approved_task_ids"]
     assert reconciled["ceo_id"]==ceo
     assert reconciled["tasks_executed"]==0
@@ -147,7 +164,8 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     expected_count=4 if deny_risk else (7 if full_board else 4)
     expected_people=(
         [ceo,cto,finance,risk] if deny_risk
-        else ([ceo,cto,finance,risk,quality,pm,worker] if full_board
+        else ([ceo,cto,finance,risk,quality,pm,
+                developer if engineering else worker] if full_board
               else [ceo,cto,pm,worker])
     )
     expected_roles=(
@@ -189,7 +207,8 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     # are forbidden, not license to truncate/reorder the planned roster.
     full_roles = (["ceo", "cto", "finance", "risk", "quality", "pm", "employee"]
                   if full_board else ["ceo", "cto", "pm", "employee"])
-    full_people = ([ceo, cto, finance, risk, quality, pm, worker]
+    full_people = ([ceo, cto, finance, risk, quality, pm,
+                    developer if engineering else worker]
                    if full_board else [ceo, cto, pm, worker])
     recorded = CompanyOllamaChainQueries(info["db"])
     evidence_args = dict(
