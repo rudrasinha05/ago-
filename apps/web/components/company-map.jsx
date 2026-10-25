@@ -196,11 +196,11 @@ export function CompanyMap({api,me,data,onRefresh}) {
   }
   useEffect(()=>{
     if(pendingFocus.current){
-      if(layout.nodes.some(n=>n.key===pendingFocus.current)){
+      if(pendingFocus.current==='founder'||layout.nodes.some(n=>n.key===pendingFocus.current)){
         focusMap(pendingFocus.current,.82);
         pendingFocus.current=null;
       }
-    }else if(!mapInitialized.current){
+    }else if(!mapInitialized.current&&employees.length>1){
       mapInitialized.current=true;
       focusMap('founder',.72);
     }
