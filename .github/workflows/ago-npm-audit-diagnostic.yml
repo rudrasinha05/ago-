@@ -1,0 +1,38 @@
+name: AGO npm audit diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths: [.github/workflows/ago-npm-audit-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  npm-audit-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Validate lock integrity (immutable install)
+        run: npm ci --ignore-scripts --no-fund --no-audit
+      - name: Report bounded audit data without printing auth tokens or paths
+        run: |
+          npm audit --json > "$RUNNER_TEMP/ago-npm-audit.json" || true
+          node - "$RUNNER_TEMP/ago-npm-audit.json" <<'NODE'
+          const fs=require('node:fs');
+          const report=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          console.log('AUDIT_SUMMARY',JSON.stringify(report.metadata?.vulnerabilities??{}));
+          for(const [name,v] of Object.entries(report.vulnerabilities||{})){
+            if(!['high','critical'].includes(v.severity))continue;
+            const via=(v.via||[]).map(x=>
+              typeof x==='string'?{name:x}:{name:x.name,title:x.title,url:x.url,range:x.range,source:x.source});
+            console.log('AUDIT_VULNERABILITY',JSON.stringify({
+              name,severity:v.severity,isDirect:v.isDirect,
+              range:v.range,fixAvailable:v.fixAvailable,via,
+              effects:v.effects,
+            }));
+          }
+          NODE
