@@ -4,6 +4,36 @@
 **Source:** AGO ka current implemented software path; production acceptance nahi.  
 **Branch:** `develop`. Public launch, cloud subscription aur Play Store ki koi zarurat nahi.
 
+## Ek click se AGO start (26 Oct 2026)
+
+**Daily use:** Existing AGO folder mein `START_AGO.cmd` par double click
+karo. VS Code mein chahe to sirf:
+
+
+
+    .\scripts\ago-start.ps1
+
+
+Iske liye `git stash`, `git pull` ya model/Docker setup ke bahut saare
+commands roz run nahi karne hain. Local `package-lock.json` modified bhi hai to
+launcher **us file ko chhede bina** existing AGO code start karega.
+Iska matlab automatic GitHub update **nahi** hai. Clean develop repo mein
+explicit latest update chahiye to `.scriptsago-start.ps1 -Update`
+use karo; dirty checkout par update skip ho jayega, startup continue karega.
+
+Developer ka approved existing PostgreSQL password pehli baar fresh terminal
+mein maang sakta hai. Model pehle se installed/running hona chahiye; paid API
+disabled rahegi. `-SoloFounder` sirf explicitly eligible local
+Founder approval policy ka opt-in hai; independent QA bypass nahi.
+
+Company Map: `http://127.0.0.1:8000/workspace/organization/`.
+Server ko band karne ke liye uski terminal mein Ctrl+C.
+
+**Limit:** Ek-click **start** implemented hai; ek-click approved
+project → Ollama → Docker → independent QA → GitHub Draft PR ka
+fully unified dashboard workflow abhi P0 Issue #7 mein pending hai.
+Existing manual advanced commands neeche emergency/diagnostic fallback hain.
+
 ## Founder ko kya karna hai?
 
 **Normally sirf AGO ka dashboard use karo.** Company Map mein *Project Delivery*
