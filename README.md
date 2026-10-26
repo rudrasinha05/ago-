@@ -126,6 +126,46 @@ Other enterprise architecture sections remain independently pending; an
 approved architecture exception still requires separately configured GitHub
 branch protection for real code-owner approval.
 
+## Founder one-click local startup (Windows)
+
+**Double-click [START_AGO.cmd](START_AGO.cmd) from the existing AGO folder.**
+Or in VS Code PowerShell run one command:
+
+
+
+$ .\scripts\ago-start.ps1
+
+
+This reuses the installed AGO checkout, safely discovers a user-scoped Docker
+CLI (if needed), disables paid model providers for the foreground session,
+and runs the existing Company Map + local Qwen engineering launcher.
+It may prompt for the **existing** local PostgreSQL password and will refuse
+unsafe/unready database state; no tenant is recreated. The backend stays
+running in that window; browse to
+http://127.0.0.1:8000/workspace/organization/ and log in normally.
+
+Git update is **not** a prerequisite to starting. Existing modified files
+(e.g., local package-lock.json) stay untouched. An explicit
+
+
+$ .\scripts\ago-start.ps1 -Update
+
+
+fast-forwards only a clean `develop` checkout; if dirty, it skips
+the update and starts the current local code instead. It never stashes,
+resets, deletes or force-pulls. For a separately authorized sole-Founder
+development workflow, explicitly opt in with
+
+
+$ .\scripts\ago-start.ps1 -SoloFounder
+
+
+This opt-in does **not** bypass independent QA or other human requirements.
+The launcher does **not** auto-install Docker/Ollama, run migrations,
+download models, approve code or push GitHub. Those decisions and real
+delivery checks remain separately governed. One-click *startup* is not
+yet one-click *project-to-PR delivery* (tracked in Issue #7).
+
 ## Fast local start (Windows)
 
 From `apps/backend` after setting your own **localhost** `AGO_POSTGRES_DSN` and applying any reviewed development migrations:
