@@ -189,6 +189,127 @@ def founder_projects(limit: int = Query(default=50,ge=1,le=100),
         actor.tenant_id,limit,offset,reader_id=actor.subject)
 
 
+def delivery_overview_record(project: dict, detail: dict, pending: list[dict]) -> dict:
+    """Presentation-only record from verified scoped data; no inferred approvals."""
+    if str(project.get('id')) != str(detail.get('id')):
+        raise ValueError('Project summary and private project evidence differ')
+    stages = detail.get('stages')
+    if not isinstance(stages, list) or len(stages) > 20:
+        raise ValueError('Project stage evidence is incomplete or unbounded')
+    result_stages = []
+    for stage in stages:
+        if not isinstance(stage, dict):
+            raise ValueError('Invalid stage evidence')
+        status = stage.get('task_status')
+        verdict = stage.get('qa_verdict')
+        if verdict not in (None, 'pass', 'fail'):
+            raise ValueError('Unrecognized QA outcome')
+        result_stages.append({
+            'stage': stage.get('stage'),
+            'position': stage.get('position'),
+            'employee': stage.get('executing_employee')
+                or stage.get('approved_assignee_name')
+                or stage.get('suggested_assignee_name'),
+            'task_status': status,
+            'agent_run_status': stage.get('agent_run_status'),
+            'agent_failure_code': stage.get('agent_failure_code'),
+            'qa_verdict': verdict,
+            'awaiting_independent_qa': status == 'completed' and verdict is None,
+        })
+    waiting_qa = any(s['awaiting_independent_qa'] for s in result_stages)
+    blocked = any(
+        s['task_status'] == 'failed' or s['qa_verdict'] == 'fail'
+        for s in result_stages
+    )
+    return {
+        'project_id': project['id'],
+        'title': detail.get('title'),
+        'manager': detail.get('accountable_manager_name'),
+        'plan_status': detail.get('plan_status'),
+        'delivery_state': (
+            'blocked' if blocked else
+            'waiting_for_independent_qa' if waiting_qa else
+            'working' if any(s['task_status'] == 'running' for s in result_stages) else
+            'awaiting_project_plan_approval' if detail.get('plan_status') != 'active' else
+            'awaiting_governed_execution'
+        ),
+        'stages': result_stages,
+        'pending_approvals': [
+            {
+                'approval_id': a.get('id'),
+                'type': a.get('approval_type'),
+                'action': a.get('action'),
+                'requires_founder_decision': a.get('requires_founder_decision') is True,
+                'review_routing': a.get('review_routing'),
+            } for a in pending
+        ],
+        'docker_qa_verified': False,
+        'github_commit_verified': False,
+        'draft_pr_verified': False,
+        'release_ready': False,
+        'next_view': (
+            'project_review' if detail.get('plan_status') != 'active' else
+            'independent_qa' if waiting_qa else
+            'project_work'
+        ),
+    }
+
+
+@router.get('/projects/delivery-overview')
+def founder_delivery_overview(
+    limit: int = Query(default=20, ge=1, le=20),
+    offset: int = Query(default=0, ge=0, le=100000),
+    actor=Depends(authenticated),
+    repositories=Depends(repository_scope),
+):
+    """Read-only Founder journey. Every displayed status originates in signed data."""
+    allowed(repositories, actor, 'organization:read')
+    allowed(repositories, actor, 'brain:read')
+    allowed(repositories, actor, 'approval:founder')
+    allowed(repositories, actor, 'approval:read')
+    store = repositories.resolve(CompanyChatPort)
+    try:
+        projects = store.projects(actor.tenant_id, limit, offset,
+                                  reader_id=actor.subject)
+        if not isinstance(projects, list):
+            raise ValueError('Incomplete project registry')
+        # Approval inbox returns signed tenant records. Expose only approvals
+        # linked to one of these individually readable project IDs/tasks.
+        approvals = store.approval_inbox(actor.tenant_id, 100,
+                                        reader_id=actor.subject)
+        if not isinstance(approvals, list):
+            raise ValueError('Incomplete approval inbox')
+        results = []
+        for project in projects:
+            detail = store.project_details(actor.tenant_id, str(project['id']),
+                                           reader_id=actor.subject)
+            if not isinstance(detail, dict):
+                raise ValueError('Incomplete project details')
+            ids = {str(s['task_id']) for s in detail.get('stages', [])
+                   if isinstance(s, dict) and s.get('task_id')}
+            linked = [
+                a for a in approvals
+                if isinstance(a, dict) and a.get('status') == 'pending'
+                and (
+                    str(a.get('founder_intake_id')) == str(project['id'])
+                    or a.get('task_id') is not None
+                    and str(a['task_id']) in ids
+                )
+            ]
+            results.append(delivery_overview_record(project, detail, linked))
+        return {
+            'kind': 'ago_founder_delivery_overview_v1',
+            'projects': results,
+            'more_projects_possible': len(projects) == limit,
+            'source': 'tenant_scoped_persisted_project_and_approval_records',
+            'read_only': True,
+            'owner_local_docker_or_github_verified': False,
+            'human_approvals_automatically_executed': False,
+        }
+    except (KeyError, ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
 @router.post('/projects/{project_id}/ceo/reconcile')
 def ceo_reconcile(project_id: UUID, actor=Depends(authenticated),
                   repositories=Depends(repository_scope)):
