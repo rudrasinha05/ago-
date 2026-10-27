@@ -35,7 +35,8 @@ export function UpwardReports({api,me,employees,onRecorded}) {
  const canSend=Boolean(current&&current.kind==='human'&&!me.roles.includes('founder'));
  const [kind,setKind]=useState('doubt'),[body,setBody]=useState('');
  const [reports,setReports]=useState(null),[error,setError]=useState(''),[saving,setSaving]=useState(false);
- const refresh=async()=>{try{setReports(await api.request('/v1/organization/company/reports'));}catch{setReports(null);}};
+ const canRead=Boolean(me.permissions?.includes('messages:read'));
+ const refresh=async()=>{if(!canRead){setReports(null);return;}try{setReports(await api.request('/v1/organization/company/reports'));}catch{setReports(null);}};
  useEffect(()=>{refresh();},[api]);
  async function submit(e){e.preventDefault();setSaving(true);setError('');
    try{await api.request('/v1/organization/company/reports',{method:'POST',

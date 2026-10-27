@@ -23,6 +23,13 @@ class OrganizationStore:
             raise ValueError("Department name required")
         record = Department(str(uuid4()), str(UUID(tenant_id)), name.strip())
         with self.connection.transaction():
+            # Same rule as the domain model: unique per tenant ignoring case.
+            # (The table's UNIQUE(tenant_id,name) is case-sensitive.)
+            if self.connection.execute(
+                "SELECT 1 FROM ago_departments WHERE tenant_id=%s AND lower(name)=lower(%s)",
+                (record.tenant_id, record.name),
+            ).fetchone():
+                raise ValueError("A department with this name already exists")
             self.connection.execute(
                 "INSERT INTO ago_departments(id, tenant_id, name) VALUES (%s, %s, %s)",
                 (record.id, record.tenant_id, record.name),

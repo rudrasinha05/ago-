@@ -37,7 +37,8 @@ export function CommandBrain({tasks,notifications,employees,departments=[],found
  const [rotation,setRotation]=useState(0);
  const [pitch,setPitch]=useState(0),[zoom,setZoom]=useState(1),[autoRotate,setAutoRotate]=useState(true),[resetSignal,setResetSignal]=useState(0);
  const preset=(yaw,tilt)=>{setRotation(yaw);setPitch(tilt);setAutoRotate(false);};
- const [gpuReady,setGpuReady]=useState(false);
+ // null until the scene reports whether WebGL started (true) or fell back (false).
+ const [gpuReady,setGpuReady]=useState(null);
  const updateGpuReady=useCallback(ready=>setGpuReady(ready),[]);
  const known=Array.isArray(tasks);
  const active=known?tasks.filter(t=>t.status==='running'):[];
@@ -70,6 +71,7 @@ export function CommandBrain({tasks,notifications,employees,departments=[],found
          <li><i className="route"/>Recorded route</li><li><i className="ring"/>Work signal</li>
        </ul>
        <div className={'brain-volume '+(active.length?'brain-volume-active':'')+(gpuReady?' webgl-active':'')}
+         data-webgl={gpuReady===null?'pending':gpuReady?'on':'off'}
          role="img" aria-label={'Layered 3D company work brain: '+active.length+' verified running tasks, '+queued.length+' awaiting action; not a simulated conscious AI'}
          style={{'--brain-rotation':rotation+'deg'}}>
         <Brain3DScene network={network} running={active.length} rotation={rotation} pitch={pitch} zoom={zoom} autoRotate={autoRotate} resetSignal={resetSignal} onZoom={setZoom}

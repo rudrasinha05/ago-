@@ -342,7 +342,6 @@ def test_next_quality_source_exact_bytes_distinct_review_and_measurement_tables(
 
 
 def test_next_constitution_emergency_stop_and_independent_recovery(page, browser, app_url, tenant):
-    from datetime import datetime, timedelta
 
     context = browser.new_context(viewport={"width": 1330, "height": 900})
     reviewer = context.new_page()
@@ -357,9 +356,15 @@ def test_next_constitution_emergency_stop_and_independent_recovery(page, browser
         page.locator("#dlg-blocked_contexts").select_option(["organization"])
         page.locator("#dlg-reason").fill("Browser containment test")
         page.locator("#dlg-containment").fill("Freeze changes while preserving review and recovery")
-        page.locator("#dlg-expires_at").fill(
-            (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")
-        )
+        # datetime-local is interpreted in the BROWSER's timezone, which can
+        # differ from the Python process (e.g. a founder machine in IST with a
+        # UTC test runner). Build "one hour from now" with the browser clock.
+        page.locator("#dlg-expires_at").fill(page.evaluate(
+            "() => { const d = new Date(Date.now() + 3600000);"
+            " const p = n => String(n).padStart(2, '0');"
+            " return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())"
+            " + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }"
+        ))
         page.locator("#operation-submit").click()
         expect(page.get_by_role("dialog")).to_be_hidden(timeout=15000)
         expect(page.locator("#screen")).to_contain_text("Browser containment test")

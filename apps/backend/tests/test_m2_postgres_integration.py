@@ -65,6 +65,24 @@ def test_organization_and_memory_tenant_isolation(db):
         memories.get(record_id=memory.id, tenant_id=tenant_b, reader_id=manager.id)
 
 
+def test_department_names_are_unique_per_tenant_ignoring_case(db):
+    # The domain model rejects "engineering" after "Engineering"; PostgreSQL's
+    # UNIQUE(tenant_id,name) is case-sensitive, so the store must enforce it and
+    # return a clear message instead of a generic database conflict.
+    tenant_a = tenant(db)
+    tenant_b = tenant(db)
+    store = OrganizationStore(db)
+    store.add_department(tenant_id=tenant_a, name="Engineering")
+    for duplicate in ("Engineering", "engineering", "  ENGINEERING  "):
+        with pytest.raises(ValueError, match="already exists"):
+            store.add_department(tenant_id=tenant_a, name=duplicate)
+    # Other tenants are independent.
+    assert store.add_department(tenant_id=tenant_b, name="engineering").name == "engineering"
+    names = [row["name"] for row in db.execute(
+        "SELECT name FROM ago_departments WHERE tenant_id=%s", (tenant_a,)).fetchall()]
+    assert names == ["Engineering"]
+
+
 def test_approved_task_lifecycle_and_audit(db):
     tenant_id = tenant(db)
     org = OrganizationStore(db)

@@ -39,7 +39,7 @@ try{
   const req=route.request(),url=new URL(req.url()),path=url.pathname,body=req.postDataJSON();let result=[];
   calls.push({path,method:req.method(),body});
   if(path==='/v1/sessions')result={access_token:'fixture-session'};
-  else if(path==='/v1/console/me')result=asReviewer?{id:id(31),tenant_id:tenant,display_name:'Reviewer',roles:['member'],permissions:['approval:read']}:{id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:write','brain:read','brain:manage','approval:read','approval:decide']};
+  else if(path==='/v1/console/me')result=asReviewer?{id:id(31),tenant_id:tenant,display_name:'Reviewer',roles:['member'],permissions:['approval:read']}:{id:founder,tenant_id:tenant,display_name:'Rudra',roles:['founder'],permissions:['organization:read','organization:manage','task:read','messages:read','messages:write','tool:read','brain:read','brain:manage','approval:read','approval:decide']};
   else if(path==='/v1/organization/departments')result=departments;
   else if(path==='/v1/organization/employees')result=employees;
   else if(path.endsWith('/company/activity'))result=tasks;

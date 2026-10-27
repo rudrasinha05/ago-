@@ -18,10 +18,21 @@ import {treeCompanyLayout,departmentCompanyLayout,circularDepartmentLayout,withM
 const BASE='/v1/organization/company';
 const time=value=>new Date(value).toLocaleString();
 export function CompanyMap({api,me,data,onRefresh}) {
-  const departments=resource(data,'departments')||[];
+  const rawDepartments=resource(data,'departments');
+  // Stable identity when unavailable, so layout and colour memos do not rebuild every render.
+  const departments=useMemo(()=>rawDepartments||[],[rawDepartments]);
   const grouped=resource(data,'employees');
   const employees=useMemo(()=>Object.values(grouped||{}).flat(),[grouped]);
   const founderView=me.roles?.includes('founder');
+  // Poll only what this role may read: the server stays the authority, but
+  // re-requesting a forbidden resource every few seconds is wasted load and
+  // a constant stream of 403s in logs.
+  const can=(...needed)=>needed.every(p=>me.permissions?.includes(p));
+  const canActivity=can('brain:read','organization:read','task:read');
+  const canChat=can('organization:read','task:read','messages:read');
+  const canEvents=can('organization:read','task:read');
+  const canGovernance=can('organization:read');
+  const canTools=can('tool:read');
   const ownMember=employees.find(e=>e.id===me.id);
   const canReadChannel=key=>{
     if(founderView||key==='global')return true;
@@ -116,11 +127,13 @@ export function CompanyMap({api,me,data,onRefresh}) {
     return()=>{document.body.style.overflow=prior;document.removeEventListener('keydown',onKey);};
   },[fullscreen]);
   const refreshActivity=useCallback(async()=>{
+    if(!canActivity){setTasks(null);setUpdated(null);return;}
     try {const result=await api.request(BASE+'/activity');if(!alive.current)return;
       previous.current=new Map(result.map(t=>[t.id,t.status]));setTasks(result);setUpdated(new Date());
     }catch{if(alive.current){setTasks(null);setUpdated(null);}}
-  },[api]);
-  useEffect(()=>{alive.current=true;refreshActivity();const timer=setInterval(refreshActivity,7000);return()=>{alive.current=false;clearInterval(timer);};},[refreshActivity]);
+  },[api,canActivity]);
+  useEffect(()=>{alive.current=true;refreshActivity();if(!canActivity)return()=>{alive.current=false;};
+    const timer=setInterval(refreshActivity,7000);return()=>{alive.current=false;clearInterval(timer);};},[refreshActivity,canActivity]);
   useEffect(()=>{
     if(!me.permissions.includes('organization:read')||!me.permissions.includes('brain:read'))return;
     let live=true;
@@ -150,10 +163,12 @@ export function CompanyMap({api,me,data,onRefresh}) {
       setMessages(old=>initial?result.items:[...new Map([...old,...result.items].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id));
       if(initial)setBefore(result.next_before);setError('');
     }catch(e){if(live)setError(e.message);}finally{if(live)setLoading(false);}}
+    if(!canChat){setLoading(false);setError('Conversations are not available for your role.');return()=>{live=false;};}
     fetchMessages(true);const timer=setInterval(fetchMessages,5000);
     return()=>{live=false;clearInterval(timer);};
-  },[api,channel]);
+  },[api,channel,canChat]);
   const refreshEvents=useCallback(async()=>{
+    if(!canEvents){setEventData(null);return;}
     try{
       const previousId=lastEvent.current;
       const path=BASE+'/notifications'+(previousId===null?'':'?after_id='+previousId);
@@ -174,12 +189,13 @@ export function CompanyMap({api,me,data,onRefresh}) {
       // Cursor pages hold only new events: merge so earlier events stay visible.
       setEventData(old=>previousId===null?mergeNotificationPage(null,next):mergeNotificationPage(old,next));
     }catch{if(alive.current)setEventData(null);}
-  },[api]);
-  useEffect(()=>{refreshEvents();const timer=setInterval(refreshEvents,7000);return()=>clearInterval(timer);},[refreshEvents]);
+  },[api,canEvents]);
+  useEffect(()=>{refreshEvents();if(!canEvents)return undefined;const timer=setInterval(refreshEvents,7000);return()=>clearInterval(timer);},[refreshEvents,canEvents]);
   const refreshGovernance=useCallback(async()=>{
+    if(!canGovernance){setGovernanceData(null);return;}
     try {const result=await api.request(BASE+'/governance');if(alive.current)setGovernanceData(result);}
     catch {if(alive.current)setGovernanceData(null);}
-  },[api]);
+  },[api,canGovernance]);
   useEffect(()=>{refreshGovernance();},[refreshGovernance]);
   async function appointBoard(seat,employeeId){
     setError('');
@@ -187,6 +203,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     catch(e){setError(e.message);}
   }
   const refreshGitHub=useCallback(async()=>{
+    if(!canTools){setGithubState(null);return;}
     try{
       const catalog=await api.request('/v1/platform/catalog');
       if(!alive.current)return;
@@ -199,8 +216,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
       }));
       if(alive.current)setGithubState(checked);
     }catch{if(alive.current)setGithubState(null);}
-  },[api]);
-  useEffect(()=>{refreshGitHub();const timer=setInterval(refreshGitHub,45000);return()=>clearInterval(timer);},[refreshGitHub]);
+  },[api,canTools]);
+  useEffect(()=>{refreshGitHub();if(!canTools)return undefined;const timer=setInterval(refreshGitHub,45000);return()=>clearInterval(timer);},[refreshGitHub,canTools]);
   useEffect(()=>{if(!popup&&eventQueue.length){setPopup(eventQueue[0]);setEventQueue(old=>old.slice(1));}},[popup,eventQueue]);
   useEffect(()=>{if(!popup)return;const timer=setTimeout(()=>setPopup(null),6500);return()=>clearTimeout(timer);},[popup]);
   function focusMap(key,scale=.8){
@@ -324,6 +341,28 @@ export function CompanyMap({api,me,data,onRefresh}) {
       const [[id,point]]=[...pointers.current.entries()];
       gesture.current={type:'pan',x:point.x,y:point.y,startX:panRef.current.x,startY:panRef.current.y,id};
     }else if(!pointers.current.size)gesture.current=null;
+  }
+  // The canvas clips the map (overflow:hidden) but the browser still scrolls
+  // it to reveal a keyboard-focused card. That shifts the whole map with no
+  // way back. Turn any such scroll into a pan so focus stays visible and the
+  // map stays consistent.
+  function mapScroll(e){
+    const el=e.currentTarget,dx=el.scrollLeft,dy=el.scrollTop;
+    if(!dx&&!dy)return;
+    el.scrollLeft=0;el.scrollTop=0;
+    userMoved.current=true;pendingFocus.current=null;
+    setPan(p=>boundedPan(p.x-dx,p.y-dy));
+  }
+  // Keyboard focus may land on a card outside the visible map in any
+  // direction (the browser cannot scroll to negative offsets): pan to it.
+  function mapFocus(e){
+    const el=e.target,box=e.currentTarget.getBoundingClientRect(),r=el.getBoundingClientRect?.();
+    if(!r||el===e.currentTarget||el.closest('.map-controls,.map-legend'))return;
+    const inside=r.left>=box.left&&r.right<=box.right&&r.top>=box.top&&r.bottom<=box.bottom;
+    if(inside)return;
+    const dx=(box.left+box.width/2)-(r.left+r.width/2),dy=(box.top+box.height/2)-(r.top+r.height/2);
+    userMoved.current=true;pendingFocus.current=null;
+    setPan(p=>boundedPan(p.x+dx,p.y+dy));
   }
   function mapClickCapture(e){
     // A drag or pinch must not also open the card it ended on.
@@ -473,7 +512,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
           return <details key={d.id} open><summary>{d.name}</summary><button onClick={()=>choose('department:'+d.id)} className={channel==='department:'+d.id?'chosen':''}>Open {d.name} chat</button><ul>{members.filter(e=>!members.some(x=>x.id===e.manager_id)).map(e=>branch(e))}</ul></details>;})}
         <p className="channel-note">Global chat is shared. Department and employee conversations are restricted to the founder and authorized members. AGO enforces access on every read and write.</p>
       </aside>
-      <div className="company-canvas" ref={canvasRef} onPointerDown={mapPointerDown} onPointerMove={mapPointerMove} onPointerUp={mapPointerEnd} onPointerCancel={mapPointerEnd} onClickCapture={mapClickCapture} onDoubleClick={e=>{if(!e.target.closest('.map-node-wrap,.map-founder,.map-controls,.map-legend'))zoomOn(zoomRef.current*1.6,e.clientX,e.clientY);}}>
+      <div className="company-canvas" ref={canvasRef} onPointerDown={mapPointerDown} onPointerMove={mapPointerMove} onPointerUp={mapPointerEnd} onPointerCancel={mapPointerEnd} onClickCapture={mapClickCapture} onScroll={mapScroll} onFocusCapture={mapFocus} onDoubleClick={e=>{if(!e.target.closest('.map-node-wrap,.map-founder,.map-controls,.map-legend'))zoomOn(zoomRef.current*1.6,e.clientX,e.clientY);}}>
         <div className="map-controls">
           <button aria-label="Zoom in" onClick={()=>zoomOn(zoomRef.current*1.25)}>+</button>
           <button aria-label="Zoom out" onClick={()=>zoomOn(zoomRef.current/1.25)}>−</button>

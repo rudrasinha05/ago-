@@ -7,7 +7,9 @@ const tenant='10000000-0000-4000-8000-000000000001';
 const user='10000000-0000-4000-8000-000000000002';
 const department='10000000-0000-4000-8000-000000000003';
 const other='10000000-0000-4000-8000-000000000004';
-const permissions=['brain:manage','approval:decide','organization:manage','calendar:write','knowledge:write','tool:manage','council:propose','meta:manage','meta:simulate'];
+// Founder fixture mirrors the real founder role: every write it holds comes
+// with the matching read (the UI only polls resources the role may read).
+const permissions=['brain:manage','brain:read','approval:decide','organization:manage','organization:read','task:read','messages:read','tool:read','calendar:write','knowledge:write','tool:manage','council:propose','meta:manage','meta:simulate'];
 async function fixtures(page,{reviewer=false}={}) {
   const calls=[],errors=[],goals=[];
   page.on('pageerror',e=>errors.push(String(e)));
@@ -79,6 +81,12 @@ test('late failed SSO bootstrap cannot clear a newer password session',async({pa
   await expect(page.getByRole('button',{name:'Sign out',exact:true})).toBeVisible();
   expect(errors).toEqual([]);
 });
+// The 3D scene reports WebGL readiness asynchronously; never decide from a race.
+async function webglState(page){
+  const volume=page.locator('.brain-volume');
+  await expect(volume).not.toHaveAttribute('data-webgl','pending');
+  return (await volume.getAttribute('data-webgl'))==='on';
+}
 async function accessibility(page) {
   await page.evaluate(axe.source);
   const violations=await page.evaluate(async()=> (await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa']}})).violations.map(x=>({id:x.id,nodes:x.nodes.map(n=>n.target)})));
@@ -351,7 +359,7 @@ test('company brain neurons, red routes and work signals come only from persiste
  // Opening a person shows the Organization tab with their record.
  await expect(page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Organization & Chat/})).toHaveAttribute('aria-current','page');
  await openCompanyTab(page,'Command Center');
- if(await page.locator('.brain-volume.webgl-active').count()){
+ if(await webglState(page)){
   // Pointer path: clicking the running neuron in the 3D scene selects that employee.
   const label=page.locator(`.brain-neuron-label[data-node="${specialist}"]`);
   await expect(label).toHaveAttribute('data-x',/\d/);
@@ -531,7 +539,7 @@ test('3D brain wheel zoom keeps the point under the cursor and Reset view restor
  await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
   {id:'20000000-0000-4000-8000-000000000061',assignee_id:worker,action:'internal:build',status:'running',project_name:'Zoom project'}]}));
  await login(page);await navigate(page,'Organization');
- test.skip(!(await page.locator('.brain-volume.webgl-active').count()),'No WebGL in this browser: SVG fallback has no zoom.');
+ test.skip(!(await webglState(page)),'No WebGL in this browser: SVG fallback has no zoom.');
  const scene=page.locator('canvas.ago-real-3d-brain');await scene.scrollIntoViewIfNeeded();
  const founder=page.locator('.brain-neuron-label[data-node="founder"]'),neuron=page.locator(`.brain-neuron-label[data-node="${worker}"]`);
  await expect(neuron).toHaveAttribute('data-x',/\d/);
@@ -545,6 +553,39 @@ test('3D brain wheel zoom keeps the point under the cursor and Reset view restor
  expect(Math.hypot(n1.x-n0.x,n1.y-n0.y)).toBeLessThan(6);
  await page.getByRole('button',{name:'Reset brain rotation'}).click();
  await expect.poll(async()=>{const f=await point(founder),n=await point(neuron);return Math.round(Math.hypot(n.x-f.x,n.y-f.y));}).toBeLessThan(gap0*1.04);
+ expect(errors).toEqual([]);
+});
+
+test('roles without read permission do not poll forbidden company resources',async({page})=>{
+ const {calls,errors}=await fixtures(page,{reviewer:true});
+ await login(page);await navigate(page,'Organization');
+ // Longer than every polling interval (chat 5 s, activity/notifications 7 s).
+ await page.waitForTimeout(8000);
+ const polled=calls.filter(c=>/\/v1\/organization\/company\/(chat|activity|notifications|governance|reports)|\/v1\/platform\/catalog/.test(c.path));
+ expect(polled.map(c=>c.path)).toEqual([]);
+ await openCompanyTab(page,'Organization & Chat');
+ await expect(page.locator('.company-error')).toContainText('Conversations are not available for your role.');
+ expect(errors).toEqual([]);
+});
+
+test('keyboard focus on an off-screen map card pans the map instead of scrolling the clipped canvas',async({page})=>{
+ const {errors}=await fixtures(page);
+ await page.route(/\/v1\/organization\/employees\?department_id=/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},
+  {id:other,name:'Far worker',department_id:department,kind:'ai',manager_id:user}]}));
+ await login(page);await navigate(page,'Organization');
+ await openCompanyTab(page,'Organization & Chat');
+ const canvas=page.locator('.company-canvas');
+ for(let i=0;i<8;i++)await page.getByRole('button',{name:'Zoom in'}).click();
+ // Move focus into the Founder card, now far outside the visible map.
+ await page.getByLabel('Talk to your company',{exact:true}).focus();
+ await expect.poll(()=>canvas.evaluate(el=>el.scrollLeft+el.scrollTop)).toBe(0);
+ const box=await canvas.boundingBox(),field=await page.getByLabel('Talk to your company',{exact:true}).boundingBox();
+ // The focused field is brought inside the map area by panning.
+ expect(field.x+field.width/2).toBeGreaterThan(box.x);
+ expect(field.x+field.width/2).toBeLessThan(box.x+box.width);
+ expect(field.y+field.height/2).toBeGreaterThan(box.y);
+ expect(field.y+field.height/2).toBeLessThan(box.y+box.height);
  expect(errors).toEqual([]);
 });
 

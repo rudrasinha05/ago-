@@ -17,6 +17,16 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
    try {const batch=await api.request('/v1/organization/company/projects?limit=50&offset=0');setProjects(batch);setHasMore(batch.length===50);} catch {setProjects(null);setHasMore(false);}
  },[api]);
  useEffect(()=>{if(isFounder)refresh();},[refresh,isFounder]);
+ // While a just-created plan waits for a decision taken elsewhere (Approvals
+ // tab), keep its status live instead of showing the stale creation state.
+ const PLAN_ORDER=['draft','pending_approval','approved','active','rejected','cancelled','completed'];
+ const liveCreated=created?projects?.find(p=>p.id===created.id):null;
+ const createdStatus=created?[created.plan_status,liveCreated?.plan_status].filter(Boolean)
+   .sort((a,b)=>PLAN_ORDER.indexOf(b)-PLAN_ORDER.indexOf(a))[0]:null;
+ useEffect(()=>{
+  if(!isFounder||!created||!['draft','pending_approval'].includes(createdStatus))return undefined;
+  const timer=setInterval(refresh,10000);return()=>clearInterval(timer);
+ },[isFounder,created,createdStatus,refresh]);
  async function loadMore(){
   if(moreBusy||!hasMore||!projects)return;setMoreBusy(true);setProjectError('');
   try{const batch=await api.request('/v1/organization/company/projects?limit=50&offset='+projects.length);
@@ -138,16 +148,20 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
   {created&&<div aria-live="polite"><strong>{created.title}</strong>
     <p><b>Accountable delivery owner:</b> {created.accountable_manager_name} ({created.accountable_manager_role||'Founder authority'}) · {created.assignment_source==='founder_escalation'?'Management staffing escalation':'Recorded executive management responsibility'}</p>
     <p><b>Commercial goal:</b> {created.commercial_objective} · {created.commercial_stage} · No verified revenue evidence yet</p>
-    <p>Draft saved · Founder approval needed · No unapproved code or external GitHub action started.</p>
+    <p>{createdStatus==='draft'?'Draft saved · Founder approval needed'
+      :createdStatus==='pending_approval'?'Submitted · waiting for the Founder decision in Approvals'
+      :createdStatus==='rejected'?'Founder rejected this plan'
+      :['approved','active'].includes(createdStatus)?'Founder approved · CEO handoff and execution stay separate steps (Project portfolio)'
+      :'Plan status: '+createdStatus} · No unapproved code or external GitHub action started.</p>
     <ol className="intake-stage-list">{created.stages.map(s=><li key={s.stage}>
       <strong>{s.position}. {s.stage}</strong><small>{s.deliverable}</small>
       <span>{s.suggested_assignee_name||'Staffing required'}</span>
       <small>{s.plan_step_id?'Allowlisted internal review step drafted':'Proposal only; tooling and approval required'}</small>
     </li>)}</ol>
-    <p>Plan ID: <code>{created.plan_id}</code> · Status: {created.plan_status} · Founder approval is required before materialization. <a href="#company-approval-inbox">View approval inbox ↑</a></p>
-    {created.plan_status==='draft'&&created.stages.some(s=>s.plan_step_id)&&
+    <p>Plan ID: <code>{created.plan_id}</code> · Status: {createdStatus} · Founder approval is required before materialization. <a href="#company-approval-inbox">View approval inbox ↑</a></p>
+    {createdStatus==='draft'&&created.stages.some(s=>s.plan_step_id)&&
       <button type="button" disabled={reviewBusy} onClick={submitForReview}>{reviewBusy?'Submitting…':'Submit plan for founder approval'}</button>}
-    {created.plan_status==='draft'&&!created.stages.some(s=>s.plan_step_id)&&
+    {createdStatus==='draft'&&!created.stages.some(s=>s.plan_step_id)&&
       <p>Assign a qualified discovery AI employee before submitting this draft for approval.</p>}
   </div>}
   <div id="ago-project-portfolio" className="founder-project-portfolio">
