@@ -44,13 +44,19 @@ def test_cycle():
         container.resolve("a")
 
 
-def test_health_and_request_id():
+@pytest.mark.parametrize('healthy', [True, False])
+def test_health_and_request_id(monkeypatch, healthy):
+    # Exercise both readiness outcomes without relying on a developer's DB.
+    # PostgreSQL connectivity and migrations have separate integration gates.
+    monkeypatch.setattr('ago.main.postgres_available', lambda: healthy)
     client = TestClient(create_app())
     response = client.get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert response.headers["x-request-id"]
-    assert client.get("/health/ready").status_code == 200
+    ready = client.get("/health/ready")
+    assert ready.status_code == (200 if healthy else 503)
+    assert ready.json()['checks']['postgres']['healthy'] is healthy
 
 
 def test_required_registration_validation():

@@ -56,3 +56,20 @@ def test_invalid_model_or_prompt_fail_closed():
     provider = ResponsesTextProvider(api_key="test", model="model")
     with pytest.raises(ValueError):
         provider.generate("")
+
+
+def test_provider_never_forwards_credentials_through_proxy_or_redirect(monkeypatch):
+    from urllib.request import HTTPRedirectHandler, ProxyHandler, Request
+
+    monkeypatch.setenv('HTTPS_PROXY', 'http://untrusted.example:8080')
+    monkeypatch.setenv('https_proxy', 'http://untrusted.example:8080')
+    provider = ResponsesTextProvider(api_key='test-key', model='configured-model')
+    handlers = provider.opener.__self__.handlers
+    assert not any(h.proxies for h in handlers if isinstance(h, ProxyHandler))
+    redirect = next(h for h in handlers if isinstance(h, HTTPRedirectHandler))
+    request = Request(provider.ENDPOINT, data=b'private prompt',
+                      headers={'Authorization': 'Bearer test-key'})
+    for code in (301, 302, 303, 307, 308):
+        with pytest.raises(RuntimeError, match='never redirect'):
+            redirect.redirect_request(request, None, code, 'redirect', {},
+                                      'https://untrusted.example/collect')

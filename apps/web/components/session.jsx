@@ -11,11 +11,17 @@ export function SessionProvider({children}) {
   const clear=()=>{epoch.current++;api.current?.clear();setMe(null);setBusy(false);setError('');};
   if (!api.current) api.current=new SessionClient({onExpire:()=>{clear();setError('Your session expired. Sign in again.');}});
   useEffect(()=>{
-    let mounted=true;
+    let mounted=true;const version=epoch.current;
+    const current=()=>mounted&&version===epoch.current;
     if(!ssoBoot.current)ssoBoot.current=api.current.completeSSO();
     ssoBoot.current.then(async available=>{
-      if(available&&mounted){const profile=await api.current.request('/v1/console/me');if(mounted)setMe(profile);}
-    }).catch(()=>{if(mounted)api.current.clear();});
+      if(available&&current()){
+        const profile=await api.current.request('/v1/console/me');
+        if(!current())return;
+        if(!profile || !Array.isArray(profile.permissions) || !profile.id || !profile.tenant_id)throw new Error('Invalid member response');
+        setMe(profile);
+      }
+    }).catch(()=>{if(current())api.current.clear();});
     return()=>{mounted=false;};
   },[]);
   async function ssoLogin(){

@@ -54,6 +54,24 @@ async function navigate(page,label) {
   await page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:label,exact:true}).click();
   await expect(page.locator(label==='Organization'?'#screen .company-command':'#screen .workspace-view')).toBeVisible();
 }
+test('late failed SSO bootstrap cannot clear a newer password session',async({page})=>{
+  const {calls,errors}=await fixtures(page);
+  let release;
+  const held=new Promise(resolve=>{release=resolve;});
+  await page.route('**/v1/security/sso/session',async route=>{
+    await held;
+    // A malformed successful SSO response rejects during JSON parsing.
+    await route.fulfill({status:200,contentType:'application/json',body:'invalid-json'});
+  });
+  await login(page);
+  release();
+  await expect.poll(()=>calls.filter(c=>c.path==='/v1/console/me').length).toBe(1);
+  await navigate(page,'Strategy');
+  await expect.poll(()=>calls.filter(c=>c.path==='/v1/brain/goals').length).toBeGreaterThan(0);
+  expect(calls.filter(c=>c.path==='/v1/brain/goals').every(c=>c.auth==='Bearer browser-fixture-only-token')).toBe(true);
+  await expect(page.getByRole('button',{name:'Sign out',exact:true})).toBeVisible();
+  expect(errors).toEqual([]);
+});
 async function accessibility(page) {
   await page.evaluate(axe.source);
   const violations=await page.evaluate(async()=> (await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa']}})).violations.map(x=>({id:x.id,nodes:x.nodes.map(n=>n.target)})));

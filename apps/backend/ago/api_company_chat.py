@@ -217,8 +217,13 @@ def delivery_overview_record(project: dict, detail: dict, pending: list[dict]) -
             'awaiting_independent_qa': status == 'completed' and verdict is None,
         })
     waiting_qa = any(s['awaiting_independent_qa'] for s in result_stages)
-    blocked = any(
-        s['task_status'] == 'failed' or s['qa_verdict'] == 'fail'
+    blocked = detail.get('plan_status') == 'rejected' or any(
+        s['task_status'] == 'failed' or s['agent_run_status'] == 'failed'
+        or s['qa_verdict'] == 'fail'
+        for s in result_stages
+    )
+    reviewed = bool(result_stages) and all(
+        s['task_status'] == 'completed' and s['qa_verdict'] == 'pass'
         for s in result_stages
     )
     return {
@@ -231,6 +236,7 @@ def delivery_overview_record(project: dict, detail: dict, pending: list[dict]) -
             'waiting_for_independent_qa' if waiting_qa else
             'working' if any(s['task_status'] == 'running' for s in result_stages) else
             'awaiting_project_plan_approval' if detail.get('plan_status') != 'active' else
+            'internally_reviewed' if reviewed else
             'awaiting_governed_execution'
         ),
         'stages': result_stages,
@@ -248,7 +254,7 @@ def delivery_overview_record(project: dict, detail: dict, pending: list[dict]) -
         'draft_pr_verified': False,
         'release_ready': False,
         'next_view': (
-            'project_review' if detail.get('plan_status') != 'active' else
+            'project_review' if blocked or detail.get('plan_status') != 'active' else
             'independent_qa' if waiting_qa else
             'project_work'
         ),
@@ -281,12 +287,16 @@ def founder_delivery_overview(
             raise ValueError('Incomplete approval inbox')
         results = []
         for project in projects:
+            if not isinstance(project, dict) or not project.get('id'):
+                raise ValueError('Incomplete project registry entry')
             detail = store.project_details(actor.tenant_id, str(project['id']),
                                            reader_id=actor.subject)
             if not isinstance(detail, dict):
                 raise ValueError('Incomplete project details')
-            ids = {str(s['task_id']) for s in detail.get('stages', [])
-                   if isinstance(s, dict) and s.get('task_id')}
+            # Validate the exact scoped record before traversing its stages or
+            # linking approvals. Missing evidence must not become an empty plan.
+            delivery_overview_record(project, detail, [])
+            ids = {str(s['task_id']) for s in detail['stages'] if s.get('task_id')}
             linked = [
                 a for a in approvals
                 if isinstance(a, dict) and a.get('status') == 'pending'

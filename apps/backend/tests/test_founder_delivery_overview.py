@@ -122,13 +122,14 @@ def test_delivery_overview_does_not_mix_other_project_approvals():
     # RBAC helper is also exercised by the signed HTTP integration test above.
 
 
-def test_delivery_overview_rejects_missing_source_records_instead_of_fake_success():
+@pytest.mark.parametrize('stages', [None, {}, 'unavailable', [None], [{}] * 21])
+def test_delivery_overview_rejects_missing_source_records_instead_of_fake_success(stages):
     from types import SimpleNamespace
     from unittest.mock import Mock
     id1 = str(uuid4())
     store = Mock()
     store.projects.return_value = [{"id": id1}]
-    store.project_details.return_value = {"id": id1, "stages": None}
+    store.project_details.return_value = {"id": id1, "stages": stages}
     store.approval_inbox.return_value = []
     repos = Mock()
     repos.resolve.return_value = store
@@ -137,3 +138,27 @@ def test_delivery_overview_rejects_missing_source_records_instead_of_fake_succes
         founder_delivery_overview(limit=20, offset=0,
                                   actor=actor, repositories=repos)
     assert exc.value.status_code == 400
+
+
+def test_delivery_overview_distinguishes_reviewed_work_from_execution_and_release():
+    project = {"id": str(uuid4())}
+    detail = {**project, "plan_status": "active", "stages": [
+        {"task_status": "completed", "agent_run_status": "completed", "qa_verdict": "pass"}
+    ]}
+    result = delivery_overview_record(project, detail, [])
+    assert result['delivery_state'] == 'internally_reviewed'
+    assert result['release_ready'] is False
+    assert result['github_commit_verified'] is False
+    detail['stages'] = []
+    assert delivery_overview_record(project, detail, [])['delivery_state'] != 'internally_reviewed'
+
+
+@pytest.mark.parametrize('plan_status,run_status', [('rejected', None), ('active', 'failed')])
+def test_rejected_plan_or_failed_run_blocks_delivery(plan_status, run_status):
+    project = {"id": str(uuid4())}
+    detail = {**project, "plan_status": plan_status, "stages": [
+        {"task_status": "running", "agent_run_status": run_status, "qa_verdict": None}
+    ]}
+    result = delivery_overview_record(project, detail, [])
+    assert result['delivery_state'] == 'blocked'
+    assert result['next_view'] == 'project_review'

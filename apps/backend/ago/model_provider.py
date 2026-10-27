@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener, urlopen
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 class ResponsesTextProvider:
@@ -24,7 +24,9 @@ class ResponsesTextProvider:
         self.model = model
         self.timeout = timeout_seconds
         self.max_output_tokens = max_output_tokens
-        self.opener = opener or urlopen
+        # Keep credentials and private prompts on the explicit provider endpoint.
+        # Default urllib redirect handling can forward Authorization elsewhere.
+        self.opener = opener or build_opener(ProxyHandler({}), _DenyRedirect()).open
 
     def generate(self, prompt: str) -> str:
         if not 1 <= len(prompt.strip()) <= 4000:
@@ -67,7 +69,7 @@ class ResponsesTextProvider:
 
 class _DenyRedirect(HTTPRedirectHandler):
     def redirect_request(self, *_args, **_kwargs):
-        raise RuntimeError("Local Ollama endpoint must never redirect to another host")
+        raise RuntimeError("Model endpoint must never redirect to another host")
 
 
 class OllamaLocalTextProvider:

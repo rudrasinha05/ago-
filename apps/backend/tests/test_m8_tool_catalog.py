@@ -107,6 +107,8 @@ def test_external_metrics_adapter_refuses_ambient_proxy_credentials(monkeypatch)
 
     hostile = "http://hostile-proxy.example:8080"
     monkeypatch.setenv("HTTPS_PROXY", hostile)
+    # urllib prefers lowercase variables when both spellings are present.
+    monkeypatch.setenv("https_proxy", hostile)
     assert getproxies().get("https") == hostile
     provider = ReadOnlyMetricsProvider(
         hostname="reports.example.com", api_token="operator-secret",
