@@ -54,6 +54,13 @@ async function navigate(page,label) {
   await page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:label,exact:true}).click();
   await expect(page.locator(label==='Organization'?'#screen .company-command':'#screen .workspace-view')).toBeVisible();
 }
+// Organization page sections live in tabs; open one by its tab link.
+async function openCompanyTab(page,label){
+  const escaped=label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const tab=page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:new RegExp('^'+escaped)});
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-current','page');
+}
 test('late failed SSO bootstrap cannot clear a newer password session',async({page})=>{
   const {calls,errors}=await fixtures(page);
   let release;
@@ -201,6 +208,7 @@ test('red routed task follows the recorded manager line and opens actual worker'
   {id:'20000000-0000-4000-8000-000000000020',assignee_id:other,action:'internal:brief',status:'running',project_name:'Real reviewed project'}
  ]}));
  await login(page);await navigate(page,'Organization');
+ await openCompanyTab(page,'Organization & Chat');
  await expect(page.locator('.company-world line.edge-live')).toHaveCount(1);
  await expect(page.locator('.company-world line.edge-pending')).toHaveCount(0);
  await page.getByRole('button',{name:'Fit all'}).click();
@@ -255,6 +263,7 @@ test('founder can create first real governed task then separately approve and di
   return route.fulfill({status:200,json:{task_id:realTaskId,status:'completed'}});
  });
  await login(page);await navigate(page,'Organization');
+ await openCompanyTab(page,'Execution & Delivery');
  await page.getByRole('button',{name:'Set up first task'}).click();
  await expect(page.getByLabel('First approved AI work setup')).toBeVisible();
  await expect(page.getByLabel('AI employee')).toHaveValue(other);
@@ -266,10 +275,12 @@ test('founder can create first real governed task then separately approve and di
  await page.getByRole('button',{name:'Request approval',exact:true}).click();
  await expect.poll(()=>approvals.length).toBe(1);
  expect(dispatched).toBe(0);
+ await openCompanyTab(page,'Approvals');
  await page.locator('#company-approval-inbox').getByRole('button',{name:'View approval details'}).click();
  await page.getByLabel('Mandatory decision reason').fill('Authorized local isolated brief validation');
  await page.getByRole('button',{name:'Approve',exact:true}).click();
  await expect.poll(()=>approvals[0].status).toBe('approved');
+ await openCompanyTab(page,'Execution & Delivery');
  await expect(page.getByRole('button',{name:'Run approved AI'})).toBeVisible();
  expect(dispatched).toBe(0);
  await page.getByRole('button',{name:'Run approved AI'}).click();
@@ -337,6 +348,9 @@ test('company brain neurons, red routes and work signals come only from persiste
  await neurons.locator(`[data-neuron="${analyst}"]`).focus();
  await page.keyboard.press('Enter');
  await expect(page.locator('.employee-inspector')).toContainText('Unlinked analyst');
+ // Opening a person shows the Organization tab with their record.
+ await expect(page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Organization & Chat/})).toHaveAttribute('aria-current','page');
+ await openCompanyTab(page,'Command Center');
  if(await page.locator('.brain-volume.webgl-active').count()){
   // Pointer path: clicking the running neuron in the 3D scene selects that employee.
   const label=page.locator(`.brain-neuron-label[data-node="${specialist}"]`);
@@ -436,6 +450,7 @@ test('map views keep the same reporting links and join every employee to its dep
  await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
   {id:'20000000-0000-4000-8000-000000000041',assignee_id:worker,action:'internal:build',status:'running',project_name:'Lane project'}]}));
  await login(page);await navigate(page,'Organization');
+ await openCompanyTab(page,'Organization & Chat');
  const world=page.locator('.company-world'),views=page.getByRole('group',{name:'Map view'});
  await expect(views.getByRole('button',{name:'Circular'})).toHaveAttribute('aria-pressed','true');
  const reporting=async()=>({links:await world.locator('.company-link.manager-link').count(),live:await world.locator('.company-link.edge-live').count()});
@@ -474,6 +489,7 @@ test('map zooms at the pointer and pans from any point without opening the card 
   {id:worker,name:'Pan target',department_id:department,kind:'ai',manager_id:user},
  ]}));
  await login(page);await navigate(page,'Organization');
+ await openCompanyTab(page,'Organization & Chat');
  const canvas=page.locator('.company-canvas');await canvas.scrollIntoViewIfNeeded();
  await page.getByRole('button',{name:'All employees'}).click();
  const card=page.locator('.map-node.employee').filter({hasText:'Pan target'});

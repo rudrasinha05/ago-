@@ -243,7 +243,10 @@ export function CompanyMap({api,me,data,onRefresh}) {
       fitMap();
     }
   },[layout]);
-  function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));if(!focusMap(key,.84)&&key.startsWith('employee:')){pendingFocus.current=key;setMapMode('all');}}
+  function choose(key){if(!canReadChannel(key)){setError('This AGO conversation is private to its authorized participants.');return;}setChannel(key);setReply(null);setInspectorOpen(true);if(key.startsWith('employee:'))setSelected(key.slice(9));if(!focusMap(key,.84)&&key.startsWith('employee:')){pendingFocus.current=key;setMapMode('all');}
+    // People, teams and conversations live on the Organization tab: show it.
+    if(activeTab!=='ago-tab-organization'){setActiveTab('ago-tab-organization');
+      requestAnimationFrame(()=>document.getElementById('ago-company-org-map')?.scrollIntoView({block:'start',behavior:'auto'}));}}
   function boundedPan(x,y,z=zoomRef.current){
     const w=viewport.current?.clientWidth||700,h=viewport.current?.clientHeight||700;
     // Allow up to half the drawn canvas off-centre so any part can be brought
@@ -354,6 +357,43 @@ export function CompanyMap({api,me,data,onRefresh}) {
       {children.length>0&&<div className="chat-thread-children">{children.map(child=>renderMessage(child,depth+1))}</div>}
     </article>;
   }
+  // Organization tabs: every section stays mounted (polling, drafts and
+  // selection survive switching); only the active panel is shown. Any
+  // in-page link to a section id opens the tab that contains it.
+  const [activeTab,setActiveTab]=useState('ago-tab-command');
+  const pendingApprovals=(approvalList||[]).filter(a=>a.status==='pending').length;
+  const tabs=[
+    {id:'ago-tab-command',label:'Command Center'},
+    {id:'ago-tab-approvals',label:'Approvals',badge:pendingApprovals||null,badgeLabel:pendingApprovals+' pending approval requests'},
+    ...((founderView&&me.permissions?.includes('brain:manage'))||(me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read'))
+      ?[{id:'ago-tab-projects',label:'Projects'}]:[]),
+    ...(me.permissions?.includes('task:read')||founderView?[{id:'ago-tab-delivery',label:'Execution & Delivery',badge:liveTaskCount||null,badgeLabel:liveTaskCount+' tasks running'}]:[]),
+    {id:'ago-tab-board',label:'Board & Roles'},
+    {id:'ago-tab-organization',label:'Organization & Chat'},
+  ];
+  const openSection=useCallback((id,{updateHash=false}={})=>{
+    const target=document.getElementById(id);
+    const panel=target?.matches?.('[data-tab-panel]')?target:target?.closest?.('[data-tab-panel]');
+    if(!panel)return false;
+    setActiveTab(panel.id);
+    if(updateHash&&window.location.hash!=='#'+id)history.replaceState(history.state,'',window.location.pathname+window.location.search+'#'+id);
+    // Scroll after the panel is shown; a panel itself scrolls to the tab bar.
+    requestAnimationFrame(()=>{
+      const node=document.getElementById(id);
+      (node?.matches?.('[data-tab-panel]')?document.querySelector('.company-tabs'):node)?.scrollIntoView({block:'start',behavior:'auto'});
+    });
+    return true;
+  },[]);
+  useEffect(()=>{
+    const fromHash=()=>{const id=decodeURIComponent(window.location.hash.slice(1));if(/^[A-Za-z0-9_-]+$/.test(id))openSection(id);};
+    fromHash();
+    window.addEventListener('hashchange',fromHash);
+    return()=>window.removeEventListener('hashchange',fromHash);
+  },[openSection]);
+  useEffect(()=>{
+    // The map measures its viewport; re-fit once it becomes visible.
+    if(activeTab==='ago-tab-organization'&&!userMoved.current)requestAnimationFrame(()=>fitMap());
+  },[activeTab]);
   async function hire(event){event.preventDefault();const form=new FormData(event.currentTarget);
     const values={department_id:department,manager_id:form.get('manager')||null,name:form.get('name'),requirement:form.get('requirement')};
     const signature=JSON.stringify(values);if(staffKey.current?.signature!==signature)staffKey.current={signature,key:crypto.randomUUID()};
@@ -370,44 +410,50 @@ export function CompanyMap({api,me,data,onRefresh}) {
       await onRefresh();
     }catch(e){setError(e.message);}finally{setSending(false);}
   }
-  return <section id="ago-unified-cockpit" className="company-command" aria-label="Company map and conversations">
+  return <section id="ago-unified-cockpit" className="company-command" aria-label="Company map and conversations"
+    onClick={event=>{
+      // Every in-page section link (tab bar or "View approval inbox ↑" style
+      // links inside sections) opens the tab holding that section. Fragment
+      // navigation never reloads a tab-memory AGO session.
+      const anchor=event.target.closest?.('a[href^="#"]');
+      const fragment=anchor?.getAttribute('href');
+      if(!fragment||!/^#[A-Za-z0-9_-]+$/.test(fragment))return;
+      if(!document.getElementById(fragment.slice(1))?.closest?.('[data-tab-panel]'))return;
+      event.preventDefault();
+      openSection(fragment.slice(1),{updateHash:true});
+    }}>
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><div className="company-heading-actions">
       <CompanyNotificationCenter api={api} data={eventData} employees={employees} onSelect={id=>choose('employee:'+id)}
         onRead={result=>{setEventData(old=>old&&Number.isInteger(result?.read_through_id)?{...old,read_through_id:result.read_through_id,
           unread_count:(old.recent||[]).filter(e=>e.id>result.read_through_id).length}:old);refreshEvents();}}/>
       {me.permissions.includes('organization:manage')&&<><button type="button" className="btn" aria-expanded={addingDepartment} onClick={()=>setAddingDepartment(v=>!v)}>Add department</button><button type="button" className="btn" disabled={!departments.length} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></>}</div></header>
     {addingDepartment&&me.permissions.includes('organization:manage')&&<form className="company-add-department" onSubmit={createDepartment}><label htmlFor="company-department-name">Department name</label><input id="company-department-name" name="name" autoFocus required maxLength={150} placeholder="e.g. Engineering"/><button className="btn" disabled={sending}>{sending?'Saving…':'Create department'}</button><button type="button" className="btn" onClick={()=>setAddingDepartment(false)}>Cancel</button></form>}
-    <nav className="company-cockpit-nav" aria-label="Company control center sections"
-      onClick={event=>{
-        // Fragment navigation must remain reliable on tablet Firefox while
-        // React repaints task updates; never reload a tab-memory AGO session.
-        const anchor=event.target.closest?.('a[href^="#"]');
-        const fragment=anchor?.getAttribute('href');
-        if(!fragment||!/^#[A-Za-z0-9_-]+$/.test(fragment))return;
-        const destination=document.getElementById(fragment.slice(1));
-        if(!destination)return;
-        event.preventDefault();
-        if(window.location.hash!==fragment)window.location.hash=fragment;
-        destination.scrollIntoView({block:'start',behavior:'auto'});
-      }}>
-      <a href="#ago-unified-cockpit">Company Brain</a>
-      <a href="#company-approval-inbox">Founder Approvals</a>
-      {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business Opportunities</a>}
-      {founderView&&me.permissions?.includes('brain:manage')&&<a href="#ago-project-portfolio">Project Portfolio</a>}
-      {founderView&&me.permissions?.includes('organization:manage')&&<a href="#ago-role-planner">Roles & Expertise</a>}
-       {me.permissions?.includes('task:read')&&<a href="#ago-execution-desk">Execution Desk</a>}
-       {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
-       {founderView&&<a href="#ago-github-delivery">Project Delivery</a>}
-      <a href="#ago-company-org-map">Organization & Chat</a>
+    <nav className="company-cockpit-nav company-tabs" aria-label="Company control center sections">
+      {tabs.map(tab=><a key={tab.id} href={'#'+tab.id} aria-current={activeTab===tab.id?'page':undefined}
+        className={activeTab===tab.id?'active':undefined}>
+        {tab.label}{tab.badge?<><b className="company-tab-badge" aria-hidden="true">{tab.badge}</b><span className="sr-only">, {tab.badgeLabel}</span></>:null}
+      </a>)}
     </nav>
-    <CommandBrain tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    <section id="ago-tab-command" className="company-tab-panel" data-tab-panel aria-label="Command Center" hidden={activeTab!=='ago-tab-command'}>
+    <CommandBrain part="brain" tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    </section>
+    <section id="ago-tab-approvals" className="company-tab-panel" data-tab-panel aria-label="Approvals" hidden={activeTab!=='ago-tab-approvals'}>
     <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
+    </section>
+    <section id="ago-tab-projects" className="company-tab-panel" data-tab-panel aria-label="Projects" hidden={activeTab!=='ago-tab-projects'}>
     <FounderProjectIntake api={api} me={me} employees={employees} profiles={governanceData?.employees||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
-    <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
+    <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
+    </section>
+    <section id="ago-tab-delivery" className="company-tab-panel" data-tab-panel aria-label="Execution and delivery" hidden={activeTab!=='ago-tab-delivery'}>
      <CompanyExecutionDesk api={api} me={me} tasks={tasks} approvals={approvalList} employees={employees} onChange={async()=>{await refreshActivity();await refreshEvents();setApprovalRefresh(v=>v+1);}} onEmployee={id=>choose('employee:'+id)}/>
      <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
      {founderView&&<CompanyGithubDelivery api={api} me={me}/>} 
-    <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
+    </section>
+    <section id="ago-tab-board" className="company-tab-panel" data-tab-panel aria-label="Board and roles" hidden={activeTab!=='ago-tab-board'}>
+    <CommandBrain part="board" tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
+    </section>
+    <section id="ago-tab-organization" className="company-tab-panel" data-tab-panel aria-label="Organization and chat" hidden={activeTab!=='ago-tab-organization'}>
     <div id="ago-company-org-map" className={"company-shell"+(fullscreen?" company-fullscreen":"")} aria-label="Organization map workspace">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>
@@ -528,6 +574,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       {githubState===null?<p>Project status unavailable or access denied. Configure approved GitHub access under Operations & Tools.</p>:!githubState.length?<p>No approved GitHub project currently linked. Connect a reviewed project before claiming code is synced.</p>:
         <ul className="github-live-list">{githubState.map(p=><li key={p.id}><strong>{p.repository}</strong><small>{p.status?(p.status.status||p.status.state||'Status checked'):'Live status unavailable'}</small></li>)}</ul>}
       <p>Commits, PRs, documentation and CI still require evidence and approval. Repository changes are never inferred from dashboard animations.</p><Link className="company-github-navigation" href="/tools/">View GitHub operations and CI →</Link></section></div>
+    </section>
     {error&&<p role="alert" className="company-error">{error}</p>}
     {staffing&&<div className="staffing-backdrop"><section onKeyDown={e=>{if(e.key==='Escape')setStaffing(false);if(e.key==='Tab'){const controls=[...e.currentTarget.querySelectorAll('input,select,textarea,button')].filter(x=>!x.disabled);const first=controls[0],last=controls.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}} role="dialog" aria-modal="true" aria-labelledby="staff-title" className="staffing-dialog"><h2 id="staff-title">Add a role your project needs</h2>{error&&<p role="alert">{error}</p>}<form onSubmit={hire}><label>Role name<input name="name" required maxLength={150} autoFocus placeholder="e.g. Research Scientist"/></label><label htmlFor="staff-department">Department</label><select id="staff-department" value={department} onChange={e=>setDepartment(e.target.value)} required><option value="">Choose department</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><label htmlFor="staff-manager">Reports to</label><select id="staff-manager" name="manager" key={department}><option value="">Department root · connected to founder</option>{employees.filter(e=>e.department_id===department).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select><label>Why is this role needed?<textarea name="requirement" minLength={10} maxLength={3000} required placeholder="Describe the project requirement and expected work."/></label><p>This creates an AI profile and records the requirement. Model access and execution permissions are configured separately.</p><button className="btn" disabled={sending||!department}>Create role</button><button type="button" className="btn" onClick={()=>setStaffing(false)}>Cancel</button></form></section></div>}
   </section>;

@@ -140,6 +140,11 @@ try{
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(result)});
  });
  async function login(){await page.getByLabel('Organization ID').fill(tenant);await page.getByLabel('Work email').fill('founder@example.test');await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByRole('heading',{name:'Company map',exact:true}).waitFor();}
+ // Organization sections live in tabs (all stay mounted; one is shown).
+ async function tab(name){
+  await page.getByRole('navigation',{name:'Company control center sections'}).locator('a').filter({hasText:name}).first().click();
+  await page.waitForFunction(n=>[...document.querySelectorAll('.company-tabs a[aria-current="page"]')].some(a=>a.textContent.startsWith(n)),name);
+ }
  await page.goto(base+'/workspace/organization/');await login();
  // The real visual page must have no path back to the retired legacy UI.
  assert.equal(await page.locator('a[href="/console/"]').count(),0,'No duplicate Control Center link');
@@ -151,12 +156,14 @@ try{
    assert.equal(await page.locator(destination).count(),1,'Company section exists: '+destination);
  }
  // Navigate via the real GitHub/Tools link: authentication must survive SPA navigation.
+ await tab('Organization & Chat');
  await page.getByRole('link',{name:'View GitHub operations and CI'}).click();
  await page.locator('#screen .workspace-view').waitFor();
  assert.equal(new URL(page.url()).pathname,'/workspace/tools/');
  assert.equal(await page.locator('#login-form').count(),0,'Tools link must not lose tab-memory sign-in');
  await page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:'Organization',exact:true}).click();
  await page.getByRole('heading',{name:'Company map',exact:true}).waitFor();
+ await tab('Execution & Delivery');
  await page.getByRole('heading',{name:'Project Delivery Center'}).waitFor();
  await page.locator('#ago-github-delivery').getByText('No approved GitHub project is linked.',{exact:false}).waitFor();
  assert.equal(await page.locator('#ago-github-delivery').getByRole('button',{name:/Execute approved GitHub/}).count(),0,
@@ -196,6 +203,7 @@ try{
  githubProjects=[];githubOperations=[];integrationProposals=[];githubRunState=null;
  await delivery.getByRole('button',{name:'Refresh live records'}).click();
 
+ await tab('Organization & Chat');
  await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
  await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
  assert.match(await page.locator('.employee-inspector').innerText(),/Busy/);
@@ -212,7 +220,9 @@ try{
  assert.ok(await page.locator('.company-world .company-orbit-ring').count()>0,'Circular guides must remain visible');
  assert.match(await page.locator('.map-node.employee').filter({hasText:'Developer'}).innerText(),/Orchestration research/);
  assert.match(await page.locator('.employee-inspector').innerText(),/Additional responsibilities/);
+ await tab('Board & Roles');
  await page.getByRole('heading',{name:'Board of Directors'}).waitFor();
+ await tab('Command Center');
  await page.getByRole('heading',{name:'AI Company Command Center'}).waitFor();
  const brain=page.locator('.brain-volume');
  const initialRotation=await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation'));
@@ -227,12 +237,14 @@ try{
  await verifiedQueue.getByText('Running',{exact:true}).waitFor();
  await verifiedQueue.getByRole('button',{name:'Open Developer work details'}).click();
  await page.locator('.employee-inspector').getByText('Orchestration research',{exact:true}).waitFor();
+ await tab('Command Center');
  await page.getByRole('button',{name:'Rotate brain right'}).click();
  assert.notEqual(await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation')),initialRotation);
  assert.match(await brain.getAttribute('aria-label'),/verified running tasks/);
  await page.getByRole('button',{name:'Reset brain rotation'}).click();
  assert.equal(await brain.evaluate(n=>n.style.getPropertyValue('--brain-rotation')),'0deg');
  const founderBrief='Build a complete project management system with audit trails, secure access, automated tests and documentation';
+ await tab('Projects');
  await page.getByLabel('Founder project brief').fill(founderBrief);
  await page.getByRole('button',{name:'Prepare project from brief'}).click();
  await page.getByText('Draft saved · Founder approval needed',{exact:false}).waitFor();
@@ -286,22 +298,27 @@ try{
  assert.equal(calls.some(c=>c.path.includes('github')&&c.body?.body?.includes('Sensitive local')),false);
 
  await page.getByText('Accountable delivery owner: CTO',{exact:false}).waitFor();
+ await tab('Execution & Delivery');
  await page.getByRole('heading',{name:'Management ownership and workforce utilization'}).waitFor();
  await page.getByRole('button',{name:'Inspect employee workload'}).click();
  await page.locator('.management-people').getByText('Developer',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Hide employee workload'}).click();
+ await tab('Projects');
  await page.getByRole('button',{name:'Submit plan for founder approval'}).click();
  await page.getByText('Status: pending_approval',{exact:false}).waitFor();
  assert.ok(calls.some(c=>c.path==='/v1/brain/plans/'+id(23)+'/submit'));
+ await tab('Approvals');
  await page.locator('.approval-inbox').getByText('1 pending requests company-wide').waitFor({timeout:15000});
  await page.locator('.approval-inbox').getByRole('button',{name:'View approval details'}).click();
  await page.getByRole('dialog',{name:'Approval details'}).getByText('Founder',{exact:false}).first().waitFor();
  assert.match(await page.getByRole('dialog',{name:'Approval details'}).innerText(),/Founder only/i);
  assert.equal(await page.getByRole('dialog',{name:'Approval details'}).getByRole('button',{name:'Approve',exact:true}).count(),1);
  await page.getByRole('button',{name:'Close approval details'}).click();
+ await tab('Board & Roles');
  await page.getByLabel('Appoint AI CTO · Chief Technology Officer').selectOption(cto);
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'Appoint AI officer'}).click();
  await page.locator('.board-seat').filter({hasText:'Technology Oversight'}).getByRole('button',{name:'View officer profile'}).waitFor();
+ await tab('Organization & Chat');
  await page.locator('.company-channels').getByRole('button',{name:'Developer',exact:true}).click();
  await page.getByRole('button',{name:'Edit employee accountability'}).click();
  await page.getByLabel('Official role title').fill('Backend Engineer');
@@ -362,6 +379,7 @@ try{
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  assert.equal(await page.locator('#ago-github-delivery').count(),0,
    'Regular company members cannot view Founder GitHub dispatch controls.');
+ await tab('Approvals');
  await page.locator('#company-approval-inbox').getByText('0 need my review',{exact:false}).waitFor();
  const readOnly=page.locator('#company-approval-inbox .approval-entry');
  await readOnly.first().getByRole('button',{name:'View approval details'}).click();
@@ -370,6 +388,7 @@ try{
  await modal.getByRole('button',{name:'Close approval details'}).click();
  asReviewer=false;
  await page.goto(base+'/workspace/organization/');await login();
+ await tab('Approvals');
  await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor();
  const entries=page.locator('#company-approval-inbox .approval-entry');
  const founderDialog=page.getByRole('dialog',{name:'Approval details'});
@@ -380,6 +399,7 @@ try{
  await founderDialog.getByRole('button',{name:'Close approval details'}).click();
  // After a fresh Founder login the map defaults to Leadership, which hides
  // ordinary contributors. Explicitly enter All employees to inspect their counters.
+ await tab('Organization & Chat');
  await page.getByRole('button',{name:'All employees',exact:true}).click();
  const developerCard=page.locator('.map-node-wrap').filter({hasText:'Developer'}).first();
  await developerCard.waitFor({state:'visible'});
@@ -403,6 +423,7 @@ try{
   plan_title:null,action:'founder:exception:'+id(99),approval_type:'governance_action',
   requires_founder_decision:true,status:'pending',reviewer_id:null,reason:null};
  approvalRecords.push(exceptional);
+ await tab('Approvals');
  await page.locator('#company-approval-inbox').getByText('1 need my review',{exact:false}).waitFor({timeout:16000});
  await page.locator('#company-approval-inbox .approval-entry')
   .filter({hasText:exceptional.action})
