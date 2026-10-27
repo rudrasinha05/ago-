@@ -3,7 +3,7 @@ import Link from 'next/link';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {resource} from '@ago/sdk/session';
 import {employeeStatus,companyLayout,companyLinkAnchors,activeRouteKeys,employeeProjects} from '@ago/sdk/company';
-import {CommandBrain} from './command-brain';
+import {CommandBrain,CompanyBoard} from './command-brain';
 import {RoleEditor,UpwardReports} from './company-governance';
 import {FounderProjectIntake} from './founder-project-intake';
 import {CompanyApprovals} from './company-approvals';
@@ -435,22 +435,32 @@ export function CompanyMap({api,me,data,onRefresh}) {
       </a>)}
     </nav>
     <section id="ago-tab-command" className="company-tab-panel" data-tab-panel aria-label="Command Center" hidden={activeTab!=='ago-tab-command'}>
-    <CommandBrain part="brain" tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    <CommandBrain tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} onSelect={id=>choose('employee:'+id)}/>
     </section>
     <section id="ago-tab-approvals" className="company-tab-panel" data-tab-panel aria-label="Approvals" hidden={activeTab!=='ago-tab-approvals'}>
     <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
     </section>
     <section id="ago-tab-projects" className="company-tab-panel" data-tab-panel aria-label="Projects" hidden={activeTab!=='ago-tab-projects'}>
+    {/* Jump links only for sections this role can actually see. */}
+    <nav className="company-subnav" aria-label="Projects sections">
+      {founderView&&me.permissions?.includes('brain:manage')&&<a href="#ago-project-portfolio">Project portfolio</a>}
+      {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business opportunities</a>}
+    </nav>
     <FounderProjectIntake api={api} me={me} employees={employees} profiles={governanceData?.employees||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
     </section>
     <section id="ago-tab-delivery" className="company-tab-panel" data-tab-panel aria-label="Execution and delivery" hidden={activeTab!=='ago-tab-delivery'}>
+    <nav className="company-subnav" aria-label="Execution and delivery sections">
+      {me.permissions?.includes('task:read')&&<a href="#ago-execution-desk">Execution desk</a>}
+      {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
+      {founderView&&<a href="#ago-github-delivery">Project delivery</a>}
+    </nav>
      <CompanyExecutionDesk api={api} me={me} tasks={tasks} approvals={approvalList} employees={employees} onChange={async()=>{await refreshActivity();await refreshEvents();setApprovalRefresh(v=>v+1);}} onEmployee={id=>choose('employee:'+id)}/>
      <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
      {founderView&&<CompanyGithubDelivery api={api} me={me}/>} 
     </section>
     <section id="ago-tab-board" className="company-tab-panel" data-tab-panel aria-label="Board and roles" hidden={activeTab!=='ago-tab-board'}>
-    <CommandBrain part="board" tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    <CompanyBoard employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
     </section>
     <section id="ago-tab-organization" className="company-tab-panel" data-tab-panel aria-label="Organization and chat" hidden={activeTab!=='ago-tab-organization'}>

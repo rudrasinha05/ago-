@@ -23,8 +23,7 @@ const ago=value=>{
  if(seconds<86400)return Math.round(seconds/3600)+' h ago';return new Date(at).toLocaleDateString();
 };
 const NEURON_FILTERS=[['all','All'],['working','Working'],['waiting','Waiting'],['signals','Signals']];
-export function CommandBrain({part='all',tasks,notifications,employees,departments=[],founderId=null,selectedId=null,onSelect,governance,onAppoint,canGovern}) {
- const [choices,setChoices]=useState({});
+export function CommandBrain({tasks,notifications,employees,departments=[],founderId=null,selectedId=null,onSelect}) {
  const [highlight,setHighlight]=useState(null);
  const [neuronFilter,setNeuronFilter]=useState('all');
  // Polling returns new arrays every few seconds; keep the same network object
@@ -47,36 +46,6 @@ export function CommandBrain({part='all',tasks,notifications,employees,departmen
  const events=notifications?.recent||[];
  const assigned=known?[...active,...queued].slice(0,8):[];
  const employeeNames=new Map(employees.map(e=>[e.id,e.name]));
- const approved=(governance?.board||[]).map(s=>({...s,member_id:s.employee_id,approved:true}));
- const seats=boardFunctionSeats(employees,approved);
- const assignedToOtherSeat=new Set((governance?.board||[]).map(a=>a.employee_id));
- const openBoardCount=seats.filter(s=>!s.member).length;
- const boardSection=(
-   <section className="board-command" aria-label="Board governance functions">
-    <div><h3>Board of Directors</h3><small>{openBoardCount} of 5 seats unassigned · Software AI roles, not legal directors · Founder approval required</small></div>
-    <div className="board-seats">{seats.map(s=>{
-      const options=employees.filter(e=>e.kind==='ai'&&(!assignedToOtherSeat.has(e.id)||e.id===s.member?.id));
-      const selected=choices[s.title]||s.member?.id||'';
-      return <div key={s.title} className="board-seat">
-        <strong>{BOARD_TITLES[s.title]}</strong>
-        <small>{s.member?'Appointed: '+s.member.name:'Vacant · AI appointment required'}</small>
-        <span><b>{s.title}</b> · {s.responsibility}</span>
-        {s.member&&<button type="button" className="board-detail" onClick={()=>onSelect(s.member.id)}>View officer profile</button>}
-        {canGovern&&<div className="board-appoint">
-          <select aria-label={'Appoint AI '+BOARD_TITLES[s.title]} value={selected} disabled={Boolean(s.member)}
-            onChange={e=>setChoices(old=>({...old,[s.title]:e.target.value}))}>
-             <option value="">Select eligible AI employee</option>
-             {options.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
-          <button type="button" disabled={Boolean(s.member)||!selected}
-            onClick={()=>onAppoint(s.title,selected)}>{s.member?'Seat appointed':'Appoint AI officer'}</button>
-          {!s.member&&!options.length&&<small>No eligible AI employee found. Add or explicitly assign a suitable AI role first.</small>}
-        </div>}
-      </div>;
-    })}</div>
-   </section>
- );
- if(part==='board')return <div className="command-overview board-only">{boardSection}</div>;
  return <div className="command-overview">
    <div className="command-head"><div><small className="command-eyebrow">AGO · LIVE WORKFORCE OBSERVATORY</small><h2>AI Company Command Center</h2><p>Task assignment, governed activity and delivery evidence — not a simulated AI workforce.</p></div>
      <div className="command-metrics"><span><b>{known?tasks.length:'—'}</b>Tasks</span><span><b>{known?active.length:'—'}</b>Working</span><span><b>{known?queued.length:'—'}</b>Awaiting</span><span><b>{known?finished.length:'—'}</b>Finished</span></div>
@@ -189,6 +158,39 @@ export function CommandBrain({part='all',tasks,notifications,employees,departmen
         <span>{n.label}{n.signals?' · '+n.signals+' signal'+(n.signals===1?'':'s'):''}</span>
       </button></li>)}</ul>:<p>No employees match this filter.</p>}
    </details>
-   {part==='all'&&boardSection}
+ </div>;
+}
+
+/** Board of Directors seats: approved appointments only; AI roles, not legal directors. */
+export function CompanyBoard({employees,governance,onAppoint,onSelect,canGovern}) {
+ const [choices,setChoices]=useState({});
+ const approved=(governance?.board||[]).map(s=>({...s,member_id:s.employee_id,approved:true}));
+ const seats=boardFunctionSeats(employees,approved);
+ const assignedToOtherSeat=new Set((governance?.board||[]).map(a=>a.employee_id));
+ const openBoardCount=seats.filter(s=>!s.member).length;
+ return <div className="command-overview board-only">
+   <section className="board-command" aria-label="Board governance functions">
+    <div><h3>Board of Directors</h3><small>{openBoardCount} of 5 seats unassigned · Software AI roles, not legal directors · Founder approval required</small></div>
+    <div className="board-seats">{seats.map(s=>{
+      const options=employees.filter(e=>e.kind==='ai'&&(!assignedToOtherSeat.has(e.id)||e.id===s.member?.id));
+      const selected=choices[s.title]||s.member?.id||'';
+      return <div key={s.title} className="board-seat">
+        <strong>{BOARD_TITLES[s.title]}</strong>
+        <small>{s.member?'Appointed: '+s.member.name:'Vacant · AI appointment required'}</small>
+        <span><b>{s.title}</b> · {s.responsibility}</span>
+        {s.member&&<button type="button" className="board-detail" onClick={()=>onSelect(s.member.id)}>View officer profile</button>}
+        {canGovern&&<div className="board-appoint">
+          <select aria-label={'Appoint AI '+BOARD_TITLES[s.title]} value={selected} disabled={Boolean(s.member)}
+            onChange={e=>setChoices(old=>({...old,[s.title]:e.target.value}))}>
+             <option value="">Select eligible AI employee</option>
+             {options.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+          <button type="button" disabled={Boolean(s.member)||!selected}
+            onClick={()=>onAppoint(s.title,selected)}>{s.member?'Seat appointed':'Appoint AI officer'}</button>
+          {!s.member&&!options.length&&<small>No eligible AI employee found. Add or explicitly assign a suitable AI role first.</small>}
+        </div>}
+      </div>;
+    })}</div>
+   </section>
  </div>;
 }
