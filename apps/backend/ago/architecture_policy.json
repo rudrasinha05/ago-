@@ -69,6 +69,7 @@
         "company_ollama_chain_queries",
         "enterprise_store",
         "organizational_dna",
+        "security_controls",
         "task_store"
       ]
     },

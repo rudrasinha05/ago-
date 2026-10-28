@@ -149,7 +149,7 @@ export class SessionClient {
       headers:{Accept:'application/json'},credentials:'same-origin',cache:'no-store',
       redirect:'error',mode:'same-origin',signal:AbortSignal.timeout(15000),
     });
-    if (!response.ok) return false;
+    if (response.status === 204 || !response.ok) return false;
     const session = await response.json();
     if (generation !== this.#generation || typeof session.access_token !== 'string' || !session.access_token) return false;
     this.#token = session.access_token;

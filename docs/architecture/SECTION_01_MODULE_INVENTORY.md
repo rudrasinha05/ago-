@@ -8,7 +8,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [__init__](../../apps/backend/ago/__init__.py) | entrypoints | composition | None |
 | [access](../../apps/backend/ago/access.py) | governance | persistence | backend_contracts, security |
 | [agent_handlers](../../apps/backend/ago/agent_handlers.py) | workforce | service | workflows |
-| [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, company_ollama_chain_queries, enterprise_store, organizational_dna, task_store |
+| [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, company_ollama_chain_queries, enterprise_store, organizational_dna, security_controls, task_store |
 | [agent_runtime_queries](../../apps/backend/ago/agent_runtime_queries.py) | workforce | persistence | backend_contracts |
 | [analytics_store](../../apps/backend/ago/analytics_store.py) | strategy | persistence | architecture_guard, backend_contracts, graph_store, reviewed_changes, security, security_controls |
 | [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, company_engineering_preflight, model_handlers, repository_ports, security |

@@ -14,6 +14,7 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.task_store import TaskStore
 from ago.organizational_dna import GenomeStore
 from ago.enterprise_store import EnterpriseOperationsStore
+from ago.security_controls import SecurityControls
 
 
 class AgentRuntime:
@@ -49,8 +50,12 @@ class AgentRuntime:
             # Project briefs are founder-confidential. Until every delegated AI
             # role has independently approved content access, nonfounders cannot
             # execute work that materializes the private brief into result logs.
-            if context_row is not None and "founder" not in actor.roles:
-                raise PermissionError("Confidential project execution requires founder authority")
+            if context_row is not None and (
+                str(context_row['founder_id']) != actor.subject
+                or not self.repositories.resolve(SecurityControls).permitted(
+                    actor, 'approval:founder', actor.tenant_id)
+            ):
+                raise PermissionError("Confidential project execution requires current project founder authority")
             project_context = ({
                 "title": context_row["title"], "brief": context_row["brief"],
                 "intake_id": str(context_row["id"]),

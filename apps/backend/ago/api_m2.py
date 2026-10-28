@@ -331,6 +331,10 @@ def finish_sso(request: Request, state: str = '', code: str = '', db=Depends(db_
 @router.get('/security/sso/session')
 def sso_session(request: Request, response: Response, db=Depends(db_connection),
                 repositories: RepositoryScope = Depends(repository_scope)):
+    # Password users have no SSO result to redeem. This is an empty probe,
+    # not an authentication failure; supplied invalid/replayed tokens still fail.
+    if not request.cookies.get('ago_sso_result'):
+        return Response(status_code=204, headers={'Cache-Control': 'no-store'})
     try:
         actor = repositories.resolve(IdentitySecurityStorePort).redeem_handoff(
             token=request.cookies.get('ago_sso_result', ''), browser_binding=request.cookies.get('ago_sso_browser', ''))
@@ -338,6 +342,7 @@ def sso_session(request: Request, response: Response, db=Depends(db_connection),
         identity_error(exc)
     response.delete_cookie('ago_sso_result', path='/v1/security/sso')
     response.delete_cookie('ago_sso_browser', path='/v1/security/sso')
+    response.headers['Cache-Control'] = 'no-store'
     return {'access_token': session_tokens().issue(actor), 'token_type': 'bearer'}
 
 

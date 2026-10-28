@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SessionClient} from '../session.js';
 
+test('empty SSO handoff is signed out without trying to parse a missing body',async()=>{
+  const client=new SessionClient({fetchImpl:async()=>({ok:true,status:204,
+    json:async()=>{throw new Error('204 must not be parsed');}})});
+  assert.equal(await client.completeSSO(),false);
+  assert.equal(client.authenticated,false);
+});
+
 test('MFA is carried only in sign-in body and cookie handoff is restricted to SSO routes',async()=>{
   const calls=[];
   const client=new SessionClient({fetchImpl:async(path,options)=>{

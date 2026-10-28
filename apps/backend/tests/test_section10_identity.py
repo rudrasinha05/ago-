@@ -131,11 +131,14 @@ def test_sso_browser_state_pkce_mapping_local_roles_and_handoff_replay(case, fac
         assert callback.status_code == 303 and callback.headers['location'] == '/workspace/'
         assert 'HttpOnly' in callback.headers['set-cookie'] and 'Secure' in callback.headers['set-cookie']
         assert browser.get(URL+'/sso/callback', params={'state': state, 'code': 'test-authorization-code'}).status_code == 401
+        replay_cookie = '; '.join(f'{key}={value}' for key, value in browser.cookies.items())
         handoff = browser.get(URL+'/sso/session')
         assert handoff.status_code == 200 and 'no-store' in handoff.headers['cache-control']
         actor = SessionTokens('m6-integration-test-signing-key-123456789').verify(handoff.json()['access_token'])
         assert actor.subject == info['reviewer1'] and actor.roles == ('reviewer',)
-        assert browser.get(URL+'/sso/session').status_code == 401
+        empty = browser.get(URL+'/sso/session')
+        assert empty.status_code == 204 and empty.content == b''
+        assert browser.get(URL+'/sso/session', headers={'Cookie': replay_cookie}).status_code == 401
         monkeypatch.setenv('AGO_IDENTITY_POLICY', 'oidc')
         login(client, info, 'm6reviewer1@example.test', 'reviewer-test-password-123', expected=401)
 

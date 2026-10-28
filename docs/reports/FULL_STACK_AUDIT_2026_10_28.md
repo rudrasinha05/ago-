@@ -61,3 +61,33 @@ Docker/export/independent-review steps have become a complete one-click journey.
 Actual owner Windows startup, real owner-local Ollama execution, private candidate
 Docker QA, independent human decision and AGO-origin GitHub delivery still need
 their own real evidence. CI fixtures do not certify those owner-device outcomes.
+
+## Continuation and integration with concurrent work
+
+On resumption, remote `develop` had advanced to
+`9050280fb4227cefb2d1b297964d513dc25c5f26`. All three workflows on that commit
+were verified successful through GitHub. The concurrent frontend/tab, department,
+timezone and polling fixes were incorporated without overwriting them; see
+`CLAUDE_FULL_STACK_VERIFICATION_2026_10_28.md` for that contributor's evidence.
+
+Additional corrections in this continuation:
+
+- **Private project execution:** the runtime trusted a cached token's founder
+  role. It now requires both the exact project's founder identity and the live
+  active-human Founder appointment, before consuming task approval or running a
+  model. The existing query supplies `founder_id`; the module policy and generated
+  inventory explicitly register the existing security service dependency. No
+  schema, approval policy or public API shape changed. Two isolated unit negatives
+  and two real signed-session PostgreSQL negatives cover revoked Founder roles
+  and a different Founder in the same tenant. Existing positive execution tests
+  continue to exercise legitimate project dispatch.
+- **Empty SSO probe:** absent handoff cookies now return HTTP 204 with no body and
+  no-store caching instead of an unnecessary 401. The SDK recognizes 204 without
+  parsing JSON. Supplied invalid credentials and replayed, previously redeemed
+  cookies still return 401; the real SSO test now explicitly replays those cookies.
+  The endpoint still uses its existing database dependency.
+
+Before this continuation, local Chromium desktop passed 19 tests; local Firefox
+failed while creating a page, before assertions. That local multi-browser run was
+stopped and was not counted as successful. CI provides the browser integration
+gate. The npm advisory audit returned zero known vulnerabilities for the lockfile.
