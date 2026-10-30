@@ -246,19 +246,9 @@ class CompanyChat:
         UUID(reader_id)
         if after_id is not None and (type(after_id) is not int or after_id < 0):
             raise ValueError('Positive notification cursor required')
-        founder=self.db.execute("""
-            SELECT 1 FROM ago_users u JOIN ago_employees e
-              ON e.tenant_id=u.tenant_id AND e.id=u.id AND e.kind='human'
-            JOIN ago_user_roles r ON r.tenant_id=u.tenant_id AND r.user_id=u.id
-              AND r.role='founder'
-            WHERE u.tenant_id=%s AND u.id=%s AND u.active
-        """,(tenant_id,reader_id)).fetchone() is not None
-        kinds="('status','report','staffing','github','qa','docs','project')" if founder else (
-            "('status','report','staffing','github','qa','docs')")
-        visibility="" if founder else " AND employee_id=%s"
-        params=[tenant_id]
-        if not founder:
-            params.append(reader_id)
+        kinds, visibility, scope = self._notification_scope(tenant_id, reader_id)
+        founder = not visibility
+        params = list(scope)
         cursor_filter=""
         if after_id is not None:
             cursor_filter=" AND id>%s"
@@ -290,11 +280,68 @@ class CompanyChat:
             """,(tenant_id,reader_id)).fetchone()
             counts={reader_id:int(count["n"])}
         return {
+            **self._notification_read_state(tenant_id, reader_id, kinds, visibility, scope),
             "by_employee":counts,
             "recent":[dict(row) for row in recent],
             "has_more":len(records)>100,
             "event_type":"committed_work_event",
         }
+
+
+    def _notification_scope(self, tenant_id: str, reader_id: str):
+        UUID(tenant_id)
+        UUID(reader_id)
+        identity = self.db.execute("""
+            SELECT EXISTS (SELECT 1 FROM ago_user_roles r
+                WHERE r.tenant_id=u.tenant_id AND r.user_id=u.id
+                  AND r.role='founder') AS founder
+            FROM ago_users u JOIN ago_employees e
+              ON e.tenant_id=u.tenant_id AND e.id=u.id AND e.kind='human'
+            WHERE u.tenant_id=%s AND u.id=%s AND u.active
+        """, (tenant_id, reader_id)).fetchone()
+        if identity is None:
+            raise PermissionError('Active human notification reader required')
+        if identity['founder']:
+            return "('status','report','staffing','github','qa','docs','project')", '', (tenant_id,)
+        return "('status','report','staffing','github','qa','docs')", ' AND employee_id=%s', (tenant_id, reader_id)
+
+    def _notification_read_state(self, tenant_id, reader_id, kinds, visibility, scope):
+        row = self.db.execute("""
+            SELECT read_through_id FROM ago_notification_read_cursors
+            WHERE tenant_id=%s AND reader_id=%s
+        """, (tenant_id, reader_id)).fetchone()
+        through = int(row['read_through_id']) if row else 0
+        rows = self.db.execute(f"""
+            SELECT employee_id, COUNT(*) AS n FROM ago_company_chat
+            WHERE tenant_id=%s {visibility} AND kind IN {kinds} AND id>%s
+            GROUP BY employee_id
+        """, (*scope, through)).fetchall()
+        return {
+            'read_through_id': through,
+            'unread_count': sum(int(row['n']) for row in rows),
+            'unread_by_employee': {str(row['employee_id']): int(row['n'])
+                                   for row in rows if row['employee_id'] is not None},
+        }
+
+    def mark_notifications_read(self, tenant_id: str, reader_id: str, through_id: int) -> dict:
+        # The reader always comes from the authenticated session, never the body.
+        if type(through_id) is not int or not 0 <= through_id <= 9007199254740991:
+            raise ValueError('Invalid notification read cursor')
+        with self.db.transaction():
+            kinds, visibility, scope = self._notification_scope(tenant_id, reader_id)
+            if through_id and not self.db.execute(f"""
+                SELECT id FROM ago_company_chat
+                WHERE tenant_id=%s {visibility} AND kind IN {kinds} AND id=%s
+            """, (*scope, through_id)).fetchone():
+                raise ValueError('Notification unavailable')
+            self.db.execute("""
+                INSERT INTO ago_notification_read_cursors(tenant_id,reader_id,read_through_id)
+                VALUES (%s,%s,%s)
+                ON CONFLICT (tenant_id,reader_id) DO UPDATE
+                SET read_through_id=GREATEST(ago_notification_read_cursors.read_through_id,
+                                           EXCLUDED.read_through_id)
+            """, (tenant_id, reader_id, through_id))
+            return self._notification_read_state(tenant_id, reader_id, kinds, visibility, scope)
 
 
     def staffing_proposals(self, actor, project_id: str) -> dict:

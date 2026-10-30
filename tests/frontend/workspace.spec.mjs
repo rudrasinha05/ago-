@@ -420,7 +420,7 @@ test('server read cursor drives unread badge and Mark all read',async({page})=>{
  let readThrough=1;const posted=[];
  await page.route(/\/v1\/organization\/company\/notifications\/read$/,route=>{
   posted.push(route.request().postDataJSON());readThrough=posted.at(-1).through_id;
-  return route.fulfill({status:200,json:{read_through_id:readThrough}});
+  return route.fulfill({status:200,json:{read_through_id:readThrough,unread_count:0,unread_by_employee:{}}});
  });
  await page.route(/\/v1\/organization\/company\/notifications(\?.*)?$/,route=>route.fulfill({status:200,json:{
   by_employee:{[worker]:2},event_type:'committed_work_event',read_through_id:readThrough,
@@ -444,6 +444,10 @@ test('server read cursor drives unread badge and Mark all read',async({page})=>{
  await page.keyboard.press('Escape');
  await expect(panel).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Work notifications, 0 unread'})).toBeFocused();
+ // Remount the workspace: the server acknowledgement survives the UI lifecycle.
+ await navigate(page,'Overview');await navigate(page,'Organization');
+ await expect(page.getByRole('button',{name:'Work notifications, 0 unread'})).toBeVisible();
+ expect(posted).toEqual([{through_id:2}]);
  expect(errors).toEqual([]);
 });
 

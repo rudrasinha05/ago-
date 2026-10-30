@@ -55,8 +55,27 @@ def notifications(after_id: int | None = Query(default=None,ge=0),
                   actor=Depends(authenticated), repositories=Depends(repository_scope)):
     allowed(repositories, actor, 'organization:read')
     allowed(repositories, actor, 'task:read')
-    return repositories.resolve(CompanyChatPort).notifications(
-        actor.tenant_id, reader_id=actor.subject, after_id=after_id)
+    try:
+        return repositories.resolve(CompanyChatPort).notifications(
+            actor.tenant_id, reader_id=actor.subject, after_id=after_id)
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+
+class NotificationReadInput(StrictInput):
+    through_id: int = Field(ge=0, le=9007199254740991, strict=True)
+
+
+@router.post('/notifications/read')
+def mark_notifications_read(data: NotificationReadInput, actor=Depends(authenticated),
+                            repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'organization:read')
+    allowed(repositories, actor, 'task:read')
+    try:
+        return repositories.resolve(CompanyChatPort).mark_notifications_read(
+            actor.tenant_id, actor.subject, data.through_id)
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
 
 
 class StaffingInput(StrictInput):

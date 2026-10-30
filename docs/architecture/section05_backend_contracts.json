@@ -374,6 +374,10 @@
         "set_reporting_manager": {
           "arguments": "self, actor, employee_id: str, manager_id: str | None",
           "returns": "dict"
+        },
+        "mark_notifications_read": {
+          "arguments": "self, tenant_id: str, reader_id: str, through_id: int",
+          "returns": "dict"
         }
       }
     },

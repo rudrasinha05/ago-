@@ -464,7 +464,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <header className="company-heading"><div><p className="eyebrow">FOUNDER OPERATIONS · EVIDENCE BASED</p><h1>Company map</h1><p>Owner prompts, delegated work, review and accountable delivery.</p></div><div className="company-heading-actions">
       <CompanyNotificationCenter api={api} data={eventData} employees={employees} onSelect={id=>choose('employee:'+id)}
         onRead={result=>{setEventData(old=>old&&Number.isInteger(result?.read_through_id)?{...old,read_through_id:result.read_through_id,
-          unread_count:(old.recent||[]).filter(e=>e.id>result.read_through_id).length}:old);refreshEvents();}}/>
+          unread_count:Number.isInteger(result.unread_count)?result.unread_count:(old.recent||[]).filter(e=>e.id>result.read_through_id).length,
+          unread_by_employee:result.unread_by_employee||old.unread_by_employee}:old);refreshEvents();}}/>
       {me.permissions.includes('organization:manage')&&<><button type="button" className="btn" aria-expanded={addingDepartment} onClick={()=>setAddingDepartment(v=>!v)}>Add department</button><button type="button" className="btn" disabled={!departments.length} onClick={()=>{setDepartment(departments[0]?.id||'');setStaffing(true);}}>Add needed role</button></>}</div></header>
     {addingDepartment&&me.permissions.includes('organization:manage')&&<form className="company-add-department" onSubmit={createDepartment}><label htmlFor="company-department-name">Department name</label><input id="company-department-name" name="name" autoFocus required maxLength={150} placeholder="e.g. Engineering"/><button className="btn" disabled={sending}>{sending?'Saving…':'Create department'}</button><button type="button" className="btn" onClick={()=>setAddingDepartment(false)}>Cancel</button></form>}
     <nav className="company-cockpit-nav company-tabs" aria-label="Company control center sections">
