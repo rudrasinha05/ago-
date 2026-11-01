@@ -9,7 +9,7 @@ const department='10000000-0000-4000-8000-000000000003';
 const other='10000000-0000-4000-8000-000000000004';
 // Founder fixture mirrors the real founder role: every write it holds comes
 // with the matching read (the UI only polls resources the role may read).
-const permissions=['brain:manage','brain:read','approval:decide','organization:manage','organization:read','task:read','messages:read','tool:read','calendar:write','knowledge:write','tool:manage','council:propose','meta:manage','meta:simulate'];
+const permissions=['brain:manage','brain:read','approval:decide','approval:read','organization:manage','organization:read','task:read','messages:read','tool:read','calendar:write','knowledge:write','tool:manage','council:propose','meta:manage','meta:simulate'];
 async function fixtures(page,{reviewer=false}={}) {
   const calls=[],errors=[],goals=[];
   page.on('pageerror',e=>errors.push(String(e)));
@@ -433,6 +433,8 @@ test('server read cursor drives unread badge and Mark all read',async({page})=>{
  const toggle=page.getByRole('button',{name:'Work notifications, 1 unread'});
  await expect(toggle).toBeVisible();
  await expect(page.locator('.notification-badge')).toHaveText('1');
+ // Per-employee badges follow the reader's unread cursor, not lifetime totals.
+ await expect(page.locator('.company-channels .chat-event-count.unread[aria-label="1 unread work events"]')).toHaveCount(1);
  await toggle.click();
  const panel=page.getByRole('region',{name:'Work notifications'});
  await expect(panel.getByRole('button',{name:/^Unread: QA reviewer — QA passed for stage/})).toBeVisible();
@@ -441,6 +443,7 @@ test('server read cursor drives unread badge and Mark all read',async({page})=>{
  await expect.poll(()=>posted).toEqual([{through_id:2}]);
  await expect(page.getByRole('button',{name:'Work notifications, 0 unread'})).toBeVisible();
  await expect(page.locator('.notification-badge')).toHaveCount(0);
+ await expect(page.locator('.company-channels .chat-event-count')).toHaveCount(0);
  await page.keyboard.press('Escape');
  await expect(panel).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Work notifications, 0 unread'})).toBeFocused();
@@ -784,6 +787,52 @@ test('delivery overview is not fetched without every required read permission',a
  await login(page);await navigate(page,'Organization');
  await expect(page.getByRole('region',{name:'Project delivery journey'})).toHaveCount(0);
  expect(calls.some(x=>x.path.endsWith('/projects/delivery-overview'))).toBe(false);
+ expect(errors).toEqual([]);
+});
+
+test('delivery journey shows only Founder decisions, unverified evidence, and opens the exact approval without acting',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const planApproval='30000000-0000-4000-8000-000000000071',qaApproval='30000000-0000-4000-8000-000000000072';
+ const draftProject='30000000-0000-4000-8000-000000000081',workProject='30000000-0000-4000-8000-000000000082';
+ await page.route(/\/v1\/organization\/company\/projects\/delivery-overview/,route=>route.fulfill({status:200,json:{
+  kind:'ago_founder_delivery_overview_v1',read_only:true,more_projects_possible:false,
+  projects:[
+   {project_id:draftProject,title:'Knowledge base app',manager:'CTO',plan_status:'pending_approval',delivery_state:'awaiting_project_plan_approval',
+    stages:[{stage:'discovery',position:1,employee:'Research Analyst',task_status:null,agent_run_status:null,agent_failure_code:null,qa_verdict:null,awaiting_independent_qa:false}],
+    pending_approvals:[{approval_id:planApproval,type:'plan_review',action:'brain:activate:x',requires_founder_decision:true,review_routing:'Founder only — authenticated active human founder'}],
+    docker_qa_verified:false,github_commit_verified:false,draft_pr_verified:false,release_ready:false,next_view:'project_review'},
+   {project_id:workProject,title:'Billing service',manager:'CTO',plan_status:'active',delivery_state:'working',
+    stages:[
+     {stage:'discovery',position:1,employee:'Research Analyst',task_status:'completed',agent_run_status:'succeeded',agent_failure_code:null,qa_verdict:null,awaiting_independent_qa:true},
+     {stage:'implementation',position:2,employee:'Backend Developer',task_status:'running',agent_run_status:'running',agent_failure_code:null,qa_verdict:null,awaiting_independent_qa:false}],
+    pending_approvals:[{approval_id:qaApproval,type:'task_execution',action:'qa:review:y',requires_founder_decision:false,review_routing:'Independent human reviewer'}],
+    docker_qa_verified:false,github_commit_verified:false,draft_pr_verified:false,release_ready:false,next_view:'project_work'}]}}));
+ await page.route(/\/v1\/organization\/company\/approvals$/,route=>route.fulfill({status:200,json:[
+  {id:planApproval,status:'pending',approval_type:'plan_review',requires_founder_decision:true,action:'brain:activate:x',plan_title:'Knowledge base app',
+   requester_id:user,requester_name:'Founder',requester_role:'Founder',review_routing:'Founder only — authenticated active human founder',
+   next_action:'An approved plan requires separate activation.',created_at:new Date().toISOString()}]}));
+ await login(page);await navigate(page,'Organization');
+ const journey=page.getByRole('region',{name:'Project delivery journey'});
+ await expect(journey.getByRole('status').filter({hasText:'decision(s)'})).toHaveText('1 decision(s) on this page wait for you.');
+ const draft=page.getByRole('article',{name:'Delivery: Knowledge base app'}),work=page.getByRole('article',{name:'Delivery: Billing service'});
+ const decisions=draft.getByRole('region',{name:'Decisions waiting for you: Knowledge base app'});
+ await expect(decisions.getByRole('listitem')).toHaveCount(1);
+ await expect(decisions).toContainText('Approve the project plan');
+ // A request routed to an independent reviewer is never offered to the Founder as a decision.
+ await expect(work.getByRole('region',{name:/Decisions waiting for you/})).toHaveCount(0);
+ await expect(work).toContainText('1 linked pending request(s)');
+ // Unverified evidence is never shown as verified.
+ const evidence=work.getByRole('list',{name:'Delivery evidence for Billing service'});
+ for(const label of ['Docker QA','GitHub commit','Draft PR','Release ready'])await expect(evidence).toContainText(label+': Not verified');
+ await expect(evidence.locator('.verified')).toHaveCount(0);
+ await accessibility(page);
+ // Viewing the journey performs no write.
+ expect(calls.filter(c=>c.method!=='GET'&&c.path!=='/v1/sessions')).toEqual([]);
+ await decisions.getByRole('button',{name:/Review and decide: Approve the project plan for Knowledge base app/}).click();
+ await expect(page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Approvals/})).toHaveAttribute('aria-current','page');
+ const dialog=page.getByRole('dialog',{name:'Approval details'});
+ await expect(dialog).toContainText(planApproval);
+ expect(calls.filter(c=>c.method!=='GET'&&c.path!=='/v1/sessions')).toEqual([]);
  expect(errors).toEqual([]);
 });
 

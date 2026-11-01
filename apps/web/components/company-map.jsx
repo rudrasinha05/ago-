@@ -58,6 +58,12 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [addingDepartment,setAddingDepartment]=useState(false);
   const [updated,setUpdated]=useState(null),[popup,setPopup]=useState(null),[loading,setLoading]=useState(false);
   const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null),[governanceData,setGovernanceData]=useState(null);const lastEvent=useRef(null);
+  // Unread counts exist only with the server's per-reader cursor; otherwise
+  // the badge shows lifetime recorded events and says so.
+  const unreadKnown=Number.isInteger(eventData?.read_through_id)&&eventData?.unread_by_employee&&typeof eventData.unread_by_employee==='object';
+  const eventBadge=id=>unreadKnown
+    ?{count:Number(eventData.unread_by_employee[id])||0,label:' unread work events',unread:true}
+    :{count:Number(eventData?.by_employee?.[id])||0,label:' recorded work events',unread:false};
   const viewport=useRef(null),drag=useRef(null),previous=useRef(null),sequence=useRef(0),alive=useRef(false),retry=useRef(null),feed=useRef(null),staffKey=useRef(null);
   const pendingFocus=useRef(null),mapInitialized=useRef(false),userMoved=useRef(false);
   // Live zoom/pan for wheel, pinch and drag handlers that fire faster than renders.
@@ -402,6 +408,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   // in-page link to a section id opens the tab that contains it.
   const [activeTab,setActiveTab]=useState('ago-tab-command');
   const [requestedProject,setRequestedProject]=useState(null),[workProject,setWorkProject]=useState(null);
+  const [approvalFocus,setApprovalFocus]=useState(null);
   const pendingApprovals=(approvalList||[]).filter(a=>a.status==='pending').length;
   const tabs=[
     {id:'ago-tab-command',label:'Command Center'},
@@ -479,12 +486,13 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <section id="ago-tab-command" className="company-tab-panel" data-tab-panel aria-label="Command Center" hidden={activeTab!=='ago-tab-command'}>
     <FounderDeliveryJourney api={api} me={me} active={activeTab==='ago-tab-command'} refreshSignal={approvalRefresh}
       onSection={id=>openSection(id)}
+      onApproval={id=>{setApprovalFocus({id,at:Date.now()});openSection('ago-tab-approvals',{updateHash:true});}}
       onProject={project=>{setRequestedProject({...project,request:Date.now()});openSection('ago-project-portfolio');}}
       onWork={project=>{setWorkProject(project);refreshActivity();openSection('ago-execution-desk');}}/>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} onSelect={id=>choose('employee:'+id)}/>
     </section>
     <section id="ago-tab-approvals" className="company-tab-panel" data-tab-panel aria-label="Approvals" hidden={activeTab!=='ago-tab-approvals'}>
-    <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents}/>
+    <CompanyApprovals api={api} me={me} employees={employees} onData={receiveApprovalData} refreshSignal={approvalRefresh} onReviewed={refreshEvents} focusRequest={approvalFocus}/>
     </section>
     <section id="ago-tab-projects" className="company-tab-panel" data-tab-panel aria-label="Projects" hidden={activeTab!=='ago-tab-projects'}>
     {/* Jump links only for sections this role can actually see. */}
@@ -514,7 +522,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>
         <button className={channel==='global'?'chosen':''} onClick={()=>choose('global')}>◉ Global timeline</button>
         {departments.map(d=>{const members=employees.filter(e=>e.department_id===d.id);if(query&&!d.name.toLowerCase().includes(query.toLowerCase())&&!members.some(e=>e.name.toLowerCase().includes(query.toLowerCase())))return null;
-          function branch(e,seen=new Set()){if(seen.has(e.id))return null;const next=new Set([...seen,e.id]);return <li key={e.id}><button aria-label={e.name} className={[channel==='employee:'+e.id?'chosen':'',routing.active.has(e.id)?'chat-assigned':'',employeeStatus(e.id,tasks).tone==='busy'?'chat-working':''].filter(Boolean).join(' ')} onClick={()=>choose('employee:'+e.id)}><span className={'presence '+employeeStatus(e.id,tasks).tone}/>{e.name}{(eventData?.by_employee?.[e.id]??0)>0&&<span className="chat-event-count" aria-label={(eventData?.by_employee?.[e.id]??0)+" recorded work events"}>{eventData.by_employee[e.id]}</span>}</button><ul>{members.filter(x=>x.manager_id===e.id).map(x=>branch(x,next))}</ul></li>;}
+          function branch(e,seen=new Set()){if(seen.has(e.id))return null;const next=new Set([...seen,e.id]);return <li key={e.id}><button aria-label={e.name} className={[channel==='employee:'+e.id?'chosen':'',routing.active.has(e.id)?'chat-assigned':'',employeeStatus(e.id,tasks).tone==='busy'?'chat-working':''].filter(Boolean).join(' ')} onClick={()=>choose('employee:'+e.id)}><span className={'presence '+employeeStatus(e.id,tasks).tone}/>{e.name}{eventBadge(e.id).count>0&&<span className={'chat-event-count'+(eventBadge(e.id).unread?' unread':'')} aria-label={eventBadge(e.id).count+eventBadge(e.id).label}>{eventBadge(e.id).count}</span>}</button><ul>{members.filter(x=>x.manager_id===e.id).map(x=>branch(x,next))}</ul></li>;}
           if(!canReadChannel('department:'+d.id))return null;
           return <details key={d.id} open><summary>{d.name}</summary><button onClick={()=>choose('department:'+d.id)} className={channel==='department:'+d.id?'chosen':''}>Open {d.name} chat</button><ul>{members.filter(e=>!members.some(x=>x.id===e.manager_id)).map(e=>branch(e))}</ul></details>;})}
         <p className="channel-note">Global chat is shared. Department and employee conversations are restricted to the founder and authorized members. AGO enforces access on every read and write.</p>
@@ -562,12 +570,12 @@ export function CompanyMap({api,me,data,onRefresh}) {
            })}</svg>
           <form className="map-founder" style={{left:layout.founder.x,top:layout.founder.y,transform:`translate(-50%,-50%) scale(${Math.max(1,Math.min(1.8,.75/zoom))})`}} onSubmit={e=>send(e,true)}><CompanyApprovalBadge employee={{id:me.id,name:'Founder'}} approvals={approvalList} updates={0} api={api} me={me} onDone={async()=>{setApprovalRefresh(v=>v+1);await refreshActivity();await refreshEvents();}}/><strong>♛ Founder · Human authority</strong><small>{employees.find(e=>e.id===me.id)?.name||'Company centre'}</small><label htmlFor="founder-message">Talk to your company</label><textarea id="founder-message" value={centerDraft} onChange={e=>setCenterDraft(e.target.value)} maxLength={20000} placeholder="Your idea, project or question…" rows={3}/><button disabled={sending||!centerDraft.trim()} className="btn">Send to global chat</button></form>
           {layout.nodes.map(n=>{const state=employeeStatus(n.id,tasks);
-             const project=displayProjects(n.id);const eventCount=eventData?.by_employee?.[n.id]??0;
+             const project=displayProjects(n.id);const eventCount=eventBadge(n.id).count;
              const recordedRole=governanceData?.employees?.find(e=>e.id===n.id)?.role_title;
              const approvalCount=(approvalList||[]).filter(a=>a.requester_id===n.id&&a.status==='pending').length;
              const color=deptColor.get(n.type==='department'?n.id:n.department_id);
-             return <div key={n.key} className="map-node-wrap" style={{left:n.x,top:n.y,'--dept':color||'#7e91a9'}}><button type="button" aria-label={n.type==='employee'?n.name+', '+state.label+', '+eventCount+' recorded updates':n.name} className={'map-node '+n.type+(channel===n.key?' active':'')+(n.type==='employee'&&state.tone==='busy'?' working':'')+(routing.active.has(n.id)?' assigned':'')} onClick={()=>choose(n.key)}>
-               {n.type==='employee'&&eventCount>0&&<span className="map-count" title="Recorded work events">{eventCount}</span>}
+             return <div key={n.key} className="map-node-wrap" style={{left:n.x,top:n.y,'--dept':color||'#7e91a9'}}><button type="button" aria-label={n.type==='employee'?n.name+', '+state.label+', '+eventCount+(unreadKnown?' unread updates':' recorded updates'):n.name} className={'map-node '+n.type+(channel===n.key?' active':'')+(n.type==='employee'&&state.tone==='busy'?' working':'')+(routing.active.has(n.id)?' assigned':'')} onClick={()=>choose(n.key)}>
+               {n.type==='employee'&&eventCount>0&&<span className={'map-count'+(unreadKnown?' unread':'')} title={unreadKnown?'Unread work events':'Recorded work events'}>{eventCount}</span>}
                <strong>{n.type==='employee'&&<span className={'presence '+state.tone}/>} {n.name}</strong>
                <small>{n.type==='department'?'Department · '+employees.filter(e=>e.department_id===n.id).length+' members':(n.kind==='ai'?'AI employee · ':'Human member · ')+state.label}</small>
                {n.type==='employee'&&<small className="map-dept">{deptName.get(n.department_id)||'No department'}</small>}
@@ -607,6 +615,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
            <dt>Reports to</dt><dd>{selectedReportingIssue?.reason==='reporting_cycle'?'Invalid reporting cycle — review required':selectedReportingIssue?.reason==='self_reporting'?'Invalid self-reporting — review required':selectedReportingIssue?.reason==='manager_not_in_roster'?'Manager unavailable in roster — review required':selectedEmployee.manager_id===me.id?'Founder (recorded)':employees.find(e=>e.id===selectedEmployee.manager_id)?.name||'No manager assigned (not a Founder report)'}</dd>
            <dt>Current projects</dt><dd>{displayProjects(selected).join(', ')||'No project linked'}</dd>
            <dt>Recorded updates</dt><dd>{eventData?.by_employee?.[selected]??'Unavailable'}</dd>
+           {unreadKnown&&<><dt>Unread for you</dt><dd>{Number(eventData.unread_by_employee[selected])||0}</dd></>}
            <dt>Core responsibility</dt><dd>{governanceData?.employees?.find(e=>e.id===selected)?.core_responsibilities||'Not configured — use Company Role Planner.'}</dd>
            <dt>Additional responsibilities</dt><dd>{governanceData?.employees?.find(e=>e.id===selected)?.extra_responsibilities||'Not configured'}</dd></dl>
            <RoleEditor key={selected} employee={selectedEmployee} profile={governanceData?.employees?.find(e=>e.id===selected)} api={api} canManage={me.roles.includes('founder')} onSaved={refreshGovernance}/>

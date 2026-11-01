@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {canReadDelivery,deliveryPage,projectTaskIds,reviewedStages} from '../apps/web/components/founder-delivery-state.js';
+import {canReadDelivery,deliveryEvidence,deliveryPage,founderDecisions,projectTaskIds,reviewedStages} from '../apps/web/components/founder-delivery-state.js';
 const project=()=>({project_id:'p1',title:'Recorded project',delivery_state:'working',stages:[{stage:'discovery',task_id:'t1',task_status:'completed',qa_verdict:null}],pending_approvals:[]});
 const page=()=>({kind:'ago_founder_delivery_overview_v1',read_only:true,projects:[project()],more_projects_possible:false});
 test('overview needs every signed permission and Founder presentation role',()=>{
@@ -25,4 +25,12 @@ test('completed execution is not passed QA; scope only includes exact recorded t
   {stage:'release',task_id:null,task_status:null,qa_verdict:null});
  assert.deepEqual(projectTaskIds(p),['t1']);assert.equal(reviewedStages(p),1);
  assert.equal(p.release_ready,undefined);
+});
+test('only server-marked Founder decisions are actionable; evidence needs exact true',()=>{
+ const p={...project(),pending_approvals:[{approval_id:'a1',type:'plan_review',requires_founder_decision:true},
+  {approval_id:'a2',type:'task_execution',requires_founder_decision:false},{approval_id:'a3',requires_founder_decision:'true'}],
+  docker_qa_verified:'true',github_commit_verified:true,draft_pr_verified:1};
+ assert.deepEqual(founderDecisions(p),[{approval_id:'a1',label:'Approve the project plan'}]);
+ assert.deepEqual(deliveryEvidence(p).filter(e=>e.verified).map(e=>e.key),['commit']);
+ assert.deepEqual(deliveryEvidence(project()).filter(e=>e.verified),[]);
 });

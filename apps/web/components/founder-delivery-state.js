@@ -36,3 +36,15 @@ export function projectTaskIds(project){
 export function reviewedStages(project){
  return project.stages.filter(s=>s.task_status==='completed'&&s.qa_verdict==='pass').length;
 }
+const DECISION_LABELS={plan_review:'Approve the project plan',task_execution:'Consent to run an AI task',governance_action:'Governed decision',opportunity_review:'Business opportunity review',market_signal_review:'Market signal review'};
+// Only requests the server marks as needing the Founder; others go to independent reviewers.
+export function founderDecisions(project){
+ return (project.pending_approvals||[]).filter(a=>a.requires_founder_decision===true).map(a=>({
+  approval_id:a.approval_id,label:typeof a.type==='string'&&a.type?DECISION_LABELS[a.type]||a.type.replaceAll('_',' '):'Decision'}));
+}
+// Evidence is verified only when the signed overview says exactly true.
+export function deliveryEvidence(project){
+ return [['docker','Docker QA',project.docker_qa_verified],['commit','GitHub commit',project.github_commit_verified],
+  ['pr','Draft PR',project.draft_pr_verified],['release','Release ready',project.release_ready]]
+  .map(([key,label,value])=>({key,label,verified:value===true}));
+}

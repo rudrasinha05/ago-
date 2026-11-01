@@ -17,7 +17,7 @@ const canDecide=(a,me)=>a.status==='pending'&&(
 // Presentation only: server re-verifies real human identity, exact authority,
 // Founder-only strategic scope, independently reviewed operations, bounded CEO work and immutable audit.
 
-export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onReviewed}) {
+export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onReviewed,focusRequest=null}) {
  const [rows,setRows]=useState(null),[selected,setSelected]=useState(null);
  const [reason,setReason]=useState(''),[error,setError]=useState('');
  const [busy,setBusy]=useState(false),[toast,setToast]=useState(null);
@@ -59,6 +59,12 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
   return()=>document.removeEventListener('keydown',onKey);
  },[selected?.id]);
  function open(a){focusReturn.current=document.activeElement;setError('');setReason('');setSelected(a);setToast(null);}
+ // Another screen (Delivery Journey) asked to open one exact request.
+ useEffect(()=>{
+  if(!focusRequest?.id||!Array.isArray(rows))return;
+  const match=rows.find(a=>a.id===focusRequest.id);
+  if(match){focusReturn.current=document.activeElement;setError('');setReason('');setSelected(match);setToast(null);}
+ },[focusRequest,rows]);
  function close(){setSelected(null);setReason('');setError('');focusReturn.current?.focus?.();}
  async function decide(approve){
   if(!selected||busy||!canDecide(selected,me)||!reason.trim())return;
