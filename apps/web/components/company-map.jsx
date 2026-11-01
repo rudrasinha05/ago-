@@ -5,6 +5,7 @@ import {resource} from '@ago/sdk/session';
 import {employeeStatus,companyLayout,companyLinkAnchors,activeRouteKeys,employeeProjects} from '@ago/sdk/company';
 import {CommandBrain,CompanyBoard} from './command-brain';
 import {RoleEditor,UpwardReports} from './company-governance';
+import {FounderDeliveryJourney} from './founder-delivery-journey';
 import {FounderProjectIntake} from './founder-project-intake';
 import {CompanyApprovals} from './company-approvals';
 import {CompanyApprovalBadge} from './company-approval-badge';
@@ -400,6 +401,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   // selection survive switching); only the active panel is shown. Any
   // in-page link to a section id opens the tab that contains it.
   const [activeTab,setActiveTab]=useState('ago-tab-command');
+  const [requestedProject,setRequestedProject]=useState(null),[workProject,setWorkProject]=useState(null);
   const pendingApprovals=(approvalList||[]).filter(a=>a.status==='pending').length;
   const tabs=[
     {id:'ago-tab-command',label:'Command Center'},
@@ -475,6 +477,10 @@ export function CompanyMap({api,me,data,onRefresh}) {
       </a>)}
     </nav>
     <section id="ago-tab-command" className="company-tab-panel" data-tab-panel aria-label="Command Center" hidden={activeTab!=='ago-tab-command'}>
+    <FounderDeliveryJourney api={api} me={me} active={activeTab==='ago-tab-command'} refreshSignal={approvalRefresh}
+      onSection={id=>openSection(id)}
+      onProject={project=>{setRequestedProject({...project,request:Date.now()});openSection('ago-project-portfolio');}}
+      onWork={project=>{setWorkProject(project);refreshActivity();openSection('ago-execution-desk');}}/>
     <CommandBrain tasks={tasks} notifications={eventData} employees={employees} departments={departments} founderId={me.id} selectedId={selected} onSelect={id=>choose('employee:'+id)}/>
     </section>
     <section id="ago-tab-approvals" className="company-tab-panel" data-tab-panel aria-label="Approvals" hidden={activeTab!=='ago-tab-approvals'}>
@@ -486,7 +492,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       {founderView&&me.permissions?.includes('brain:manage')&&<a href="#ago-project-portfolio">Project portfolio</a>}
       {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business opportunities</a>}
     </nav>
-    <FounderProjectIntake api={api} me={me} employees={employees} profiles={governanceData?.employees||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
+    <FounderProjectIntake api={api} me={me} requestedProject={requestedProject} employees={employees} profiles={governanceData?.employees||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
     </section>
     <section id="ago-tab-delivery" className="company-tab-panel" data-tab-panel aria-label="Execution and delivery" hidden={activeTab!=='ago-tab-delivery'}>
@@ -495,7 +501,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       {me.permissions?.includes('task:read')&&<a href="#ago-workforce">Workforce</a>}
       {founderView&&<a href="#ago-github-delivery">Project delivery</a>}
     </nav>
-     <CompanyExecutionDesk api={api} me={me} tasks={tasks} approvals={approvalList} employees={employees} onChange={async()=>{await refreshActivity();await refreshEvents();setApprovalRefresh(v=>v+1);}} onEmployee={id=>choose('employee:'+id)}/>
+     <CompanyExecutionDesk api={api} me={me} projectScope={workProject} onClearScope={()=>setWorkProject(null)} tasks={tasks} approvals={approvalList} employees={employees} onChange={async()=>{await refreshActivity();await refreshEvents();setApprovalRefresh(v=>v+1);}} onEmployee={id=>choose('employee:'+id)}/>
      <ManagementWorkload api={api} me={me} refreshSignal={approvalRefresh}/>
      {founderView&&<CompanyGithubDelivery api={api} me={me}/>} 
     </section>

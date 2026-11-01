@@ -713,3 +713,98 @@ test('Inspect evidence loads exact source bytes for the Founder only from the au
  expect(calls.some(c=>c.path.startsWith('/v1/operations/enterprise/evidence/'))).toBeFalsy();
  expect(errors).toEqual([]);
 });
+
+async function deliveryFixtures(page){
+ const state=await fixtures(page);
+ await page.route('**/v1/console/me',route=>route.fulfill({status:200,json:{id:user,tenant_id:tenant,roles:['founder'],
+  permissions:[...permissions,'approval:read','approval:founder'],display_name:'Test member'}}));
+ return state;
+}
+const deliveryProject=(id=other,title='Private student workflow')=>({project_id:id,title,manager:'Recorded CEO',plan_status:'active',
+ delivery_state:'awaiting_governed_execution',stages:[{stage:'discovery',position:1,employee:'Test member',task_id:user,task_status:'proposed',qa_verdict:null}],
+ pending_approvals:[],docker_qa_verified:false,github_commit_verified:false,draft_pr_verified:false,release_ready:false,next_view:'project_work'});
+const deliveryOverview=(projects,more=false)=>({kind:'ago_founder_delivery_overview_v1',read_only:true,projects,more_projects_possible:more});
+
+test('delivery journey opens the exact project and filters execution without starting work',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const project=deliveryProject();
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([project])}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
+  {id:user,assignee_id:user,action:'Selected project task',status:'proposed',project_name:project.title},
+  {id:other,assignee_id:user,action:'Unrelated project task',status:'proposed',project_name:'Other project'},
+ ]}));
+ await page.route('**/v1/organization/company/projects/'+other,route=>route.fulfill({status:200,json:{
+  id:other,title:project.title,brief:'Exact selected private project brief',plan_status:'active',stages:[],stage_count:0,
+  status_label:'Awaiting execution',project_health:'pending',qa_passed_stages:0,completion_percent:0,
+  accountable_manager_name:'Recorded CEO',commercial_stage:'unverified',verified_revenue_inr:null,
+ }}));
+ await login(page);await navigate(page,'Organization');
+ const journey=page.getByRole('region',{name:'Project delivery journey'});
+ await expect(journey.getByRole('heading',{name:project.title})).toBeVisible();
+ await expect(journey.getByText('0 of 1 stages have completed work and passed QA.')).toBeVisible();
+ await accessibility(page);
+ await page.screenshot({path:test.info().outputPath('delivery-journey.png'),fullPage:true});
+ await journey.getByRole('button',{name:'Inspect project',exact:true}).click();
+ await expect(page.getByText('Founder requirement: Exact selected private project brief',{exact:true})).toBeVisible();
+ await openCompanyTab(page,'Command Center');
+ await journey.getByRole('button',{name:'View project work'}).click();
+ const desk=page.getByRole('region',{name:'Governed AI task execution queue'});
+ await expect(desk.getByText(/Selected project task/)).toBeVisible();
+ await expect(desk.getByText(/Unrelated project task/)).toHaveCount(0);
+ await desk.getByRole('button',{name:'Show all company work'}).click();
+ await expect(desk.getByText(/Unrelated project task/)).toBeVisible();
+ expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
+test('delivery journey paginates, rejects incomplete evidence and recovers explicitly',async({page})=>{
+ const {errors}=await deliveryFixtures(page);let invalid=false;const offsets=[];
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>{
+  const offset=Number(new URL(route.request().url()).searchParams.get('offset'));offsets.push(offset);
+  return route.fulfill({status:200,json:invalid?{projects:[]}:
+   deliveryOverview([deliveryProject(offset?department:other,offset?'Second project':'<img src=x onerror=window.xss=true>')],offset===0)});
+ });
+ await login(page);await navigate(page,'Organization');
+ const journey=page.getByRole('region',{name:'Project delivery journey'});
+ await expect(journey.getByRole('heading',{name:'<img src=x onerror=window.xss=true>'})).toBeVisible();
+ expect(await page.evaluate(()=>window.xss)).toBeUndefined();
+ await journey.getByRole('button',{name:'Next projects'}).click();
+ await expect(journey.getByRole('heading',{name:'Second project'})).toBeVisible();
+ expect(offsets).toContain(20);
+ invalid=true;await journey.getByRole('button',{name:'Refresh delivery status'}).click();
+ await expect(journey.getByRole('alert')).toContainText('evidence is unavailable');
+ await expect(journey.getByRole('button',{name:'Inspect project',exact:true})).toHaveCount(0);
+ invalid=false;await journey.getByRole('button',{name:'Refresh delivery status'}).click();
+ await expect(journey.getByRole('heading',{name:'Second project'})).toBeVisible();
+ expect(errors).toEqual([]);
+});
+
+test('delivery overview is not fetched without every required read permission',async({page})=>{
+ const {calls,errors}=await fixtures(page);
+ await login(page);await navigate(page,'Organization');
+ await expect(page.getByRole('region',{name:'Project delivery journey'})).toHaveCount(0);
+ expect(calls.some(x=>x.path.endsWith('/projects/delivery-overview'))).toBe(false);
+ expect(errors).toEqual([]);
+});
+
+test('late project details cannot replace the newly selected delivery project',async({page})=>{
+ const {errors}=await deliveryFixtures(page);
+ const first=deliveryProject(other,'First project'),second=deliveryProject(department,'Second project');
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([first,second])}));
+ await page.route(/\/company\/projects\?/,route=>route.fulfill({status:200,json:[first,second].map(p=>({id:p.project_id,title:p.title,plan_status:'active'}))}));
+ const detail=p=>({id:p.project_id,title:p.title,brief:p.title+' exact brief',plan_status:'active',stages:[],stage_count:0,qa_passed_stages:0});
+ let release,arrived=false;const held=new Promise(resolve=>{release=resolve;});
+ await page.route('**/v1/organization/company/projects/'+other,async route=>{arrived=true;await held;await route.fulfill({status:200,json:detail(first)});});
+ await page.route('**/v1/organization/company/projects/'+department,route=>route.fulfill({status:200,json:detail(second)}));
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('article',{name:'Delivery: First project'}).getByRole('button',{name:'Inspect project',exact:true}).click();
+ await expect.poll(()=>arrived).toBe(true);
+ await page.locator('.project-portfolio-open').filter({hasText:'Second project'}).click();
+ await expect(page.getByText('Founder requirement: Second project exact brief',{exact:true})).toBeVisible();
+ const lateResponse=page.waitForResponse(r=>r.url().endsWith('/company/projects/'+other));
+ release();await (await lateResponse).finished();
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await expect(page.getByText('Founder requirement: First project exact brief',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('Founder requirement: Second project exact brief',{exact:true})).toBeVisible();
+ expect(errors).toEqual([]);
+});

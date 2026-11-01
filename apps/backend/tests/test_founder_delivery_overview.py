@@ -119,6 +119,7 @@ def test_delivery_overview_does_not_mix_other_project_approvals():
                                            reader_id=actor.subject)
     store.project_details.assert_called_once_with(actor.tenant_id, id1,
                                                    reader_id=actor.subject)
+    assert result["projects"][0]["stages"][0]["task_id"] == t1
     # RBAC helper is also exercised by the signed HTTP integration test above.
 
 

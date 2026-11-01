@@ -229,6 +229,7 @@ def delivery_overview_record(project: dict, detail: dict, pending: list[dict]) -
             'employee': stage.get('executing_employee')
                 or stage.get('approved_assignee_name')
                 or stage.get('suggested_assignee_name'),
+            'task_id': str(stage['task_id']) if stage.get('task_id') else None,
             'task_status': status,
             'agent_run_status': stage.get('agent_run_status'),
             'agent_failure_code': stage.get('agent_failure_code'),

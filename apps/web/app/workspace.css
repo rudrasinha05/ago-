@@ -544,3 +544,15 @@
 .company-subnav:empty{display:none}
 .company-subnav a{padding:6px 12px;border:1px solid #2f5b91;border-radius:999px;color:#cfe4ff;text-decoration:none;min-height:32px;display:inline-flex;align-items:center}
 .company-subnav a:hover,.company-subnav a:focus-visible{background:#163a63}
+
+/* Founder journey uses recorded project/task evidence and existing governed actions. */
+.founder-delivery-journey{padding:1.25rem;margin-bottom:1.5rem;border:1px solid var(--line,#354563);border-radius:16px;background:var(--panel,#101b30)}
+.founder-delivery-journey>header{display:flex;justify-content:space-between;align-items:start;gap:1rem;flex-wrap:wrap}
+.delivery-project-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:1rem;margin:1rem 0}
+.delivery-project-grid>article{min-width:0;padding:1rem;border:1px solid #425271;border-radius:12px;overflow-wrap:anywhere}
+.delivery-project-grid h3{margin-top:0}.delivery-project-grid ol{padding-left:1.3rem}
+.delivery-project-grid li{margin:.7rem 0}.delivery-project-grid li span,.delivery-project-grid li small{display:block}
+.delivery-actions{display:flex;gap:.65rem;align-items:center;flex-wrap:wrap}
+.delivery-actions button,.delivery-actions a{min-height:44px}.delivery-actions button:focus-visible{outline:3px solid #80b9ff;outline-offset:3px}
+.delivery-state{font-weight:700;color:#9ac6ff}.delivery-state.state-blocked{color:#ffb4b4}
+.founder-delivery-journey small{color:#b9c7dd}

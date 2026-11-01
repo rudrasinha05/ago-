@@ -3,13 +3,14 @@ import Link from 'next/link';
 import {useState} from 'react';
 import {executionSummary,nextTaskAction} from '@ago/sdk/company-execution';
 import {CompanyFirstRun} from './company-first-run';
-export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,onEmployee}){
+export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,onEmployee,projectScope=null,onClearScope}){
  const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[showAll,setShowAll]=useState(false);
  const canView=me.permissions?.includes('task:read')&&me.permissions?.includes('organization:read');
  if(!canView)return null;
- const summary=executionSummary(tasks);
- const pending=(tasks||[]).filter(t=>['proposed','waiting_approval','ready','running'].includes(t.status));
- const completed=(tasks||[]).filter(t=>['completed','failed'].includes(t.status));
+ const visibleTasks=projectScope&&tasks?tasks.filter(t=>projectScope.taskIds.includes(t.id)):tasks;
+ const summary=executionSummary(visibleTasks);
+ const pending=(visibleTasks||[]).filter(t=>['proposed','waiting_approval','ready','running'].includes(t.status));
+ const completed=(visibleTasks||[]).filter(t=>['completed','failed'].includes(t.status));
  const rows=showAll?[...pending,...completed].slice(0,75):pending.slice(0,20);
  const approvalsById=new Map((approvals||[]).map(x=>[x.id,x]));
  const name=id=>employees.find(x=>x.id===id)?.name||'Employee not found';
@@ -34,7 +35,8 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
  return <section className="company-execution-desk" id="ago-execution-desk" aria-label="Governed AI task execution queue">
    <h3>Execution Desk · Approved company work</h3>
    <p>Real server-side task records only. Approval enables governed execution; no automatic model run, source commit, or release occurs from viewing this desk.</p>
-   <CompanyFirstRun api={api} me={me} employees={employees} tasks={tasks} onCreated={onChange}/>
+   {projectScope&&<p role="status">Showing work for <strong>{projectScope.title}</strong>. <button type="button" onClick={onClearScope}>Show all company work</button></p>}
+   {!projectScope&&<CompanyFirstRun api={api} me={me} employees={employees} tasks={tasks} onCreated={onChange}/>}
    {summary===null?<p role="alert">Task activity unavailable. Execution is disabled until the authenticated server responds.</p>:<>
     <div className="execution-metrics">
       <span><strong>{summary.proposed}</strong>Needs task approval request</span>

@@ -3,7 +3,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {CompanyDocumentVault} from './company-document-vault';
 import {ProjectStageRouting} from './project-stage-routing';
 
-export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}) {
+export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,requestedProject=null}) {
  const [brief,setBrief]=useState('');
  const [projects,setProjects]=useState(null);
  const [projectDetail,setProjectDetail]=useState(null),[selectedProject,setSelectedProject]=useState(null);
@@ -11,12 +11,28 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
  const [created,setCreated]=useState(null);
  const [busy,setBusy]=useState(false),[reviewBusy,setReviewBusy]=useState(false),[error,setError]=useState('');
  const [ceoBusy,setCeoBusy]=useState(false),[ceoNotice,setCeoNotice]=useState('');
- const retry=useRef(null);
+ const retry=useRef(null),detailEpoch=useRef(0);
  const isFounder=me.roles?.includes('founder')&&me.permissions?.includes('brain:manage');
  const refresh=useCallback(async()=>{
    try {const batch=await api.request('/v1/organization/company/projects?limit=50&offset=0');setProjects(batch);setHasMore(batch.length===50);} catch {setProjects(null);setHasMore(false);}
  },[api]);
  useEffect(()=>{if(isFounder)refresh();},[refresh,isFounder]);
+ useEffect(()=>{
+  if(!isFounder||!requestedProject?.project_id)return undefined;
+  let live=true;const version=++detailEpoch.current;
+  setSelectedProject(requestedProject.project_id);setProjectDetail(null);setProjectError('');setCeoNotice('');
+  api.request('/v1/organization/company/projects/'+encodeURIComponent(requestedProject.project_id))
+   .then(result=>{if(!live||version!==detailEpoch.current)return;
+    if(result?.id!==requestedProject.project_id)throw new Error('Project evidence does not match the selection.');
+    setProjectDetail(result);
+   }).catch(e=>{if(live&&version===detailEpoch.current)setProjectError(e.message||'Project details unavailable.');});
+  return()=>{live=false;};
+ },[api,isFounder,requestedProject]);
+ const visibleProjects=requestedProject&&!projects?.some(p=>p.id===requestedProject.project_id)
+  ? [{id:requestedProject.project_id,title:requestedProject.title,plan_status:requestedProject.plan_status,
+      accountable_manager_name:requestedProject.manager,staffing_gaps:'Not checked',
+      commercial_stage:'Not verified',verified_revenue_inr:null},...(projects||[])] : projects;
+
  // While a just-created plan waits for a decision taken elsewhere (Approvals
  // tab), keep its status live instead of showing the stale creation state.
  const PLAN_ORDER=['draft','pending_approval','approved','active','rejected','cancelled','completed'];
@@ -34,13 +50,18 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
   }catch(e){setProjectError(e.message||'Could not fetch project page.');}finally{setMoreBusy(false);}
  }
  async function inspectProject(project){
+  const version=++detailEpoch.current;
   if(selectedProject===project.id){setSelectedProject(null);setProjectDetail(null);return;}
-  setSelectedProject(project.id);setProjectDetail(null);setProjectError('');
-  try{const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(project.id));setProjectDetail(result);}
-  catch(e){setProjectError(e.message||'Project details are unavailable.');}
+  setSelectedProject(project.id);setProjectDetail(null);setProjectError('');setCeoNotice('');
+  try{const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(project.id));
+   if(version!==detailEpoch.current)return;
+   if(result?.id!==project.id)throw new Error('Project evidence does not match the selection.');
+   setProjectDetail(result);
+  }catch(e){if(version===detailEpoch.current)setProjectError(e.message||'Project details are unavailable.');}
  }
  async function resumeCeo(){
   if(!projectDetail||ceoBusy||projectDetail.plan_status!=='active')return;
+  const version=detailEpoch.current;
   setCeoBusy(true);setProjectError('');setCeoNotice('');
   let requested=0;
   try{
@@ -52,12 +73,13 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
     }
    }
    const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(projectDetail.id)+'/ceo/reconcile',{method:'POST'});
-   setCeoNotice('CEO '+result.ceo_name+' verified '+result.verified_task_count+
+   if(version===detailEpoch.current)setCeoNotice('CEO '+result.ceo_name+' verified '+result.verified_task_count+
      ' internal task(s). '+requested+' new approval requests. No execution or external action started.');
-   setProjectDetail(await api.request('/v1/organization/company/projects/'+encodeURIComponent(projectDetail.id)));
+   const updated=await api.request('/v1/organization/company/projects/'+encodeURIComponent(projectDetail.id));
+   if(version===detailEpoch.current)setProjectDetail(updated);
    await onChanged?.();
   }catch(e){
-   setProjectError('CEO handoff incomplete after '+requested+' requests: '+(e.message||'Blocked')+
+   if(version===detailEpoch.current)setProjectError('CEO handoff incomplete after '+requested+' requests: '+(e.message||'Blocked')+
     '. Inspect CEO appointment and approval state; do not reapprove Founder scope.');
   }finally{setCeoBusy(false);}
  }
@@ -167,8 +189,8 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
   <div id="ago-project-portfolio" className="founder-project-portfolio">
    <h3>All company projects · Recent founder projects</h3>
    <p>Click any project to inspect full brief, current plan, assigned specialists, task state, CEO-led QA and commercial evidence. A project with no verified release is under process, not automatically complete.</p>
-   {projects===null?<small>Project history unavailable</small>:!projects.length?<small>No approved or draft founder projects recorded yet.</small>:
-    <div className="project-portfolio-grid">{projects.map(p=><article key={p.id} className="project-portfolio-card">
+   {visibleProjects===null?<small>Project history unavailable</small>:!visibleProjects.length?<small>No approved or draft founder projects recorded yet.</small>:
+    <div className="project-portfolio-grid">{visibleProjects.map(p=><article key={p.id} className="project-portfolio-card">
       <button type="button" className="project-portfolio-open" aria-expanded={selectedProject===p.id} onClick={()=>inspectProject(p)}>
        <strong>{p.title}</strong><small>Plan: {p.plan_status} · {p.staffing_gaps} staffing gaps</small>
        <small>Executive: {p.accountable_manager_name||'Unassigned'} · {p.assignment_source==='founder_escalation'?'Escalated':'Accountable manager'}</small>
@@ -177,7 +199,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged}
       </button>
       {selectedProject===p.id&&
        <div className="project-portfolio-details">
-        {!projectDetail?<p>Loading live project details…</p>:<>
+        {!projectDetail?<p>{projectError?'Project details unavailable.':'Loading live project details…'}</p>:<>
          <h4>{projectDetail.title}</h4>
          <p><b>Status:</b> {projectDetail.status_label} · <b>Strategy:</b> {projectDetail.plan_status} · <b>Delivery health:</b> {projectDetail.project_health}</p>
          {projectDetail.plan_status==='active'&&<div className="project-ceo-handoff">
