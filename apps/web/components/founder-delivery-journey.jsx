@@ -1,11 +1,12 @@
 "use client";
 import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
+import {RecoveryHint} from './recovery-hint';
 import {canReadDelivery,deliveryPage,DELIVERY_STATES,deliveryEvidence,founderDecisions,projectTaskIds,reviewedStages} from './founder-delivery-state';
 
 export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onProject,onWork,onSection,onApproval}){
  const [page,setPage]=useState(null),[offset,setOffset]=useState(0),[loading,setLoading]=useState(false);
- const [error,setError]=useState(''),[refresh,setRefresh]=useState(0);
+ const [error,setError]=useState(''),[failure,setFailure]=useState(null),[refresh,setRefresh]=useState(0);
  const sequence=useRef(0);
  const readable=canReadDelivery(me);
  useEffect(()=>{
@@ -15,8 +16,8 @@ export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onPro
    const version=++sequence.current;setLoading(true);
    try{
     const result=deliveryPage(await api.request('/v1/organization/company/projects/delivery-overview?limit=20&offset='+offset));
-    if(live&&version===sequence.current){setPage(result);setError('');}
-   }catch(e){if(live&&version===sequence.current){setPage(null);setError(e.message||'Delivery overview unavailable.');}}
+    if(live&&version===sequence.current){setPage(result);setError('');setFailure(null);}
+   }catch(e){if(live&&version===sequence.current){setPage(null);setFailure(e);setError(e.message||'Delivery overview unavailable.');}}
    finally{if(live&&version===sequence.current)setLoading(false);}
   }
   setPage(null);load();
@@ -31,6 +32,7 @@ export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onPro
     <button type="button" disabled={loading} onClick={()=>setRefresh(x=>x+1)}>Refresh delivery status</button></div>
   </header>
   {error&&<p role="alert">{error} Use Refresh to retry; no previous success is assumed.</p>}
+  {error&&<RecoveryHint error={failure}/>}
   {!page&&!error&&<p role="status">Loading current project evidence…</p>}
   {page&&page.projects.length>0&&(()=>{const n=page.projects.reduce((sum,p)=>sum+founderDecisions(p).length,0);
    return <p role="status" className="delivery-decision-summary">{n?n+' decision(s) on this page wait for you.':'No decision on this page waits for you.'}</p>;})()}

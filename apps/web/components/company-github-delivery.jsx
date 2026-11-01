@@ -1,9 +1,14 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {githubDeliveryRows,sameRecord,verifiedGitHubChecks} from './company-github-delivery-state';
+import {deliverySteps,githubDeliveryRows,sameRecord,verifiedGitHubChecks} from './company-github-delivery-state';
+import {RecoveryHint} from './recovery-hint';
 
-const APPLY='APPLY_APPROVED_GITHUB_OPERATION';
-const EXECUTE='EXECUTE_VERIFIED_GITHUB_OPERATION';
+const STEP_STATE={done:'Done',action:'Your action',waiting:'Waiting for reviewer',blocked:'Blocked',todo:'Not yet'};
+function Steps({row,label}){
+ return <ol className="github-steps" aria-label={'Delivery steps: '+label}>{deliverySteps(row).map(s=>
+  <li key={s.key} className={'step-'+s.state} data-step={s.key} data-state={s.state}>
+   <span aria-hidden="true"/>{s.title}<small>{STEP_STATE[s.state]}</small></li>)}</ol>;
+}
 
 /** Read authenticated evidence only; backend remains the sole approval/write authority. */
 export function CompanyGithubDelivery({api,me}){
@@ -13,7 +18,7 @@ export function CompanyGithubDelivery({api,me}){
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
  const [busy,setBusy]=useState('');
- const [confirmation,setConfirmation]=useState('');
+ const [pending,setPending]=useState(null),[failure,setFailure]=useState(null);
  const used=useRef(new Set());
  const founder=me?.roles?.includes('founder')&&me.permissions?.includes('organization:manage');
  const refresh=useCallback(async()=>{
@@ -34,8 +39,8 @@ export function CompanyGithubDelivery({api,me}){
     }catch{return {id:record.id,repository:record.repository,status:null};}
    }));
    setProjects(all.filter(Boolean));setOperations(catalog.github_operations);
-   setProposals(review.proposals);setError('');
-  }catch(e){setProjects(null);setOperations([]);setProposals([]);
+   setProposals(review.proposals);setError('');setFailure(null);
+  }catch(e){setProjects(null);setOperations([]);setProposals([]);setFailure(e);
    setError('Live GitHub delivery evidence is unavailable. '+(e.message||'Check access or connectivity'));}
  },[api,founder]);
  useEffect(()=>{if(!founder)return;
@@ -45,7 +50,14 @@ export function CompanyGithubDelivery({api,me}){
   return()=>{on=false;clearInterval(timer);};
  },[founder,refresh]);
  if(!founder)return null;
- async function act(step,project,entry){
+ // First click only asks; the write needs a second, explicit confirmation of
+ // this exact operation on this exact repository.
+ function request(step,project,entry,label){
+  if(busy)return;
+  setError('');setFailure(null);setNotice('');
+  setPending({key:step+':'+entry.operation?.id,step,project,entry,label});
+ }
+ async function act(step,project,entry,confirmed){
   if(busy||!project?.status||project.status.repository_private!==true||
      project.status.project_id!==project.id||
      project.status.repository!=='rudrasinha05/'+project.repository)return;
@@ -53,8 +65,7 @@ export function CompanyGithubDelivery({api,me}){
   const proposal=entry.proposal;
   const row=entry.row;
   const key=step+':'+op.id;
-  const required=step==='apply'?APPLY:EXECUTE;
-  if(confirmation!==required){setError('Select the exact confirmation shown for this action.');return;}
+  if(confirmed!==key){setError('Confirm this exact step first. Nothing was sent.');return;}
   if(used.current.has(key)){setError('This action was already attempted in this browser session. Inspect AGO before any retry.');return;}
   if(!proposal||proposal.status!=='approved'||proposal.actor_id!==me.id||
      proposal.command!=='github_operation'||!sameRecord(proposal.specification,op)||
@@ -65,7 +76,7 @@ export function CompanyGithubDelivery({api,me}){
       !verifiedGitHubChecks(project.status,op.payload?.required_checks)){
    setError('Required real GitHub CI is incomplete or ambiguous. PR blocked.');return;
   }
-  used.current.add(key);setBusy(key);setError('');setNotice('');setConfirmation('');
+  used.current.add(key);setBusy(key);setError('');setFailure(null);setNotice('');setPending(null);
   try{
    if(step==='apply'){
     await api.request('/v1/enterprise/reviews/integration/apply',
@@ -78,7 +89,7 @@ export function CompanyGithubDelivery({api,me}){
      'AGO server recorded a GitHub dispatch. Verify the live receipt below.':
      'Dispatch outcome is not confirmed. Inspect the recorded marker before any further action.');
    }
-  }catch(e){setError('Outcome may be uncertain. No automatic retry: '+(e.message||'Inspect AGO dispatch and GitHub receipts.'));}
+  }catch(e){setFailure(e);setError('Outcome may be uncertain. No automatic retry: '+(e.message||'Inspect AGO dispatch and GitHub receipts.'));}
   finally{setBusy('');await refresh();}
  }
  const cards=(projects||[]).map(project=>{
@@ -93,7 +104,7 @@ export function CompanyGithubDelivery({api,me}){
   <header><div><h3>Project Delivery Center</h3>
    <p>One Founder dashboard for approved code delivery, CI and draft Pull Requests. No invented AI work or auto-merge.</p></div>
    <button type="button" disabled={Boolean(busy)} onClick={refresh}>Refresh live records</button></header>
-  {projects===null?<p role="alert">GitHub delivery cannot be verified. {error||'Signed project status is unavailable.'}</p>:
+  {projects===null?<><p role="alert">GitHub delivery cannot be verified. {error||'Signed project status is unavailable.'}</p><RecoveryHint error={failure}/></>:
    !cards.length?<p>No approved GitHub project is linked. Connect a private repository through reviewed AGO governance first.</p>:
    cards.map(({project,rows,health,blocker,needApply})=><article className="company-github-project" key={project.id}>
     <h4>{project.repository}</h4>
@@ -101,9 +112,10 @@ export function CompanyGithubDelivery({api,me}){
     {blocker&&<small role="status">{blocker}</small>}
     {needApply.map(proposal=><div className="github-delivery-operation" key={proposal.id}>
       <b>Independent approval recorded · awaiting Founder apply</b>
-      <small>{proposal.specification?.operation||'Operation'} · {proposal.id}</small>
-      <button type="button" disabled={Boolean(busy)||health!=='verified'} onClick={()=>act('apply',project,{
-       operation:proposal.specification,proposal,applied:false})}>
+      <small>{proposal.specification?.operation==='create_pull_request'?'Review-only draft Pull Request':proposal.specification?.operation==='commit_files'?'AI-generated code commit':'GitHub operation'}</small>
+      <Steps row={{awaitingApply:true}} label={project.repository}/>
+      <button type="button" disabled={Boolean(busy)||health!=='verified'} onClick={()=>request('apply',project,{
+       operation:proposal.specification,proposal,applied:false},'Record the approved operation in AGO for '+project.repository+'. This does not write to GitHub.')}>
        Apply approved operation in AGO (no GitHub write)
       </button>
     </div>)}
@@ -112,25 +124,29 @@ export function CompanyGithubDelivery({api,me}){
       const proposal=(proposals||[]).find(x=>x.command==='github_operation'&&x.specification?.id===row.id&&sameRecord(x.specification,entry?.payload));
       return <div key={row.id} className="github-delivery-operation">
        <strong>{row.label}</strong>
+       <Steps row={row} label={row.label}/>
        <small>Approval: {row.approved?'independently approved':'not independently approved'} · GitHub: {row.dispatch.replaceAll('_',' ')}</small>
        {row.committed&&<small>Verified commit: <code>{row.commitSha}</code></small>}
        {row.prUrl&&<a href={row.prUrl} target="_blank" rel="noreferrer">Open verified draft PR ↗</a>}
        {row.blocker&&<small>{row.blocker}</small>}
-       {row.eligibleExecute&&<button type="button" disabled={Boolean(busy)} onClick={()=>act('execute',project,{
-        operation:entry.payload,proposal,row,applied:true})}>Execute approved GitHub {row.type==='commit_files'?'commit':'draft PR'}</button>}
+       {row.eligibleExecute&&<button type="button" disabled={Boolean(busy)} onClick={()=>request('execute',project,{
+        operation:entry.payload,proposal,row,applied:true},
+        'Send the approved '+(row.type==='commit_files'?'commit':'draft Pull Request')+' to GitHub repository '+project.repository+
+        ' at develop '+(project.status?.develop_sha?.slice(0,12)||'unknown')+'. This writes to GitHub and is not retried automatically.')}>Execute approved GitHub {row.type==='commit_files'?'commit':'draft PR'}</button>}
       </div>;
     })}
    </article>)}
-  {cards.some(({rows,needApply})=>rows.some(r=>r.eligibleExecute)||needApply.length>0)&&
-   <label className="company-github-confirm">Explicit Founder confirmation for selected step
-    <select value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={Boolean(busy)}>
-     <option value="">Choose action confirmation</option>
-     <option value={APPLY}>{APPLY}</option><option value={EXECUTE}>{EXECUTE}</option>
-    </select>
-    <small>A separate independent human must approve proposals. The server rechecks permissions, exact repository, GitHub HEAD and required CI. No automatic retry.</small>
-   </label>}
+  {pending&&<div className="company-github-confirm" role="group" aria-label="Confirm this delivery step">
+    <p><strong>Please confirm:</strong> {pending.label}</p>
+    <small>A separate independent human already approved this. The server re-checks permissions, the exact repository, GitHub HEAD and required CI.</small>
+    <div className="delivery-actions">
+     <button type="button" disabled={Boolean(busy)} onClick={()=>act(pending.step,pending.project,pending.entry,pending.key)}>Yes, confirm this step</button>
+     <button type="button" disabled={Boolean(busy)} onClick={()=>setPending(null)}>Cancel</button>
+    </div>
+   </div>}
   {notice&&<p role="status">{notice}</p>}
   {error&&projects!==null&&<p role="alert">{error}</p>}
+  <RecoveryHint error={failure}/>
   <p className="company-github-footnote">The private-source export and independent QA evidence are separate prerequisites. This dashboard does not mark a product released or run unseen AI code.</p>
  </section>;
 }

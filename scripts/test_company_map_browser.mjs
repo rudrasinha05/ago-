@@ -183,13 +183,20 @@ try{
  await delivery.getByRole('button',{name:'Refresh live records'}).click();
  await delivery.getByText('AI-generated code commit').waitFor();
  const execute=delivery.getByRole('button',{name:'Execute approved GitHub commit'});
+ assert.equal(await delivery.locator('.github-steps [data-step="dispatched"]').first().getAttribute('data-state'),'action');
+ const confirmBox=delivery.getByRole('group',{name:'Confirm this delivery step'});
+ // First click only asks; Cancel sends nothing.
  await execute.click();
- await delivery.getByText('Select the exact confirmation',{exact:false}).waitFor();
+ await confirmBox.getByText('ago-private-test',{exact:false}).waitFor();
+ await confirmBox.getByRole('button',{name:'Cancel'}).click();
+ assert.equal(await confirmBox.count(),0);
  assert.equal(calls.filter(c=>c.path.endsWith('/execute')&&c.method==='POST').length,0);
- await delivery.getByLabel('Explicit Founder confirmation for selected step')
-  .selectOption('EXECUTE_VERIFIED_GITHUB_OPERATION');
  await execute.click();
+ assert.equal(calls.filter(c=>c.path.endsWith('/execute')&&c.method==='POST').length,0,
+  'Asking for confirmation must not dispatch');
+ await confirmBox.getByRole('button',{name:'Yes, confirm this step'}).click();
  await delivery.getByText('Verified commit:',{exact:false}).waitFor();
+ assert.equal(await delivery.locator('.github-steps [data-step="verified"]').first().getAttribute('data-state'),'done');
  assert.equal(calls.filter(c=>c.path.endsWith('/execute')&&c.method==='POST').length,1,
   'One Founder confirmation permits at most one real provider dispatch request');
  await delivery.getByRole('button',{name:'Refresh live records'}).click();

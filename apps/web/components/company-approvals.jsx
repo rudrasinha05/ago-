@@ -1,4 +1,5 @@
 "use client";
+import {RecoveryHint} from './recovery-hint';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {decideFounderScope} from './company-founder-decision';
 
@@ -19,7 +20,7 @@ const canDecide=(a,me)=>a.status==='pending'&&(
 
 export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onReviewed,focusRequest=null}) {
  const [rows,setRows]=useState(null),[selected,setSelected]=useState(null);
- const [reason,setReason]=useState(''),[error,setError]=useState('');
+ const [reason,setReason]=useState(''),[error,setError]=useState(''),[failure,setFailure]=useState(null);
  const [busy,setBusy]=useState(false),[toast,setToast]=useState(null);
  const [handoffNotice,setHandoffNotice]=useState('');
  const [showAll,setShowAll]=useState(false);
@@ -68,7 +69,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
  function close(){setSelected(null);setReason('');setError('');focusReturn.current?.focus?.();}
  async function decide(approve){
   if(!selected||busy||!canDecide(selected,me)||!reason.trim())return;
-  setBusy(true);setError('');setHandoffNotice('');
+  setBusy(true);setError('');setFailure(null);setHandoffNotice('');
   try{
    if(selected.requires_founder_decision){
     const result=await decideFounderScope(api,selected,approve,reason);
@@ -79,7 +80,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
     setHandoffNotice('Independent operational decision recorded. Authorization and execution remain separate.');
    }
    close();await refresh();setToast(null);await onReviewed?.();
-  }catch(e){setError(e.message);}finally{setBusy(false);}
+  }catch(e){setFailure(e);setError(e.message);}finally{setBusy(false);}
  }
  if(!readable)return <section id="company-approval-inbox" className="approval-inbox" aria-label="Approvals inbox">
    <h3>Approvals inbox</h3><p>Approval history is restricted to authorized employees.</p>
@@ -157,7 +158,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
         <button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(false)}>Deny</button></div>
       </>:<p>{selected.requires_founder_decision?'Only an authenticated active human founder can decide this strategic request.':selected.founder_solo_mode?'The active Founder can decide this narrowly allowed standalone internal request.':'An independent authorized human reviews operations; CEO may verify only bounded, approved project tasks.'} You can still inspect its details.</p>}
     </div>}
-    {error&&<p role="alert">{error}</p>}
+    {error&&<p role="alert">{error}</p>}{error&&<RecoveryHint error={failure}/>}
    </section>
   </div>}
  </section>;

@@ -836,6 +836,25 @@ test('delivery journey shows only Founder decisions, unverified evidence, and op
  expect(errors).toEqual([]);
 });
 
+test('a failed delivery read shows plain recovery guidance and recovers on Refresh',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);let fail=true;
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>fail
+  ?route.fulfill({status:503,json:{detail:'Database temporarily unavailable'}})
+  :route.fulfill({status:200,json:deliveryOverview([deliveryProject()])}));
+ await login(page);await navigate(page,'Organization');
+ const journey=page.getByRole('region',{name:'Project delivery journey'});
+ await expect(journey.getByRole('alert')).toContainText('Database temporarily unavailable');
+ const hint=journey.getByRole('note',{name:'How to recover'});
+ await expect(hint).toContainText('What happened: The AGO server hit a problem');
+ await expect(hint).toContainText('START_AGO.cmd');
+ await accessibility(page);
+ fail=false;await journey.getByRole('button',{name:'Refresh delivery status'}).click();
+ await expect(journey.getByRole('heading',{name:'Private student workflow'})).toBeVisible();
+ await expect(hint).toHaveCount(0);
+ expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('late project details cannot replace the newly selected delivery project',async({page})=>{
  const {errors}=await deliveryFixtures(page);
  const first=deliveryProject(other,'First project'),second=deliveryProject(department,'Second project');

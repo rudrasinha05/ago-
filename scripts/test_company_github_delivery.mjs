@@ -129,3 +129,17 @@ test('PR execution unavailable until complete single provider CI evidence passes
   assert.match(out.rows[0].blocker,/CI checks incomplete/);
  }
 });
+
+test('delivery steps come only from recorded state and never skip the independent approval',async()=>{
+ const {deliverySteps}=await import('../apps/web/components/company-github-delivery-state.js');
+ const states=row=>deliverySteps(row).map(s=>s.state);
+ assert.deepEqual(states({awaitingApply:true}),['done','done','action','todo','todo']);
+ assert.deepEqual(states({proposalId:null,approved:false,dispatch:'not_started'}),['blocked','todo','todo','todo','todo']);
+ assert.deepEqual(states({proposalId:'p',approved:false,dispatch:'not_started'}),['done','waiting','todo','todo','todo']);
+ assert.deepEqual(states({proposalId:'p',approved:true,dispatch:'not_started',eligibleExecute:true}),['done','done','done','action','todo']);
+ // Approved but GitHub HEAD moved or CI incomplete: blocked, not actionable.
+ assert.deepEqual(states({proposalId:'p',approved:true,dispatch:'not_started',eligibleExecute:false}),['done','done','done','blocked','todo']);
+ // A recorded dispatch without verified provider evidence is not "verified".
+ assert.deepEqual(states({proposalId:'p',approved:true,dispatch:'failed'}),['done','done','done','done','blocked']);
+ assert.deepEqual(states({proposalId:'p',approved:true,dispatch:'succeeded',committed:true}),['done','done','done','done','done']);
+});

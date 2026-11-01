@@ -1,4 +1,5 @@
 "use client";
+import {RecoveryHint} from './recovery-hint';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {CompanyDocumentVault} from './company-document-vault';
 import {ProjectStageRouting} from './project-stage-routing';
@@ -9,7 +10,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
  const [projectDetail,setProjectDetail]=useState(null),[selectedProject,setSelectedProject]=useState(null);
  const [moreBusy,setMoreBusy]=useState(false),[hasMore,setHasMore]=useState(false),[projectError,setProjectError]=useState('');
  const [created,setCreated]=useState(null);
- const [busy,setBusy]=useState(false),[reviewBusy,setReviewBusy]=useState(false),[error,setError]=useState('');
+ const [busy,setBusy]=useState(false),[reviewBusy,setReviewBusy]=useState(false),[error,setError]=useState(''),[failure,setFailure]=useState(null);
  const [ceoBusy,setCeoBusy]=useState(false),[ceoNotice,setCeoNotice]=useState('');
  const retry=useRef(null),detailEpoch=useRef(0);
  const isFounder=me.roles?.includes('founder')&&me.permissions?.includes('brain:manage');
@@ -141,21 +142,21 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
  }
  if(!isFounder)return null;
  async function start(e){e.preventDefault();if(busy||brief.trim().length<20)return;
-  setBusy(true);setError('');
+  setBusy(true);setError('');setFailure(null);
   if(!retry.current||retry.current.brief!==brief.trim())retry.current={brief:brief.trim(),key:crypto.randomUUID()};
   try {
     const response=await api.request('/v1/organization/company/projects/start',
       {method:'POST',body:{brief:retry.current.brief,operation_key:retry.current.key}});
     setCreated(response);setBrief('');retry.current=null;await refresh();onChanged?.();
-  } catch(err){setError(err.message);}finally{setBusy(false);}
+  } catch(err){setFailure(err);setError(err.message);}finally{setBusy(false);}
  }
  async function submitForReview(){
   if(!created||reviewBusy||created.plan_status!=='draft')return;
-  setReviewBusy(true);setError('');
+  setReviewBusy(true);setError('');setFailure(null);
   try{const response=await api.request('/v1/brain/plans/'+encodeURIComponent(created.plan_id)+'/submit',{method:'POST'});
     setCreated(old=>({...old,plan_status:response.status,approval_id:response.approval_id}));
     await refresh();onChanged?.();
-  }catch(e){setError(e.message);}finally{setReviewBusy(false);}
+  }catch(e){setFailure(e);setError(e.message);}finally{setReviewBusy(false);}
  }
   return <section className="founder-project-intake" aria-label="Start founder project">
   <div><h3>Start a governed project</h3>
@@ -166,7 +167,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
       placeholder="What should the company build? Who uses it, what must it deliver, and what would success look like?"/></label>
     <button disabled={busy||brief.trim().length<20}>{busy?'Preparing draft…':'Prepare project from brief'}</button>
   </form>
-  {error&&<p role="alert">{error}</p>}
+  {error&&<p role="alert">{error}</p>}{error&&<RecoveryHint error={failure}/>}
   {created&&<div aria-live="polite"><strong>{created.title}</strong>
     <p><b>Accountable delivery owner:</b> {created.accountable_manager_name} ({created.accountable_manager_role||'Founder authority'}) · {created.assignment_source==='founder_escalation'?'Management staffing escalation':'Recorded executive management responsibility'}</p>
     <p><b>Commercial goal:</b> {created.commercial_objective} · {created.commercial_stage} · No verified revenue evidence yet</p>

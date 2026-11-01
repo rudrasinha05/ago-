@@ -34,3 +34,14 @@ test('only server-marked Founder decisions are actionable; evidence needs exact 
  assert.deepEqual(deliveryEvidence(p).filter(e=>e.verified).map(e=>e.key),['commit']);
  assert.deepEqual(deliveryEvidence(project()).filter(e=>e.verified),[]);
 });
+test('recovery guidance explains the recorded failure and never invents an outcome',async()=>{
+ const {recoveryHint}=await import('../apps/web/components/recovery.js');
+ const err=(status,message='x')=>Object.assign(new Error(message),{status});
+ assert.equal(recoveryHint(null),null);
+ assert.equal(recoveryHint(new Error('Incomplete project delivery record.')),null,'A validation error has no guessed cause');
+ assert.match(recoveryHint(err(401)).what,/sign-in has expired/);
+ assert.match(recoveryHint(err(403)).next,/does not skip permission/);
+ assert.match(recoveryHint(err(409)).next,/does not repeat/);
+ for(const e of [err(503),err(0,'Request timed out'),new TypeError('Failed to fetch')])
+  assert.match(recoveryHint(e).next,/may already have done it/,'Unknown outcome must warn before retry');
+});

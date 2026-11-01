@@ -3,8 +3,9 @@ import Link from 'next/link';
 import {useState} from 'react';
 import {executionSummary,nextTaskAction} from '@ago/sdk/company-execution';
 import {CompanyFirstRun} from './company-first-run';
+import {RecoveryHint} from './recovery-hint';
 export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,onEmployee,projectScope=null,onClearScope}){
- const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[showAll,setShowAll]=useState(false);
+ const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[showAll,setShowAll]=useState(false),[failure,setFailure]=useState(null);
  const canView=me.permissions?.includes('task:read')&&me.permissions?.includes('organization:read');
  if(!canView)return null;
  const visibleTasks=projectScope&&tasks?tasks.filter(t=>projectScope.taskIds.includes(t.id)):tasks;
@@ -19,7 +20,7 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
   // Recheck the UI transition: server also independently enforces approval and rights.
   const gate=nextTaskAction(task,approvalsById.get(task.approval_id),me.permissions,false);
   if(gate.action!==operation){setError('Action unavailable: '+gate.reason);return}
-  setError('');setNotice('');setBusy(task.id);
+  setError('');setFailure(null);setNotice('');setBusy(task.id);
   try{
    if(operation==='request'){
     const response=await api.request('/v1/console/tasks/'+encodeURIComponent(task.id)+'/request-approval',{method:'POST'});
@@ -29,7 +30,7 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
     setNotice(result.status==='completed'?'AI execution recorded. Independent human QA required.':'Agent outcome: '+result.status+'. Verify persisted task status before further action.');
    }
   }catch(e){
-   setError((e.message||'Task operation failed')+'. Check recorded task history before any retry. The server may have completed a run even if the browser timed out.');
+   setFailure(e);setError((e.message||'Task operation failed')+'. Check recorded task history before any retry. The server may have completed a run even if the browser timed out.');
   }finally{setBusy('');await onChange?.()}
  }
  return <section className="company-execution-desk" id="ago-execution-desk" aria-label="Governed AI task execution queue">
@@ -59,7 +60,7 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
       </article>;
     })}</div>
    </>}
-   {notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error}</p>}
+   {notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error}</p>}{error&&<RecoveryHint error={failure}/>}
    <small>Dispatch is one task at a time, from a founder/user action. Failed/time-out runs are not automatically replayed. For bounded batch use, run the separate founder-confirmed local script. All execution authority remains enforced by AGO backend.</small>
   </section>;
 }

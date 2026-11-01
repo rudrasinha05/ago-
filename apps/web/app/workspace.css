@@ -573,3 +573,19 @@
 /* Lifetime counts are muted; per-reader unread counts are the red alert. */
 .company-channels .chat-event-count:not(.unread){background:#33506f}
 .company-world .map-count:not(.unread){background:#33506f}
+/* GitHub delivery: five governed steps from recorded state (Issue #7). */
+.github-steps{list-style:none;margin:2px 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.github-steps li{display:grid;gap:2px;padding:7px 8px;border:1px solid #23466f;border-radius:8px;background:#081328;font-size:12px;color:#e6f1ff;min-width:0;overflow-wrap:anywhere}
+.github-steps li>span{width:9px;height:9px;border-radius:50%;background:#5a6f8c}
+.github-steps small{font-size:11px;color:#9db6d2}
+.github-steps .step-done{border-color:#2f8f6c}.github-steps .step-done>span{background:#4debb3}
+.github-steps .step-action{border-color:#a8781e;background:#1c1508}.github-steps .step-action>span{background:#ffc84d}
+.github-steps .step-waiting>span{background:#7fb2ff}
+.github-steps .step-blocked{border-color:#7d5bc0}.github-steps .step-blocked>span{background:#b78cff}
+@media(max-width:650px){.github-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.company-github-confirm[role=group]{padding:12px 14px;border:1px solid #a8781e;border-radius:10px;background:#1c1508;font-weight:400}
+.company-github-confirm[role=group] p{margin:0;color:#fff3dc}
+.company-github-confirm[role=group] small{color:#e0cfae}
+/* Plain-language recovery guidance below an error. */
+.recovery-hint{margin:6px 0;padding:10px 12px;border-left:3px solid #ffb547;border-radius:8px;background:#1a1408;font-size:13px}
+.recovery-hint p{margin:2px 0;color:#f2e4c8}.recovery-hint strong{color:#ffd38a}

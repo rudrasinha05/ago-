@@ -74,3 +74,26 @@ export function githubDeliveryRows(project,operations,proposals){
  return {health:'verified',rows,
   blocker:rows.length?'':'No approved GitHub delivery operations recorded yet.'};
 }
+/**
+ * The five governed GitHub steps for one operation, from recorded state only.
+ * `row` is a githubDeliveryRows row; `{awaitingApply:true}` is an independently
+ * approved proposal the Founder has not applied in AGO yet.
+ * States: done | action (Founder can act now) | waiting (someone else) | blocked | todo.
+ */
+export function deliverySteps(row){
+ if(row?.awaitingApply)return [
+  {key:'proposed',title:'Proposed',state:'done'},
+  {key:'approved',title:'Independent approval',state:'done'},
+  {key:'applied',title:'Recorded in AGO',state:'action'},
+  {key:'dispatched',title:'Sent to GitHub',state:'todo'},
+  {key:'verified',title:'Verified on GitHub',state:'todo'}];
+ const proposed=Boolean(row?.proposalId),approved=row?.approved===true;
+ const verified=row?.committed===true||row?.createdPr===true;
+ const started=Boolean(row?.dispatch)&&row.dispatch!=='not_started';
+ return [
+  {key:'proposed',title:'Proposed',state:proposed?'done':'blocked'},
+  {key:'approved',title:'Independent approval',state:approved?'done':proposed?'waiting':'todo'},
+  {key:'applied',title:'Recorded in AGO',state:approved?'done':'todo'},
+  {key:'dispatched',title:'Sent to GitHub',state:verified||started?'done':row?.eligibleExecute?'action':approved?'blocked':'todo'},
+  {key:'verified',title:'Verified on GitHub',state:verified?'done':started?'blocked':'todo'}];
+}
