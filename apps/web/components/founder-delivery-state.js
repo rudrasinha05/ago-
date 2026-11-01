@@ -10,8 +10,13 @@ export const DELIVERY_STATES={
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const optionalText=x=>x==null||typeof x==='string';
 const identifier=x=>typeof x==='string'&&x.length>0&&x.length<=100;
+// `approval:founder` is not a stored grant: the server evaluates it from the
+// signed identity (active human Founder) and /v1/console/me never lists it.
+// Requiring it here hid the journey from every real Founder. The server still
+// enforces it on the overview request; a 403 is shown as an error.
+export const DELIVERY_READ_PERMISSIONS=['organization:read','brain:read','approval:read'];
 export function canReadDelivery(me){
- return Boolean(me?.roles?.includes('founder')&&['organization:read','brain:read','approval:founder','approval:read'].every(p=>me.permissions?.includes(p)));
+ return Boolean(me?.roles?.includes('founder')&&DELIVERY_READ_PERMISSIONS.every(p=>me.permissions?.includes(p)));
 }
 export function deliveryPage(value){
  if(!object(value)||value.kind!=='ago_founder_delivery_overview_v1'||value.read_only!==true||

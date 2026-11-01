@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {canReadDelivery,deliveryEvidence,deliveryPage,founderDecisions,projectTaskIds,reviewedStages} from '../apps/web/components/founder-delivery-state.js';
 const project=()=>({project_id:'p1',title:'Recorded project',delivery_state:'working',stages:[{stage:'discovery',task_id:'t1',task_status:'completed',qa_verdict:null}],pending_approvals:[]});
 const page=()=>({kind:'ago_founder_delivery_overview_v1',read_only:true,projects:[project()],more_projects_possible:false});
-test('overview needs every signed permission and Founder presentation role',()=>{
- const me={roles:['founder'],permissions:['organization:read','brain:read','approval:founder','approval:read']};
+test('overview needs every signed read permission and Founder presentation role',()=>{
+ const me={roles:['founder'],permissions:['organization:read','brain:read','approval:read']};
  assert.equal(canReadDelivery(me),true);
  for(const p of me.permissions)assert.equal(canReadDelivery({...me,permissions:me.permissions.filter(x=>x!==p)}),false);
  assert.equal(canReadDelivery({...me,roles:['reviewer']}),false);
@@ -44,4 +44,9 @@ test('recovery guidance explains the recorded failure and never invents an outco
  assert.match(recoveryHint(err(409)).next,/does not repeat/);
  for(const e of [err(503),err(0,'Request timed out'),new TypeError('Failed to fetch')])
   assert.match(recoveryHint(e).next,/may already have done it/,'Unknown outcome must warn before retry');
+});
+test('a real Founder /me (approval:founder is identity-derived, never listed) can read the overview',()=>{
+ // Shape returned by the live server for an active human Founder.
+ assert.equal(canReadDelivery({roles:['founder'],permissions:['organization:read','brain:read','approval:read','approval:decide']}),true);
+ assert.equal(canReadDelivery({roles:['reviewer'],permissions:['organization:read','brain:read','approval:read','approval:founder']}),false);
 });

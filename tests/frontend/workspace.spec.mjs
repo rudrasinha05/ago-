@@ -28,6 +28,8 @@ async function fixtures(page,{reviewer=false}={}) {
     else if(url.pathname==='/v1/organization/employees')data=[{id:user,name:'Test member',department_id:department,kind:'human'}];
     else if(url.pathname==='/v1/brain/goals'){if(request.method()==='POST')goals.push({id:other,status:'active',...request.postDataJSON()});data=request.method()==='POST'?goals.at(-1):goals;}
     else if(url.pathname==='/v1/operations/calendar')data=[{id:other,title:'Evidence review',status:'scheduled',starts_at:'2026-10-10T10:00:00Z',ends_at:'2026-10-10T11:00:00Z'}];
+    // Valid empty delivery page by default; delivery tests override it.
+    else if(url.pathname==='/v1/organization/company/projects/delivery-overview')data={kind:'ago_founder_delivery_overview_v1',read_only:true,projects:[],more_projects_possible:false};
     else if(url.pathname==='/v1/knowledge/nodes')data=[{id:other,label:'<img src=x onerror="window.xss=true">',statement:'Untrusted evidence is displayed as text',source_ref:'test-only'}];
     await route.fulfill({status:200,json:data});
   });
@@ -784,6 +786,8 @@ test('delivery journey paginates, rejects incomplete evidence and recovers expli
 
 test('delivery overview is not fetched without every required read permission',async({page})=>{
  const {calls,errors}=await fixtures(page);
+ await page.route('**/v1/console/me',route=>route.fulfill({status:200,json:{id:user,tenant_id:tenant,roles:['founder'],
+  permissions:permissions.filter(p=>p!=='approval:read'),display_name:'Test member'}}));
  await login(page);await navigate(page,'Organization');
  await expect(page.getByRole('region',{name:'Project delivery journey'})).toHaveCount(0);
  expect(calls.some(x=>x.path.endsWith('/projects/delivery-overview'))).toBe(false);
@@ -851,6 +855,17 @@ test('a failed delivery read shows plain recovery guidance and recovers on Refre
  fail=false;await journey.getByRole('button',{name:'Refresh delivery status'}).click();
  await expect(journey.getByRole('heading',{name:'Private student workflow'})).toBeVisible();
  await expect(hint).toHaveCount(0);
+ expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
+test('a real Founder session sees the delivery journey without a listed approval:founder',async({page})=>{
+ // The live server evaluates approval:founder from identity and never lists it in /me.
+ const {calls,errors}=await fixtures(page);
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([deliveryProject()])}));
+ await login(page);await navigate(page,'Organization');
+ const journey=page.getByRole('region',{name:'Project delivery journey'});
+ await expect(journey.getByRole('heading',{name:'Private student workflow'})).toBeVisible();
  expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
  expect(errors).toEqual([]);
 });
