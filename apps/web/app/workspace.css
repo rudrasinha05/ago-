@@ -556,3 +556,6 @@
 .delivery-actions button,.delivery-actions a{min-height:44px}.delivery-actions button:focus-visible{outline:3px solid #80b9ff;outline-offset:3px}
 .delivery-state{font-weight:700;color:#9ac6ff}.delivery-state.state-blocked{color:#ffb4b4}
 .founder-delivery-journey small{color:#b9c7dd}
+.founder-delivery-journey button{border:1px solid #315a79;border-radius:8px;background:#12304a;color:#e2f1ff;padding:.6rem .85rem;font:inherit;font-weight:600;cursor:pointer}
+.founder-delivery-journey button:hover:not(:disabled){background:#1b4263}
+.founder-delivery-journey button:disabled{opacity:.45;cursor:default}
