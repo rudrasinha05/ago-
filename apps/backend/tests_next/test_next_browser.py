@@ -508,3 +508,69 @@ def test_next_github_and_enterprise_controls_preserve_human_roles(page, app_url,
     navigate_next(page, "Operations & Tools", "Enterprise operations")
     expect(page.get_by_role("button", name="GitHub project", exact=True)).to_have_count(0)
     expect(page.get_by_role("button", name="Run approved GitHub operation", exact=True)).to_have_count(0)
+
+
+def test_saved_founder_project_resumes_from_real_delivery_journey(page, app_url, tenant):
+    """Real /me permissions and persisted drafts; no mocked response or UI grants."""
+    from uuid import uuid4
+
+    session = page.request.post(app_url + '/v1/sessions', data={
+        'tenant_id': tenant['id'], 'email': tenant['founder'][0],
+        'password': tenant['founder'][1],
+    })
+    assert session.status == 200
+    headers = {'Authorization': 'Bearer ' + session.json()['access_token']}
+    profile = page.request.get(app_url + '/v1/console/me', headers=headers)
+    assert profile.status == 200
+    assert 'founder' in profile.json()['roles']
+    assert 'approval:founder' not in profile.json()['permissions']
+    department = page.request.post(app_url + '/v1/organization/departments',
+                                   headers=headers, data={'name': 'Saved draft research'})
+    assert department.status == 200
+    worker = page.request.post(app_url + '/v1/organization/employees', headers=headers,
+                               data={'department_id': department.json()['id'],
+                                     'name': 'Research Agent', 'kind': 'ai'})
+    assert worker.status == 200
+    title = 'Persisted Founder delivery project'
+    project = page.request.post(app_url + '/v1/organization/company/projects/start',
+                                headers=headers, data={
+                                    'brief': title + '\nBuild a private, testable research summary.',
+                                    'operation_key': str(uuid4()),
+                                })
+    assert project.status == 200
+    saved = project.json()
+    assert saved['plan_status'] == 'draft'
+    assert any(stage['plan_step_id'] for stage in saved['stages'])
+
+    sign_in_next(page, app_url, tenant)
+    navigate_next(page, 'Organization', 'Company map')
+    journey = page.get_by_role('region', name='Project delivery journey')
+    card = journey.get_by_role('article', name='Delivery: ' + title)
+    expect(card).to_be_visible()
+    card.get_by_role('button', name='Inspect project', exact=True).click()
+    submit = page.get_by_role('button', name='Submit saved plan for founder approval', exact=True)
+    expect(submit).to_be_visible()
+    submit.click()
+    expect(submit).to_have_count(0)
+    expect(page.get_by_text('Saved plan submitted.', exact=False)).to_be_visible()
+    with psycopg.connect(os.environ['AGO_TEST_POSTGRES_DSN'], row_factory=dict_row) as db:
+        record = db.execute('SELECT status,approval_id FROM ago_strategy_plans '
+                            'WHERE tenant_id=%s AND id=%s',
+                            (tenant['id'], saved['plan_id'])).fetchone()
+        assert record['status'] == 'pending_approval'
+        approval = db.execute('SELECT status FROM ago_approval_requests '
+                              'WHERE tenant_id=%s AND id=%s',
+                              (tenant['id'], record['approval_id'])).fetchone()
+        assert approval['status'] == 'pending'
+        assert db.execute('SELECT count(*) AS n FROM ago_agent_runs WHERE tenant_id=%s',
+                          (tenant['id'],)).fetchone()['n'] == 0
+
+    # A new UI session still shows persisted pending approval, never a fresh submit.
+    page.get_by_role('button', name='Sign out', exact=True).click()
+    sign_in_next(page, app_url, tenant)
+    navigate_next(page, 'Organization', 'Company map')
+    journey.get_by_role('article', name='Delivery: ' + title).get_by_role(
+        'button', name='Inspect project', exact=True,
+    ).click()
+    expect(page.get_by_text('Saved plan submitted.', exact=False)).to_be_visible()
+    expect(page.get_by_role('button', name='Submit saved plan for founder approval')).to_have_count(0)

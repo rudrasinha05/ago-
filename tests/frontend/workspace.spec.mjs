@@ -891,3 +891,28 @@ test('late project details cannot replace the newly selected delivery project',a
  await expect(page.getByText('Founder requirement: Second project exact brief',{exact:true})).toBeVisible();
  expect(errors).toEqual([]);
 });
+
+test('saved draft submission stays explicit after failure and updates the selected project',async({page})=>{
+ const {errors}=await deliveryFixtures(page);let attempts=0,status='draft';
+ const project=deliveryProject(other,'Saved draft');project.plan_status='draft';project.delivery_state='awaiting_project_plan_approval';
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([project])}));
+ await page.route(/\/company\/projects\?/,route=>route.fulfill({status:200,json:[{id:other,title:project.title,plan_status:status}]}));
+ await page.route('**/v1/organization/company/projects/'+other,route=>route.fulfill({status:200,json:{
+  id:other,title:project.title,plan_id:department,brief:'A saved project with a real draft step',plan_status:status,
+  stage_count:1,qa_passed_stages:0,stages:[{stage:'discovery',plan_step_id:user}],
+ }}));
+ await page.route('**/v1/brain/plans/'+department+'/submit',route=>{
+  expect(route.request().method()).toBe('POST');attempts++;
+  if(attempts===1)return route.fulfill({status:409,json:{detail:'Plan requires another review'}});
+  status='pending_approval';return route.fulfill({status:200,json:{status,approval_id:user}});
+ });
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('article',{name:'Delivery: Saved draft'}).getByRole('button',{name:'Inspect project',exact:true}).click();
+ const submit=page.getByRole('button',{name:'Submit saved plan for founder approval',exact:true});
+ await expect(submit).toBeVisible();expect(attempts).toBe(0);
+ await submit.click();await expect(page.getByRole('alert').filter({hasText:'Plan requires another review'})).toBeVisible();
+ await expect(submit).toBeEnabled();expect(attempts).toBe(1);
+ await submit.click();await expect(submit).toHaveCount(0);
+ await expect(page.getByText('Saved plan submitted.',{exact:false})).toBeVisible();
+ expect(attempts).toBe(2);expect(errors).toEqual([]);
+});

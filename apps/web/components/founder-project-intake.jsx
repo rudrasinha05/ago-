@@ -150,11 +150,15 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
     setCreated(response);setBrief('');retry.current=null;await refresh();onChanged?.();
   } catch(err){setFailure(err);setError(err.message);}finally{setBusy(false);}
  }
- async function submitForReview(){
-  if(!created||reviewBusy||created.plan_status!=='draft')return;
+ async function submitForReview(project){
+  if(!project?.plan_id||reviewBusy||project.plan_status!=='draft'||
+    !project.stages?.some(s=>s.plan_step_id))return;
+  const version=detailEpoch.current;
   setReviewBusy(true);setError('');setFailure(null);
-  try{const response=await api.request('/v1/brain/plans/'+encodeURIComponent(created.plan_id)+'/submit',{method:'POST'});
-    setCreated(old=>({...old,plan_status:response.status,approval_id:response.approval_id}));
+  try{const response=await api.request('/v1/brain/plans/'+encodeURIComponent(project.plan_id)+'/submit',{method:'POST'});
+    const update=old=>old?.id===project.id?{...old,plan_status:response.status,approval_id:response.approval_id}:old;
+    setCreated(update);
+    if(version===detailEpoch.current)setProjectDetail(update);
     await refresh();onChanged?.();
   }catch(e){setFailure(e);setError(e.message);}finally{setReviewBusy(false);}
  }
@@ -183,7 +187,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
     </li>)}</ol>
     <p>Plan ID: <code>{created.plan_id}</code> · Status: {createdStatus} · Founder approval is required before materialization. <a href="#company-approval-inbox">View approval inbox ↑</a></p>
     {createdStatus==='draft'&&created.stages.some(s=>s.plan_step_id)&&
-      <button type="button" disabled={reviewBusy} onClick={submitForReview}>{reviewBusy?'Submitting…':'Submit plan for founder approval'}</button>}
+      <button type="button" disabled={reviewBusy} onClick={()=>submitForReview(created)}>{reviewBusy?'Submitting…':'Submit plan for founder approval'}</button>}
     {createdStatus==='draft'&&!created.stages.some(s=>s.plan_step_id)&&
       <p>Assign a qualified discovery AI employee before submitting this draft for approval.</p>}
   </div>}
@@ -202,6 +206,14 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
        <div className="project-portfolio-details">
         {!projectDetail?<p>{projectError?'Project details unavailable.':'Loading live project details…'}</p>:<>
          <h4>{projectDetail.title}</h4>
+         {projectDetail.plan_status==='draft'&&(projectDetail.stages||[]).some(s=>s.plan_step_id)&&
+          <button type="button" disabled={reviewBusy} onClick={()=>submitForReview(projectDetail)}>
+           {reviewBusy?'Submitting…':'Submit saved plan for founder approval'}
+          </button>}
+         {projectDetail.plan_status==='pending_approval'&&<p role="status">
+          Saved plan submitted. <a href="#company-approval-inbox">Open approval inbox</a> to review the pending decision.
+         </p>}
+
          <p><b>Status:</b> {projectDetail.status_label} · <b>Strategy:</b> {projectDetail.plan_status} · <b>Delivery health:</b> {projectDetail.project_health}</p>
          {projectDetail.plan_status==='active'&&<div className="project-ceo-handoff">
           <button type="button" disabled={ceoBusy} onClick={resumeCeo}>
