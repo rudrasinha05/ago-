@@ -180,7 +180,7 @@ def test_github_review_is_linked_to_exact_founder_project_without_self_approval(
     pm = employee(client, founder, dept)
     dev = employee(client, founder, dept)
     projects = [post(client, BASE + '/projects/start', founder, {
-        'brief': 'Private delivery requirement ' + str(i) + ' never copy into approval metadata',
+        'brief': 'Private delivery requirement ' + str(i) + '\nnever copy into approval metadata',
         'operation_key': str(uuid4()),
     }) for i in range(2)]
     binding = {
