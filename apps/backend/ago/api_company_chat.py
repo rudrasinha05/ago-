@@ -322,6 +322,7 @@ def founder_delivery_overview(
                 if isinstance(a, dict) and a.get('status') == 'pending'
                 and (
                     str(a.get('founder_intake_id')) == str(project['id'])
+                    or str(a.get('github_founder_intake_id')) == str(project['id'])
                     or a.get('task_id') is not None
                     and str(a['task_id']) in ids
                 )

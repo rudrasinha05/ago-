@@ -1468,6 +1468,8 @@ class CompanyChat:
                    p.id AS plan_id,p.title AS plan_title,
                    left(g.description,3000) AS goal_brief_excerpt,
                    i.id AS founder_intake_id,
+                   github_i.id AS github_founder_intake_id,
+                   github_p.id AS github_proposal_id,
                    t.id AS task_id,t.action AS task_action,t.status AS task_status,
                    t.assignee_id AS task_assignee_id,
                    assignee.name AS task_assignee_name,
@@ -1499,6 +1501,21 @@ class CompanyChat:
             LEFT JOIN ago_goals g ON g.tenant_id=p.tenant_id AND g.id=p.goal_id
             LEFT JOIN ago_founder_intakes i ON i.tenant_id=p.tenant_id
              AND i.plan_id=p.id
+            LEFT JOIN ago_enterprise_proposals github_p
+              ON github_p.tenant_id=a.tenant_id AND github_p.approval_id=a.id
+             AND github_p.domain='integration' AND github_p.command='github_operation'
+             AND a.requester_id=github_p.actor_id
+             AND a.action=('enterprise:review:integration:' || github_p.id::text || ':' || github_p.digest)
+            LEFT JOIN LATERAL (
+                SELECT s.payload FROM ago_integration_settings s
+                WHERE s.tenant_id=github_p.tenant_id AND s.kind='github_project'
+                  AND s.id::text=github_p.specification->>'project_id'
+                ORDER BY s.revision DESC LIMIT 1
+            ) github_binding ON true
+            LEFT JOIN ago_founder_intakes github_i
+              ON github_i.tenant_id=github_p.tenant_id
+             AND github_i.goal_id::text=github_binding.payload->>'goal_id'
+             AND github_binding.payload->'enabled'='true'::jsonb
             LEFT JOIN ago_governed_tasks t
               ON t.tenant_id=a.tenant_id AND t.approval_id=a.id
              AND t.action=a.action
@@ -1531,6 +1548,7 @@ class CompanyChat:
         for row in rows:
             item = dict(row)
             item["approval_type"] = (
+                "github_operation" if item["github_proposal_id"] else
                 "market_signal_review" if item["market_signal_id"] else
                 "opportunity_review" if item["opportunity_id"] else
                 "plan_review" if item["plan_id"] else
