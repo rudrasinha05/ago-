@@ -132,6 +132,7 @@ def test_no_founder_private_details_in_diagnostic(monkeypatch):
 
 
 def test_worker_pm_blocker_exposes_real_scoped_identities_no_fake_status(monkeypatch):
+    monkeypatch.delenv('AGO_LOCAL_ENGINEERING_CANDIDATES', raising=False)
     tenant, founder, task_id = (str(uuid4()) for _ in range(3))
     worker, pm, intake = (str(uuid4()) for _ in range(3))
     manager = str(uuid4())
@@ -139,7 +140,7 @@ def test_worker_pm_blocker_exposes_real_scoped_identities_no_fake_status(monkeyp
         def execute(self, query, params=None):
             if "AS worker_id" in query and "ago_founder_project_lead" in query:
                 self.commands.append(query.strip())
-                assert params == (tenant, founder, intake, task_id)
+                assert params == (False, tenant, founder, intake, task_id)
                 return Cursor({
                     "worker_id":worker, "worker_name":"Software Worker",
                     "worker_kind":"ai", "worker_manager_id":manager,

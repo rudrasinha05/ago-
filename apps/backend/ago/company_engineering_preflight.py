@@ -6,6 +6,7 @@ The mutable calendar/constitutional execution checks remain separate gates.
 """
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -31,6 +32,8 @@ BLOCKER_CODES = {
         "board_pm_or_worker_not_ai",
     "All Board, PM and worker roles need distinct employees":
         "board_pm_worker_identities_not_distinct",
+    "Engineering needs an independently activated implementation-stage AI developer":
+        "implementation_stage_not_activated",
 }
 
 
@@ -128,9 +131,9 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
             failure_code = BLOCKER_CODES.get(str(exc), "company_hierarchy_not_verified")
             report["blocking_checks"].append(failure_code)
             if failure_code == "worker_pm_reporting_path_missing":
-                # Scope matches the already checked ACTIVE founder-owned
-                # discovery step. Return only AI identity and current manager,
-                # never project brief or task payload. SQL read-only transaction.
+                # Match assignments(): engineering uses the separately activated
+                # developer, not the discovery task's research assignee.
+                # A changed/missing activation fails closed without a fallback.
                 link = db.execute("""
                     SELECT w.id AS worker_id, w.name AS worker_name,
                            w.kind AS worker_kind,
@@ -149,8 +152,17 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
                       AND ps.id=st.plan_step_id AND ps.plan_id=i.plan_id
                     JOIN ago_governed_tasks t ON t.tenant_id=i.tenant_id
                       AND t.id=ps.task_id AND t.action='internal:brief'
+                    LEFT JOIN ago_project_stage_delegation_activations implementation
+                      ON implementation.tenant_id=i.tenant_id
+                      AND implementation.intake_id=i.id
+                      AND implementation.stage='implementation'
+                    LEFT JOIN ago_founder_intake_stages engineering
+                      ON engineering.tenant_id=i.tenant_id AND engineering.intake_id=i.id
+                      AND engineering.stage='implementation'
+                      AND engineering.suggested_assignee_id=implementation.assignee_id
                     JOIN ago_employees w ON w.tenant_id=t.tenant_id
-                      AND w.id=t.assignee_id
+                      AND w.id=CASE WHEN %s THEN engineering.suggested_assignee_id
+                                    ELSE t.assignee_id END
                     JOIN ago_employees pm ON pm.tenant_id=i.tenant_id
                       AND pm.id=l.accountable_manager_id
                     LEFT JOIN ago_employees mgr ON mgr.tenant_id=w.tenant_id
@@ -158,7 +170,8 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
                     WHERE i.tenant_id=%s AND i.founder_id=%s
                       AND i.id=%s AND t.id=%s
                     LIMIT 1
-                """, (tenant_id, founder_id, context["id"], task_id)).fetchone()
+                """, (os.getenv('AGO_LOCAL_ENGINEERING_CANDIDATES') == 'true',
+                      tenant_id, founder_id, context["id"], task_id)).fetchone()
                 if link:
                     report["reporting_repair_evidence"] = {
                         "worker_id": str(link["worker_id"]),

@@ -26,3 +26,16 @@ in local files, not a server-verifiable delivery record. The overview's Docker,
 GitHub and release flags are not upgraded from approval existence. A complete
 source-bound pipeline, actual owner Ollama/Docker run, independent artifact review
 and AGO-origin provider receipts are still required for full product acceptance.
+
+## Engineering recovery follow-up
+
+Engineering-mode assignment uses a separately activated implementation developer,
+but preflight's reporting repair still selected the discovery researcher. Recovery
+now selects the same current implementation-stage employee as runtime assignments;
+a missing activation never falls back to the researcher. Non-engineering mode
+retains discovery behavior. The missing-implementation blocker also has an explicit
+safe diagnostic code. Real PostgreSQL chain coverage temporarily changes only the
+implementation developer's manager, verifies the returned repair identity and then
+restores it before continuing the existing governed execution test. The model in
+that CI test is explicitly a fixture, not owner Ollama evidence. Eighteen local
+preflight/repair tests passed before publication.

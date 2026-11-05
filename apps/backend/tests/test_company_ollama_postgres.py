@@ -154,6 +154,27 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
             WHERE tenant_id=%s AND intake_id=%s AND stage='implementation'
         """,(info["tenant"],project["id"])).fetchone()
         assert str(stage["assignee_id"])==developer
+        # Recovery must identify the actual coder, never the research assignee.
+        changed = client.put(BASE+'/employees/'+developer+'/manager', headers=founder,
+                             json={'manager_id': cto})
+        assert changed.status_code == 200, changed.text
+        from ago.company_engineering_preflight import inspect_engineering_task
+        # This fixture has uncommitted writes; exercise the real query without
+        # changing the outer test transaction's read/write mode.
+        diagnostic = inspect_engineering_task(
+            info['db'], tenant_id=info['tenant'], founder_id=info['founder_id'],
+            task_id=task_id,
+        )
+        evidence = diagnostic['reporting_repair_evidence']
+        assert evidence['worker_id'] == developer
+        assert evidence['worker_id'] != worker
+        assert evidence['worker_manager_id'] == cto
+        assert evidence['accountable_pm_id'] == pm
+        assert diagnostic['task_post_authorized'] is False
+        assert calls == []
+        restored = client.put(BASE+'/employees/'+developer+'/manager', headers=founder,
+                              json={'manager_id': pm})
+        assert restored.status_code == 200, restored.text
     assert task_id in reconciled["approved_task_ids"]
     assert reconciled["ceo_id"]==ceo
     assert reconciled["tasks_executed"]==0
