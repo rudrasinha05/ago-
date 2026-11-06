@@ -229,6 +229,30 @@ test('red routed task follows the recorded manager line and opens actual worker'
  expect(errors).toEqual([]);
 });
 
+test('approval history shows who decided a request instead of "awaiting"',async({page})=>{
+ // Found on the Founder's live AGO: decided rows still read "Awaiting an authorized decision".
+ const {calls,errors}=await fixtures(page);
+ const decided={id:'30000000-0000-4000-8000-000000000021',action:'internal:brief',status:'approved',requester_id:user,
+  requester_name:'Founder',approval_type:'task_execution',reviewer_id:other,reviewer_name:'Independent Reviewer',
+  decided_at:'2026-10-25T09:00:00Z',created_at:'2026-10-25T08:59:28Z',requires_founder_decision:false};
+ const pending={...decided,id:'30000000-0000-4000-8000-000000000022',status:'pending',reviewer_id:null,
+  reviewer_name:'Not yet decided',decided_at:null,approval_type:'plan_review',plan_title:'First task workflow'};
+ await page.route('**/v1/organization/company/approvals',route=>route.fulfill({status:200,json:[pending,decided]}));
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Approvals/}).click();
+ const inbox=page.getByRole('region',{name:'Approvals inbox'});
+ await expect(inbox.locator('.approval-entry')).toHaveCount(1);
+ await expect(inbox.locator('.approval-entry')).toContainText('Awaiting an authorized decision');
+ await inbox.getByRole('button',{name:'Show history'}).click();
+ const rows=inbox.locator('.approval-entry');
+ await expect(rows).toHaveCount(2);
+ await expect(rows.nth(1)).toContainText('Decided: approved by Independent Reviewer on');
+ await expect(rows.nth(1)).not.toContainText('Awaiting');
+ await accessibility(page);
+ expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('founder can create first real governed task then separately approve and dispatch once',async({page})=>{
  const {errors}=await fixtures(page);
  const rights=['brain:read','brain:manage','organization:read','organization:manage','task:read','task:create','approval:request','approval:read','approval:decide','approval:founder','agent:dispatch','task:execute'];

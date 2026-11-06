@@ -6,6 +6,14 @@ import {decideFounderScope} from './company-founder-decision';
 const BASE='/v1/organization/company';
 const fmt=date=>date?new Date(date).toLocaleString():'Not recorded';
 const typeLabel={plan_review:'Strategy plan review',task_execution:'Governed task authorization',opportunity_review:'Business opportunity proposal',market_signal_review:'Internet market signal for founder review',github_operation:'Independent GitHub operation review',governance_action:'Other governed action'};
+// A decided request must never read as still awaiting a decision.
+export function decisionLine(a,me){
+ if(a.status&&a.status!=='pending'){
+  const who=a.reviewer_name&&a.reviewer_name!=='Not yet decided'?' by '+a.reviewer_name:'';
+  return 'Decided: '+String(a.status).replaceAll('_',' ')+who+(a.decided_at?' on '+fmt(a.decided_at):'');
+ }
+ return canDecide(a,me)?'Your decision is required':isMine(a,me)?'Awaiting an authorized decision':a.requires_founder_decision?'Awaiting founder decision':'Awaiting qualified independent human review or scoped CEO reconciliation';
+}
 const subject=a=>a.market_signal_title||a.opportunity_title||a.plan_title||a.task_action||a.action;
 const isMine=(a,me)=>a.requester_id===me.id;
 const canDecide=(a,me)=>a.status==='pending'&&(
@@ -99,7 +107,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
    <div className="approval-rows">{displayed.map(a=><article key={a.id} className="approval-entry">
     <div><strong>{subject(a)}</strong><small>{typeLabel[a.approval_type]} · {a.status} · Requested {fmt(a.created_at)}</small>
      <small>From: {a.requester_name} ({a.requester_role||'Role not recorded'})</small>
-     <small>{canDecide(a,me)?'Your decision is required':isMine(a,me)?'Awaiting an authorized decision':a.requires_founder_decision?'Awaiting founder decision':'Awaiting qualified independent human review or scoped CEO reconciliation'}</small></div>
+     <small>{decisionLine(a,me)}</small></div>
     <button type="button" onClick={()=>open(a)}>View approval details</button>
    </article>)}</div>}
   {toast&&<div className="approval-toast" role="status">
