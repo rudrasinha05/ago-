@@ -42,3 +42,18 @@ The real-session PostgreSQL regression checks identity/tenant/role restrictions,
 no-op audit behavior and preserved project content. Existing governed chain cases
 now recover legacy Founder ownership through the API and reject reassignment during
 running work. Their model provider is explicitly injected test code, not real Ollama.
+
+## Verified backend and browser follow-up
+At backend commit `9a73b3e5f5917d42240350e19539b08ca5fc66d8`, Backend quality
+passed 1,298 tests (run 42177571451) and focused acceptance passed 401 tests
+(run 42177571507). Python 3.11 and 3.14 architecture jobs passed. Full browser
+acceptance found two contrast failures on the journey refresh button in Chromium
+and Firefox; 190 other browser cases passed and six were skipped. This was not an
+all-green architecture run.
+
+The contrast failure reproduced locally on the packaged app. Journey disabled/loading
+buttons now use opaque, contrasting colors instead of reducing the entire control
+to 45% opacity. This preserves readable labels while asynchronous refresh changes
+button state. No accessibility assertions or rules were removed. The previously
+failing Chromium eight-route WCAG scan passes locally after the CSS correction.
+The complete CI workflow must be checked at the CSS follow-up commit as well.

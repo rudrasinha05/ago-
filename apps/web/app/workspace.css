@@ -558,7 +558,8 @@
 .founder-delivery-journey small{color:#b9c7dd}
 .founder-delivery-journey button{border:1px solid #315a79;border-radius:8px;background:#12304a;color:#e2f1ff;padding:.6rem .85rem;font:inherit;font-weight:600;cursor:pointer}
 .founder-delivery-journey button:hover:not(:disabled){background:#1b4263}
-.founder-delivery-journey button:disabled{opacity:.45;cursor:default}
+/* Keep loading/disabled labels readable through asynchronous refresh transitions. */
+.founder-delivery-journey button:disabled{opacity:1;color:#aabed2;background:#172535;border-color:#344b62;cursor:default}
 /* Exact Founder decisions and delivery evidence inside each journey card. */
 .delivery-decisions{margin:.75rem 0;padding:.75rem;border:1px solid #6b4a1f;border-radius:10px;background:#1c1508}
 .delivery-decisions h4{margin:0 0 .5rem;font-size:.95rem;color:#ffe6b8}
