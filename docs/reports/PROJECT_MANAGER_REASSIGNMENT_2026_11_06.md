@@ -10,12 +10,15 @@ details, now including `accountable_manager_role`, `assigned_at`, and
 
 The target must be an existing same-tenant AI employee with an intake-allowlisted
 PM role and report directly to the appointed AI CEO. Board members and project
-stage workers (suggested, activated or actual task assignees) are excluded.
+workers are excluded: suggested discovery/implementation/quality workers,
+all activated stage workers and actual task assignees. A nonactivated release
+preparation suggestion alone does not prevent a delivery manager assignment.
 Employees currently have no active/inactive flag; existence in the current employee
 registry is the available employee lifecycle check. Founder user activation is checked.
 
 Reassignment locks existing plan tasks in runtime admission order, then project
-ownership. Running tasks or agent runs block an actual change. Repeating the same
+ownership. Runtime admission shares the project lock so a newly materialized
+task also cannot race the assignment change. Running tasks or agent runs block an actual change. Repeating the same
 valid manager is a no-op. Unknown/nonowned projects return 404, unauthorized users
 403, invalid/stale targets or running work 400, malformed inputs 422.
 

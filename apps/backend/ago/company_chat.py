@@ -1160,6 +1160,7 @@ class CompanyChat:
                 UNION ALL
                 SELECT 1 FROM ago_founder_intake_stages
                 WHERE tenant_id=%s AND intake_id=%s AND suggested_assignee_id=%s
+                  AND stage IN ('discovery','implementation','quality')
                 UNION ALL
                 SELECT 1 FROM ago_project_stage_delegation_activations
                 WHERE tenant_id=%s AND intake_id=%s AND assignee_id=%s
