@@ -500,7 +500,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       {founderView&&me.permissions?.includes('brain:manage')&&<a href="#ago-project-portfolio">Project portfolio</a>}
       {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business opportunities</a>}
     </nav>
-    <FounderProjectIntake api={api} me={me} requestedProject={requestedProject} employees={employees} profiles={governanceData?.employees||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
+    <FounderProjectIntake api={api} me={me} requestedProject={requestedProject} employees={employees} profiles={governanceData?.employees||[]} board={governanceData?.board||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
     </section>
     <section id="ago-tab-delivery" className="company-tab-panel" data-tab-panel aria-label="Execution and delivery" hidden={activeTab!=='ago-tab-delivery'}>

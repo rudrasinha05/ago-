@@ -597,3 +597,7 @@
 .task-self-check p{margin:2px 0}.task-self-check ul{margin:6px 0;padding-left:18px;display:grid;gap:6px}
 .task-self-check li span{display:block}.task-self-check li small,.task-self-check>small{display:block;color:#c7b896}
 .task-self-check.ready>small{color:#9fd8c2}
+.project-manager-change{margin:1rem 0;padding:1rem;border:1px solid #42678b;border-radius:10px;background:#0b1c32}
+.project-manager-change h5{margin:0;font-size:14px}.project-manager-change select{width:100%;min-height:44px;padding:8px;background:#102b45;color:#edf7ff;border:1px solid #6689aa;border-radius:6px}
+.project-manager-change input[type=checkbox]{width:20px;height:20px;justify-self:start}.project-manager-change button{margin-top:12px;min-height:44px}
+.project-manager-change button:disabled{opacity:1;background:#172535;color:#aabed2;border-color:#344b62}

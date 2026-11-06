@@ -29,10 +29,12 @@ reporting line, model run or QA result is created/approved/changed. Existing app
 retain their original action and assignee. Runtime still rechecks current hierarchy;
 a worker outside the new PM's reporting line needs the separate reporting repair.
 
-Frontend handoff: preserve the existing project, select an eligible AI PM, submit
-with expected manager, then refresh details and self-check. This patch does not
-claim that Claude's manager-selection screen is implemented or that AdmissionFlow
-has been reassigned on the owner's PC. Issue #8 hierarchical AI approval remains a
+Frontend: existing project details now include an eligible AI PM selector, an
+explicit confirmation checkbox and save action carrying the expected current manager.
+A successful matching response refreshes the same project and portfolio. Failed
+requests remain errors; project switches discard old UI responses. No candidate
+or running work produces an explicit explanation. AdmissionFlow has not been
+reassigned on the owner's PC by this repository change. Issue #8 hierarchical AI approval remains a
 separate feature; no human-independent approval checks are loosened here.
 
 Validation before publication: Ruff, domain/backend/API contract guards, compile,
@@ -57,3 +59,11 @@ to 45% opacity. This preserves readable labels while asynchronous refresh change
 button state. No accessibility assertions or rules were removed. The previously
 failing Chromium eight-route WCAG scan passes locally after the CSS correction.
 The complete CI workflow must be checked at the CSS follow-up commit as well.
+
+
+The frontend manager control is covered by a browser fixture that filters human,
+Board and discovery workers, requires confirmation, handles rejection then success,
+and verifies no approval/run request. The real signed-session PostgreSQL Next.js
+journey now checks manager selection, the durable audit row and persistence after
+logout/login using actual Founder permissions (without a fabricated approval:founder
+entry). Owner-PC and real Ollama acceptance remain separate.

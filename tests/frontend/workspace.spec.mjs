@@ -1010,3 +1010,42 @@ test('saved draft submission stays explicit after failure and updates the select
  await expect(page.getByText('Saved plan submitted.',{exact:false})).toBeVisible();
  expect(attempts).toBe(2);expect(errors).toEqual([]);
 });
+
+test('existing project manager change needs explicit confirmation and preserves the project',async({page})=>{
+ const {errors,calls}=await fixtures(page);
+ const ceo='10000000-0000-4000-8000-000000000071',pm='10000000-0000-4000-8000-000000000072',worker='10000000-0000-4000-8000-000000000073';
+ const project=deliveryProject(other,'Existing manager recovery');let manager=user,attempts=0;
+ const details=()=>({id:other,title:project.title,brief:'Preserved founder requirement',plan_id:department,plan_status:'active',
+  accountable_manager_id:manager,accountable_manager_name:manager===pm?'Delivery AI':'Founder',
+  stage_count:1,qa_passed_stages:0,stages:[{stage:'discovery',suggested_assignee_id:worker}]});
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([project])}));
+ await page.route(/\/company\/projects\?/,route=>route.fulfill({status:200,json:[details()]}));
+ await page.route('**/v1/organization/company/projects/'+other,route=>route.fulfill({status:200,json:details()}));
+ await page.route('**/v1/organization/company/governance',route=>route.fulfill({status:200,json:{
+  board:[{seat:'Strategy & Vision',employee_id:ceo}],employees:[
+   {id:user,name:'Founder',kind:'human',role_title:'Project Manager',manager_id:ceo},
+   {id:ceo,name:'CEO',kind:'ai',role_title:'Project Manager'},
+   {id:pm,name:'Delivery AI',kind:'ai',role_title:'Project Manager',manager_id:ceo},
+   {id:worker,name:'Discovery worker',kind:'ai',role_title:'Project Manager',manager_id:ceo},
+  ]}}));
+ await page.route('**/v1/organization/company/projects/'+other+'/accountable-manager',route=>{
+  attempts++;expect(route.request().method()).toBe('POST');
+  expect(route.request().postDataJSON()).toEqual({employee_id:pm,expected_manager_id:user});
+  if(attempts===1)return route.fulfill({status:400,json:{detail:'Wait for running project work to stop before changing manager'}});
+  manager=pm;return route.fulfill({status:200,json:{...details(),manager_change:{changed:true,previous_manager_id:user,manager_id:pm}}});
+ });
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('article',{name:'Delivery: '+project.title}).getByRole('button',{name:'Inspect project',exact:true}).click();
+ const control=page.getByRole('region',{name:'Change accountable manager'});
+ const select=control.getByLabel('New accountable manager');await expect(select).toBeVisible();
+ await expect(select.locator('option')).toHaveText(['Select an eligible AI PM','Delivery AI — Project Manager']);
+ await select.selectOption(pm);const save=control.getByRole('button',{name:'Save accountable manager'});
+ await expect(save).toBeDisabled();expect(attempts).toBe(0);
+ await control.getByRole('checkbox').check();await accessibility(page);await save.click();
+ await expect(control.getByRole('alert')).toContainText('Wait for running project work');expect(attempts).toBe(1);
+ await save.click();await expect(page.getByRole('status').filter({hasText:'Accountable manager saved: Delivery AI'})).toBeVisible();
+ await expect(page.locator('.project-portfolio-details')).toContainText('Preserved founder requirement');
+ await expect(control).toContainText('No eligible replacement AI Project Manager');
+ expect(attempts).toBe(2);expect(calls.filter(c=>c.method==='POST'&&c.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});

@@ -542,18 +542,49 @@ def test_saved_founder_project_resumes_from_real_delivery_journey(page, app_url,
     assert saved['plan_status'] == 'draft'
     assert any(stage['plan_step_id'] for stage in saved['stages'])
 
+    def create_ai(name, manager_id=None):
+        response = page.request.post(app_url + '/v1/organization/employees', headers=headers,
+                                     data={'department_id': department.json()['id'],
+                                           'name': name, 'kind': 'ai', 'manager_id': manager_id})
+        assert response.status == 200
+        return response.json()['id']
+
+    ceo = create_ai('Recovery Strategy AI')
+    pm = create_ai('Recovery Project Manager', ceo)
+    response = page.request.put(app_url + '/v1/organization/company/employees/' + pm + '/role',
+                                headers=headers, data={'role_title': 'Project Manager',
+                                  'core_responsibilities': 'Manage approved internal project delivery',
+                                  'extra_responsibilities': 'Track independent acceptance evidence'})
+    assert response.status == 200
+    response = page.request.post(app_url + '/v1/organization/company/board/appoint',
+                                 headers=headers, data={'seat': 'Strategy & Vision', 'employee_id': ceo})
+    assert response.status == 200
+
     sign_in_next(page, app_url, tenant)
     navigate_next(page, 'Organization', 'Company map')
     journey = page.get_by_role('region', name='Project delivery journey')
     card = journey.get_by_role('article', name='Delivery: ' + title)
     expect(card).to_be_visible()
     card.get_by_role('button', name='Inspect project', exact=True).click()
+    manager_control = page.get_by_role('region', name='Change accountable manager')
+    manager_control.get_by_label('New accountable manager').select_option(pm)
+    save_manager = manager_control.get_by_role('button', name='Save accountable manager')
+    expect(save_manager).to_be_disabled()
+    manager_control.get_by_role('checkbox').check()
+    save_manager.click()
+    expect(page.get_by_role('status').filter(has_text='Accountable manager saved: Recovery Project Manager')).to_be_visible()
     submit = page.get_by_role('button', name='Submit saved plan for founder approval', exact=True)
     expect(submit).to_be_visible()
     submit.click()
     expect(submit).to_have_count(0)
     expect(page.get_by_text('Saved plan submitted.', exact=False)).to_be_visible()
     with psycopg.connect(os.environ['AGO_TEST_POSTGRES_DSN'], row_factory=dict_row) as db:
+        audit = db.execute('SELECT * FROM ago_project_manager_changes '
+                           'WHERE tenant_id=%s AND intake_id=%s',
+                           (tenant['id'], saved['id'])).fetchall()
+        assert len(audit) == 1
+        assert str(audit[0]['manager_id']) == pm
+        assert str(audit[0]['previous_manager_id']) == saved['accountable_manager_id']
         record = db.execute('SELECT status,approval_id FROM ago_strategy_plans '
                             'WHERE tenant_id=%s AND id=%s',
                             (tenant['id'], saved['plan_id'])).fetchone()
@@ -574,3 +605,5 @@ def test_saved_founder_project_resumes_from_real_delivery_journey(page, app_url,
     ).click()
     expect(page.get_by_text('Saved plan submitted.', exact=False)).to_be_visible()
     expect(page.get_by_role('button', name='Submit saved plan for founder approval')).to_have_count(0)
+
+    expect(page.locator('.project-portfolio-details')).to_contain_text('Accountable manager: Recovery Project Manager')

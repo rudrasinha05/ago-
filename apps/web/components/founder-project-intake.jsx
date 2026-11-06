@@ -3,8 +3,9 @@ import {RecoveryHint} from './recovery-hint';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {CompanyDocumentVault} from './company-document-vault';
 import {ProjectStageRouting} from './project-stage-routing';
+import {ProjectManagerChange} from './project-manager-change';
 
-export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,requestedProject=null}) {
+export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],onChanged,requestedProject=null}) {
  const [brief,setBrief]=useState('');
  const [projects,setProjects]=useState(null);
  const [projectDetail,setProjectDetail]=useState(null),[selectedProject,setSelectedProject]=useState(null);
@@ -12,6 +13,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
  const [created,setCreated]=useState(null);
  const [busy,setBusy]=useState(false),[reviewBusy,setReviewBusy]=useState(false),[error,setError]=useState(''),[failure,setFailure]=useState(null);
  const [ceoBusy,setCeoBusy]=useState(false),[ceoNotice,setCeoNotice]=useState('');
+ const [managerNotice,setManagerNotice]=useState('');
  const retry=useRef(null),detailEpoch=useRef(0);
  const isFounder=me.roles?.includes('founder')&&me.permissions?.includes('brain:manage');
  const refresh=useCallback(async()=>{
@@ -21,7 +23,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
  useEffect(()=>{
   if(!isFounder||!requestedProject?.project_id)return undefined;
   let live=true;const version=++detailEpoch.current;
-  setSelectedProject(requestedProject.project_id);setProjectDetail(null);setProjectError('');setCeoNotice('');
+  setSelectedProject(requestedProject.project_id);setProjectDetail(null);setProjectError('');setCeoNotice('');setManagerNotice('');
   api.request('/v1/organization/company/projects/'+encodeURIComponent(requestedProject.project_id))
    .then(result=>{if(!live||version!==detailEpoch.current)return;
     if(result?.id!==requestedProject.project_id)throw new Error('Project evidence does not match the selection.');
@@ -53,7 +55,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
  async function inspectProject(project){
   const version=++detailEpoch.current;
   if(selectedProject===project.id){setSelectedProject(null);setProjectDetail(null);return;}
-  setSelectedProject(project.id);setProjectDetail(null);setProjectError('');setCeoNotice('');
+  setSelectedProject(project.id);setProjectDetail(null);setProjectError('');setCeoNotice('');setManagerNotice('');
   try{const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(project.id));
    if(version!==detailEpoch.current)return;
    if(result?.id!==project.id)throw new Error('Project evidence does not match the selection.');
@@ -63,7 +65,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
  async function resumeCeo(){
   if(!projectDetail||ceoBusy||projectDetail.plan_status!=='active')return;
   const version=detailEpoch.current;
-  setCeoBusy(true);setProjectError('');setCeoNotice('');
+  setCeoBusy(true);setProjectError('');setCeoNotice('');setManagerNotice('');
   let requested=0;
   try{
    for(const stage of projectDetail.stages||[]){
@@ -226,6 +228,14 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],onChanged,
          <button type="button" onClick={exportProjectReport}>Export current evidence report (.md)</button>
          <p><b>Founder requirement:</b> {projectDetail.brief}</p>
          <p><b>Accountable manager:</b> {projectDetail.accountable_manager_name}</p>
+         {managerNotice&&<p role="status">{managerNotice}</p>}
+         <ProjectManagerChange key={projectDetail.id+':'+projectDetail.accountable_manager_id}
+          api={api} project={projectDetail} profiles={profiles} board={board} onSaved={result=>{
+           setProjectDetail(current=>current?.id===result.id?result:current);
+           setManagerNotice('Accountable manager saved: '+result.accountable_manager_name+'. Audit recorded. No work executed; check Execution & Delivery before running.');
+           refresh();onChanged?.();
+          }}/>
+
          <p><b>Revenue plan:</b> {projectDetail.commercial_objective} · {projectDetail.commercial_stage}</p>
          <p><b>Actual income evidence:</b> {projectDetail.revenue_record_status==='no_verified_evidence'?'Not recorded':'₹'+projectDetail.verified_revenue_inr}</p>
          <ol className="intake-stage-list">{(projectDetail.stages||[]).map(st=><li key={st.stage}>
