@@ -10,8 +10,10 @@ export function recoveryHint(error){
   const message=String(error.message||'');
   if(status===401)return {what:'Your sign-in has expired.',
     next:'Sign in again. A request rejected as signed-out changes nothing on the server.'};
-  if(status===403)return {what:'Your account is not allowed to do this step.',
-    next:'Ask the Founder to assign the right role. AGO does not skip permission checks.'};
+  // 403 also covers governed prerequisites (e.g. "Board, PM and worker must be
+  // actual AI employees"), so never claim it is only an account role problem.
+  if(status===403)return {what:'AGO refused this step. The reason is shown above: a missing permission or an unmet company setup rule.',
+    next:'Fix the reason shown above (for example the role, manager or Board setup), then try again. AGO does not skip these checks.'};
   if(status===404)return {what:'This record no longer exists, or you are not allowed to see it.',
     next:'Use Refresh and open it again from the current list.'};
   if(status===409)return {what:'The record changed after you opened it. Someone else may have acted, or the step moved on.',

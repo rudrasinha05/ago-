@@ -40,7 +40,8 @@ test('recovery guidance explains the recorded failure and never invents an outco
  assert.equal(recoveryHint(null),null);
  assert.equal(recoveryHint(new Error('Incomplete project delivery record.')),null,'A validation error has no guessed cause');
  assert.match(recoveryHint(err(401)).what,/sign-in has expired/);
- assert.match(recoveryHint(err(403)).next,/does not skip permission/);
+ assert.match(recoveryHint(err(403)).next,/does not skip these checks/);
+ assert.doesNotMatch(recoveryHint(err(403)).what,/account is not allowed/,'403 may be a setup rule, not only a role');
  assert.match(recoveryHint(err(409)).next,/does not repeat/);
  for(const e of [err(503),err(0,'Request timed out'),new TypeError('Failed to fetch')])
   assert.match(recoveryHint(e).next,/may already have done it/,'Unknown outcome must warn before retry');
