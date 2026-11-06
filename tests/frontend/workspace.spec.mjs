@@ -253,6 +253,55 @@ test('approval history shows who decided a request instead of "awaiting"',async(
  expect(errors).toEqual([]);
 });
 
+test('AGO self-check explains why an approved project task cannot run, before Run is pressed',async({page})=>{
+ // Live case: AdmissionFlow's PM is the human Founder, so the server refuses the AI chain.
+ const {calls,errors}=await fixtures(page);
+ const blocked='41000000-0000-4000-8000-000000000041',ready='42000000-0000-4000-8000-000000000042',plain='43000000-0000-4000-8000-000000000043';
+ await page.route('**/v1/console/me',route=>route.fulfill({status:200,json:{id:user,tenant_id:tenant,display_name:'Founder',roles:['founder'],
+  permissions:[...permissions,'agent:read']}}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
+  {id:blocked,action:'internal:brief',status:'waiting_approval',assignee_id:user,project_name:'AdmissionFlow'},
+  {id:ready,action:'internal:brief',status:'waiting_approval',assignee_id:user,project_name:'Ready project'},
+  {id:plain,action:'internal:brief',status:'waiting_approval',assignee_id:user}]}));
+ const checked=[];
+ await page.route(/\/v1\/agents\/tasks\/[^/]+\/engineering-preflight$/,route=>{
+  const id=new URL(route.request().url()).pathname.split('/')[4];checked.push(id);
+  return route.fulfill({status:200,json:{kind:'ago_founder_engineering_preflight_v1',mode:'read_only',database_modified:false,
+   blocking_checks:id===blocked?['board_pm_or_worker_not_ai']:[],assigned_role_names:id===ready?['ceo','cto','pm','employee']:[],
+   unverified_execution_gates:['local_ollama_response']}});
+ });
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Execution/}).click();
+ const blockedCheck=page.getByRole('group',{name:'AGO self-check for AdmissionFlow · '+blocked.slice(0,8)});
+ await expect(blockedCheck).toContainText('Self-check: Run will be refused.');
+ await expect(blockedCheck).toContainText('not an AI employee');
+ await expect(blockedCheck).toContainText('Who fixes it: Assign an AI Project Manager');
+ await expect(blockedCheck).toContainText('Checked only when Run is pressed: local Ollama model.');
+ await expect(page.getByRole('group',{name:'AGO self-check for Ready project · '+ready.slice(0,8)})).toContainText('Self-check passed.');
+ // An unlinked task is not part of a Founder project chain: no misleading check.
+ await expect(page.locator('.task-self-check',{hasText:plain.slice(0,8)})).toHaveCount(0);
+ expect(checked).not.toContain(plain);
+ await accessibility(page);
+ expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
+test('self-check stays silent when the server does not offer it (403)',async({page})=>{
+ const {errors}=await fixtures(page);
+ const task='30000000-0000-4000-8000-000000000044';
+ await page.route('**/v1/console/me',route=>route.fulfill({status:200,json:{id:user,tenant_id:tenant,display_name:'Founder',roles:['founder'],
+  permissions:[...permissions,'agent:read']}}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
+  {id:task,action:'internal:brief',status:'waiting_approval',assignee_id:user,project_name:'AdmissionFlow'}]}));
+ let asked=false;
+ await page.route(/\/engineering-preflight$/,route=>{asked=true;return route.fulfill({status:403,json:{detail:'Local engineering diagnostics require development mode'}});});
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Execution/}).click();
+ await expect.poll(()=>asked).toBe(true);
+ await expect(page.locator('.task-self-check')).toHaveCount(0);
+ expect(errors).toEqual([]);
+});
+
 test('founder can create first real governed task then separately approve and dispatch once',async({page})=>{
  const {errors}=await fixtures(page);
  const rights=['brain:read','brain:manage','organization:read','organization:manage','task:read','task:create','approval:request','approval:read','approval:decide','approval:founder','agent:dispatch','task:execute'];

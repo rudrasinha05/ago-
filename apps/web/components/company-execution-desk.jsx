@@ -4,6 +4,7 @@ import {useState} from 'react';
 import {executionSummary,nextTaskAction} from '@ago/sdk/company-execution';
 import {CompanyFirstRun} from './company-first-run';
 import {RecoveryHint} from './recovery-hint';
+import {TaskSelfCheck} from './task-self-check';
 export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,onEmployee,projectScope=null,onClearScope}){
  const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[showAll,setShowAll]=useState(false),[failure,setFailure]=useState(null);
  const canView=me.permissions?.includes('task:read')&&me.permissions?.includes('organization:read');
@@ -57,6 +58,7 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
           {busy===t.id?'Processing…':choice.action==='request'?'Request approval':'Run approved AI'}
         </button>}
         {t.status==='completed'&&<Link href="/governance/">Review independent QA in Governance →</Link>}
+        {t.status==='waiting_approval'&&t.project_name&&<TaskSelfCheck api={api} me={me} task={t}/>}
       </article>;
     })}</div>
    </>}

@@ -589,3 +589,10 @@
 /* Plain-language recovery guidance below an error. */
 .recovery-hint{margin:6px 0;padding:10px 12px;border-left:3px solid #ffb547;border-radius:8px;background:#1a1408;font-size:13px}
 .recovery-hint p{margin:2px 0;color:#f2e4c8}.recovery-hint strong{color:#ffd38a}
+/* AGO self-check before Run (self-sufficiency stage 1). */
+.task-self-check{grid-column:1/-1;margin-top:6px;padding:10px 12px;border-radius:8px;border:1px solid #2b4a6f;background:#0a1830;font-size:13px;color:#dce8f7}
+.task-self-check.ready{border-color:#2f8f6c;background:#08241c}
+.task-self-check.blocked{border-color:#a8781e;background:#1c1508}
+.task-self-check p{margin:2px 0}.task-self-check ul{margin:6px 0;padding-left:18px;display:grid;gap:6px}
+.task-self-check li span{display:block}.task-self-check li small,.task-self-check>small{display:block;color:#c7b896}
+.task-self-check.ready>small{color:#9fd8c2}

@@ -70,3 +70,16 @@ test('an approved task waiting to be run is labelled from recorded approval stat
  assert.equal(stageTaskLabel({task_id:'t1',task_status:'running'},states),'Running');
  assert.equal(stageTaskLabel({task_status:null},states),'not created');
 });
+test('self-check explains every blocker with who fixes it and never invents readiness',async()=>{
+ const {selfCheck}=await import('../apps/web/components/task-self-check-state.js');
+ const base={kind:'ago_founder_engineering_preflight_v1',blocking_checks:[],unverified_execution_gates:['local_ollama_response','virtual_credit_budget'],assigned_role_names:['ceo','cto','pm','employee']};
+ const ok=selfCheck(base);
+ assert.equal(ok.ready,true);assert.deepEqual(ok.laterGates,['local Ollama model','budget']);
+ const live=selfCheck({...base,blocking_checks:['board_pm_or_worker_not_ai','board_pm_or_worker_not_ai','brand_new_check']});
+ assert.equal(live.ready,false);assert.equal(live.blockers.length,2,'duplicates collapse');
+ assert.match(live.blockers[0].what,/not an AI employee/);assert.match(live.blockers[0].fix,/issue #9/);
+ assert.match(live.blockers[1].what,/brand_new_check/,'unknown codes stay visible, never hidden');
+ const repair=selfCheck({...base,blocking_checks:['worker_pm_reporting_path_missing'],reporting_repair_evidence:{worker_name:'AI Engineer',worker_manager_name:'AGO AI CEO',accountable_pm_name:'Project Manager'}});
+ assert.equal(repair.repair,'AI Engineer reports to AGO AI CEO; it must report to project manager Project Manager.');
+ for(const bad of [null,{},{kind:'other',blocking_checks:[]},{kind:base.kind}])assert.throws(()=>selfCheck(bad));
+});
