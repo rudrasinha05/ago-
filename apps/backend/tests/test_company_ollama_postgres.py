@@ -62,6 +62,21 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
                             if s["stage"]=="implementation")
         assert implementation["suggested_assignee_id"]==developer
 
+    # Reproduce a legacy Founder-owned project without replacing its plan/tasks.
+    info['db'].execute("""
+        UPDATE ago_founder_project_lead SET accountable_manager_id=%s,
+          assignment_source='founder_escalation'
+        WHERE tenant_id=%s AND intake_id=%s
+    """, (info['founder_id'],info['tenant'],project['id']))
+    changed = client.put(BASE+'/employees/'+pm+'/manager', headers=founder,
+                         json={'manager_id': ceo})
+    assert changed.status_code == 200, changed.text
+    alternate_pm = ai('Alternative delivery lead', ceo)
+    changed = client.put(BASE+'/employees/'+alternate_pm+'/role', headers=founder, json={
+        'role_title': 'Project Manager', 'core_responsibilities': 'Reviewed project delivery',
+        'extra_responsibilities': 'Track independent quality evidence'})
+    assert changed.status_code == 200, changed.text
+
     plan=post(client,"/v1/brain/plans/"+project["plan_id"]+"/submit",founder)
     post(client,"/v1/governance/approvals/"+plan["approval_id"]+"/decision",
          founder,{"approve":True,"reason":"Founder approves local project scope"})
@@ -83,6 +98,12 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
             assert kwargs["keep_alive"]=="90s"
             assert kwargs["max_output_tokens"]==(1024 if engineering else 384)
         def generate(self, prompt):
+            # An actual running task holds its manager stable, even if a
+            # Founder attempts a valid alternative through the signed API.
+            blocked = client.post(BASE+'/projects/'+project['id']+'/accountable-manager',
+                                  headers=founder, json={'employee_id': alternate_pm})
+            assert blocked.status_code == 400, blocked.text
+            assert 'running project work' in blocked.json()['detail']
             calls.append(prompt)
             assert len(prompt)<=4000
             if deny_risk and "ROLE: RISK\n" in prompt:
@@ -141,6 +162,11 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     for seat,identity in seats:
         post(client,BASE+"/board/appoint",founder,{
             "seat":seat,"employee_id":identity})
+    recovered = post(client,BASE+'/projects/'+project['id']+'/accountable-manager',
+                     founder,{'employee_id': pm, 'expected_manager_id': info['founder_id']})
+    assert recovered['accountable_manager_id'] == pm
+    assert recovered['plan_id'] == project['plan_id']
+    assert calls == []
     if engineering:
         # Board seats alone cannot authorize source generation. The separate
         # implementation engineer stage must be genuinely activated first.

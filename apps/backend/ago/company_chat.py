@@ -1015,7 +1015,8 @@ class CompanyChat:
                 SELECT i.id,i.title,i.goal_id,i.plan_id,i.created_at,p.status AS plan_status,
               l.accountable_manager_id,e.name AS accountable_manager_name,
               e.role_title AS accountable_manager_role,
-              l.assignment_source,l.commercial_objective,l.commercial_stage,
+              e.role_title AS accountable_manager_role,l.assigned_at,
+                   l.assignment_source,l.commercial_objective,l.commercial_stage,
               l.verified_revenue_inr,
                     l.accountable_manager_id,l.assignment_source,
                     e.name AS accountable_manager_name,e.role_title AS accountable_manager_role,
@@ -1104,6 +1105,89 @@ class CompanyChat:
             ORDER BY i.created_at DESC,i.id DESC LIMIT %s OFFSET %s
         """, (tenant_id,reader_id,reader_id,reader_id,limit,offset)).fetchall()]
 
+    def reassign_project_manager(self, actor, project_id: str, employee_id: str,
+                                 expected_manager_id: str | None = None) -> dict:
+        """Founder-owned reassignment; never authorize or start project work."""
+        UUID(project_id)
+        UUID(employee_id)
+        if expected_manager_id is not None:
+            UUID(expected_manager_id)
+        if 'founder' not in actor.roles or not founder_solo_eligible(
+            self.db, actor.tenant_id, actor.subject
+        ):
+            raise PermissionError('Only the authenticated active Founder may change project management')
+        with self.db.transaction():
+            # Runtime takes the task lock before checking project assignments.
+            # Use that same order: a concurrent run either finishes admission
+            # first (and blocks this change), or sees the new manager afterwards.
+            tasks = self.db.execute("""
+                SELECT t.id,t.status,t.assignee_id FROM ago_governed_tasks t
+                JOIN ago_plan_steps s ON s.tenant_id=t.tenant_id AND s.task_id=t.id
+                JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id AND i.plan_id=s.plan_id
+                WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
+                ORDER BY t.id FOR UPDATE OF t
+            """, (actor.tenant_id,project_id,actor.subject)).fetchall()
+            project = self.db.execute("""
+                SELECT l.accountable_manager_id FROM ago_founder_project_lead l
+                JOIN ago_founder_intakes i ON i.tenant_id=l.tenant_id AND i.id=l.intake_id
+                WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
+                FOR UPDATE OF l,i
+            """, (actor.tenant_id,project_id,actor.subject)).fetchone()
+            if project is None:
+                raise LookupError('Project not found')
+            previous = str(project['accountable_manager_id'])
+            if expected_manager_id is not None and expected_manager_id != previous:
+                raise ValueError('Project manager changed; refresh before reassignment')
+            target = self.db.execute("""
+                SELECT e.id,e.kind,e.role_title,e.manager_id,b.employee_id AS ceo_id
+                FROM ago_employees e
+                JOIN ago_company_board_appointments b ON b.tenant_id=e.tenant_id
+                  AND b.seat='Strategy & Vision'
+                JOIN ago_employees ceo ON ceo.tenant_id=b.tenant_id AND ceo.id=b.employee_id
+                  AND ceo.kind='ai'
+                WHERE e.tenant_id=%s AND e.id=%s
+                FOR SHARE OF e,b,ceo
+            """, (actor.tenant_id,employee_id)).fetchone()
+            if (not target or target['kind'] != 'ai'
+                    or (target['role_title'] or '').strip().lower() not in (
+                        'project manager','ai project manager',
+                        'ai project manager (pm)','technical project manager')
+                    or str(target['manager_id']) != str(target['ceo_id'])):
+                raise ValueError('Choose an AI Project Manager reporting to the appointed AI CEO')
+            incompatible = self.db.execute("""
+                SELECT 1 FROM ago_company_board_appointments
+                WHERE tenant_id=%s AND employee_id=%s
+                UNION ALL
+                SELECT 1 FROM ago_founder_intake_stages
+                WHERE tenant_id=%s AND intake_id=%s AND suggested_assignee_id=%s
+                UNION ALL
+                SELECT 1 FROM ago_project_stage_delegation_activations
+                WHERE tenant_id=%s AND intake_id=%s AND assignee_id=%s
+            """, (actor.tenant_id,employee_id,actor.tenant_id,project_id,employee_id,
+                  actor.tenant_id,project_id,employee_id)).fetchone()
+            if incompatible or any(str(t['assignee_id']) == employee_id for t in tasks):
+                raise ValueError('Project manager must be distinct from Board and project workers')
+            changed = previous != employee_id
+            if changed:
+                running = self.db.execute("""
+                    SELECT 1 FROM ago_agent_runs r
+                    JOIN ago_plan_steps s ON s.tenant_id=r.tenant_id AND s.task_id=r.task_id
+                    JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id AND i.plan_id=s.plan_id
+                    WHERE i.tenant_id=%s AND i.id=%s AND r.status='running'
+                """, (actor.tenant_id,project_id)).fetchone()
+                if running or any(t['status'] == 'running' for t in tasks):
+                    raise ValueError('Wait for running project work to stop before changing manager')
+                self.db.execute("""
+                    UPDATE ago_founder_project_lead SET accountable_manager_id=%s,
+                      assigned_by=%s,assigned_at=clock_timestamp(),
+                      assignment_source='founder_reassignment'
+                    WHERE tenant_id=%s AND intake_id=%s
+                """, (employee_id,actor.subject,actor.tenant_id,project_id))
+            result = self.project_details(actor.tenant_id,project_id,reader_id=actor.subject)
+            result['manager_change'] = {'changed': changed,
+                'previous_manager_id': previous, 'manager_id': employee_id}
+            return result
+
     def project_details(self, tenant_id: str, project_id: str,
                         reader_id: str | None = None) -> dict:
         """Need-to-know founder, accountable manager or approved stage worker only."""
@@ -1115,6 +1199,7 @@ class CompanyChat:
         row = self.db.execute("""
             SELECT i.id,i.title,i.brief,i.created_at,i.plan_id,p.status AS plan_status,
                    l.accountable_manager_id,e.name AS accountable_manager_name,
+                   e.role_title AS accountable_manager_role,l.assigned_at,
                    l.assignment_source,l.commercial_objective,l.commercial_stage,
                    l.verified_revenue_inr
             FROM ago_founder_intakes i

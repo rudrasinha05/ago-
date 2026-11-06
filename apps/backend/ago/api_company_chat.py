@@ -378,6 +378,25 @@ def founder_project_details(project_id: UUID,actor=Depends(authenticated),
     except (ValueError,LookupError) as exc:
         translate_error(exc)
 
+class ProjectManagerInput(StrictInput):
+    employee_id: UUID
+    expected_manager_id: UUID | None = None
+
+
+@router.post('/projects/{project_id}/accountable-manager')
+def reassign_project_manager(project_id: UUID, data: ProjectManagerInput,
+                             actor=Depends(authenticated),
+                             repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'approval:founder')
+    try:
+        return repositories.resolve(CompanyChatPort).reassign_project_manager(
+            actor,str(project_id),str(data.employee_id),
+            str(data.expected_manager_id) if data.expected_manager_id else None)
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
 class StageDelegationInput(StrictInput):
     stage: Literal['discovery','architecture','implementation','quality','release']
     assignee_id: UUID

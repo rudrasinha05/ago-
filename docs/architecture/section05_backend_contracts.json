@@ -378,6 +378,10 @@
         "mark_notifications_read": {
           "arguments": "self, tenant_id: str, reader_id: str, through_id: int",
           "returns": "dict"
+        },
+        "reassign_project_manager": {
+          "arguments": "self, actor, project_id: str, employee_id: str, expected_manager_id: str | None=None",
+          "returns": "dict"
         }
       }
     },
