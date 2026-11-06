@@ -894,6 +894,27 @@ test('a real Founder session sees the delivery journey without a listed approval
  expect(errors).toEqual([]);
 });
 
+test('an approved stage task reads "ready to run", never "waiting", and nothing runs',async({page})=>{
+ // Live finding: the task stays waiting_approval after approval until an explicit Run.
+ const {calls,errors}=await deliveryFixtures(page);
+ const project=deliveryProject();
+ project.stages=[{stage:'discovery',position:1,employee:'Business Analyst',task_id:user,task_status:'waiting_approval',qa_verdict:null},
+  {stage:'architecture',position:2,employee:'Software Architect',task_id:other,task_status:'waiting_approval',qa_verdict:null}];
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([project])}));
+ await page.route('**/v1/organization/company/approvals',route=>route.fulfill({status:200,json:[
+  {id:'30000000-0000-4000-8000-000000000031',task_id:user,status:'approved',approval_type:'task_execution',action:'internal:brief',
+   requester_id:user,requester_name:'Founder',created_at:'2026-10-25T08:59:28Z'},
+  {id:'30000000-0000-4000-8000-000000000032',task_id:other,status:'pending',approval_type:'task_execution',action:'internal:brief',
+   requester_id:user,requester_name:'Founder',created_at:'2026-10-25T08:59:28Z'}]}));
+ await login(page);await navigate(page,'Organization');
+ const card=page.getByRole('article',{name:'Delivery: '+project.title});
+ await expect(card.getByRole('listitem').filter({hasText:'Business Analyst'})).toContainText('Task: Approved — ready to run (needs an explicit Run)');
+ await expect(card.getByRole('listitem').filter({hasText:'Software Architect'})).toContainText('Task: Waiting for approval');
+ await expect(card).not.toContainText('waiting_approval');
+ expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('late project details cannot replace the newly selected delivery project',async({page})=>{
  const {errors}=await deliveryFixtures(page);
  const first=deliveryProject(other,'First project'),second=deliveryProject(department,'Second project');

@@ -50,3 +50,22 @@ test('a real Founder /me (approval:founder is identity-derived, never listed) ca
  assert.equal(canReadDelivery({roles:['founder'],permissions:['organization:read','brain:read','approval:read','approval:decide']}),true);
  assert.equal(canReadDelivery({roles:['reviewer'],permissions:['organization:read','brain:read','approval:read','approval:founder']}),false);
 });
+test('an approved task waiting to be run is labelled from recorded approval state only',async()=>{
+ const {taskApprovalStates,stageTaskLabel}=await import('../apps/web/components/founder-delivery-state.js');
+ const states=taskApprovalStates([
+  {task_id:'t1',status:'pending',created_at:'2026-10-20T00:00:00Z'},
+  {task_id:'t1',status:'approved',created_at:'2026-10-25T00:00:00Z'},
+  {task_id:'t2',status:'rejected',created_at:'2026-10-25T00:00:00Z'},
+  {task_id:null,status:'approved'},{status:'approved'},null]);
+ const wait=id=>({task_id:id,task_status:'waiting_approval'});
+ assert.match(stageTaskLabel(wait('t1'),states),/^Approved — ready to run/);
+ assert.match(stageTaskLabel(wait('t2'),states),/^Approval rejected/);
+ assert.equal(stageTaskLabel(wait('t3'),states),'Waiting for approval','No record => not approved');
+ assert.equal(stageTaskLabel(wait('t1'),null),'Waiting for approval','Inbox unavailable => not approved');
+ // A server-provided field wins over the inbox.
+ assert.equal(stageTaskLabel({...wait('t1'),task_approval_status:'pending'},states),'Waiting for approval');
+ assert.match(stageTaskLabel({...wait('t3'),task_approval_status:'approved'},states),/^Approved/);
+ // Only waiting tasks are relabelled; other states keep their meaning.
+ assert.equal(stageTaskLabel({task_id:'t1',task_status:'running'},states),'Running');
+ assert.equal(stageTaskLabel({task_status:null},states),'not created');
+});

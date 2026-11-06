@@ -73,10 +73,17 @@ try {
 Push-Location $backend
 try {
     $doctorRaw = (& python -m ago.local_ops doctor | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0) { throw "AGO doctor could not run." }
+    # Exit 2 means the doctor ran and reported "not ready"; show its report.
+    $doctorExit = $LASTEXITCODE
+    if ($doctorExit -ne 0 -and $doctorExit -ne 2) {
+        throw "AGO doctor could not run (exit $doctorExit). Check Python and the backend dependencies."
+    }
     $diagnosis = $doctorRaw | ConvertFrom-Json
     Write-Host "Database/schema preflight: $doctorRaw"
     if (-not $diagnosis.ready) {
+        if ($diagnosis.database_configured -and $diagnosis.database_local -and -not $diagnosis.migrations_applied) {
+            Write-Host "Database migrations are not applied. In a PowerShell window with AGO_POSTGRES_DSN set, run .\scripts\ago.ps1 migrate (you must type MIGRATE; existing data is kept), then start AGO again."
+        }
         throw "AGO doctor is not ready. The visual launcher never modifies the database."
     }
 } finally {

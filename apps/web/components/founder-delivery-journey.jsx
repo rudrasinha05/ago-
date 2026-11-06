@@ -2,11 +2,12 @@
 import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {RecoveryHint} from './recovery-hint';
-import {canReadDelivery,deliveryPage,DELIVERY_STATES,deliveryEvidence,founderDecisions,projectTaskIds,reviewedStages} from './founder-delivery-state';
+import {canReadDelivery,deliveryPage,DELIVERY_STATES,deliveryEvidence,founderDecisions,projectTaskIds,reviewedStages,stageTaskLabel,taskApprovalStates} from './founder-delivery-state';
 
 export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onProject,onWork,onSection,onApproval}){
  const [page,setPage]=useState(null),[offset,setOffset]=useState(0),[loading,setLoading]=useState(false);
  const [error,setError]=useState(''),[failure,setFailure]=useState(null),[refresh,setRefresh]=useState(0);
+ const [approvalStates,setApprovalStates]=useState(()=>new Map());
  const sequence=useRef(0);
  const readable=canReadDelivery(me);
  useEffect(()=>{
@@ -16,7 +17,9 @@ export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onPro
    const version=++sequence.current;setLoading(true);
    try{
     const result=deliveryPage(await api.request('/v1/organization/company/projects/delivery-overview?limit=20&offset='+offset));
-    if(live&&version===sequence.current){setPage(result);setError('');setFailure(null);}
+    // Optional enrichment: an unavailable inbox never hides the overview.
+    const inbox=await api.request('/v1/organization/company/approvals').catch(()=>null);
+    if(live&&version===sequence.current){setPage(result);setApprovalStates(taskApprovalStates(inbox));setError('');setFailure(null);}
    }catch(e){if(live&&version===sequence.current){setPage(null);setFailure(e);setError(e.message||'Delivery overview unavailable.');}}
    finally{if(live&&version===sequence.current)setLoading(false);}
   }
@@ -46,7 +49,7 @@ export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onPro
     <p>{reviewedStages(p)} of {p.stages.length} stages have completed work and passed QA.</p>
     <ol>{p.stages.map((s,i)=><li key={s.stage+':'+i}>
      <strong>{s.stage}</strong><span>{s.employee||'Employee not assigned'}</span>
-     <small>Task: {s.task_status||'not created'} · QA: {s.qa_verdict||'not reviewed'}</small>
+     <small>Task: {stageTaskLabel(s,approvalStates)} · QA: {s.qa_verdict||'not reviewed'}</small>
      {s.agent_failure_code&&<small>Recorded failure: {s.agent_failure_code}</small>}
     </li>)}</ol>
     <ul className="delivery-evidence" aria-label={'Delivery evidence for '+p.title}>{deliveryEvidence(p).map(e=>

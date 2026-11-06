@@ -53,3 +53,29 @@ export function deliveryEvidence(project){
   ['pr','Draft PR',project.draft_pr_verified],['release','Release ready',project.release_ready]]
   .map(([key,label,value])=>({key,label,verified:value===true}));
 }
+// Task approval state per task (Issue #7, found on the Founder's live AGO).
+// A governed task keeps status `waiting_approval` after its approval is granted
+// and only becomes `running` when someone explicitly runs it, so the overview's
+// task_status alone made approved work look undecided. Prefer a server field
+// `task_approval_status` on the stage when present; otherwise use the newest
+// matching row from the approval inbox. Nothing found => keep the raw status.
+export function taskApprovalStates(rows){
+ const latest=new Map();
+ for(const row of Array.isArray(rows)?rows:[]){
+  if(!row||!identifier(row.task_id)||typeof row.status!=='string')continue;
+  const old=latest.get(row.task_id);
+  if(!old||String(row.created_at||'')>String(old.created_at||''))latest.set(row.task_id,row);
+ }
+ return new Map([...latest].map(([id,row])=>[id,row.status]));
+}
+const TASK_STATUS={proposed:'Proposed',waiting_approval:'Waiting for approval',running:'Running',completed:'Completed',failed:'Failed',blocked:'Blocked'};
+export function stageTaskLabel(stage,approvalStates){
+ if(!stage?.task_status)return 'not created';
+ if(stage.task_status==='waiting_approval'){
+  const decided=['pending','approved','rejected'].includes(stage.task_approval_status)
+   ?stage.task_approval_status:approvalStates?.get?.(stage.task_id);
+  if(decided==='approved')return 'Approved — ready to run (needs an explicit Run)';
+  if(decided==='rejected')return 'Approval rejected — not allowed to run';
+ }
+ return TASK_STATUS[stage.task_status]||String(stage.task_status).replaceAll('_',' ');
+}
