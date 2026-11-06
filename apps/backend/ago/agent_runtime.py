@@ -45,7 +45,7 @@ class AgentRuntime:
             experiment = self.repositories.resolve(EnterpriseOperationsStore).experiment_variant(
                 tenant_id=actor.tenant_id, task_id=task_id)
             context_row = (self.repositories.resolve(AgentRuntimeQueries)
-                           .select_ago_founder_project_12((task_id, actor.tenant_id))
+                           .select_ago_founder_project_12((task_id, actor.tenant_id), lock=True)
                            .fetchone())
             # Project briefs are founder-confidential. Until every delegated AI
             # role has independently approved content access, nonfounders cannot
