@@ -263,11 +263,11 @@ test('AGO self-check explains why an approved project task cannot run, before Ru
   {id:blocked,action:'internal:brief',status:'waiting_approval',assignee_id:user,project_name:'AdmissionFlow'},
   {id:ready,action:'internal:brief',status:'waiting_approval',assignee_id:user,project_name:'Ready project'},
   {id:plain,action:'internal:brief',status:'waiting_approval',assignee_id:user}]}));
- const checked=[];
+ const checked=[],fixed=new Set();
  await page.route(/\/v1\/agents\/tasks\/[^/]+\/engineering-preflight$/,route=>{
   const id=new URL(route.request().url()).pathname.split('/')[4];checked.push(id);
   return route.fulfill({status:200,json:{kind:'ago_founder_engineering_preflight_v1',mode:'read_only',database_modified:false,
-   blocking_checks:id===blocked?['board_pm_or_worker_not_ai']:[],assigned_role_names:id===ready?['ceo','cto','pm','employee']:[],
+   blocking_checks:id===blocked&&!fixed.has(id)?['board_pm_or_worker_not_ai']:[],assigned_role_names:id===ready?['ceo','cto','pm','employee']:[],
    unverified_execution_gates:['local_ollama_response']}});
  });
  await login(page);await navigate(page,'Organization');
@@ -277,6 +277,10 @@ test('AGO self-check explains why an approved project task cannot run, before Ru
  await expect(blockedCheck).toContainText('not an AI employee');
  await expect(blockedCheck).toContainText('Who fixes it: Assign an AI Project Manager');
  await expect(blockedCheck).toContainText('Checked only when Run is pressed: local Ollama model.');
+ // After the Founder fixes a blocker elsewhere, "Check again" re-reads the server answer.
+ fixed.add(blocked);
+ await blockedCheck.getByRole('button',{name:/^Check again/}).click();
+ await expect(page.getByRole('group',{name:'AGO self-check for AdmissionFlow · '+blocked.slice(0,8)})).toContainText('Self-check passed.');
  await expect(page.getByRole('group',{name:'AGO self-check for Ready project · '+ready.slice(0,8)})).toContainText('Self-check passed.');
  // An unlinked task is not part of a Founder project chain: no misleading check.
  await expect(page.locator('.task-self-check',{hasText:plain.slice(0,8)})).toHaveCount(0);

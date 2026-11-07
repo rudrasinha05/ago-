@@ -4,7 +4,7 @@ import {selfCheck} from './task-self-check-state';
 
 /** Read-only "can this run?" check shown before the Founder presses Run. */
 export function TaskSelfCheck({api,me,task,refreshSignal=0}){
- const [result,setResult]=useState(null),[state,setState]=useState('loading');
+ const [result,setResult]=useState(null),[state,setState]=useState('loading'),[attempt,setAttempt]=useState(0);
  const eligible=Boolean(me.roles?.includes('founder')&&me.permissions?.includes('agent:read')&&task?.id);
  useEffect(()=>{
   if(!eligible)return undefined;
@@ -14,7 +14,7 @@ export function TaskSelfCheck({api,me,task,refreshSignal=0}){
    // 403: not available to this session or outside local development: stay silent.
    .catch(e=>{if(live){setResult(null);setState(e?.status===403?'hidden':'error');}});
   return()=>{live=false;};
- },[api,eligible,task?.id,task?.status,refreshSignal]);
+ },[api,eligible,task?.id,task?.status,refreshSignal,attempt]);
  if(!eligible||state==='hidden')return null;
  const label='AGO self-check for '+(task.project_name||'task')+' · '+task.id.slice(0,8);
  if(state==='loading')return <div className="task-self-check" role="status" aria-label={label}>AGO is checking whether this task can run…</div>;
@@ -26,5 +26,7 @@ export function TaskSelfCheck({api,me,task,refreshSignal=0}){
     <ul>{result.blockers.map(b=><li key={b.code}><span>{b.what}</span><small>Who fixes it: {b.fix}</small></li>)}</ul>
     {result.repair&&<p>{result.repair}</p>}</>}
   {result.laterGates.length>0&&<small>Checked only when Run is pressed: {result.laterGates.join(', ')}.</small>}
+  <button type="button" className="task-self-check-again" onClick={()=>setAttempt(n=>n+1)}
+   aria-label={'Check again: '+label}>Check again</button>
  </div>;
 }
