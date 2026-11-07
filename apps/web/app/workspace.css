@@ -614,4 +614,9 @@
 .stage-recovery textarea{min-height:56px}
 .stage-recovery .stage-recovery-confirm{display:flex;gap:6px;align-items:center}
 .founder-delivery-journey .stage-recovery-open{justify-self:start;margin-top:4px;font-size:12px}
+.stage-ai-qa{margin-top:6px;padding:10px 12px;border:1px solid #2f7d6b;border-radius:8px;background:#0b1a16;display:grid;gap:8px;font-size:13px}
+.stage-ai-qa p{margin:0}.stage-ai-qa label{display:grid;gap:4px}
+.stage-ai-qa .stage-ai-qa-confirm{display:flex;gap:6px;align-items:center}
+.stage-ai-qa-result{display:grid;gap:4px}.stage-ai-qa-result.verdict-fail strong{color:#ffb4a8}
+.founder-delivery-journey .stage-ai-qa-open{justify-self:start;margin-top:4px;font-size:12px}
 .delivery-recovery-notice{padding:8px 12px;border-left:3px solid #4debb3;background:#08241c;border-radius:8px}

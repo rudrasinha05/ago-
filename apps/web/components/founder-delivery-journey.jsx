@@ -2,13 +2,15 @@
 import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {RecoveryHint} from './recovery-hint';
-import {canReadDelivery,deliveryPage,DELIVERY_STATES,deliveryEvidence,failureReason,founderDecisions,projectTaskIds,recoverableStage,reviewedStages,stageTaskLabel,taskApprovalStates} from './founder-delivery-state';
+import {aiQaReadyStage,canReadDelivery,deliveryPage,DELIVERY_STATES,deliveryEvidence,failureReason,founderDecisions,projectTaskIds,recoverableStage,reviewedStages,stageTaskLabel,taskApprovalStates} from './founder-delivery-state';
 import {StageRecovery} from './stage-recovery';
+import {StageAiQa} from './stage-ai-qa';
 
-export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onProject,onWork,onSection,onApproval}){
+export function FounderDeliveryJourney({api,me,profiles=[],active=true,refreshSignal=0,onProject,onWork,onSection,onApproval}){
  const [page,setPage]=useState(null),[offset,setOffset]=useState(0),[loading,setLoading]=useState(false);
  const [error,setError]=useState(''),[failure,setFailure]=useState(null),[refresh,setRefresh]=useState(0);
  const [approvalStates,setApprovalStates]=useState(()=>new Map()),[recoveryNotice,setRecoveryNotice]=useState('');
+ const [qaNotice,setQaNotice]=useState('');
  const sequence=useRef(0);
  const readable=canReadDelivery(me);
  useEffect(()=>{
@@ -38,6 +40,7 @@ export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onPro
   {error&&<p role="alert">{error} Use Refresh to retry; no previous success is assumed.</p>}
   {error&&<RecoveryHint error={failure}/>}
   {recoveryNotice&&<p role="status" className="delivery-recovery-notice">{recoveryNotice} <button type="button" onClick={()=>onSection('ago-execution-desk')}>Open Execution Desk</button></p>}
+  {qaNotice&&<p role="status" className="delivery-qa-notice">{qaNotice}</p>}
   {!page&&!error&&<p role="status">Loading current project evidence…</p>}
   {page&&page.projects.length>0&&(()=>{const n=page.projects.reduce((sum,p)=>sum+founderDecisions(p).length,0);
    return <p role="status" className="delivery-decision-summary">{n?n+' decision(s) on this page wait for you.':'No decision on this page waits for you.'}</p>;})()}
@@ -55,6 +58,10 @@ export function FounderDeliveryJourney({api,me,active=true,refreshSignal=0,onPro
      {s.agent_failure_code&&<small>Why it failed: {failureReason(s.agent_failure_code)}</small>}
      {recoverableStage(s)&&<StageRecovery api={api} project={p} stage={s} onRecovered={r=>{
       setRecoveryNotice('Recovery task created for '+r.stage+' ('+r.recovery_task_id.slice(0,8)+'…). Next: request its approval in Execution & Delivery, then run it.');
+      setRefresh(x=>x+1);}}/>}
+     {aiQaReadyStage(s)&&me.roles?.includes('founder')&&<StageAiQa api={api} project={p} stage={s} profiles={profiles}
+      onReviewed={r=>{if(!r.review_recorded)return;
+      setQaNotice('AI QA '+r.verdict.toUpperCase()+' recorded for '+r.stage+' of '+p.title+' by '+r.qa_employee_name+' (receipt '+r.receipt_id.slice(0,8)+'…).');
       setRefresh(x=>x+1);}}/>}
     </li>)}</ol>
     <ul className="delivery-evidence" aria-label={'Delivery evidence for '+p.title}>{deliveryEvidence(p).map(e=>

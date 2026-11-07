@@ -98,6 +98,8 @@
     "agent_handlers": "workforce",
     "agent_runtime": "workforce",
     "agent_runtime_queries": "workforce",
+    "ai_qa_review": "governance",
+    "ai_qa_review_queries": "governance",
     "analytics_store": "strategy",
     "api_agents": "transport",
     "api_brain": "transport",
@@ -235,6 +237,19 @@
       "ago_founder_intakes",
       "ago_governed_tasks",
       "ago_plan_steps"
+    ],
+    "ai_qa_review": [],
+    "ai_qa_review_queries": [
+      "ago_agent_runs",
+      "ago_ai_qa_reviews",
+      "ago_employees",
+      "ago_founder_intake_stages",
+      "ago_founder_intakes",
+      "ago_governed_tasks",
+      "ago_personnel_events",
+      "ago_plan_steps",
+      "ago_strategy_plans",
+      "ago_task_reviews"
     ],
     "analytics_store": [
       "ago_analytics_reports",

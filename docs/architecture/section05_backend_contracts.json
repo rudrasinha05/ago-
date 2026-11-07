@@ -1615,6 +1615,10 @@
           "arguments": "self, *, task_id: str, principal: Principal, verdict: Verdict, evidence: str",
           "returns": "Review"
         },
+        "record_ai_review": {
+          "arguments": "self, *, tenant_id: str, task_id: str, qa_employee_id: str, verdict: Verdict, evidence: str",
+          "returns": "Review"
+        },
         "require_pass": {
           "arguments": "self, *, task_id: str, tenant_id: str",
           "returns": "None"
@@ -1923,6 +1927,32 @@
           "returns": "Cursor"
         },
         "select_ago_tool_run_evidence_11": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "AiQaReview": {
+      "module": "ai_qa_review",
+      "methods": {
+        "review_stage": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str, qa_employee_id: str, operation_key: str",
+          "returns": "dict"
+        }
+      }
+    },
+    "AiQaReviewQueries": {
+      "module": "ai_qa_review_queries",
+      "methods": {
+        "select_stage_task_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_qa_employee_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_ai_qa_review_03": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         }

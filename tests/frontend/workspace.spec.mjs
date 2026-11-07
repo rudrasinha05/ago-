@@ -1055,6 +1055,47 @@ test('a failed stage shows why it failed and the Founder creates a recovery task
  expect(errors).toEqual([]);
 });
 
+test('a finished stage is checked by an independent AI QA employee chosen by the Founder',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const doneTask='48000000-0000-4000-8000-000000000048',qa='49000000-0000-4000-8000-000000000049',
+  writer='4a000000-0000-4000-8000-00000000004a';
+ const project={...deliveryProject(),delivery_state:'waiting_for_independent_qa',stages:[{stage:'discovery',position:1,
+  employee:'Business Analyst',task_id:doneTask,task_status:'completed',agent_run_status:'completed',qa_verdict:null}]};
+ let reviewed=false;const posted=[];
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([
+  reviewed?{...project,delivery_state:'internally_reviewed',stages:[{...project.stages[0],qa_verdict:'pass'}]}:project])}));
+ await page.route('**/v1/organization/company/governance',route=>route.fulfill({status:200,json:{board:[],employees:[
+  {id:qa,name:'Quinn',kind:'ai',role_title:'QA Engineer'},{id:writer,name:'Wren',kind:'ai',role_title:'Content Writer'},
+  {id:user,name:'Founder',kind:'human',role_title:'Founder'}]}}));
+ await page.route(/\/stages\/discovery\/ai-qa$/,route=>{posted.push(route.request().postDataJSON());reviewed=true;
+  return route.fulfill({status:200,json:{kind:'ago_ai_qa_review_v1',project_id:project.project_id,stage:'discovery',task_id:doneTask,
+   receipt_id:'4b000000-0000-4000-8000-00000000004b',qa_employee_id:qa,qa_employee_name:'Quinn',model:'qwen2.5-coder:1.5b',
+   verdict:'pass',review_recorded:true,response_text:'FINDINGS:\n- checklist present\nQA_VERDICT: PASS',
+   recorded_at:'2026-11-07T06:00:00Z',credits_charged:1,executed_or_released:false}});});
+ await login(page);await navigate(page,'Organization');
+ const card=page.getByRole('article',{name:'Delivery: '+project.title});
+ await expect(card).toContainText('Ask an AI QA employee who did not build it');
+ await card.getByRole('button',{name:'Ask AI QA to check the discovery stage of '+project.title}).click();
+ const box=card.getByRole('group',{name:'AI QA for the discovery stage of '+project.title});
+ const select=box.getByRole('combobox',{name:'AI QA employee'});
+ await expect(select.locator('option')).toHaveText(['Choose…','Quinn — QA Engineer']);
+ const run=box.getByRole('button',{name:'Run AI QA check'});
+ await expect(run).toBeDisabled();
+ await select.selectOption(qa);
+ await expect(run).toBeDisabled();
+ await box.getByRole('checkbox').check();
+ await run.click();
+ await expect(page.getByRole('status').filter({hasText:'AI QA PASS recorded for discovery of '+project.title+' by Quinn'})).toBeVisible();
+ expect(posted).toHaveLength(1);
+ expect(posted[0].qa_employee_id).toBe(qa);
+ expect(posted[0].operation_key).toMatch(/^[0-9a-f-]{36}$/);
+ await expect(card).toContainText('QA: pass');
+ await expect(card.getByRole('button',{name:/^Ask AI QA/})).toHaveCount(0);
+ await accessibility(page);
+ expect(calls.filter(x=>/\/run$|\/decision$/.test(x.path))).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('late project details cannot replace the newly selected delivery project',async({page})=>{
  const {errors}=await deliveryFixtures(page);
  const first=deliveryProject(other,'First project'),second=deliveryProject(department,'Second project');

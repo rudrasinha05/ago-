@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "name": "AGO Section 14 — enforceable module boundary contract",
+  "name": "AGO Section 14 \u2014 enforceable module boundary contract",
   "approved_baseline": "2026-10-10",
   "review_reference": "SECTION05-LAYERS-AND-INJECTION-001",
   "layers": {
@@ -914,6 +914,8 @@
         "access",
         "agent_runtime",
         "agent_runtime_queries",
+        "ai_qa_review",
+        "ai_qa_review_queries",
         "analytics_store",
         "approvals",
         "backend_contracts",
@@ -1143,6 +1145,25 @@
       "context": "workforce",
       "layer": "domain",
       "imports": []
+    },
+    "ai_qa_review": {
+      "context": "governance",
+      "layer": "service",
+      "imports": [
+        "ai_qa_review_queries",
+        "backend_contracts",
+        "credits",
+        "model_provider",
+        "quality",
+        "quality_store"
+      ]
+    },
+    "ai_qa_review_queries": {
+      "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
     }
   },
   "protected_sql_writers": {

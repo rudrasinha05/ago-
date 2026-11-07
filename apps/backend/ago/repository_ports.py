@@ -21,6 +21,8 @@ from ago.document_vault import DocumentVault as _DocumentVault
 from ago.access import AccessDecision
 from ago.access import AccessService as _AccessService
 from ago.agent_runtime import AgentRuntime as _AgentRuntime
+from ago.ai_qa_review import AiQaReview as _AiQaReview
+from ago.ai_qa_review_queries import AiQaReviewQueries as _AiQaReviewQueries
 from ago.agent_runtime_queries import AgentRuntimeQueries as _AgentRuntimeQueries
 from ago.approvals import ApprovalRequest
 from ago.backend_contracts import Cursor, DatabaseConnection
@@ -548,7 +550,29 @@ class QualityStorePort(Protocol):
         self, *, task_id: str, principal: Principal, verdict: Verdict, evidence: str
     ) -> Review: ...
 
+    def record_ai_review(
+        self, *, tenant_id: str, task_id: str, qa_employee_id: str, verdict: Verdict,
+        evidence: str,
+    ) -> Review: ...
+
     def require_pass(self, *, task_id: str, tenant_id: str) -> None: ...
+
+
+@runtime_checkable
+class AiQaReviewPort(Protocol):
+    def review_stage(
+        self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
+        qa_employee_id: str, operation_key: str,
+    ) -> dict: ...
+
+
+@runtime_checkable
+class AiQaReviewQueriesPort(Protocol):
+    def select_stage_task_01(self, parameters: Any = None) -> Cursor: ...
+
+    def select_qa_employee_02(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_ai_qa_review_03(self, parameters: Any = None) -> Cursor: ...
 
 
 @runtime_checkable
@@ -1130,6 +1154,8 @@ REPOSITORY_BINDINGS = {
     MessageStorePort: _MessageStore,
     AccessServicePort: _AccessService,
     AgentRuntimePort: _AgentRuntime,
+    AiQaReviewPort: _AiQaReview,
+    AiQaReviewQueriesPort: _AiQaReviewQueries,
     AgentRuntimeQueriesPort: _AgentRuntimeQueries,
     ApprovalRepositoryPort: _ApprovalRepository,
     CalendarStorePort: _CalendarStore,

@@ -73,6 +73,66 @@ class QualityStore:
             )
         return assessment
 
+    def record_ai_review(
+        self,
+        *,
+        tenant_id: str,
+        task_id: str,
+        qa_employee_id: str,
+        verdict: Verdict,
+        evidence: str,
+    ) -> Review:
+        """Write the ordinary QA row for an AI QA employee's recorded verdict.
+
+        Only the AI QA service calls this, after a real model receipt exists
+        (issue #8 M4). The reviewer must be an AI employee who is not the task
+        author; the caller's transaction owns the locks.
+        """
+        for value in (tenant_id, task_id, qa_employee_id):
+            UUID(value)
+        evidence = (evidence or "").strip()
+        if not 1 <= len(evidence) <= 4000:
+            raise ValueError("AI QA evidence of 1-4000 characters is required")
+        task = self.connection.execute(
+            """SELECT assignee_id, status FROM ago_governed_tasks
+               WHERE tenant_id=%s AND id=%s FOR UPDATE""",
+            (tenant_id, task_id),
+        ).fetchone()
+        if task is None or task["status"] not in ("completed", "failed"):
+            raise PermissionError("Only finished tasks may be reviewed")
+        if verdict == Verdict.PASS and task["status"] != "completed":
+            raise PermissionError("Failed tasks cannot receive passing QA")
+        reviewer = self.connection.execute(
+            """SELECT 1 FROM ago_employees
+               WHERE tenant_id=%s AND id=%s AND kind='ai'""",
+            (tenant_id, qa_employee_id),
+        ).fetchone()
+        if reviewer is None:
+            raise PermissionError("AI QA reviewer must be an AI employee")
+        assessment = Review(
+            tenant_id=tenant_id,
+            artifact_id=task_id,
+            author_id=str(task["assignee_id"]),
+            reviewer_id=qa_employee_id,
+            verdict=verdict,
+            evidence=evidence,
+        )
+        self.connection.execute(
+            """INSERT INTO ago_task_reviews
+               (id, tenant_id, task_id, author_id, reviewer_id, verdict, evidence)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (
+                str(uuid4()),
+                assessment.tenant_id,
+                assessment.artifact_id,
+                assessment.author_id,
+                assessment.reviewer_id,
+                assessment.verdict.value,
+                assessment.evidence,
+            ),
+        )
+        return assessment
+
     def require_pass(self, *, task_id: str, tenant_id: str) -> None:
         row = self.connection.execute(
             """SELECT 1 FROM ago_task_reviews

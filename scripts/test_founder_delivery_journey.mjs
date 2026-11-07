@@ -106,3 +106,15 @@ test('failure reasons are plain text and only failed linked stages are recoverab
  for(const s of [{stage:'discovery',task_status:'completed',task_id:'t1'},{stage:'discovery',task_status:'failed',task_id:null},
   {stage:'marketing',task_status:'failed',task_id:'t1'},null])assert.equal(recoverableStage(s),false);
 });
+test('only a finished, unreviewed stage offers AI QA, and only AI QA-role employees are offered',async()=>{
+ const {aiQaReadyStage,aiQaReviewers}=await import('../apps/web/components/founder-delivery-state.js');
+ const done={stage:'discovery',task_status:'completed',agent_run_status:'completed',qa_verdict:null,task_id:'t1'};
+ assert.equal(aiQaReadyStage(done),true);
+ for(const s of [{...done,qa_verdict:'pass'},{...done,qa_verdict:'fail'},{...done,agent_run_status:'failed'},
+  {...done,task_status:'running'},{...done,task_id:null},{...done,stage:'marketing'},null])assert.equal(aiQaReadyStage(s),false);
+ const people=[{id:'a',kind:'ai',role_title:'QA Engineer'},{id:'b',kind:'ai',role_title:'Quality Lead'},
+  {id:'c',kind:'human',role_title:'QA Engineer'},{id:'d',kind:'ai',role_title:'Content Writer'},
+  {id:'e',kind:'ai',role_title:'Software Tester'},{id:'f',kind:'ai',role_title:'QA Engineer',status:'terminated'},{kind:'ai',role_title:'QA'}];
+ assert.deepEqual(aiQaReviewers(people).map(e=>e.id),['a','b','e']);
+ assert.deepEqual(aiQaReviewers(null),[]);
+});

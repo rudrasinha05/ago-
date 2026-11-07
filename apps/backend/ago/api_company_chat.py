@@ -1,11 +1,11 @@
 """Authenticated company map and shared conversation endpoints."""
 from uuid import UUID
 from typing import Literal
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, repository_scope, translate_error
-from ago.repository_ports import CompanyChatPort, PlanExecutionPort
+from ago.repository_ports import AiQaReviewPort, CompanyChatPort, PlanExecutionPort
 
 router = APIRouter(prefix='/v1/organization/company', tags=['Company map'])
 
@@ -399,6 +399,32 @@ def recover_failed_stage(project_id: UUID,
             stage=stage, failed_task_id=str(data.failed_task_id), reason=data.reason)
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)
+
+
+class StageAiQaInput(StrictInput):
+    qa_employee_id: UUID
+    operation_key: UUID
+
+
+@router.post('/projects/{project_id}/stages/{stage}/ai-qa')
+def ai_qa_stage(project_id: UUID,
+                stage: Literal['discovery','architecture','implementation','quality','release'],
+                data: StageAiQaInput, actor=Depends(authenticated),
+                repositories=Depends(repository_scope)):
+    """Founder asks an independent AI QA employee to review a finished stage task."""
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'approval:founder')
+    if 'founder' not in actor.roles:
+        translate_error(PermissionError('Only the project Founder may request AI QA'))
+    try:
+        return repositories.resolve(AiQaReviewPort).review_stage(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id),
+            stage=stage, qa_employee_id=str(data.qa_employee_id),
+            operation_key=str(data.operation_key))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+    except (TimeoutError,OSError,RuntimeError) as exc:
+        raise HTTPException(502,'AI QA model call failed; the credit attempt is recorded') from exc
 
 
 class ProjectManagerInput(StrictInput):

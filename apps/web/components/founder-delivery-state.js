@@ -1,7 +1,7 @@
 // Read-only projection of the signed overview. Never infer release or write authority.
 export const DELIVERY_STATES={
  blocked:['Blocked — review required','Review the failed stage or rejected plan before taking another action.'],
- waiting_for_independent_qa:['Independent QA required','Execution is recorded; a separate authorized reviewer must assess the work.'],
+ waiting_for_independent_qa:['Independent QA required','Execution is recorded. Ask an AI QA employee who did not build it to check each finished stage.'],
  working:['Work in progress','Follow the recorded running tasks.'],
  awaiting_project_plan_approval:['Plan review required','Inspect the scope and submit or review the plan.'],
  internally_reviewed:['Stages reviewed','Stage QA has passed. Verify Docker and GitHub delivery evidence separately.'],
@@ -98,4 +98,17 @@ const RECOVERY_STAGES=new Set(['discovery','architecture','implementation','qual
 /** A stage the Founder may recover: linked task failed (server re-checks everything). */
 export function recoverableStage(stage){
  return Boolean(stage&&RECOVERY_STAGES.has(stage.stage)&&stage.task_status==='failed'&&identifier(stage.task_id));
+}
+// Issue #8 M4: the Founder is the only human, so a finished stage is checked
+// by an independent AI QA employee. Same regex as the server (QA/quality/test).
+const QA_ROLE=/\b(qa|quality|test(er|ing)?)\b/i;
+/** A finished stage with a completed AI run and no QA verdict yet (server re-checks). */
+export function aiQaReadyStage(stage){
+ return Boolean(stage&&RECOVERY_STAGES.has(stage.stage)&&stage.task_status==='completed'&&
+  stage.agent_run_status==='completed'&&!stage.qa_verdict&&identifier(stage.task_id));
+}
+/** Active AI employees whose role is QA; the server also excludes the builders. */
+export function aiQaReviewers(profiles){
+ return (Array.isArray(profiles)?profiles:[]).filter(e=>e&&identifier(e.id)&&e.kind==='ai'&&
+  e.status!=='terminated'&&QA_ROLE.test(e.role_title||''));
 }

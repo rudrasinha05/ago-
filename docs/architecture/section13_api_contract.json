@@ -311,7 +311,8 @@
     "PUT /v1/organization/company/employees/{employee_id}/role": "2e63f9d19d5edd1b6ceb2ab161109d07f64ff2f5555e2110542abace8c11b794",
     "POST /v1/organization/company/notifications/read": "e382941b411d824eb5df65e259b2182bf38b57cdfed5b044248ec8c8985369d2",
     "POST /v1/organization/company/projects/{project_id}/accountable-manager": "847bf300d54c2cf6ef2a272f5b756d203d98f114076c190b5d3f5923e52491be",
-    "POST /v1/organization/company/projects/{project_id}/stages/{stage}/recovery": "af191715e6e57b289a4da8657980295a895c7d7307b72d7137a89e81b5ed7603"
+    "POST /v1/organization/company/projects/{project_id}/stages/{stage}/recovery": "af191715e6e57b289a4da8657980295a895c7d7307b72d7137a89e81b5ed7603",
+    "POST /v1/organization/company/projects/{project_id}/stages/{stage}/ai-qa": "59d4858ad0b1992c902e24485b32e19101b0acef6235178a14537416914b164f"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",
@@ -451,6 +452,7 @@
     "WorkLeaseExecutionInput": "57539346f7e370a0eecd0b79321b1b35277084164d31f863d26f882953c5b242",
     "NotificationReadInput": "7e99ad91e126d1dd48eb9b316d6fadc1cb6b9d17405c252b6ccf554c3f191951",
     "ProjectManagerInput": "fad55695e618731d8ad4eb8c9b4ba421df6c84fff8d20dd14d8187dbcea56069",
-    "StageRecoveryInput": "2eaa1649c96a67b8ecdd078e0d7433e4650f846cf0f7cb23b878a107984127ae"
+    "StageRecoveryInput": "2eaa1649c96a67b8ecdd078e0d7433e4650f846cf0f7cb23b878a107984127ae",
+    "StageAiQaInput": "6779fb083f5c4c123cdc5e617fdfdef3085e3747ffdbf561521db99050f71452"
   }
 }

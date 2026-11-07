@@ -484,7 +484,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       </a>)}
     </nav>
     <section id="ago-tab-command" className="company-tab-panel" data-tab-panel aria-label="Command Center" hidden={activeTab!=='ago-tab-command'}>
-    <FounderDeliveryJourney api={api} me={me} active={activeTab==='ago-tab-command'} refreshSignal={approvalRefresh}
+    <FounderDeliveryJourney api={api} me={me} profiles={governanceData?.employees||[]} active={activeTab==='ago-tab-command'} refreshSignal={approvalRefresh}
       onSection={id=>openSection(id)}
       onApproval={id=>{setApprovalFocus({id,at:Date.now()});openSection('ago-tab-approvals',{updateHash:true});}}
       onProject={project=>{setRequestedProject({...project,request:Date.now()});openSection('ago-project-portfolio');}}
