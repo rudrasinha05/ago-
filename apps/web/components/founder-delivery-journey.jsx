@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {RecoveryHint} from './recovery-hint';
-import {aiQaReadyStage,canReadDelivery,deliveryPage,DELIVERY_STATES,deliveryEvidence,failureReason,founderDecisions,projectTaskIds,recoverableStage,reviewedStages,stageTaskLabel,taskApprovalStates} from './founder-delivery-state';
+import {aiQaReadyStage,canReadDelivery,deliveryPage,stageFailureReason,DELIVERY_STATES,deliveryEvidence,founderDecisions,projectTaskIds,recoverableStage,reviewedStages,stageTaskLabel,taskApprovalStates} from './founder-delivery-state';
 import {StageRecovery} from './stage-recovery';
 import {StageAiQa} from './stage-ai-qa';
 import {ProjectAdvance} from './project-advance';
@@ -60,7 +60,7 @@ export function FounderDeliveryJourney({api,me,profiles=[],active=true,refreshSi
     <ol>{p.stages.map((s,i)=><li key={s.stage+':'+i}>
      <strong>{s.stage}</strong><span>{s.employee||'Employee not assigned'}</span>
      <small>Task: {stageTaskLabel(s,approvalStates)} · QA: {s.qa_verdict||'not reviewed'}</small>
-     {s.agent_failure_code&&<small>Why it failed: {failureReason(s.agent_failure_code)}</small>}
+     {stageFailureReason(s)&&<small>Why it failed: {stageFailureReason(s)}</small>}
      {recoverableStage(s)&&<StageRecovery api={api} project={p} stage={s} onRecovered={r=>{
       setRecoveryNotice('Recovery task created for '+r.stage+' ('+r.recovery_task_id.slice(0,8)+'…). Next: request its approval in Execution & Delivery, then run it.');
       setRefresh(x=>x+1);}}/>}

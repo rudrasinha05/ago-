@@ -35,9 +35,12 @@ BOARD_ROLE_SEATS = {
 
 def board_recommendation(text: str) -> str:
     """Only an explicit, unambiguous model line can become ADVISORY evidence."""
+    # Surrounding whitespace, Markdown bold and a final period are layout, not
+    # content; the rule stays: exactly ONE such line, APPROVE or DENY.
+    cleaned = [part.strip().replace("*", "").strip() for part in text.splitlines()]
     lines = [
-        part.split(":", 1)[1].strip().upper()
-        for part in text.splitlines()
+        part.split(":", 1)[1].strip().rstrip(".").strip().upper()
+        for part in cleaned
         if part.upper().startswith("BOARD_RECOMMENDATION:")
     ]
     return lines[0].lower() if len(lines) == 1 and lines[0] in {"APPROVE", "DENY"} else "unverified"
@@ -97,8 +100,9 @@ def run_four_role_chain(
              "No tools, links to private content, hiring, spending, code execution, "
              "GitHub operations, publishing or approvals. Human QA is pending.\n")
             +"ROLE: "+role.upper()+"\nROLE_GOAL: "+goal+"\n"
-            +("BOARD_ADVISORY: State exactly one independent scoped recommendation line "
-              "BOARD_RECOMMENDATION: APPROVE or BOARD_RECOMMENDATION: DENY. "
+            +("BOARD_ADVISORY: Your FIRST line must be exactly one of these two lines, "
+              "with nothing else on it:\nBOARD_RECOMMENDATION: APPROVE\n"
+              "BOARD_RECOMMENDATION: DENY\nWrite that line only once. "
               "This does NOT authorize execution, approval or release.\n"
               if role in BOARD_ROLE_SEATS else "")
             +"Founder project title (quoted data): "+title+"\n"
@@ -124,6 +128,8 @@ def run_four_role_chain(
                      +str(len(engineering_candidate["files"]))+
                      " files, Python syntax checked; tests NOT executed.")
         if role in BOARD_ROLE_SEATS:
+            # Only the persisted draft is evidence: a vote past the stored
+            # excerpt is unverifiable. The prompt asks for the vote line FIRST.
             vote = board_recommendation(bounded)
             board_seat=BOARD_ROLE_SEATS[role]
             board_advice.append({

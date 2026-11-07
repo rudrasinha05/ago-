@@ -117,3 +117,11 @@ export function aiQaReviewers(profiles){
  return (Array.isArray(profiles)?profiles:[]).filter(e=>e&&identifier(e.id)&&e.kind==='ai'&&
   e.status!=='terminated'&&QA_ROLE.test(e.role_title||''));
 }
+/** Plain reason for a failed stage. A failed task whose AI run itself completed was
+ * stopped by the AI Board (no single clear vote, or a DENY) - not a crash. */
+export function stageFailureReason(stage){
+ if(!stage||stage.task_status!=='failed')return stage?.agent_failure_code?failureReason(stage.agent_failure_code):null;
+ if(stage.agent_failure_code)return failureReason(stage.agent_failure_code);
+ if(stage.agent_run_status==='completed')return 'The AI Board stopped the work: a Board member gave no single clear APPROVE/DENY line, or said DENY. Recover the stage to try again.';
+ return null;
+}

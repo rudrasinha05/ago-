@@ -184,3 +184,22 @@ test('advance picks the one next step from the first stage that has not passed Q
  assert.equal(pickQaReviewer(reviewers,{approved_assignee_id:'w'}).id,'q');
  assert.equal(pickQaReviewer([{id:'w'}],{suggested_assignee_id:'w'}),null);
 });
+test('advance explains a Board block instead of reporting a finished run',async()=>{
+ const {runBlocker}=await import('../apps/web/components/project-advance-state.js');
+ const live={status:'completed',delivery_status:'blocked',result:{board_blocked:true,blocked_by_board_seat:'Strategy & Vision',
+  board_block_reason:'unverified',roles_completed:1,roles_expected:7}};
+ assert.match(runBlocker(live),/^The Board stopped the AI team: Strategy & Vision — its AI answer had no single clear/);
+ assert.match(runBlocker(live),/\(1 of 7 AI roles ran\)\. The stage is marked failed; recover it to try again\.$/);
+ assert.match(runBlocker({...live,result:{...live.result,board_block_reason:'deny'}}),/it recommended DENY/);
+ assert.equal(runBlocker({status:'completed',delivery_status:'completed',result:{board_blocked:false}}),null);
+ assert.equal(runBlocker({status:'completed'}),null);
+ assert.match(runBlocker({status:'failed'}),/^The run ended as failed/);
+ assert.match(runBlocker(null),/no recorded result/);
+});
+test('a failed stage whose AI run completed is explained as a Board stop',async()=>{
+ const {stageFailureReason}=await import('../apps/web/components/founder-delivery-state.js');
+ assert.match(stageFailureReason({task_status:'failed',agent_run_status:'completed'}),/^The AI Board stopped the work/);
+ assert.match(stageFailureReason({task_status:'failed',agent_run_status:'failed',agent_failure_code:'model_timeout'}),/did not answer in time/);
+ assert.equal(stageFailureReason({task_status:'failed',agent_run_status:null}),null);
+ assert.equal(stageFailureReason({task_status:'completed',agent_run_status:'completed'}),null);
+});

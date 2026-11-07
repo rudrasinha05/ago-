@@ -56,3 +56,23 @@ export function pickQaReviewer(reviewers,stage){
  const builders=new Set([stage?.approved_assignee_id,stage?.suggested_assignee_id].filter(Boolean));
  return (Array.isArray(reviewers)?reviewers:[]).find(e=>!builders.has(e.id))||null;
 }
+
+const BOARD_REASONS={
+ unverified:'its AI answer had no single clear "BOARD_RECOMMENDATION: APPROVE" or "DENY" line, so AGO could not verify a vote',
+ deny:'it recommended DENY',
+};
+/** Why a recorded run did NOT deliver, in plain words; null when it completed and delivered. */
+export function runBlocker(result){
+ if(!result||typeof result!=='object')return 'The run returned no recorded result. Inspect the stage before anything else.';
+ const r=result.result&&typeof result.result==='object'?result.result:{};
+ if(r.board_blocked===true){
+  const seat=typeof r.blocked_by_board_seat==='string'?r.blocked_by_board_seat:'A Board seat';
+  const why=BOARD_REASONS[r.board_block_reason]||'it did not clear the work';
+  const done=Number.isFinite(r.roles_completed)&&Number.isFinite(r.roles_expected)?' ('+r.roles_completed+' of '+r.roles_expected+' AI roles ran)':'';
+  return 'The Board stopped the AI team: '+seat+' — '+why+done+'. The stage is marked failed; recover it to try again.';
+ }
+ if(result.status!=='completed')return 'The run ended as '+(result.status||'unknown')+'. Inspect the stage before anything else.';
+ if(result.delivery_status&&result.delivery_status!=='completed'&&result.delivery_status!=='delivered')
+  return 'The run finished but delivery is '+result.delivery_status+'. Inspect the stage before anything else.';
+ return null;
+}

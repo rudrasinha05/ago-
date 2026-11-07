@@ -2,7 +2,7 @@
 import {useRef,useState} from 'react';
 import {aiQaReviewers} from './founder-delivery-state';
 import {creditBalance,creditBlocker,selfCheck,CREDITS_PER_CHAIN_RUN} from './task-self-check-state';
-import {AUTOMATIC,QA_CREDITS,nextAdvanceStep,pickQaReviewer,stepLabel} from './project-advance-state';
+import {AUTOMATIC,QA_CREDITS,nextAdvanceStep,pickQaReviewer,runBlocker,stepLabel} from './project-advance-state';
 
 const BASE='/v1/organization/company/projects/';
 const MAX_STEPS=12;
@@ -46,7 +46,8 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
    if(!view.ready){add('Self-check blocked the run: '+view.blockers.map(b=>b.what+' ('+b.fix+')').join(' '),'stop');return false;}
    add('Self-check passed. The AI team is working on '+step.stage+' (this can take a few minutes)…');
    const r=await api.request('/v1/agents/tasks/'+encodeURIComponent(step.task_id)+'/run',{method:'POST',timeoutMs:270000});
-   if(r?.status!=='completed'){add('The run ended as '+(r?.status||'unknown')+'. Inspect the stage before anything else.','stop');return false;}
+   const blocked=runBlocker(r);
+   if(blocked){add(blocked,'stop');return false;}
    add('The AI team finished the '+step.stage+' task. The result is recorded.','ok');return true;
   }
   // qa
