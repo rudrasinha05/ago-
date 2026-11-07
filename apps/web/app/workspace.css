@@ -629,7 +629,7 @@
 .portfolio-filters button[aria-pressed="true"]{outline:2px solid #4debb3;outline-offset:1px}
 .portfolio-filters b{margin-left:4px}
 .portfolio-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.portfolio-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line,#354563);border-left:4px solid #5b6f94;border-radius:10px;background:rgba(255,255,255,.02)}
+.portfolio-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr) 290px;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line,#354563);border-left:4px solid #5b6f94;border-radius:10px;background:rgba(255,255,255,.02)}
 .portfolio-row.group-needs_you{border-left-color:#f2c14e}.portfolio-row.group-blocked{border-left-color:#ff8a80}
 .portfolio-row.group-running{border-left-color:#6fb6ff}.portfolio-row.group-done{border-left-color:#4debb3}
 .portfolio-main{display:grid;gap:2px;min-width:0}.portfolio-main strong{overflow-wrap:anywhere}
@@ -639,3 +639,4 @@
 .project-portfolio-overview button{border:1px solid #315a79;border-radius:8px;background:#12304a;color:#e2f1ff;padding:.6rem .85rem;font:inherit;font-weight:600;cursor:pointer;min-height:44px}
 .project-portfolio-overview button:hover:not(:disabled){background:#1b4263}
 .project-portfolio-overview button:focus-visible{outline:3px solid #80b9ff;outline-offset:3px}
+.portfolio-row>.delivery-actions{justify-content:flex-end}@media (max-width:760px){.portfolio-row>.delivery-actions{justify-content:flex-start}}
