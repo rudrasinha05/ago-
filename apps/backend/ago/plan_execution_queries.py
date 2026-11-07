@@ -65,9 +65,12 @@ class PlanExecutionQueries:
         )
 
     def select_task_for_recovery_08(self, parameters: Any = None) -> Cursor:
-        """(tenant_id, task_id): task status plus whether any run is still running."""
+        """(tenant_id, task_id): status, running work, prior recovery and a QA FAIL verdict."""
         return self.connection.execute(
             """SELECT t.status,t.action,t.assignee_id,
+                      EXISTS (SELECT 1 FROM ago_task_reviews q
+                              WHERE q.tenant_id=t.tenant_id AND q.task_id=t.id
+                                AND q.verdict='fail') AS qa_failed,
                       EXISTS (SELECT 1 FROM ago_agent_runs r
                               WHERE r.tenant_id=t.tenant_id AND r.task_id=t.id
                                 AND r.status='running') AS run_active,

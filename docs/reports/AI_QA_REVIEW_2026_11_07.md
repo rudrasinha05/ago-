@@ -66,5 +66,20 @@ In the Delivery Journey, a stage that is completed, has a completed run and has 
 
 ## Not done / next
 - Choosing the QA reviewer is a Founder action for now. M2/M5 should let the AI CEO or the project's QA lead request it within the hierarchy, and later do it automatically when a stage finishes.
-- A FAIL verdict on a *completed* task has no follow-up path yet. Stage recovery only accepts `failed` tasks. Next: a "rework" task after a QA fail.
+- Done later the same day: a FAIL verdict on a completed task now has a rework path (see *QA FAIL rework* below).
 - AI QA reviews the recorded drafts. It does not execute code. Docker/test evidence stays a separate gate.
+
+## QA FAIL rework (follow-up, same day)
+- `POST …/stages/{stage}/recovery` now also accepts a **completed** task whose `ago_task_reviews` verdict is `fail`. The result has `recovery_kind: "qa_rework"`, versus `"failed_run"` for a failed run.
+- Every other rule is unchanged:
+  - the request needs the signed Founder, a reason and an active plan;
+  - the step must still be linked to the task;
+  - no work may be running;
+  - the task is recovered at most once;
+  - the new task is `proposed`, with the same action and assignee, and needs a new approval and a new QA.
+- A completed task with no verdict, or with a PASS, is refused with 400.
+- Migration `072_qa_fail_rework.sql` replaces `ago_guard_plan_step`. The audited relink now also allows a `completed` old task that has a `fail` review. Everything else from 068 is unchanged.
+- **UI:** a stage with `QA: fail` shows "Rework after QA FAIL". The Founder writes what should change in the redo and confirms. The old work and its FAIL stay as evidence.
+- **Tests:**
+  - `test_ai_qa_review.py`: a FAIL leads to rework, which gives a new proposed task and a fresh `qa_verdict`; a second rework is refused; a PASS cannot be reworked.
+  - Unit and Playwright tests on all 6 projects.

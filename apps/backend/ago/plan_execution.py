@@ -79,6 +79,10 @@ class PlanExecution:
     ) -> dict:
         """Founder-authorized recovery of a FAILED project stage task (issue #10).
 
+        Also the rework path after QA (issue #8): a COMPLETED task whose QA
+        verdict is FAIL may be recovered the same way, so the stage gets new
+        work and a new QA instead of staying stuck.
+
         Creates a NEW proposed task with the step's own action and assignee,
         records an append-only recovery row and relinks the step. The failed
         task and its run stay immutable evidence; nothing is approved, replayed
@@ -107,8 +111,11 @@ class PlanExecution:
                 raise LookupError("Task not found")
             if task["already_recovered"]:
                 raise ValueError("This failed task was already recovered")
-            if task["status"] != "failed" or task["run_active"]:
-                raise ValueError("Only a failed task with no running work can be recovered")
+            rework = task["status"] == "completed" and bool(task["qa_failed"])
+            if (task["status"] != "failed" and not rework) or task["run_active"]:
+                raise ValueError(
+                    "Only a failed task, or a finished task that failed QA, can be recovered"
+                )
             if (task["action"] != step["action"]
                     or str(task["assignee_id"]) != str(step["assignee_id"])):
                 raise ValueError("Failed task does not match this plan step")
@@ -133,6 +140,7 @@ class PlanExecution:
             "failed_task_id": failed_task_id,
             "recovery_task_id": created.id,
             "recovery_task_status": "proposed",
+            "recovery_kind": "qa_rework" if rework else "failed_run",
             "recovery_id": int(record["id"]),
             "recorded_at": record["created_at"].isoformat(),
             "approval_required": True,

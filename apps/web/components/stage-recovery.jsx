@@ -1,5 +1,6 @@
 "use client";
 import {useState} from 'react';
+import {qaReworkStage} from './founder-delivery-state';
 
 /** Founder: create a NEW proposed task for a failed stage (issue #10). Never approves or runs. */
 export function StageRecovery({api,project,stage,onRecovered}){
@@ -20,17 +21,21 @@ export function StageRecovery({api,project,stage,onRecovered}){
   }catch(e){setError(e.message||'Recovery not created.');}
   finally{setBusy(false);}
  }
+ const rework=qaReworkStage(stage);
+ const name=rework?'Rework the QA-failed '+label:'Recover the failed '+label;
  if(!open)return <button type="button" className="stage-recovery-open" onClick={()=>setOpen(true)}
-  aria-label={'Recover the failed '+label}>Recover failed stage</button>;
- return <div className="stage-recovery" role="group" aria-label={'Recover the failed '+label}>
-  <p>Creates a <strong>new</strong> task for this stage with the same employee. The failed task and its run stay as evidence.
-   The new task still needs its own approval, and nothing runs now.</p>
-  <label>Why is it safe to try again?<textarea value={reason} maxLength={500} disabled={busy}
-   onChange={e=>{setReason(e.target.value);setConfirm(false);}} placeholder="For example: the AI credit allowance is now set."/></label>
+  aria-label={name}>{rework?'Rework after QA FAIL':'Recover failed stage'}</button>;
+ return <div className="stage-recovery" role="group" aria-label={name}>
+  {rework?<p>AI QA said this stage does <strong>not</strong> meet its goal. This creates a <strong>new</strong> task for the same employee
+   to redo the work; the old work and its QA FAIL stay as evidence. The new task needs its own approval and a new QA, and nothing runs now.</p>
+  :<p>Creates a <strong>new</strong> task for this stage with the same employee. The failed task and its run stay as evidence.
+   The new task still needs its own approval, and nothing runs now.</p>}
+  <label>{rework?'What should change in the redo?':'Why is it safe to try again?'}<textarea value={reason} maxLength={500} disabled={busy}
+   onChange={e=>{setReason(e.target.value);setConfirm(false);}} placeholder={rework?'For example: add the missing acceptance checklist the QA found.':'For example: the AI credit allowance is now set.'}/></label>
   <label className="stage-recovery-confirm"><input type="checkbox" checked={confirm} disabled={busy||!text}
-   onChange={e=>setConfirm(e.target.checked)}/>Create a recovery task for the {label}</label>
+   onChange={e=>setConfirm(e.target.checked)}/>{rework?'Create a rework task for the '+label:'Create a recovery task for the '+label}</label>
   <div className="delivery-actions">
-   <button type="button" disabled={busy||!confirm||!text} onClick={save}>{busy?'Creating…':'Create recovery task'}</button>
+   <button type="button" disabled={busy||!confirm||!text} onClick={save}>{busy?'Creating…':rework?'Create rework task':'Create recovery task'}</button>
    <button type="button" disabled={busy} onClick={()=>{setOpen(false);setError('');}}>Cancel</button>
   </div>
   {error&&<p role="alert">{error}</p>}

@@ -1055,6 +1055,37 @@ test('a failed stage shows why it failed and the Founder creates a recovery task
  expect(errors).toEqual([]);
 });
 
+test('a stage that failed AI QA offers a rework task and keeps the QA FAIL as evidence',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const doneTask='4d000000-0000-4000-8000-00000000004d',newTask='4e000000-0000-4000-8000-00000000004e';
+ const project={...deliveryProject(),delivery_state:'blocked',stages:[{stage:'discovery',position:1,employee:'Business Analyst',
+  task_id:doneTask,task_status:'completed',agent_run_status:'completed',qa_verdict:'fail'}]};
+ let reworked=false;const posted=[];
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([
+  reworked?{...project,delivery_state:'awaiting_governed_execution',stages:[{...project.stages[0],task_id:newTask,task_status:'proposed',
+   agent_run_status:null,qa_verdict:null}]}:project])}));
+ await page.route(/\/stages\/discovery\/recovery$/,route=>{posted.push(route.request().postDataJSON());reworked=true;
+  return route.fulfill({status:200,json:{kind:'ago_stage_task_recovery_v1',project_id:project.project_id,stage:'discovery',
+   failed_task_id:doneTask,recovery_task_id:newTask,recovery_task_status:'proposed',recovery_kind:'qa_rework',approval_required:true,run_started:false}});});
+ await login(page);await navigate(page,'Organization');
+ const card=page.getByRole('article',{name:'Delivery: '+project.title});
+ await expect(card.getByRole('button',{name:/^Ask AI QA/})).toHaveCount(0);
+ await card.getByRole('button',{name:'Rework the QA-failed discovery stage of '+project.title}).click();
+ const box=card.getByRole('group',{name:'Rework the QA-failed discovery stage of '+project.title});
+ await expect(box).toContainText('AI QA said this stage does not meet its goal.');
+ const create=box.getByRole('button',{name:'Create rework task'});
+ await box.getByLabel('What should change in the redo?').fill('Add the acceptance checklist QA found missing.');
+ await expect(create).toBeDisabled();
+ await box.getByRole('checkbox').check();
+ await create.click();
+ await expect.poll(()=>posted).toEqual([{failed_task_id:doneTask,reason:'Add the acceptance checklist QA found missing.'}]);
+ await expect(card).toContainText('Task: Proposed');
+ await expect(card.getByRole('button',{name:/^Rework the QA-failed/})).toHaveCount(0);
+ await accessibility(page);
+ expect(calls.filter(x=>/\/run$|\/decision$/.test(x.path))).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('a finished stage is checked by an independent AI QA employee chosen by the Founder',async({page})=>{
  const {calls,errors}=await deliveryFixtures(page);
  const doneTask='48000000-0000-4000-8000-000000000048',qa='49000000-0000-4000-8000-000000000049',

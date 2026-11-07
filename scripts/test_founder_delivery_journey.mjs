@@ -150,3 +150,12 @@ test('the AI hierarchy notice names each recorded approver and its level',async(
  assert.match(line,/1 task\(s\) could not be approved by the AI team; they wait for the Founder\./);
  assert.match(hierarchyApprovalLine({}),/^No task needed an AI approval right now\. No work was run/);
 });
+test('a QA FAIL on a finished stage is recoverable as rework; a PASS or no verdict is not',async()=>{
+ const {recoverableStage,qaReworkStage,aiQaReadyStage}=await import('../apps/web/components/founder-delivery-state.js');
+ const done={stage:'discovery',task_status:'completed',agent_run_status:'completed',task_id:'t1'};
+ assert.equal(qaReworkStage({...done,qa_verdict:'fail'}),true);
+ assert.equal(recoverableStage({...done,qa_verdict:'fail'}),true);
+ assert.equal(aiQaReadyStage({...done,qa_verdict:'fail'}),false);
+ for(const v of ['pass',null,undefined])assert.equal(recoverableStage({...done,qa_verdict:v}),false);
+ assert.equal(recoverableStage({...done,task_status:'failed',qa_verdict:null}),true);
+});

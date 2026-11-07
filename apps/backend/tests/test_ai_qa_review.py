@@ -170,3 +170,41 @@ def test_ai_qa_needs_the_local_model_and_a_finished_run(case, monkeypatch):
     # A stage with no plan step has nothing to review.
     post(client, BASE+'/projects/'+project['id']+'/stages/architecture/ai-qa', founder,
          {**body, 'operation_key': str(uuid4())}, expected=404)
+
+
+def test_a_qa_fail_opens_an_audited_rework_task_and_a_fresh_qa(case, monkeypatch):
+    client, headers, info = case
+    db, tenant, founder = info['db'], info['tenant'], headers['founder']
+    project, task_id, people = _completed_discovery(client, headers, info, monkeypatch)
+    base = BASE+'/projects/'+project['id']+'/stages/discovery'
+    recovery = {'failed_task_id': task_id, 'reason': 'Add the missing acceptance checklist'}
+    # A completed task with no QA verdict (or a PASS) cannot be reworked.
+    post(client, base+'/recovery', founder, recovery, expected=400)
+    _use_model(monkeypatch, 'FINDINGS:\n- acceptance checklist missing\nQA_VERDICT: FAIL')
+    post(client, base+'/ai-qa', founder, {'qa_employee_id': people['qa'],
+                                          'operation_key': str(uuid4())})
+    rework = post(client, base+'/recovery', founder, recovery)
+    assert rework['recovery_kind'] == 'qa_rework'
+    assert rework['recovery_task_status'] == 'proposed' and rework['run_started'] is False
+    new = rework['recovery_task_id']
+    old = db.execute("SELECT status FROM ago_governed_tasks WHERE tenant_id=%s AND id=%s",
+                     (tenant, task_id)).fetchone()
+    assert old['status'] == 'completed'
+    assert db.execute("SELECT verdict FROM ago_task_reviews WHERE tenant_id=%s AND task_id=%s",
+                      (tenant, task_id)).fetchone()['verdict'] == 'fail'
+    detail = client.get(BASE+'/projects/'+project['id'], headers=founder).json()
+    stage = next(s for s in detail['stages'] if s['stage'] == 'discovery')
+    assert stage['task_id'] == new and stage['qa_verdict'] is None
+    post(client, base+'/recovery', founder, recovery, expected=400)
+
+
+def test_a_qa_pass_cannot_be_reworked(case, monkeypatch):
+    client, headers, info = case
+    founder = headers['founder']
+    project, task_id, people = _completed_discovery(client, headers, info, monkeypatch)
+    base = BASE+'/projects/'+project['id']+'/stages/discovery'
+    _use_model(monkeypatch, 'FINDINGS:\n- ok\nQA_VERDICT: PASS')
+    post(client, base+'/ai-qa', founder, {'qa_employee_id': people['qa'],
+                                          'operation_key': str(uuid4())})
+    post(client, base+'/recovery', founder,
+         {'failed_task_id': task_id, 'reason': 'Try again'}, expected=400)

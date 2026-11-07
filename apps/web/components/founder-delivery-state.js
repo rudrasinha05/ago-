@@ -97,7 +97,12 @@ export function failureReason(code){
 const RECOVERY_STAGES=new Set(['discovery','architecture','implementation','quality','release']);
 /** A stage the Founder may recover: linked task failed (server re-checks everything). */
 export function recoverableStage(stage){
- return Boolean(stage&&RECOVERY_STAGES.has(stage.stage)&&stage.task_status==='failed'&&identifier(stage.task_id));
+ return Boolean(stage&&RECOVERY_STAGES.has(stage.stage)&&identifier(stage.task_id)&&
+  (stage.task_status==='failed'||qaReworkStage(stage)));
+}
+/** A finished stage whose independent QA said FAIL: it needs new work (server re-checks). */
+export function qaReworkStage(stage){
+ return Boolean(stage&&stage.task_status==='completed'&&stage.qa_verdict==='fail');
 }
 // Issue #8 M4: the Founder is the only human, so a finished stage is checked
 // by an independent AI QA employee. Same regex as the server (QA/quality/test).

@@ -661,7 +661,8 @@
       "ago_governed_tasks",
       "ago_plan_step_task_recoveries",
       "ago_plan_steps",
-      "ago_strategy_plans"
+      "ago_strategy_plans",
+      "ago_task_reviews"
     ],
     "plan_store": [
       "ago_employees",
