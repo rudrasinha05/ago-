@@ -96,7 +96,10 @@ def run_four_role_chain(
              "Your response is NOT a committed file or passed test.\n"
              if code_author else
              "Generate one concrete INTERNAL artifact, never a claim of execution. "
-             "Output text only, with headings: DECISION, DELIVERABLE, RISKS, ACCEPTANCE. "
+             +("Output text only, with headings: BOARD_RECOMMENDATION, DELIVERABLE, "
+               "RISKS, ACCEPTANCE. "
+               if role in BOARD_ROLE_SEATS else
+               "Output text only, with headings: DECISION, DELIVERABLE, RISKS, ACCEPTANCE. ")+
              "No tools, links to private content, hiring, spending, code execution, "
              "GitHub operations, publishing or approvals. Human QA is pending.\n")
             +"ROLE: "+role.upper()+"\nROLE_GOAL: "+goal+"\n"
