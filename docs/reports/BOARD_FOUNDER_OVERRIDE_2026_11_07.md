@@ -72,3 +72,13 @@ Run 6 on the Founder PC: the Founder allowed the Finance seat, and then the AI C
   - PostgreSQL: `revision_notes` after an override recovery;
   - unit tests for the step kinds and the reason text;
   - Playwright: DENY → revise → request → approve → run → QA PASS → done.
+
+## The project manager rewrites the scope before the Board sees it again (live run 7)
+Credit allowance was set to 1,000,000 at the Founder's request. Advance revised twice and the CEO denied both times with the same reason. Cause: the CEO is the first role, so it always judged the original brief; the team's revision never reached it.
+
+The fix, when `revision_notes` is present:
+1. The project's AI manager (`pm` participant) first writes an IMPROVED scope. This is one bounded model call, metered as one credit. Its headings are PROBLEM, USERS, FIRST_VERSION, OUT_OF_SCOPE, SUCCESS_MEASURES and HOW_FEEDBACK_IS_FIXED.
+2. That scope is the "previous draft" the CEO and every later role judge. The REVISION block tells them to judge the improved scope, not only the original brief.
+3. The result records `revised_scope`, the PM's draft. `roles_completed` still counts the 7 chain roles.
+
+Advance logs "<PM> (project manager) rewrote the scope…".

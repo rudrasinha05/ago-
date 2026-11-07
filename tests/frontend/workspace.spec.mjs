@@ -1153,7 +1153,8 @@ test('a Board denial is revised with its reasons and resubmitted until the Board
   if(runs===1){Object.assign(stage,{task_status:'failed',agent_run_status:'completed',agent_failure_code:null,founder_agent_result:denied});
    return route.fulfill({status:200,json:{status:'completed',delivery_status:'blocked',result:denied}});}
   Object.assign(stage,{task_status:'completed',agent_run_status:'completed',founder_agent_result:null});
-  return route.fulfill({status:200,json:{status:'completed',delivery_status:'completed',result:{board_blocked:false}}});});
+  return route.fulfill({status:200,json:{status:'completed',delivery_status:'completed',result:{board_blocked:false,
+   revised_scope:{role:'pm_revision',employee_name:'Pia',draft:'PROBLEM: coaching centres lose enquiries'}}}});});
  await page.route(/\/stages\/discovery\/recovery$/,route=>{sequence.push('revise:'+route.request().postDataJSON().reason);
   stage={stage:'discovery',position:1,task_id:second,task_status:'proposed',task_approval_status:null,agent_run_status:null,qa_verdict:null};
   return route.fulfill({status:200,json:{kind:'ago_stage_task_recovery_v1',failed_task_id:first,recovery_task_id:second,recovery_task_status:'proposed',run_started:false}});});
@@ -1173,6 +1174,7 @@ test('a Board denial is revised with its reasons and resubmitted until the Board
  await expect(steps).toContainText('Every stage passed AI QA. AGO stopped here.',{timeout:15000});
  await expect(steps).toContainText('Strategy & Vision — it recommended DENY (1 of 7 AI roles ran). Reason given: “Brief lacks the problem it solves.”. AGO will revise the proposal and resubmit it.');
  await expect(steps).toContainText('Board feedback sent to the team for revision 1 of 2: Strategy & Vision: Brief lacks the problem it solves.');
+ await expect(steps).toContainText('Pia (project manager) rewrote the scope to fix the Board feedback: PROBLEM: coaching centres lose enquiries');
  expect(sequence).toEqual(['run1','revise:Revise to fix Board feedback: Strategy & Vision: Brief lacks the problem it solves.','request','approve','run2','qa']);
  await accessibility(page);
  expect(errors).toEqual([]);

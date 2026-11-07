@@ -58,6 +58,9 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
    if(!view.ready){add('Self-check blocked the run: '+view.blockers.map(b=>b.what+' ('+b.fix+')').join(' '),'stop');return false;}
    add('Self-check passed. The AI team is working on '+step.stage+' (this can take a few minutes)…');
    const r=await api.request('/v1/agents/tasks/'+encodeURIComponent(step.task_id)+'/run',{method:'POST',timeoutMs:270000});
+   const revised=r?.result?.revised_scope;
+   if(revised&&typeof revised.draft==='string')add(revised.employee_name+' (project manager) rewrote the scope to fix the Board feedback: '+
+    revised.draft.replace(/\s+/g,' ').slice(0,240)+(revised.draft.length>240?'…':''),'ok');
    const blocked=runBlocker(r);
    if(blocked){
     // A Board stop is not the end: the next step revises and resubmits (bounded).

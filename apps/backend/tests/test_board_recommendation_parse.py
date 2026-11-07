@@ -159,9 +159,18 @@ def test_a_revision_carries_board_feedback_into_every_role_and_fits_the_bound():
     result = run_four_role_chain(task=task, participants=participants, provider=model,
                                  revision_notes=notes)
     assert result["revision_of_denied_attempt"] is True
-    assert len(model.prompts) == 7
+    # The project manager first rewrites the scope; then the 7 roles judge it.
+    assert len(model.prompts) == 8
+    assert "ROLE: PROJECT MANAGER (revision)" in model.prompts[0]
+    assert "HOW_FEEDBACK_IS_FIXED" in model.prompts[0]
+    assert result["revised_scope"]["role"] == "pm_revision"
+    assert result["revised_scope"]["draft"] == "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: revised plan"
+    assert "IMPROVED scope: judge that improved scope" in model.prompts[1]
+    assert result["roles_completed"] == 7
+    model.prompts = model.prompts[1:]
     assert all("REVISION: the Board denied the previous attempt" in p for p in model.prompts)
     assert all("brief lacks the problem it solves" in p and len(p) <= 4000 for p in model.prompts)
     first = Recorder()
-    run_four_role_chain(task=task, participants=participants, provider=first)
+    plain = run_four_role_chain(task=task, participants=participants, provider=first)
     assert not any("REVISION:" in p for p in first.prompts)
+    assert len(first.prompts) == 7 and plain["revised_scope"] is None
