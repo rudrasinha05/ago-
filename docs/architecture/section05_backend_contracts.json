@@ -172,6 +172,10 @@
           "arguments": "self, *, tenant_id: str, founder_id: str, ceo_id: str, project_id: str, task_id: str, approval_id: str, action: str, reason: str",
           "returns": "dict"
         },
+        "approve_project_task_by_hierarchy": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str, approval_id: str, action: str",
+          "returns": "dict"
+        },
         "approve_ceo_project_stage": {
           "arguments": "self, *, tenant_id: str, founder_id: str, ceo_id: str, project_id: str, proposal_id: str, approval_id: str, reason: str",
           "returns": "dict"

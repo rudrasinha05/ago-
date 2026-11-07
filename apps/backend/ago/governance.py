@@ -282,6 +282,114 @@ class ApprovalRepository:
             return {"approval_id":approval_id,"status":"approved",
                     "ceo_id":ceo_id,"task_id":task_id,"ai_decision":True}
 
+    def approve_project_task_by_hierarchy(
+        self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str,
+        approval_id: str, action: str,
+    ) -> dict:
+        """Approve ONE task inside a Founder-approved project by the AI hierarchy.
+
+        Governance itself picks the approver (issue #8 M2): the worker's direct
+        manager, else the project manager, else the appointed AI CEO. Each must
+        be an active AI employee and not the worker. The chosen approver is
+        recorded as responsible, with every skipped level and the reason.
+        Same scope checks as the CEO path; no client-chosen approver.
+        """
+        for value in (tenant_id, founder_id, project_id, task_id, approval_id):
+            UUID(value)
+        if action not in ("internal:brief", "research:brief", "project:plan"):
+            raise PermissionError("The AI hierarchy cannot authorize unknown or high-risk actions")
+        with self.connection.transaction():
+            scope = self.connection.execute("""
+                SELECT t.action,t.status,t.assignee_id,t.accountable_manager_id,
+                       a.status AS review_status,a.action AS review_action,
+                       p.status AS plan_status,plan_review.status AS founder_approval,
+                       plan_review.reviewer_id AS founder_reviewer,
+                       lead.accountable_manager_id AS project_manager_id,
+                       seat.employee_id AS ceo_id
+                FROM ago_governed_tasks t
+                JOIN ago_plan_steps ps ON ps.tenant_id=t.tenant_id AND ps.task_id=t.id
+                JOIN ago_founder_intakes i ON i.tenant_id=ps.tenant_id AND i.plan_id=ps.plan_id
+                JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                JOIN ago_approval_requests a ON a.tenant_id=t.tenant_id AND a.id=t.approval_id
+                JOIN ago_approval_requests plan_review ON
+                  plan_review.tenant_id=p.tenant_id AND plan_review.id=p.approval_id
+                LEFT JOIN ago_founder_project_lead lead ON lead.tenant_id=i.tenant_id
+                  AND lead.intake_id=i.id
+                LEFT JOIN ago_company_board_appointments seat ON
+                  seat.tenant_id=t.tenant_id AND seat.seat='Strategy & Vision'
+                WHERE t.tenant_id=%s AND t.id=%s AND i.id=%s AND i.founder_id=%s
+                  AND a.id=%s FOR UPDATE OF t,a
+            """, (tenant_id, task_id, project_id, founder_id, approval_id)).fetchone()
+            if (scope is None or scope["action"] != action
+                    or scope["review_action"] != action
+                    or scope["review_status"] != "pending"
+                    or scope["plan_status"] != "active"
+                    or scope["founder_approval"] != "approved"
+                    or str(scope["founder_reviewer"]) != founder_id
+                    or scope["status"] != "waiting_approval"):
+                raise PermissionError("Hierarchy approval outside approved project scope denied")
+            worker = str(scope["assignee_id"])
+            levels = (("manager", scope["accountable_manager_id"]),
+                      ("project_manager", scope["project_manager_id"]),
+                      ("ceo", scope["ceo_id"]))
+            skipped, approver = [], None
+            for level, candidate in levels:
+                if candidate is None:
+                    skipped.append({"level": level, "reason": "not assigned"})
+                    continue
+                row = self.connection.execute("""
+                    SELECT e.id,e.name,e.kind,e.role_title,
+                      EXISTS (SELECT 1 FROM ago_personnel_events pe
+                              WHERE pe.tenant_id=e.tenant_id AND pe.employee_id=e.id
+                                AND pe.change_kind='terminated') AS terminated
+                    FROM ago_employees e WHERE e.tenant_id=%s AND e.id=%s
+                """, (tenant_id, str(candidate))).fetchone()
+                why = ("not found" if row is None
+                       else "is the worker" if str(row["id"]) == worker
+                       else "not an AI employee" if row["kind"] != "ai"
+                       else "no longer employed" if row["terminated"] else None)
+                if why:
+                    skipped.append({"level": level, "employee_id": str(candidate),
+                                    "reason": why})
+                    continue
+                approver = (level, row)
+                break
+            if approver is None:
+                raise PermissionError("No eligible AI approver in the hierarchy; the Founder decides")
+            level, person = approver
+            approver_id = str(person["id"])
+            label = {"manager": "direct manager", "project_manager": "project manager",
+                     "ceo": "AI CEO"}[level]
+            reason = (label.capitalize() + " " + person["name"] + " approved task " + task_id
+                      + " inside Founder-approved project " + project_id
+                      + " and is responsible for this decision"
+                      + ("; escalated past: " + ", ".join(
+                          s["level"] + " (" + s["reason"] + ")" for s in skipped) if skipped else "")
+                      + "; Founder session " + founder_id)[:2000]
+            changed = self.connection.execute("""
+                UPDATE ago_approval_requests SET status='approved',reviewer_id=%s,
+                  reason=%s,decided_at=now()
+                WHERE tenant_id=%s AND id=%s AND status='pending' RETURNING id
+            """, (approver_id, reason, tenant_id, approval_id)).fetchone()
+            if changed is None:
+                raise PermissionError("Approval changed during hierarchy verification")
+            self.connection.execute("""
+                INSERT INTO ago_approval_audit (request_id,tenant_id,actor_id,event,reason)
+                VALUES (%s,%s,%s,'approved',%s)
+            """, (approval_id, tenant_id, approver_id, reason))
+            from json import dumps
+            from uuid import uuid4
+            self.connection.execute("""
+                INSERT INTO ago_hierarchy_task_approvals
+                  (id,tenant_id,approval_id,task_id,intake_id,approver_id,approver_level,
+                   worker_id,skipped,founder_session_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
+            """, (str(uuid4()), tenant_id, approval_id, task_id, project_id, approver_id,
+                  level, worker, dumps(skipped), founder_id))
+            return {"approval_id": approval_id, "status": "approved", "task_id": task_id,
+                    "approver_id": approver_id, "approver_name": person["name"],
+                    "approver_level": level, "skipped": skipped, "ai_decision": True}
+
     def approve_ceo_project_stage(
         self, *, tenant_id: str, founder_id: str, ceo_id: str,
         project_id: str, proposal_id: str, approval_id: str, reason: str,

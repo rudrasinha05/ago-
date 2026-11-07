@@ -530,6 +530,8 @@
       "ago_founder_intakes",
       "ago_founder_project_lead",
       "ago_governed_tasks",
+      "ago_hierarchy_task_approvals",
+      "ago_personnel_events",
       "ago_plan_steps",
       "ago_project_stage_delegation_proposals",
       "ago_role_permissions",

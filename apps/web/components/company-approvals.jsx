@@ -100,7 +100,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
   <header className="approval-header">
    <div><h3>Approvals inbox <span className="approval-badge">{actionable.length} need my review</span></h3>
     <p>{pending.length} pending requests company-wide · {(rows||[]).some(r=>r.founder_solo_mode)
-     ?'Founder decides company-level (major) requests; the AI CEO decides work inside Founder-approved projects. The Founder is the only human in AGO.'
+     ?'Founder decides company-level (major) requests. Inside Founder-approved projects the AI team decides by hierarchy: manager, then project manager, then AI CEO. The Founder is the only human in AGO.'
      :'Founder controls project strategy; CEO handles bounded approved project work; qualified independent humans review ordinary operations and QA.'}</p></div>
    <button type="button" onClick={()=>setShowAll(x=>!x)}>{showAll?'Show pending only':'Show history'}</button>
   </header>

@@ -479,6 +479,7 @@ class CompanyChat:
             checked=0
             authorized=[]
             blocked=[]
+            approvers=[]
             for task in rows:
                 action=task['action']
                 if task['status'] not in ('proposed','waiting_approval'):
@@ -507,16 +508,20 @@ class CompanyChat:
                     continue
                 if receipt['status']!='pending':
                     continue
-                # Approval storage belongs to Governance, which rechecks every
-                # record and board identity inside this same transaction.
-                reason=('CEO scope verified: approved project '+project_id+
-                        '; task '+str(task['id'])+'; Founder session '+actor.subject)
-                self.repositories.resolve(ApprovalRepository).approve_ceo_project_task(
-                    tenant_id=actor.tenant_id, founder_id=actor.subject,
-                    ceo_id=str(board['id']), project_id=project_id,
-                    task_id=str(task['id']), approval_id=approval_id, action=action,
-                    reason=reason,
-                )
+                # Governance picks the approver from the worker's hierarchy
+                # (direct manager -> project manager -> AI CEO) and records
+                # who is responsible; it rechecks every record in this transaction.
+                try:
+                    decision=self.repositories.resolve(ApprovalRepository).approve_project_task_by_hierarchy(
+                        tenant_id=actor.tenant_id, founder_id=actor.subject,
+                        project_id=project_id, task_id=str(task['id']),
+                        approval_id=approval_id, action=action,
+                    )
+                except PermissionError:
+                    blocked.append(str(task['id']))
+                    continue
+                approvers.append({k:decision[k] for k in
+                    ('task_id','approver_id','approver_name','approver_level')})
                 checked+=1
                 authorized.append(str(task['id']))
             # Founder approves a FULL proposal once. The appointed CEO may
@@ -623,10 +628,11 @@ class CompanyChat:
                 'approved_stage_count':len(approved_stages),
                 'blocked_stage_names':blocked_stages,
                 'approved_task_ids':authorized,
+                'task_approvers':approvers,
                 'blocked_task_ids':blocked,
                 'tasks_executed':0,
                 'external_tools_authorized':False,
-                'evidence':'stored project scope, actual board CEO, immutable approval records',
+                'evidence':'stored project scope, AI hierarchy (manager, project manager, CEO), immutable approval records',
                 'verification_kind':'deterministic_project_scope_gate',
             }
 
@@ -1657,13 +1663,13 @@ class CompanyChat:
             item["founder_solo_mode"] = bool(solo and not strategic)
             item["decided_by_level"] = (
                 "founder" if strategic else
-                "ai_ceo" if item["project_task"] else
+                "ai_hierarchy" if item["project_task"] else
                 "founder" if solo else "independent_human"
             )
             item["review_routing"] = (
                 "Founder only: company-level (major) approval for the approved strategic scope"
                 if strategic else
-                "AI CEO decides inside the Founder-approved project (use Resume CEO verification on the project); the Founder may also decide"
+                "AI team decides inside the Founder-approved project by hierarchy: the worker's AI manager, else the project manager, else the AI CEO (use Get AI team approvals on the project); the Founder may also decide"
                 if item["project_task"] else
                 "Founder decides: company-level approval (the Founder is the only human in AGO)"
                 if solo else

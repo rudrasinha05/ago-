@@ -141,3 +141,12 @@ test('portfolio rows show live status, team and only verified income; Founder de
  assert.equal(portfolioGroup({...base,delivery_state:'awaiting_governed_execution',stages:[]}),'waiting');
  assert.deepEqual(projectTeam({manager:' ',stages:[{employee:null}]}),[]);
 });
+test('the AI hierarchy notice names each recorded approver and its level',async()=>{
+ const {hierarchyApprovalLine}=await import('../apps/web/components/company-founder-decision.js');
+ const line=hierarchyApprovalLine({task_approvers:[{task_id:'t',approver_name:'Mira',approver_level:'manager'},
+  {task_id:'u',approver_name:'Ceo',approver_level:'ceo'},{approver_name:'Fake',approver_level:'board'}],blocked_task_ids:['x']});
+ assert.match(line,/Mira \(direct manager\), Ceo \(AI CEO\)\./);
+ assert.doesNotMatch(line,/Fake/);
+ assert.match(line,/1 task\(s\) could not be approved by the AI team; they wait for the Founder\./);
+ assert.match(hierarchyApprovalLine({}),/^No task needed an AI approval right now\. No work was run/);
+});

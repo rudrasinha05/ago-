@@ -352,7 +352,7 @@ test('in a sole-Founder company the Founder decides a standalone plan the old ru
  await login(page);await navigate(page,'Organization');
  await page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Approvals/}).click();
  const inbox=page.getByRole('region',{name:'Approvals inbox'});
- await expect(inbox).toContainText('Founder decides company-level (major) requests; the AI CEO decides work inside Founder-approved projects.');
+ await expect(inbox).toContainText('Inside Founder-approved projects the AI team decides by hierarchy: manager, then project manager, then AI CEO.');
  await expect(inbox.locator('.approval-entry')).toContainText('Your decision is required');
  await expect(inbox).not.toContainText('qualified independent humans');
  await accessibility(page);

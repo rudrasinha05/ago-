@@ -1,5 +1,15 @@
 /** Shared one-time Founder approval → bounded CEO handoff. */
 const BASE='/v1/organization/company';
+const LEVEL={manager:'direct manager',project_manager:'project manager',ceo:'AI CEO'};
+/** Who in the AI hierarchy approved which task (issue #8 M2); server-recorded only. */
+export function hierarchyApprovalLine(result){
+ const rows=Array.isArray(result?.task_approvers)?result.task_approvers.filter(r=>r&&typeof r.approver_name==='string'&&LEVEL[r.approver_level]):[];
+ const blocked=Array.isArray(result?.blocked_task_ids)?result.blocked_task_ids.length:0;
+ const who=rows.length?'Approved by the AI hierarchy: '+rows.map(r=>r.approver_name+' ('+LEVEL[r.approver_level]+')').join(', ')+
+  '. Each approver is recorded as responsible.':'No task needed an AI approval right now.';
+ return who+(blocked?' '+blocked+' task(s) could not be approved by the AI team; they wait for the Founder.':'')+
+  ' No work was run and no external action started.';
+}
 export async function decideFounderScope(api,request,approve,reason){
  if(!request||request.status!=='pending'||!request.requires_founder_decision)
   throw new Error('Only Founder scope decisions may use this action');
@@ -19,8 +29,7 @@ export async function decideFounderScope(api,request,approve,reason){
     await api.request('/v1/console/tasks/'+encodeURIComponent(stage.task_id)+'/request-approval',{method:'POST'});
   }
   const result=await api.request(BASE+'/projects/'+project+'/ceo/reconcile',{method:'POST'});
-  return {notice:'Founder approved once. CEO '+result.ceo_name+
-   ' verified '+result.verified_task_count+' in-scope tasks; execution is separate.'};
+  return {notice:'Founder approved once. '+hierarchyApprovalLine(result)};
  }catch(error){
   return {notice:'Founder approval recorded; CEO handoff incomplete: '+(error.message||'Inspect board/plan')+
    '. Do not approve twice. Resume from Project Portfolio.',handoffNeedsAttention:true};

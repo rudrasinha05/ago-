@@ -4,6 +4,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {CompanyDocumentVault} from './company-document-vault';
 import {ProjectStageRouting} from './project-stage-routing';
 import {ProjectManagerChange} from './project-manager-change';
+import {hierarchyApprovalLine} from './company-founder-decision';
 
 export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],onChanged,requestedProject=null}) {
  const [brief,setBrief]=useState('');
@@ -76,8 +77,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
     }
    }
    const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(projectDetail.id)+'/ceo/reconcile',{method:'POST'});
-   if(version===detailEpoch.current)setCeoNotice('CEO '+result.ceo_name+' verified '+result.verified_task_count+
-     ' internal task(s). '+requested+' new approval requests. No execution or external action started.');
+   if(version===detailEpoch.current)setCeoNotice(requested+' approval request(s) sent. '+hierarchyApprovalLine(result));
    const updated=await api.request('/v1/organization/company/projects/'+encodeURIComponent(projectDetail.id));
    if(version===detailEpoch.current)setProjectDetail(updated);
    await onChanged?.();
@@ -219,7 +219,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
          <p><b>Status:</b> {projectDetail.status_label} · <b>Strategy:</b> {projectDetail.plan_status} · <b>Delivery health:</b> {projectDetail.project_health}</p>
          {projectDetail.plan_status==='active'&&<div className="project-ceo-handoff">
           <button type="button" disabled={ceoBusy} onClick={resumeCeo}>
-           {ceoBusy?'Checking the approved scope…':'Resume CEO verification (no new Founder approval)'}
+           {ceoBusy?'Checking the approved scope…':'Get AI team approvals (manager → project manager → CEO)'}
           </button>
           {ceoNotice&&<p role="status">{ceoNotice}</p>}
          </div>}
