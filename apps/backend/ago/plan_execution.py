@@ -98,8 +98,8 @@ class PlanExecution:
             ).fetchone()
             if step is None:
                 raise LookupError("Project stage not found")
-            if step["plan_status"] != "active":
-                raise PermissionError("Only an active approved plan may recover a stage task")
+            if step["plan_status"] != "active" or step["goal_status"] != "active":
+                raise PermissionError("Only an active approved plan and goal may recover a stage task")
             if str(step["task_id"] or "") != failed_task_id:
                 raise ValueError("This stage is no longer linked to that task; refresh first")
             task = queries.select_task_for_recovery_08((tenant_id, failed_task_id)).fetchone()

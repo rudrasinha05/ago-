@@ -48,18 +48,19 @@ class PlanExecutionQueries:
         )
 
     def select_founder_stage_step_07(self, parameters: Any = None) -> Cursor:
-        """(tenant_id, project_id, founder_id, stage): the stage's plan step, locked."""
+        """(stage, tenant_id, project_id, founder_id): lock the stage and its goal."""
         return self.connection.execute(
             """SELECT ps.id AS plan_step_id,ps.plan_id,ps.action,ps.assignee_id,ps.task_id,
-                      p.status AS plan_status
+                      p.status AS plan_status,g.status AS goal_status
                FROM ago_founder_intakes i
                JOIN ago_founder_intake_stages s ON s.tenant_id=i.tenant_id
                 AND s.intake_id=i.id AND s.stage=%s
                JOIN ago_plan_steps ps ON ps.tenant_id=s.tenant_id
                 AND ps.plan_id=s.plan_id AND ps.id=s.plan_step_id
                JOIN ago_strategy_plans p ON p.tenant_id=ps.tenant_id AND p.id=ps.plan_id
+               JOIN ago_goals g ON g.tenant_id=p.tenant_id AND g.id=p.goal_id
                WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
-               FOR UPDATE OF ps""",
+               FOR UPDATE OF ps,g""",
             parameters,
         )
 

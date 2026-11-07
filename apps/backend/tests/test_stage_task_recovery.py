@@ -145,3 +145,57 @@ def test_database_refuses_unaudited_relinks_and_audit_rewrites(case, monkeypatch
             db.execute("UPDATE ago_plan_step_task_recoveries SET reason='changed' "
                        "WHERE tenant_id=%s", (tenant,))
     assert recovered['recovery_task_id'] != stray
+
+
+@pytest.mark.parametrize("goal_status", ["cancelled", "completed"])
+def test_recovery_rejects_inactive_goal_without_creating_work(case, monkeypatch, goal_status):
+    client, headers, info = case
+    db, tenant = info['db'], info['tenant']
+    project, failed = _failed_discovery(client, headers, info, monkeypatch)
+    before = db.execute("SELECT count(*) AS n FROM ago_governed_tasks WHERE tenant_id=%s",
+                        (tenant,)).fetchone()['n']
+    db.execute("UPDATE ago_goals SET status=%s WHERE tenant_id=%s AND id="
+               "(SELECT goal_id FROM ago_strategy_plans WHERE tenant_id=%s AND id=%s)",
+               (goal_status, tenant, tenant, project['plan_id']))
+    post(client, BASE+'/projects/'+project['id']+'/stages/discovery/recovery',
+         headers['founder'], {'failed_task_id': failed, 'reason': 'Retry after fix'}, expected=403)
+    assert db.execute("SELECT count(*) AS n FROM ago_governed_tasks WHERE tenant_id=%s",
+                      (tenant,)).fetchone()['n'] == before
+    assert db.execute("SELECT count(*) AS n FROM ago_plan_step_task_recoveries WHERE tenant_id=%s",
+                      (tenant,)).fetchone()['n'] == 0
+
+
+def test_recovered_task_runs_only_after_new_approval_and_keeps_failed_evidence(case, monkeypatch):
+    client, headers, info = case
+    db, tenant, founder = info['db'], info['tenant'], headers['founder']
+    project, failed = _failed_discovery(client, headers, info, monkeypatch)
+    recovered = post(client, BASE+'/projects/'+project['id']+'/stages/discovery/recovery',
+                     founder, {'failed_task_id': failed, 'reason': 'Provider repaired'})
+    new = recovered['recovery_task_id']
+    calls = []
+
+    def repaired_provider(task):
+        calls.append(task.id)
+        return {'summary': 'Controlled recovery test result'}
+
+    import ago.api_agents as api_agents
+    monkeypatch.setattr(api_agents, 'optional_model_handlers',
+                        lambda *a, **k: {'internal:brief': repaired_provider})
+    post(client, '/v1/agents/tasks/'+new+'/run', founder, expected=403)
+    approval = post(client, '/v1/governance/approvals', founder, {'action': 'internal:brief'})
+    post(client, '/v1/tasks/'+new+'/approval', founder, {'approval_id': approval['request_id']})
+    post(client, '/v1/agents/tasks/'+new+'/run', founder, expected=403)
+    assert calls == []
+    post(client, '/v1/governance/approvals/'+approval['request_id']+'/decision',
+         headers['reviewer'], {'approve': True, 'reason': 'Approve recovered task'})
+    result = post(client, '/v1/agents/tasks/'+new+'/run', founder)
+    assert result['status'] == 'completed'
+    assert calls == [new]
+    post(client, '/v1/agents/tasks/'+new+'/run', founder, expected=403)
+    assert calls == [new]
+    assert db.execute("SELECT status FROM ago_governed_tasks WHERE tenant_id=%s AND id=%s",
+                      (tenant, new)).fetchone()['status'] == 'completed'
+    old = db.execute("SELECT status,failure_code,result FROM ago_agent_runs "
+                     "WHERE tenant_id=%s AND task_id=%s", (tenant, failed)).fetchone()
+    assert (old['status'], old['failure_code'], old['result']) == (
+        'failed', 'credit_budget_missing', None)
