@@ -165,10 +165,25 @@ class ReviewedChanges:
         ).fetchone()
         if (
             not a
-            or str(a["reviewer_id"]) == actor.subject
             or a["action"] != f"enterprise:review:{domain}:{p['id']}:{p['digest']}"
         ):
-            raise PermissionError("Exact independent human review required")
+            raise PermissionError("Exact approved human review required")
+        # Governance permits a sole Founder to decide company-level requests.
+        # Apply must honor that decision, while rechecking current authority and
+        # preserving independent review when another human approver exists.
+        if str(a["reviewer_id"]) == actor.subject:
+            security = self.repositories.resolve(SecurityControls)
+            others = self.db.execute(
+                """SELECT u.id FROM ago_users u JOIN ago_employees e
+                   ON e.tenant_id=u.tenant_id AND e.id=u.id
+                   WHERE u.tenant_id=%s AND u.id<>%s AND u.active AND e.kind='human'""",
+                (actor.tenant_id, actor.subject),
+            ).fetchall()
+            if any(security.permitted(
+                Principal(str(other["id"]), actor.tenant_id, ()),
+                "approval:decide", actor.tenant_id,
+            ) for other in others):
+                raise PermissionError("Another active human approver must review this change")
         reviewer = Principal(str(a["reviewer_id"]), actor.tenant_id, ("reviewer",))
         if not self.repositories.resolve(SecurityControls).permitted(
             reviewer, "approval:decide", actor.tenant_id

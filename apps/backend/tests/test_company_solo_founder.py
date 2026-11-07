@@ -165,3 +165,48 @@ def test_staffing_does_not_invent_human_reviewers(case):
             if x["project_id"] == project["id"] and x["stage"] == "quality"]
     assert rows and rows[0]["founder_local_qa_candidate"] is False
     assert report.json()["staffing_decisions_executed"] == 0
+
+
+
+def test_sole_founder_approved_graph_change_can_be_applied(case):
+    from test_sections31_34 import BASE, graph_node, propose
+
+    client, headers, info = case
+    founder, db, tenant = headers['founder'], info['db'], info['tenant']
+    db.execute("UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s",
+               (tenant, info['reviewer_id']))
+    item, _ = propose(client, founder, 'graph', 'node', graph_node(info['founder_id']))
+    path = BASE + '/reviews/graph/apply'
+    payload = {'proposal_id': item['id']}
+    post(client, path, founder, payload, expected=403)
+    post(client, '/v1/governance/approvals/'+item['approval_id']+'/decision', founder,
+         {'approve': True, 'reason': 'Founder approves company knowledge change'})
+    result = post(client, path, founder, payload)
+    assert result
+    # An already applied proposal returns the same durable revision, not a second write.
+    post(client, path, founder, payload)
+    assert db.execute("SELECT count(*) AS n FROM ago_enterprise_applied "
+                      "WHERE tenant_id=%s AND proposal_id=%s", (tenant, item['id'])).fetchone()['n'] == 1
+
+
+def test_founder_apply_rechecks_other_human_approver_and_revoked_founder_role(case):
+    from test_sections31_34 import BASE, graph_node, propose
+
+    client, headers, info = case
+    founder, db, tenant = headers['founder'], info['db'], info['tenant']
+    db.execute("UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s",
+               (tenant, info['reviewer_id']))
+    item, _ = propose(client, founder, 'graph', 'node', graph_node(info['founder_id']))
+    post(client, '/v1/governance/approvals/'+item['approval_id']+'/decision', founder,
+         {'approve': True, 'reason': 'Founder approves company knowledge change'})
+    path, payload = BASE + '/reviews/graph/apply', {'proposal_id': item['id']}
+    db.execute("UPDATE ago_users SET active=true WHERE tenant_id=%s AND id=%s",
+               (tenant, info['reviewer_id']))
+    post(client, path, founder, payload, expected=403)
+    db.execute("UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s",
+               (tenant, info['reviewer_id']))
+    db.execute("DELETE FROM ago_user_roles WHERE tenant_id=%s AND user_id=%s AND role='founder'",
+               (tenant, info['founder_id']))
+    post(client, path, founder, payload, expected=403)
+    assert db.execute("SELECT count(*) AS n FROM ago_enterprise_applied "
+                      "WHERE tenant_id=%s AND proposal_id=%s", (tenant, item['id'])).fetchone()['n'] == 0
