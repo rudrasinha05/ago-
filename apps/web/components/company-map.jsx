@@ -6,6 +6,7 @@ import {employeeStatus,companyLayout,companyLinkAnchors,activeRouteKeys,employee
 import {CommandBrain,CompanyBoard} from './command-brain';
 import {RoleEditor,UpwardReports} from './company-governance';
 import {FounderDeliveryJourney} from './founder-delivery-journey';
+import {ProjectPortfolio} from './project-portfolio';
 import {FounderProjectIntake} from './founder-project-intake';
 import {CompanyApprovals} from './company-approvals';
 import {CompanyApprovalBadge} from './company-approval-badge';
@@ -497,9 +498,13 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <section id="ago-tab-projects" className="company-tab-panel" data-tab-panel aria-label="Projects" hidden={activeTab!=='ago-tab-projects'}>
     {/* Jump links only for sections this role can actually see. */}
     <nav className="company-subnav" aria-label="Projects sections">
+      {founderView&&<a href="#ago-projects-overview">All projects</a>}
       {founderView&&me.permissions?.includes('brain:manage')&&<a href="#ago-project-portfolio">Project portfolio</a>}
       {me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read')&&<a href="#ago-opportunities">Business opportunities</a>}
     </nav>
+    <ProjectPortfolio api={api} me={me} active={activeTab==='ago-tab-projects'} refreshSignal={approvalRefresh}
+      onOpen={project=>{setRequestedProject({...project,request:Date.now()});openSection('ago-project-portfolio');}}
+      onApproval={id=>{setApprovalFocus({id,at:Date.now()});openSection('ago-tab-approvals',{updateHash:true});}}/>
     <FounderProjectIntake api={api} me={me} requestedProject={requestedProject} employees={employees} profiles={governanceData?.employees||[]} board={governanceData?.board||[]} onChanged={()=>setApprovalRefresh(v=>v+1)}/>
     <OpportunityRadar api={api} me={me} onChanged={()=>setApprovalRefresh(x=>x+1)}/>
     </section>

@@ -118,3 +118,26 @@ test('only a finished, unreviewed stage offers AI QA, and only AI QA-role employ
  assert.deepEqual(aiQaReviewers(people).map(e=>e.id),['a','b','e']);
  assert.deepEqual(aiQaReviewers(null),[]);
 });
+test('portfolio rows show live status, team and only verified income; Founder decisions come first',async()=>{
+ const {portfolioRows,portfolioCounts,portfolioGroup,projectTeam}=await import('../apps/web/components/project-portfolio-state.js');
+ const base={project_id:'p1',title:'Admissions',manager:'Project Manager',plan_status:'active',delivery_state:'working',pending_approvals:[],
+  stages:[{stage:'discovery',employee:'AI Engineer',task_status:'running',agent_run_status:'running',qa_verdict:null},
+   {stage:'architecture',employee:'AI Engineer',task_status:'completed',agent_run_status:'completed',qa_verdict:'pass'},
+   {stage:'implementation',employee:'Project Manager',task_status:'failed',agent_run_status:'failed',qa_verdict:null}]};
+ const page={projects:[base,{...base,project_id:'p2',title:'Blocked one',delivery_state:'blocked',stages:[],manager:null},
+  {...base,project_id:'p3',title:'Needs me',delivery_state:'blocked',pending_approvals:[{approval_id:'a',requires_founder_decision:true,type:'plan_review'}]}]};
+ const rows=portfolioRows(page,[{id:'p1',verified_revenue_inr:5000,commercial_stage:'pilot'},{id:'p2',verified_revenue_inr:'5000'}]);
+ assert.deepEqual(rows.map(r=>r.group),['running','blocked','needs_you']);
+ assert.deepEqual(rows[0].team,['Project Manager','AI Engineer']);
+ assert.deepEqual([rows[0].reviewed,rows[0].stageCount,rows[0].running,rows[0].failed],[1,3,1,1]);
+ assert.equal(rows[0].income.verified,true);assert.match(rows[0].income.label,/5,000/);
+ assert.equal(rows[1].income.verified,false,'a string is not verified income');
+ assert.equal(rows[1].commercial,'Not recorded');assert.deepEqual(rows[1].team,[]);
+ assert.equal(rows[2].decisions,1);
+ assert.equal(portfolioRows(page,null)[0].income.label,'No verified income yet');
+ const counts=portfolioCounts(rows);
+ assert.deepEqual([counts.all,counts.running,counts.blocked,counts.needs_you,counts.done],[3,1,1,1,0]);
+ assert.equal(portfolioGroup({...base,delivery_state:'internally_reviewed',stages:[]}),'done');
+ assert.equal(portfolioGroup({...base,delivery_state:'awaiting_governed_execution',stages:[]}),'waiting');
+ assert.deepEqual(projectTeam({manager:' ',stages:[{employee:null}]}),[]);
+});

@@ -1096,6 +1096,49 @@ test('a finished stage is checked by an independent AI QA employee chosen by the
  expect(errors).toEqual([]);
 });
 
+test('the Founder sees every project with live status, AI team and income, filters them and opens one',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const running={...deliveryProject(other,'Admission tracker'),delivery_state:'working',manager:'Project Manager',stages:[
+  {stage:'discovery',position:1,employee:'AI Engineer',task_id:user,task_status:'running',agent_run_status:'running',qa_verdict:null},
+  {stage:'architecture',position:2,employee:'AI Architect',task_id:department,task_status:'completed',agent_run_status:'completed',qa_verdict:'pass'}]};
+ const blocked={...deliveryProject(department,'Fee reminder app'),delivery_state:'blocked',stages:[
+  {stage:'discovery',position:1,employee:'Research AI',task_id:other,task_status:'failed',agent_run_status:'failed',agent_failure_code:'model_timeout',qa_verdict:null}]};
+ const decide={...deliveryProject(tenant,'Campus website'),delivery_state:'awaiting_project_plan_approval',
+  pending_approvals:[{approval_id:'4c000000-0000-4000-8000-00000000004c',type:'plan_review',action:'brain:activate',requires_founder_decision:true}]};
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([running,blocked,decide])}));
+ await page.route(/\/company\/projects\?/,route=>route.fulfill({status:200,json:[
+  {id:other,title:'Admission tracker',plan_status:'active',verified_revenue_inr:12000,commercial_stage:'paying pilot'},
+  {id:department,title:'Fee reminder app',plan_status:'active',verified_revenue_inr:null,commercial_stage:'idea'},
+  {id:tenant,title:'Campus website',plan_status:'pending_approval',verified_revenue_inr:null,commercial_stage:'idea'}]}));
+ await page.route('**/v1/organization/company/projects/'+other,route=>route.fulfill({status:200,json:{id:other,title:'Admission tracker',
+  brief:'Admission tracker exact brief',plan_status:'active',stages:[],stage_count:2,qa_passed_stages:1}}));
+ await login(page);await navigate(page,'Organization');await openCompanyTab(page,'Projects');
+ const portfolio=page.getByRole('region',{name:'All projects'});
+ const rows=portfolio.getByRole('listitem');
+ await expect(rows).toHaveCount(3);
+ const first=rows.filter({hasText:'Admission tracker'});
+ await expect(first).toContainText('Work in progress');
+ await expect(first).toContainText('1/2 stages passed QA · 1 running');
+ await expect(first).toContainText('AI team: Project Manager, AI Engineer, AI Architect');
+ await expect(first).toContainText('₹12,000 (verified) · paying pilot');
+ await expect(rows.filter({hasText:'Fee reminder app'})).toContainText('0/1 stages passed QA · 1 failed');
+ await expect(rows.filter({hasText:'Fee reminder app'})).toContainText('No verified income yet');
+ const filters=portfolio.getByRole('group',{name:'Filter projects'});
+ await filters.getByRole('button',{name:/^Needs your decision/}).click();
+ await expect(rows).toHaveCount(1);
+ await expect(rows.first()).toContainText('Campus website');
+ await expect(rows.first().getByRole('button',{name:'Review 1 decision(s) for Campus website'})).toBeVisible();
+ await filters.getByRole('button',{name:/^Blocked/}).click();
+ await expect(rows).toHaveCount(1);
+ await expect(rows.first()).toContainText('Fee reminder app');
+ await filters.getByRole('button',{name:/^All/}).click();
+ await accessibility(page);
+ await portfolio.getByRole('button',{name:'Open project details: Admission tracker'}).click();
+ await expect(page.getByText('Admission tracker exact brief')).toBeVisible();
+ expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('late project details cannot replace the newly selected delivery project',async({page})=>{
  const {errors}=await deliveryFixtures(page);
  const first=deliveryProject(other,'First project'),second=deliveryProject(department,'Second project');
