@@ -210,3 +210,17 @@ def test_founder_apply_rechecks_other_human_approver_and_revoked_founder_role(ca
     post(client, path, founder, payload, expected=403)
     assert db.execute("SELECT count(*) AS n FROM ago_enterprise_applied "
                       "WHERE tenant_id=%s AND proposal_id=%s", (tenant, item['id'])).fetchone()['n'] == 0
+
+
+def test_database_guard_allows_self_review_only_for_a_sole_founder(case):
+    """070: the DB guard mirrors governance; another active human approver means
+    the Founder's own approval of the Founder's proposal is refused."""
+    db, tenant, founder = case[2]['db'], case[2]['tenant'], case[2]['founder_id']
+    reviewer = case[2]['reviewer_id']
+    ok = "SELECT ago_sole_founder_self_review_ok(%s,%s) AS ok"
+    assert db.execute(ok, (tenant, founder)).fetchone()['ok'] is False
+    assert db.execute(ok, (tenant, reviewer)).fetchone()['ok'] is False
+    db.execute("UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s", (tenant, reviewer))
+    assert db.execute(ok, (tenant, founder)).fetchone()['ok'] is True
+    # A non-Founder never qualifies, even when alone.
+    assert db.execute(ok, (tenant, reviewer)).fetchone()['ok'] is False
