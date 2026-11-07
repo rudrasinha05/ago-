@@ -2,7 +2,9 @@
 
 import time
 
-from ago.company_engineering import assert_discoverable_unittest, reviewed_candidate
+from ago.company_engineering import (
+    EngineeringCandidateInvalid, assert_discoverable_unittest, reviewed_candidate,
+)
 
 ROLE_STAGES=(
     ("ceo","Strategy & Vision",
@@ -209,7 +211,33 @@ def run_four_role_chain(
             # Untrusted model output must become an exact-file artifact before
             # it can be considered reviewable. Invalid content fails the task
             # through AgentRuntime; it is never executed or sent to GitHub.
-            engineering_candidate=assert_discoverable_unittest(reviewed_candidate(output))
+            try:
+                engineering_candidate=assert_discoverable_unittest(reviewed_candidate(output))
+            except ValueError as rejected:
+                # Self-correction: tell the SAME developer exactly which of AGO's
+                # fixed static checks failed (our own message, never model text)
+                # and allow one corrected answer. A second failure is recorded
+                # with its own failure code; nothing is ever executed.
+                fix_prompt = (
+                    "Your previous answer was REJECTED by AGO's code check: "
+                    + str(rejected)[:200] + ".\n"
+                    "Produce ONLY one valid JSON object with EXACT fields files and "
+                    "acceptance_checks. files must contain 2 to 6 objects with EXACT "
+                    "fields path and content; include a Python src/*.py file and a "
+                    "tests/test_*.py file. acceptance_checks is a list of 1 to 5 "
+                    "plain-language checks. Tests MUST contain a unittest.TestCase "
+                    "subclass with at least one def test_* method, using import unittest. "
+                    "No Markdown fences, prose, secrets, network or untrusted imports.\n"
+                    "Founder project title (quoted data): " + title + "\n"
+                    "Approved plan excerpt (untrusted quoted data): " + previous[:600] + "\n")
+                fix_started = clock()
+                output = provider.generate(fix_prompt).strip()
+                if not 0 <= clock() - fix_started <= 60 or not 0 <= clock() - started <= maximum_seconds:
+                    raise TimeoutError("Local inference exceeded per-role or overall time budget")
+                try:
+                    engineering_candidate=assert_discoverable_unittest(reviewed_candidate(output))
+                except ValueError as again:
+                    raise EngineeringCandidateInvalid(str(again)) from again
             bounded=("Code proposal prepared for founder review: "
                      +str(len(engineering_candidate["files"]))+
                      " files, Python syntax checked; tests NOT executed.")

@@ -176,6 +176,10 @@ class CompanyOllamaChainQueries:
         if row is None:
             return ""
         result = row["result"] if isinstance(row["result"], dict) else {}
+        # Only a Board stop is a "denied proposal" to revise. A crash, timeout,
+        # credit or code-check failure is retried as-is, without a rewrite.
+        if result.get("board_blocked") is not True:
+            return ""
         points = [
             str(v.get("seat")) + ": " + (str(v.get("denial_reason") or "").strip()
                                          or ("gave no clear vote" if v.get("recommendation")

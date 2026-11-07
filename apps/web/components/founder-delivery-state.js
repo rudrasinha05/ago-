@@ -87,6 +87,7 @@ const FAILURE_REASONS={
  model_timeout:'The local AI model did not answer in time.',
  model_unreachable:'AGO could not reach the local AI model (Ollama).',
  model_incomplete:'The local AI model returned an incomplete answer.',
+ engineering_candidate_invalid:'The AI developer\'s code proposal failed AGO\'s code check twice (invalid JSON, files or tests). The Board had approved; recover the stage to try again.',
  worker_timeout:'The AI worker did not finish in time.',
  handler_error:'The AI run stopped with an unclassified error (older runs record only this).',
 };

@@ -23,6 +23,7 @@ from ago.security_controls import SecurityControls
 RUN_FAILURE_CODES = frozenset({
     "handler_error", "credit_budget_unavailable", "credit_budget_missing",
     "credit_budget_exceeded", "model_timeout", "model_unreachable", "model_incomplete",
+    "engineering_candidate_invalid",
 })
 
 

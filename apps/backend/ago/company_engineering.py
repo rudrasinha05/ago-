@@ -13,6 +13,12 @@ import re
 
 from ago.github_adapter import validate_operation
 
+class EngineeringCandidateInvalid(ValueError):
+    """The AI developer's code proposal failed AGO's static review twice."""
+
+    failure_code = "engineering_candidate_invalid"
+
+
 _SAFE_SOURCE = re.compile(r"(?:src/[A-Za-z0-9_./-]+\.py|tests/test_[A-Za-z0-9_./-]+\.py|docs/[A-Za-z0-9_./-]+\.md)")
 _SECRET = re.compile(
     r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"

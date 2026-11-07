@@ -14,6 +14,7 @@ const KINDS={
  rework:'AI QA failed the {stage} stage — Founder: create a rework task',
  failed:'The {stage} task failed — Founder: recover the stage',
  revise:'Revise the {stage} proposal to fix the Board feedback and resubmit it',
+ retry_code:'Retry the {stage} task: the AI developer\'s code failed AGO\'s code check',
  revise_limit:'The Board denied the {stage} proposal again after 2 revisions — Founder: read the Board feedback and decide',
  rejected:'The {stage} task approval was rejected — Founder decides what to do',
  unstaffed:'The {stage} stage has no AI worker — staff it first',
@@ -21,7 +22,7 @@ const KINDS={
  done:'Every stage passed AI QA',
 };
 // Steps AGO can do by itself; every other kind needs a person and stops a loop.
-export const AUTOMATIC=new Set(['request','approve','run','qa','revise']);
+export const AUTOMATIC=new Set(['request','approve','run','qa','revise','retry_code']);
 export const MAX_REVISIONS=2;
 
 export function stepLabel(step){
@@ -42,6 +43,7 @@ export function nextAdvanceStep(detail){
    case 'failed':
     // A Board stop (the AI run itself completed) is revised and resubmitted;
     // a crash, timeout or credit failure needs the Founder.
+    if(s.agent_failure_code==='engineering_candidate_invalid')return {...base,kind:'retry_code'};
     return {...base,kind:s.agent_run_status==='completed'&&!s.agent_failure_code?'revise':'failed'};
    case 'proposed':return {...base,kind:'request'};
    case 'waiting_approval':

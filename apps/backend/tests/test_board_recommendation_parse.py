@@ -191,3 +191,43 @@ def test_a_follow_up_without_a_clear_vote_still_stops():
     result = _chain(["BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: plan", "no vote here", "still no vote"])
     assert result["blocked_by_board_seat"] == "Technology Oversight"
     assert result["board_block_reason"] == "unverified"
+
+
+def test_invalid_code_gets_one_correction_with_agos_own_reason_then_a_clear_failure():
+    import pytest
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from ago.company_engineering import EngineeringCandidateInvalid
+    from ago.company_ollama_chain import FULL_BOARD_STAGES, run_four_role_chain
+    from ago.agent_runtime import run_failure_code
+
+    good = ('{"files":[{"path":"src/app.py","content":"def add(a, b):\\n    return a + b\\n"},'
+            '{"path":"tests/test_app.py","content":"import unittest\\nfrom src.app import add\\n'
+            'class T(unittest.TestCase):\\n    def test_add(self):\\n        self.assertEqual(add(1, 2), 3)\\n"}],'
+            '"acceptance_checks":["adds numbers"]}')
+
+    class Coder:
+        def __init__(self, code_answers):
+            self.prompts, self.code_answers = [], list(code_answers)
+
+        def generate(self, prompt):
+            self.prompts.append(prompt)
+            if "Produce ONLY one valid JSON object" in prompt:
+                return self.code_answers.pop(0)
+            return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: plan"
+
+    participants = [{"role": role, "employee_id": str(uuid4()), "employee_name": role}
+                    for role, _, _ in FULL_BOARD_STAGES]
+    task = SimpleNamespace(id=str(uuid4()), action="internal:brief", project_context={
+        "intake_id": str(uuid4()), "title": "AdmissionFlow", "brief": "Admissions"})
+    fixed = Coder(["not json at all", good])
+    result = run_four_role_chain(task=task, participants=participants, provider=fixed,
+                                 engineering_candidates=True)
+    assert result["engineering_candidate_status"] == "syntax_reviewed"
+    retry = [p for p in fixed.prompts if p.startswith("Your previous answer was REJECTED")]
+    assert len(retry) == 1 and "not one JSON document" in retry[0]
+    broken = Coder(["not json", "still not json"])
+    with pytest.raises(EngineeringCandidateInvalid) as caught:
+        run_four_role_chain(task=task, participants=participants, provider=broken,
+                            engineering_candidates=True)
+    assert run_failure_code(caught.value) == "engineering_candidate_invalid"

@@ -383,7 +383,8 @@ def reconcile_attempts(journal: DurableAttemptJournal, tasks, runs) -> dict:
         failure_code = (failure_code if failure_code in (
             "handler_error", "worker_timeout", "credit_budget_unavailable",
             "credit_budget_missing", "credit_budget_exceeded", "model_timeout",
-            "model_unreachable", "model_incomplete") else None)
+            "model_unreachable", "model_incomplete",
+            "engineering_candidate_invalid") else None)
         roles = result.get("roles_completed")
         matched.append({
             "task_id": task_id,

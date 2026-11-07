@@ -176,7 +176,9 @@ def test_generated_engineering_rejects_tests_not_discovered_by_offline_runner(te
 
     class CompleteBoard:
         def generate(self, prompt):
-            if "ROLE: EMPLOYEE\n" in prompt:
+            # The developer's first answer and its one self-correction retry
+            # both return the same undiscoverable tests: still rejected.
+            if "ROLE: EMPLOYEE\n" in prompt or prompt.startswith("Your previous answer was REJECTED"):
                 return json.dumps(source)
             return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Human-review only"
     with pytest.raises(ValueError, match="discoverable unittest.TestCase"):

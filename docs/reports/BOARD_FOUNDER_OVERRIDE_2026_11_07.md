@@ -90,3 +90,11 @@ Fixes:
 - **Missing-vote follow-up**, full Board only. When a seat's draft contains no BOARD_RECOMMENDATION at all, the same seat gets one short vote question (metered, bounded). A clear reply is prepended to the persisted draft, so the vote is stored with the evidence. A draft with conflicting votes is not asked again and stays unverified. The legacy two-seat mode is unchanged.
 - **Prompt:** Board prompts end with a reminder to start with the vote line and not to copy the previous draft's format.
 - **Feedback is carried forward:** `revision_notes` labels an unclear vote as "gave no clear vote". When the latest attempt has no stated reason, it appends the earlier recovery's feedback ("Earlier feedback: …").
+
+## Run 9: the full Board approved; the code proposal failed its check
+In revision 2, after the PM rewrote the scope following the CTO's feedback, all five Board seats approved and the PM role completed. The engineering worker's JSON then failed AGO's static code check. That raised a plain ValueError, which was recorded as `handler_error` ("unclassified").
+
+Fixes:
+- **Self-correction.** The same developer is told which of AGO's fixed check messages failed (AGO's own text, never model text) and gets one corrected answer. A second failure raises `EngineeringCandidateInvalid`, with failure code `engineering_candidate_invalid`. It is added to `RUN_FAILURE_CODES`, to the preflight mirror, to `local_approved_agent_batch`, and to the UI reason. Nothing is executed.
+- **Advance.** `engineering_candidate_invalid` becomes the automatic step `retry_code`: an audited recovery, counted within the 2-attempt limit.
+- **Bug fix.** `revision_notes` returns '' unless the replaced run was a Board stop. A crash, timeout, credit or code-check recovery no longer triggers the PM scope rewrite.

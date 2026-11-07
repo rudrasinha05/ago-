@@ -30,15 +30,16 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
   if(!AUTOMATIC.has(step.kind)){add(stepLabel(step)+'. AGO stopped here.',step.kind==='done'?'ok':'stop');return false;}
   add('Next: '+stepLabel(step)+'…');
   const stage=current.stages.find(s=>s.task_id===step.task_id);
-  if(step.kind==='revise'){
+  if(step.kind==='revise'||step.kind==='retry_code'){
    if(revisions.current>=MAX_REVISIONS){add(stepLabel({...step,kind:'revise_limit'})+'. AGO stopped here.','stop');return false;}
    const view=boardDenial(stage?.founder_agent_result);
-   const reason=revisionReason(view?.votes);
+   const reason=step.kind==='retry_code'?'Retry after the AI developer\'s code failed AGO\'s code check (Board had approved)':revisionReason(view?.votes);
    const r=await api.request(BASE+id+'/stages/'+encodeURIComponent(step.stage)+'/recovery',
     {method:'POST',body:{failed_task_id:step.task_id,reason}});
    if(r?.kind!=='ago_stage_task_recovery_v1'||r.run_started!==false){add('The revision was not recorded. Check the stage before retrying.','stop');return false;}
    revisions.current++;
-   add('Board feedback sent to the team for revision '+revisions.current+' of '+MAX_REVISIONS+': '+reason.replace(/^Revise to fix Board feedback: /,'')+'. The revised proposal will go back to the Board.','ok');
+   add(step.kind==='retry_code'?'New task created to retry the code (attempt '+revisions.current+' of '+MAX_REVISIONS+').'
+    :'Board feedback sent to the team for revision '+revisions.current+' of '+MAX_REVISIONS+': '+reason.replace(/^Revise to fix Board feedback: /,'')+'. The revised proposal will go back to the Board.','ok');
    return true;
   }
   if(step.kind==='request'){

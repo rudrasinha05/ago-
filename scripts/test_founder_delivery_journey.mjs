@@ -178,7 +178,7 @@ test('advance picks the one next step from the first stage that has not passed Q
  assert.deepEqual([next.kind,next.stage,next.task_id],['request','architecture','architecture-task']);
  assert.equal(kind(pass),'done');
  assert.equal(nextAdvanceStep({stages:[]}).kind,'unstaffed');
- assert.deepEqual([...AUTOMATIC].sort(),['approve','qa','request','revise','run']);
+ assert.deepEqual([...AUTOMATIC].sort(),['approve','qa','request','retry_code','revise','run']);
  assert.match(stepLabel({kind:'run',stage:'discovery'}),/Run the discovery task with the AI team \(uses 7 internal credits\)/);
  const reviewers=[{id:'w'},{id:'q'}];
  assert.equal(pickQaReviewer(reviewers,{approved_assignee_id:'w'}).id,'q');
@@ -234,4 +234,12 @@ test('a Board stop is revised and resubmitted; a crash is not',async()=>{
  assert.equal(revisionReason(null),'Revise to fix Board feedback: Board did not approve');
  assert.ok(revisionReason([{seat:'X',recommendation:'deny',reason:'r'.repeat(900)}]).length<=500);
  assert.match(stepLabel({kind:'revise_limit',stage:'discovery'}),/after 2 revisions/);
+});
+test('an invalid code proposal is retried automatically and explained',async()=>{
+ const {nextAdvanceStep,AUTOMATIC,stepLabel}=await import('../apps/web/components/project-advance-state.js');
+ const {failureReason}=await import('../apps/web/components/founder-delivery-state.js');
+ const step=nextAdvanceStep({stages:[{stage:'discovery',position:1,task_id:'t',task_status:'failed',agent_run_status:'failed',agent_failure_code:'engineering_candidate_invalid'}]});
+ assert.equal(step.kind,'retry_code');assert.ok(AUTOMATIC.has('retry_code'));
+ assert.match(stepLabel(step),/code failed AGO's code check/);
+ assert.match(failureReason('engineering_candidate_invalid'),/failed AGO's code check twice/);
 });

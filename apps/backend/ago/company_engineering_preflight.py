@@ -18,7 +18,7 @@ from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 RUN_FAILURE_CODES = (
     "handler_error", "worker_timeout", "credit_budget_unavailable",
     "credit_budget_missing", "credit_budget_exceeded", "model_timeout",
-    "model_unreachable", "model_incomplete",
+    "model_unreachable", "model_incomplete", "engineering_candidate_invalid",
 )
 
 BLOCKER_CODES = {
