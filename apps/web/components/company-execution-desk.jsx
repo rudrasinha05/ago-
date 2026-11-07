@@ -5,8 +5,9 @@ import {executionSummary,nextTaskAction} from '@ago/sdk/company-execution';
 import {CompanyFirstRun} from './company-first-run';
 import {RecoveryHint} from './recovery-hint';
 import {TaskSelfCheck} from './task-self-check';
+import {CreditAllowance} from './credit-allowance';
 export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,onEmployee,projectScope=null,onClearScope}){
- const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[showAll,setShowAll]=useState(false),[failure,setFailure]=useState(null);
+ const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[showAll,setShowAll]=useState(false),[failure,setFailure]=useState(null),[credits,setCredits]=useState(undefined);
  const canView=me.permissions?.includes('task:read')&&me.permissions?.includes('organization:read');
  if(!canView)return null;
  const visibleTasks=projectScope&&tasks?tasks.filter(t=>projectScope.taskIds.includes(t.id)):tasks;
@@ -39,6 +40,7 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
    <p>Real server-side task records only. Approval enables governed execution; no automatic model run, source commit, or release occurs from viewing this desk.</p>
    {projectScope&&<p role="status">Showing work for <strong>{projectScope.title}</strong>. <button type="button" onClick={onClearScope}>Show all company work</button></p>}
    {!projectScope&&<CompanyFirstRun api={api} me={me} employees={employees} tasks={tasks} onCreated={onChange}/>}
+   <CreditAllowance api={api} me={me} onBalance={setCredits}/>
    {summary===null?<p role="alert">Task activity unavailable. Execution is disabled until the authenticated server responds.</p>:<>
     <div className="execution-metrics">
       <span><strong>{summary.proposed}</strong>Needs task approval request</span>
@@ -58,7 +60,7 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
           {busy===t.id?'Processing…':choice.action==='request'?'Request approval':'Run approved AI'}
         </button>}
         {t.status==='completed'&&<Link href="/governance/">Review independent QA in Governance →</Link>}
-        {t.status==='waiting_approval'&&t.project_name&&<TaskSelfCheck api={api} me={me} task={t}/>}
+        {t.status==='waiting_approval'&&t.project_name&&<TaskSelfCheck api={api} me={me} task={t} credits={credits}/>}
       </article>;
     })}</div>
    </>}

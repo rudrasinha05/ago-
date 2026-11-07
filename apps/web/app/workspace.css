@@ -602,3 +602,9 @@
 .project-manager-change input[type=checkbox]{width:20px;height:20px;justify-self:start}.project-manager-change button{margin-top:12px;min-height:44px}
 .project-manager-change button:disabled{opacity:1;background:#172535;color:#aabed2;border-color:#344b62}
 .task-self-check .task-self-check-again{margin-top:8px;padding:5px 10px;font-size:12px}
+/* Internal AI credit allowance on the Execution Desk. */
+.credit-allowance{margin:10px 0;padding:12px 14px;border:1px solid #2b4a6f;border-radius:10px;background:#0a1830;color:#dce8f7}
+.credit-allowance h4{margin:0 0 6px;font-size:14px}.credit-allowance p{margin:4px 0;font-size:13px}
+.credit-allowance-form{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin-top:6px}
+.credit-allowance-form label{display:grid;gap:4px;font-size:13px}.credit-allowance-form input[type=number]{width:140px}
+.credit-allowance-form .credit-confirm{display:flex;gap:6px;align-items:center;flex-basis:100%}

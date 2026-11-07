@@ -20,6 +20,7 @@ const BLOCKERS={
  board_pm_worker_identities_not_distinct:['One employee holds two roles in the AI chain.','Give each Board seat, the manager and the worker to different employees.'],
  implementation_stage_not_activated:['No AI developer is activated for the implementation stage.','Founder or CEO: activate the implementation stage in Projects.'],
  seven_distinct_ai_employees_required:['The AI chain needs seven different AI employees.','Fill the missing Board, manager or worker roles.'],
+ prior_run_found_do_not_replay:['This task already ran once. AGO never replays a run automatically.','Inspect the recorded result; for a failed run, request a new authorized recovery task.'],
  company_hierarchy_not_verified:['The company hierarchy could not be verified for this task.','Review Board & Roles and the project staffing.'],
 };
 const GATES={
@@ -44,4 +45,25 @@ export function selfCheck(report){
   .map(g=>GATES[g]||String(g).replaceAll('_',' '));
  return {ready:blockers.length===0,blockers,repair,laterGates,
   roles:Array.isArray(report.assigned_role_names)?report.assigned_role_names.filter(r=>typeof r==='string'):[]};
+}
+
+// The server checks credits only at Run; the allowance is readable before.
+// `credits` is the recorded balance (null/undefined = unknown: add nothing).
+// Internal AI credits cap how many local model calls AGO may attempt; they are
+// not money. One full AI-team run (5 Board roles, PM, worker) uses 7 credits.
+export const CREDITS_PER_CHAIN_RUN=7;
+const finite=value=>{const n=Number(value);return Number.isFinite(n)?n:null;};
+/** Parse the scorecard's virtual_credit_budget; null when not readable. */
+export function creditBalance(scorecard){
+ const b=scorecard?.virtual_credit_budget;
+ if(!b)return null;
+ const ceiling=finite(b.ceiling),consumed=finite(b.consumed),remaining=finite(b.remaining);
+ if(ceiling===null||consumed===null||remaining===null||ceiling<0||consumed<0)return null;
+ return {ceiling,consumed,remaining};
+}
+export function creditBlocker(check,credits){
+ if(!check||!credits||typeof credits.remaining!=='number'||credits.remaining>=CREDITS_PER_CHAIN_RUN)return check;
+ const what='Not enough internal AI credits: '+credits.remaining+' left, and one AI-team run needs '+CREDITS_PER_CHAIN_RUN+'.';
+ return {...check,ready:false,blockers:[...check.blockers,{code:'virtual_credit_budget_low',what,
+  fix:'Founder: raise the AI credit allowance on this desk (internal credits, not money).'}]};
 }

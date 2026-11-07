@@ -83,3 +83,16 @@ test('self-check explains every blocker with who fixes it and never invents read
  assert.equal(repair.repair,'AI Engineer reports to AGO AI CEO; it must report to project manager Project Manager.');
  for(const bad of [null,{},{kind:'other',blocking_checks:[]},{kind:base.kind}])assert.throws(()=>selfCheck(bad));
 });
+test('credit balance is read strictly and a low balance becomes a visible blocker',async()=>{
+ const {creditBalance,creditBlocker,selfCheck}=await import('../apps/web/components/task-self-check-state.js');
+ // The live Founder data: no allowance configured.
+ assert.deepEqual(creditBalance({virtual_credit_budget:{ceiling:'0',consumed:'0',remaining:'0'}}),{ceiling:0,consumed:0,remaining:0});
+ for(const bad of [null,{},{virtual_credit_budget:{ceiling:'x',consumed:'0',remaining:'0'}},{virtual_credit_budget:{ceiling:'-1',consumed:'0',remaining:'0'}}])
+  assert.equal(creditBalance(bad),null);
+ const ok=selfCheck({kind:'ago_founder_engineering_preflight_v1',blocking_checks:[]});
+ assert.equal(creditBlocker(ok,{ceiling:0,consumed:0,remaining:0}).ready,false);
+ assert.match(creditBlocker(ok,{remaining:0}).blockers[0].what,/0 left/);
+ assert.equal(creditBlocker(ok,{remaining:7}).ready,true);
+ assert.equal(creditBlocker(ok,null).ready,true,'unknown balance adds no invented blocker');
+ assert.equal(creditBlocker(ok,undefined),ok);
+});

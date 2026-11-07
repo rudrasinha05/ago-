@@ -290,6 +290,41 @@ test('AGO self-check explains why an approved project task cannot run, before Ru
  expect(errors).toEqual([]);
 });
 
+test('AGO warns before Run when AI credits are 0, and the Founder sets an allowance without running anything',async({page})=>{
+ // Live case (Founder PC, 2026-11-07): discovery failed with handler_error because the allowance was 0.
+ const {calls,errors}=await fixtures(page);
+ const task='45000000-0000-4000-8000-000000000045';
+ await page.route('**/v1/console/me',route=>route.fulfill({status:200,json:{id:user,tenant_id:tenant,display_name:'Founder',roles:['founder'],
+  permissions:[...permissions,'agent:read','insights:read','economy:manage']}}));
+ await page.route('**/v1/organization/company/activity',route=>route.fulfill({status:200,json:[
+  {id:task,action:'internal:brief',status:'waiting_approval',assignee_id:user,project_name:'AdmissionFlow'}]}));
+ await page.route(/\/engineering-preflight$/,route=>route.fulfill({status:200,json:{kind:'ago_founder_engineering_preflight_v1',
+  blocking_checks:[],assigned_role_names:['ceo','pm','employee'],unverified_execution_gates:['virtual_credit_budget']}}));
+ let budget={ceiling:'0',consumed:'0',remaining:'0'};const posted=[];
+ await page.route('**/v1/insights/scorecard',route=>route.fulfill({status:200,json:{counts:{},virtual_credit_budget:budget}}));
+ await page.route('**/v1/insights/budget',route=>{posted.push(route.request().postDataJSON());
+  budget={ceiling:'30',consumed:'0',remaining:'30'};return route.fulfill({status:200,json:budget});});
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Execution/}).click();
+ const allowance=page.getByRole('region',{name:'AI credit allowance'});
+ await expect(allowance).toContainText('0 of 0 internal credits available');
+ const check=page.getByRole('group',{name:'AGO self-check for AdmissionFlow · '+task.slice(0,8)});
+ await expect(check).toContainText('Self-check: Run will be refused.');
+ await expect(check).toContainText('Not enough internal AI credits: 0 left');
+ const save=allowance.getByRole('button',{name:'Save allowance'});
+ await expect(save).toBeDisabled();
+ await allowance.getByLabel('New total allowance').fill('30');
+ await expect(save).toBeDisabled();
+ await allowance.getByRole('checkbox').check();
+ await save.click();
+ await expect(allowance).toContainText('AI credit allowance saved: 30 of 30 credits available. Nothing was run.');
+ expect(posted).toEqual([{ceiling:30}]);
+ await expect(check).toContainText('Self-check passed.');
+ await accessibility(page);
+ expect(calls.filter(x=>/\/run$|request-approval/.test(x.path))).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('self-check stays silent when the server does not offer it (403)',async({page})=>{
  const {errors}=await fixtures(page);
  const task='30000000-0000-4000-8000-000000000044';
