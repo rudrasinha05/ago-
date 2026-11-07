@@ -122,6 +122,8 @@ class ApprovedProjectDb:
                             "kind":"ai","action":"internal:brief"}])
         if "FROM ago_employees" in sql:
             return Cursor([{"id":self.pm,"name":"PM AI","kind":"ai"}])
+        if "FROM ago_plan_step_task_recoveries v" in sql:
+            return Cursor([])  # first attempt: no earlier Board denial to revise
         if "FROM ago_board_founder_overrides" in sql:
             # No Founder override recorded for this project (Founder rule, 073).
             return Cursor([])

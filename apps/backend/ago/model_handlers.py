@@ -270,6 +270,8 @@ def optional_model_handlers(
                 engineering_candidates=engineering_enabled,
                 on_role_completed=record_role_completed,
                 overridden_seats=overrides,
+                revision_notes=repositories.resolve(CompanyOllamaChainQueries).revision_notes(
+                    tenant_id=actor.tenant_id, task_id=task.id),
             )
 
         handlers["internal:brief"] = governed_company_handoff

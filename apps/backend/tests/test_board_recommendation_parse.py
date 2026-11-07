@@ -135,3 +135,33 @@ def test_denial_reason_needs_exactly_one_line():
     assert denial_reason("DENY_REASON: a\nDENY_REASON: b") == ""
     assert denial_reason("**DENY_REASON:** budget unknown") == "budget unknown"
     assert denial_reason("BOARD_RECOMMENDATION: DENY") == ""
+
+
+def test_a_revision_carries_board_feedback_into_every_role_and_fits_the_bound():
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from ago.company_ollama_chain import FULL_BOARD_STAGES, run_four_role_chain
+
+    class Recorder:
+        def __init__(self):
+            self.prompts = []
+
+        def generate(self, prompt):
+            self.prompts.append(prompt)
+            return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: revised plan"
+
+    participants = [{"role": role, "employee_id": str(uuid4()), "employee_name": role}
+                    for role, _, _ in FULL_BOARD_STAGES]
+    task = SimpleNamespace(id=str(uuid4()), action="internal:brief", project_context={
+        "intake_id": str(uuid4()), "title": "T" * 180, "brief": "B" * 1500})
+    notes = "Strategy & Vision: brief lacks the problem it solves. " * 30
+    model = Recorder()
+    result = run_four_role_chain(task=task, participants=participants, provider=model,
+                                 revision_notes=notes)
+    assert result["revision_of_denied_attempt"] is True
+    assert len(model.prompts) == 7
+    assert all("REVISION: the Board denied the previous attempt" in p for p in model.prompts)
+    assert all("brief lacks the problem it solves" in p and len(p) <= 4000 for p in model.prompts)
+    first = Recorder()
+    run_four_role_chain(task=task, participants=participants, provider=first)
+    assert not any("REVISION:" in p for p in first.prompts)

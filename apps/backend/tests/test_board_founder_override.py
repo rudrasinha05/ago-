@@ -91,6 +91,12 @@ def test_founder_allows_the_project_past_a_finance_denial(case, monkeypatch):
     assert seats == frozenset({'Finance & Budget'})
     assert CompanyOllamaChainQueries(db).founder_board_overrides(
         tenant_id=tenant, intake_id=str(uuid4())) == frozenset()
+    # deny -> revise -> resubmit: the new task carries the Board feedback.
+    notes = CompanyOllamaChainQueries(db).revision_notes(
+        tenant_id=tenant, task_id=allowed['recovery_task_id'])
+    assert notes.startswith('Finance & Budget: No cost estimate for the pilot.')
+    assert 'Founder allowed the project over the Finance & Budget denial' in notes
+    assert CompanyOllamaChainQueries(db).revision_notes(tenant_id=tenant, task_id=failed) == ''
     # The stage now points at the new task; the old one cannot be allowed again.
     post(client, endpoint, founder, body, expected=400)
     with pytest.raises(Exception, match='append-only|cannot|immutable'):

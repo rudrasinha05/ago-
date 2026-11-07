@@ -178,7 +178,7 @@ test('advance picks the one next step from the first stage that has not passed Q
  assert.deepEqual([next.kind,next.stage,next.task_id],['request','architecture','architecture-task']);
  assert.equal(kind(pass),'done');
  assert.equal(nextAdvanceStep({stages:[]}).kind,'unstaffed');
- assert.deepEqual([...AUTOMATIC].sort(),['approve','qa','request','run']);
+ assert.deepEqual([...AUTOMATIC].sort(),['approve','qa','request','revise','run']);
  assert.match(stepLabel({kind:'run',stage:'discovery'}),/Run the discovery task with the AI team \(uses 7 internal credits\)/);
  const reviewers=[{id:'w'},{id:'q'}];
  assert.equal(pickQaReviewer(reviewers,{approved_assignee_id:'w'}).id,'q');
@@ -220,4 +220,18 @@ test('board votes show who denied and why; only Finance/Risk/Quality after CEO+C
  assert.equal(boardDenial(null),null);
  const line=runBlocker({status:'completed',delivery_status:'blocked',result});
  assert.match(line,/Reason given: “No cost estimate\.”\. The AI CEO and CTO approved, so you can allow the project on the stage card\.$/);
+});
+test('a Board stop is revised and resubmitted; a crash is not',async()=>{
+ const {nextAdvanceStep,revisionReason,AUTOMATIC,MAX_REVISIONS,stepLabel}=await import('../apps/web/components/project-advance-state.js');
+ const s=extra=>({stage:'discovery',position:1,task_id:'t',...extra});
+ assert.equal(nextAdvanceStep({stages:[s({task_status:'failed',agent_run_status:'completed'})]}).kind,'revise');
+ assert.equal(nextAdvanceStep({stages:[s({task_status:'failed',agent_run_status:'failed',agent_failure_code:'model_timeout'})]}).kind,'failed');
+ assert.equal(nextAdvanceStep({stages:[s({task_status:'failed',agent_run_status:'completed',agent_failure_code:'handler_error'})]}).kind,'failed');
+ assert.ok(AUTOMATIC.has('revise'));assert.equal(MAX_REVISIONS,2);
+ assert.equal(revisionReason([{seat:'Strategy & Vision',recommendation:'deny',reason:'Brief lacks the problem it solves.'},
+  {seat:'Technology Oversight',recommendation:'approve',reason:''},{seat:'Finance & Budget',recommendation:'unverified',reason:''}]),
+  'Revise to fix Board feedback: Strategy & Vision: Brief lacks the problem it solves.; Finance & Budget: denied without a stated reason');
+ assert.equal(revisionReason(null),'Revise to fix Board feedback: Board did not approve');
+ assert.ok(revisionReason([{seat:'X',recommendation:'deny',reason:'r'.repeat(900)}]).length<=500);
+ assert.match(stepLabel({kind:'revise_limit',stage:'discovery'}),/after 2 revisions/);
 });

@@ -400,6 +400,10 @@
           "arguments": "self, *, tenant_id: str, intake_id: str",
           "returns": "frozenset"
         },
+        "revision_notes": {
+          "arguments": "self, *, tenant_id: str, task_id: str",
+          "returns": "str"
+        },
         "record_verified_handoff": {
           "arguments": "self, *, tenant_id: str, founder_id: str, task_id: str, role: str, employee_id: str, blocked: bool, participants: list[dict]",
           "returns": "None"

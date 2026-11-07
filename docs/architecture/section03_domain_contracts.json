@@ -366,6 +366,7 @@
     ],
     "company_ollama_chain": [],
     "company_ollama_chain_queries": [
+      "ago_agent_runs",
       "ago_board_founder_overrides",
       "ago_company_board_appointments",
       "ago_company_chat",
@@ -374,6 +375,7 @@
       "ago_founder_intakes",
       "ago_founder_project_lead",
       "ago_governed_tasks",
+      "ago_plan_step_task_recoveries",
       "ago_plan_steps",
       "ago_project_stage_delegation_activations",
       "ago_strategy_plans"

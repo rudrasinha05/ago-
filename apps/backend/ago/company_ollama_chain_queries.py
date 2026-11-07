@@ -156,6 +156,34 @@ class CompanyOllamaChainQueries:
         ).fetchall()
         return frozenset(str(r["seat"]) for r in rows)
 
+    def revision_notes(self, *, tenant_id: str, task_id: str) -> str:
+        """Board feedback on the attempt this task replaces (deny -> revise -> resubmit).
+
+        Reads only the audited recovery link and the replaced task's recorded
+        Board votes; returns bounded plain text (or '' for a first attempt).
+        """
+        UUID(tenant_id)
+        UUID(task_id)
+        row = self.db.execute(
+            """SELECT v.reason,r.result FROM ago_plan_step_task_recoveries v
+               LEFT JOIN ago_agent_runs r ON r.tenant_id=v.tenant_id AND r.task_id=v.failed_task_id
+               WHERE v.tenant_id=%s AND v.recovery_task_id=%s""",
+            (tenant_id, task_id),
+        ).fetchone()
+        if row is None:
+            return ""
+        result = row["result"] if isinstance(row["result"], dict) else {}
+        points = [
+            str(v.get("seat")) + ": " + (str(v.get("denial_reason") or "").strip()
+                                         or "denied without a stated reason")
+            for v in result.get("board_recommendations") or []
+            if isinstance(v, dict) and v.get("recommendation") in ("deny", "unverified")
+        ]
+        notes = "; ".join(points)
+        if row["reason"]:
+            notes = (notes + " | Note: " if notes else "Note: ") + str(row["reason"])
+        return notes[:700]
+
     def record_verified_handoff(
         self, *, tenant_id: str, founder_id: str, task_id: str, role: str,
         employee_id: str, blocked: bool, participants: list[dict],

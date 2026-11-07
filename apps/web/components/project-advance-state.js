@@ -13,13 +13,16 @@ const KINDS={
  running:'The {stage} task is running — wait for it to finish',
  rework:'AI QA failed the {stage} stage — Founder: create a rework task',
  failed:'The {stage} task failed — Founder: recover the stage',
+ revise:'Revise the {stage} proposal to fix the Board feedback and resubmit it',
+ revise_limit:'The Board denied the {stage} proposal again after 2 revisions — Founder: read the Board feedback and decide',
  rejected:'The {stage} task approval was rejected — Founder decides what to do',
  unstaffed:'The {stage} stage has no AI worker — staff it first',
  unknown:'The {stage} stage is in a state AGO cannot advance automatically',
  done:'Every stage passed AI QA',
 };
 // Steps AGO can do by itself; every other kind needs a person and stops a loop.
-export const AUTOMATIC=new Set(['request','approve','run','qa']);
+export const AUTOMATIC=new Set(['request','approve','run','qa','revise']);
+export const MAX_REVISIONS=2;
 
 export function stepLabel(step){
  return KINDS[step.kind].replace('{stage}',step.stage||'');
@@ -36,7 +39,10 @@ export function nextAdvanceStep(detail){
   if(!s.task_id)return {...base,kind:'unstaffed'};
   if(s.qa_verdict==='fail')return {...base,kind:'rework'};
   switch(s.task_status){
-   case 'failed':return {...base,kind:'failed'};
+   case 'failed':
+    // A Board stop (the AI run itself completed) is revised and resubmitted;
+    // a crash, timeout or credit failure needs the Founder.
+    return {...base,kind:s.agent_run_status==='completed'&&!s.agent_failure_code?'revise':'failed'};
    case 'proposed':return {...base,kind:'request'};
    case 'waiting_approval':
     if(s.task_approval_status==='approved')return {...base,kind:'run'};
@@ -79,4 +85,11 @@ export function runBlocker(result){
  if(result.delivery_status&&result.delivery_status!=='completed'&&result.delivery_status!=='delivered')
   return 'The run finished but delivery is '+result.delivery_status+'. Inspect the stage before anything else.';
  return null;
+}
+
+/** Recovery reason that carries the Board feedback into the next attempt. */
+export function revisionReason(votes){
+ const points=(Array.isArray(votes)?votes:[]).filter(v=>v&&v.recommendation!=='approve')
+  .map(v=>v.seat+': '+(v.reason||'denied without a stated reason'));
+ return ('Revise to fix Board feedback: '+(points.join('; ')||'Board did not approve')).slice(0,500);
 }

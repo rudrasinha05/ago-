@@ -1135,6 +1135,49 @@ test('advance project walks one stage through approval, AI team approval, run an
  expect(calls.filter(x=>/\/decision$/.test(x.path))).toEqual([]);
 });
 
+test('a Board denial is revised with its reasons and resubmitted until the Board approves',async({page})=>{
+ const {errors}=await deliveryFixtures(page);
+ const first='56000000-0000-4000-8000-000000000056',second='57000000-0000-4000-8000-000000000057',qa='58000000-0000-4000-8000-000000000058';
+ const project={...deliveryProject(),stages:[{stage:'discovery',position:1,employee:'Business Analyst',task_id:first,task_status:'waiting_approval',qa_verdict:null}]};
+ const denied={kind:'local_company_governed_handoff',board_blocked:true,blocked_by_board_seat:'Strategy & Vision',board_block_reason:'deny',
+  founder_override_available:false,roles_completed:1,roles_expected:7,board_recommendations:[{seat:'Strategy & Vision',recommendation:'deny',
+   denial_reason:'Brief lacks the problem it solves.',founder_override:false}]};
+ let stage={stage:'discovery',position:1,task_id:first,task_status:'waiting_approval',task_approval_status:'approved',agent_run_status:null,qa_verdict:null};
+ const sequence=[];let runs=0;
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([project])}));
+ await page.route('**/v1/organization/company/governance',route=>route.fulfill({status:200,json:{board:[],employees:[{id:qa,name:'Quinn',kind:'ai',role_title:'QA Engineer'}]}}));
+ await page.route('**/v1/organization/company/projects/'+project.project_id,route=>route.fulfill({status:200,json:{id:project.project_id,title:project.title,plan_status:'active',stages:[{...stage}]}}));
+ await page.route(/\/engineering-preflight$/,route=>route.fulfill({status:200,json:{kind:'ago_founder_engineering_preflight_v1',blocking_checks:[],unverified_execution_gates:[]}}));
+ await page.route('**/v1/insights/scorecard',route=>route.fulfill({status:200,json:{virtual_credit_budget:{ceiling:30,consumed:0,remaining:30}}}));
+ await page.route(/\/v1\/agents\/tasks\/[^/]+\/run$/,route=>{runs++;sequence.push('run'+runs);
+  if(runs===1){Object.assign(stage,{task_status:'failed',agent_run_status:'completed',agent_failure_code:null,founder_agent_result:denied});
+   return route.fulfill({status:200,json:{status:'completed',delivery_status:'blocked',result:denied}});}
+  Object.assign(stage,{task_status:'completed',agent_run_status:'completed',founder_agent_result:null});
+  return route.fulfill({status:200,json:{status:'completed',delivery_status:'completed',result:{board_blocked:false}}});});
+ await page.route(/\/stages\/discovery\/recovery$/,route=>{sequence.push('revise:'+route.request().postDataJSON().reason);
+  stage={stage:'discovery',position:1,task_id:second,task_status:'proposed',task_approval_status:null,agent_run_status:null,qa_verdict:null};
+  return route.fulfill({status:200,json:{kind:'ago_stage_task_recovery_v1',failed_task_id:first,recovery_task_id:second,recovery_task_status:'proposed',run_started:false}});});
+ await page.route('**/v1/console/tasks/'+second+'/request-approval',route=>{sequence.push('request');
+  Object.assign(stage,{task_status:'waiting_approval',task_approval_status:'pending'});return route.fulfill({status:200,json:{status:'waiting_approval'}});});
+ await page.route('**/v1/organization/company/projects/'+project.project_id+'/ceo/reconcile',route=>{sequence.push('approve');stage.task_approval_status='approved';
+  return route.fulfill({status:200,json:{approved_task_ids:[second],blocked_task_ids:[],task_approvers:[{task_id:second,approver_name:'Mira',approver_level:'manager'}]}});});
+ await page.route(/\/stages\/discovery\/ai-qa$/,route=>{sequence.push('qa');stage.qa_verdict='pass';
+  return route.fulfill({status:200,json:{kind:'ago_ai_qa_review_v1',task_id:second,verdict:'pass',qa_employee_name:'Quinn',review_recorded:true,
+   receipt_id:'59000000-0000-4000-8000-000000000059',executed_or_released:false}});});
+ await login(page);await navigate(page,'Organization');
+ const box=page.getByRole('article',{name:'Delivery: '+project.title}).getByRole('group',{name:'Advance '+project.title});
+ await expect(box).toContainText('AGO sends the Board’s reasons back to the team and resubmits a revised proposal (up to 2 times)');
+ await box.getByRole('checkbox').check();
+ await box.getByRole('button',{name:'Keep going until I am needed'}).click();
+ const steps=box.getByRole('list',{name:'Steps AGO took for '+project.title});
+ await expect(steps).toContainText('Every stage passed AI QA. AGO stopped here.',{timeout:15000});
+ await expect(steps).toContainText('Strategy & Vision — it recommended DENY (1 of 7 AI roles ran). Reason given: “Brief lacks the problem it solves.”. AGO will revise the proposal and resubmit it.');
+ await expect(steps).toContainText('Board feedback sent to the team for revision 1 of 2: Strategy & Vision: Brief lacks the problem it solves.');
+ expect(sequence).toEqual(['run1','revise:Revise to fix Board feedback: Strategy & Vision: Brief lacks the problem it solves.','request','approve','run2','qa']);
+ await accessibility(page);
+ expect(errors).toEqual([]);
+});
+
 test('advance project stops at a self-check blocker and runs nothing',async({page})=>{
  const {calls,errors}=await deliveryFixtures(page);
  const task='53000000-0000-4000-8000-000000000053';

@@ -2,7 +2,8 @@
 import {useRef,useState} from 'react';
 import {aiQaReviewers} from './founder-delivery-state';
 import {creditBalance,creditBlocker,selfCheck,CREDITS_PER_CHAIN_RUN} from './task-self-check-state';
-import {AUTOMATIC,QA_CREDITS,nextAdvanceStep,pickQaReviewer,runBlocker,stepLabel} from './project-advance-state';
+import {AUTOMATIC,MAX_REVISIONS,QA_CREDITS,nextAdvanceStep,pickQaReviewer,revisionReason,runBlocker,stepLabel} from './project-advance-state';
+import {boardDenial} from './founder-delivery-state';
 
 const BASE='/v1/organization/company/projects/';
 const MAX_STEPS=12;
@@ -11,7 +12,7 @@ const MAX_STEPS=12;
 export function ProjectAdvance({api,project,profiles,onChanged}){
  const [log,setLog]=useState([]),[busy,setBusy]=useState(false),[allow,setAllow]=useState(false);
  const [preview,setPreview]=useState(null),[error,setError]=useState('');
- const stop=useRef(false);
+ const stop=useRef(false),revisions=useRef(0);
  const id=encodeURIComponent(project.project_id);
  const add=(text,tone='info')=>setLog(items=>[...items,{at:new Date().toLocaleTimeString(),text,tone}]);
 
@@ -29,6 +30,17 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
   if(!AUTOMATIC.has(step.kind)){add(stepLabel(step)+'. AGO stopped here.',step.kind==='done'?'ok':'stop');return false;}
   add('Next: '+stepLabel(step)+'…');
   const stage=current.stages.find(s=>s.task_id===step.task_id);
+  if(step.kind==='revise'){
+   if(revisions.current>=MAX_REVISIONS){add(stepLabel({...step,kind:'revise_limit'})+'. AGO stopped here.','stop');return false;}
+   const view=boardDenial(stage?.founder_agent_result);
+   const reason=revisionReason(view?.votes);
+   const r=await api.request(BASE+id+'/stages/'+encodeURIComponent(step.stage)+'/recovery',
+    {method:'POST',body:{failed_task_id:step.task_id,reason}});
+   if(r?.kind!=='ago_stage_task_recovery_v1'||r.run_started!==false){add('The revision was not recorded. Check the stage before retrying.','stop');return false;}
+   revisions.current++;
+   add('Board feedback sent to the team for revision '+revisions.current+' of '+MAX_REVISIONS+': '+reason.replace(/^Revise to fix Board feedback: /,'')+'. The revised proposal will go back to the Board.','ok');
+   return true;
+  }
   if(step.kind==='request'){
    const r=await api.request('/v1/console/tasks/'+encodeURIComponent(step.task_id)+'/request-approval',{method:'POST'});
    add('Approval requested for '+step.stage+' ('+(r?.status||'recorded')+').','ok');return true;
@@ -47,7 +59,12 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
    add('Self-check passed. The AI team is working on '+step.stage+' (this can take a few minutes)…');
    const r=await api.request('/v1/agents/tasks/'+encodeURIComponent(step.task_id)+'/run',{method:'POST',timeoutMs:270000});
    const blocked=runBlocker(r);
-   if(blocked){add(blocked,'stop');return false;}
+   if(blocked){
+    // A Board stop is not the end: the next step revises and resubmits (bounded).
+    const board=r?.result?.board_blocked===true;
+    add(blocked.replace(/ The stage is marked failed; recover it to try again\.$/,'')+(board?' AGO will revise the proposal and resubmit it.':''),board?'info':'stop');
+    return board;
+   }
    add('The AI team finished the '+step.stage+' task. The result is recorded.','ok');return true;
   }
   // qa
@@ -62,7 +79,7 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
 
  async function go(keepGoing){
   if(busy||!allow)return;
-  setBusy(true);setError('');stop.current=false;
+  setBusy(true);setError('');stop.current=false;revisions.current=0;
   try{
    for(let i=0;i<(keepGoing?MAX_STEPS:1);i++){
     const more=await perform(await detail());
@@ -81,6 +98,7 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
  return <div className="project-advance" role="group" aria-label={label}>
   <p><strong>Let AGO move this project forward.</strong> AGO does the next allowed step itself: ask for approval,
    get the AI team’s approval, run the AI team after its self-check, and have an independent AI QA check the result.
+   If the Board denies, AGO sends the Board’s reasons back to the team and resubmits a revised proposal (up to {MAX_REVISIONS} times).
    It stops whenever you are needed. A run uses {CREDITS_PER_CHAIN_RUN} internal credits and a QA check {QA_CREDITS}.</p>
   {preview?<p role="status">Next step: {stepLabel(preview)}.</p>:
    <button type="button" disabled={busy} onClick={look} aria-label={'Show the next step for '+project.title}>Show next step</button>}

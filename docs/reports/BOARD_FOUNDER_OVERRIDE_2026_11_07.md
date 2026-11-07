@@ -56,3 +56,19 @@ Credits used: 8 of 30. Every run went through the full path: approval request, A
 
 ## Not done yet
 - **"If a role is not assigned, the Board assigns it to their employee."** AdmissionFlow's quality stage has no employee. That needs the Board (CEO/CTO) to staff an unstaffed stage with a matching AI employee. A stage without a plan step cannot be added to an active plan today (the `ago_guard_plan_step` rule). This is the next item.
+
+## Deny → revise → resubmit (Founder: "deny ek end nhi h")
+Run 6 on the Founder PC: the Founder allowed the Finance seat, and then the AI CEO denied with a real reason: "brief lacks specific problem-solving capabilities…". The Founder asked that a denial be resolved, improved and resubmitted, because that is the workflow.
+
+- **Backend:** `CompanyOllamaChainQueries.revision_notes(task)` reads the audited recovery link and the replaced task's recorded Board votes, giving each non-approving seat and its `denial_reason`, plus the recovery note, up to 700 characters.
+  - The chain adds a `REVISION:` block to every role's prompt: the Board feedback as quoted data, "fix each point explicitly and say how; do not repeat the denied approach".
+  - The brief and the notes are shortened so the prompt stays within the 4000-character limit.
+  - The result has `revision_of_denied_attempt`.
+- **Advance:** a Board stop (the task failed but its AI run completed, with no failure code) is the step `revise`. AGO creates the audited recovery task, with the reason "Revise to fix Board feedback: <seat>: <reason>…", and continues: request → hierarchy approval → run → QA.
+  - At most 2 revisions per press; after that AGO stops and shows the Board feedback.
+  - Crash, timeout and credit failures still stop for the Founder.
+- **Tests:**
+  - every role's prompt carries the feedback and stays within 4000 characters, and a first attempt has no feedback;
+  - PostgreSQL: `revision_notes` after an override recovery;
+  - unit tests for the step kinds and the reason text;
+  - Playwright: DENY → revise → request → approve → run → QA PASS → done.
