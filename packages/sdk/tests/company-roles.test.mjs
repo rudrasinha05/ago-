@@ -51,3 +51,22 @@ test('board uses recorded department expertise before inventing executive skills
  const noEvidence=buildLeadershipPlan([{id:'g',kind:'ai',name:'Generic Agent',department_id:'unknown'}],[],[],'founder',deps);
  assert.equal(noEvidence.filter(x=>!x.employee_id).length,5);
 });
+
+test('a "Project Management" department is project delivery, and a Project Manager keeps the title the backend requires',()=>{
+ // Live bug (Founder PC, 2026-11-07): "Project Management" matched Executive Office via /management/,
+ // and the employee named "Project Manager" was retitled "Strategic Planning Lead", so no AI PM was eligible.
+ assert.equal(departmentBlueprint('Project Management').name,'Project Delivery');
+ assert.equal(departmentBlueprint('Executive').name,'Executive Office');
+ assert.equal(departmentBlueprint('Management').name,'Executive Office');
+ const deps=[{id:'pm',name:'Project Management'}];
+ const people=[{id:'a',name:'Project Manager',kind:'ai',department_id:'pm'},{id:'b',name:'Delivery Coordinator',kind:'ai',department_id:'pm'}];
+ const plan=buildCompanyRolePlan(people,deps,[{id:'a',role_title:'Project Manager'}],'f');
+ assert.equal(plan.find(x=>x.id==='a').role_title,'Project Manager');
+ // Even when the stored title is the name (an unconfigured default), the protected role is kept.
+ const fresh=buildCompanyRolePlan(people,deps,[],'f');
+ assert.equal(fresh.find(x=>x.id==='a').role_title,'Project Manager');
+ assert.notEqual(fresh.find(x=>x.id==='b').role_title,'Strategic Planning Lead');
+ // A Founder-entered different title is still never overwritten.
+ const kept=buildCompanyRolePlan(people,deps,[{id:'a',role_title:'Delivery Lead',core_responsibilities:'Owns delivery'}],'f');
+ assert.equal(kept.find(x=>x.id==='a').role_title,'Delivery Lead');
+});

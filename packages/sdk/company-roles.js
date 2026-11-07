@@ -1,7 +1,7 @@
 /** Founder-reviewable organization staffing blueprint. Profiles describe work areas, not proven abilities. */
 const duty=(title,area,focus,deliverable)=>({title,area,focus,deliverable});
 const CATALOG=[
- {pattern:/executive|leadership|board|management|corporate|strategy|office of ceo/,name:'Executive Office',roles:[
+ {pattern:/executive|leadership|board|corporate|strategy|office of ceo|^management$/,name:'Executive Office',roles:[
   duty('Chief of Staff','Cross-company coordination','Portfolio governance, ownership mapping','Dependency register and escalation decisions'),
   duty('Strategic Planning Lead','Company strategy','Market hypotheses, objectives and prioritization','Reviewed business roadmap'),
   duty('Portfolio Operations Manager','Program oversight','Capacity, risk and project milestones','Portfolio dashboard and delivery follow-through'),
@@ -53,6 +53,7 @@ const CATALOG=[
   duty('Performance & Reliability Tester','Nonfunctional testing','Load, latency, stability and failure recovery','Measured performance evidence'),
   duty('Release Acceptance Analyst','Release verification','Traceability, requirements and defects','Signed-off quality evidence for founder review')]},
  {pattern:/project|delivery|pmo|operations|workflow/,name:'Project Delivery',roles:[
+  duty('Project Manager','Project accountability','Approved scope, staffing, milestones and escalation','Reviewed project delivery ledger'),
   duty('Program Manager','Cross-team delivery','Dependencies, milestone accountability and escalation','Reviewed milestone and delivery ledger'),
   duty('Technical Project Manager','Engineering coordination','Scoped tickets, blockers and resource planning','Assigned technical work packages'),
   duty('Scrum & Workflow Coordinator','Delivery cadence','Handoffs, cycle times and standups','Updated workflow and blocker reports'),
@@ -85,9 +86,13 @@ const FALLBACK=[
  duty('Project Support Specialist','Unclassified department','Tickets, support and internal handoffs','Work queue and blocker reports')];
 export function departmentBlueprint(name){
  const key=String(name||'').trim().toLowerCase();
- const priority=['Security & Governance','Quality Assurance','People Operations','Finance & Economics','Growth & Commercial','Platform & Reliability','Data & Intelligence','Research & Innovation','Design & UX','Application Engineering','Software Engineering','Product Management','Executive Office','Project Delivery'];
+ const priority=['Security & Governance','Quality Assurance','People Operations','Finance & Economics','Growth & Commercial','Platform & Reliability','Data & Intelligence','Research & Innovation','Design & UX','Application Engineering','Software Engineering','Product Management','Project Delivery','Executive Office'];
  return CATALOG.filter(entry=>entry.pattern.test(key)).sort((a,b)=>priority.indexOf(a.name)-priority.indexOf(b.name))[0]||{name:'Unclassified Department',roles:FALLBACK};
 }
+// Role titles the backend checks literally (project manager eligibility for a
+// Founder project). An employee whose name or title already is one keeps it.
+export const PROTECTED_ROLE_TITLES=['Project Manager','AI Project Manager','AI Project Manager (PM)','Technical Project Manager'];
+const protectedTitle=value=>PROTECTED_ROLE_TITLES.find(t=>t.toLowerCase()===String(value||'').trim().toLowerCase())||null;
 export function hasVerifiedProfile(employee,profile){
  const title=String(profile?.role_title||'').trim();
  const core=String(profile?.core_responsibilities||'').trim();
@@ -114,7 +119,7 @@ export function buildCompanyRolePlan(employees,departments,profiles,founderId){
    const keep=hasVerifiedProfile(employee,current);
    const currentTitle=String(current?.role_title||'').trim();
    const meaningfulTitle=currentTitle&&currentTitle!==employee.name&&currentTitle.toLowerCase()!=='not assigned';
-   const role_title=meaningfulTitle?currentTitle:specialization.title;
+   const role_title=protectedTitle(currentTitle)||(meaningfulTitle?currentTitle:protectedTitle(employee.name)||specialization.title);
    const core_responsibilities='Work area: '+specialization.area+'. Core duties: '+specialization.focus+'. Expected deliverable: '+specialization.deliverable+'. Report progress and blockers to recorded manager.';
    const extra_responsibilities='Proposed expertise focus (not a verified skill assessment): '+specialization.focus+'. Cross-team collaboration, quality evidence, documentation, security/privacy and reproducible handoffs. Project execution requires a separately approved task, actual tools and CEO-led quality verification.';
    result.push({id:employee.id,name:employee.name,kind:employee.kind,department:department?.name||'Department not recorded',manager_id:employee.manager_id||null,role_title:keep?current.role_title:role_title,core_responsibilities:keep?current.core_responsibilities:(String(current?.core_responsibilities||'').trim()||core_responsibilities),extra_responsibilities:keep?current.extra_responsibilities:(String(current?.extra_responsibilities||'').trim()||extra_responsibilities),status:keep?'configured':'proposed',focus:specialization.focus});
