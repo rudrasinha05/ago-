@@ -37,12 +37,42 @@ def test_founder_can_approve_or_deny_without_other_human_or_legacy_flags(case, m
         """, (info["tenant"], proposal["request_id"], info["founder_id"],
               "approved" if decision else "rejected")).fetchone()
     assert client.post(path, json={"approve": True, "reason": "Anonymous"}).status_code == 401
+    # Founder rule (issue #8): the Founder is the only human in an AGO company,
+    # so company-level requests come to the Founder in every environment and
+    # for every governed action, not only small internal validation tasks.
     monkeypatch.setenv("AGO_ENVIRONMENT", "production")
-    production = post(client, "/v1/governance/approvals", founder,
-                      {"action": "internal:brief"})
-    post(client, "/v1/governance/approvals/" + production["request_id"] + "/decision",
-         founder, {"approve": True, "reason": "Production self-review prohibited"},
-         expected=403)
+    for action in ("internal:brief", "tool:review:example", "governance:policy:update"):
+        request = post(client, "/v1/governance/approvals", founder, {"action": action})
+        done = post(client, "/v1/governance/approvals/" + request["request_id"] + "/decision",
+                    founder, {"approve": True, "reason": "Founder decides company request"})
+        assert (done["status"], done["reviewer_id"]) == ("approved", info["founder_id"])
+    inbox = client.get("/v1/organization/company/approvals", headers=founder).json()
+    pending = post(client, "/v1/governance/approvals", founder, {"action": "tool:review:other"})
+    inbox = client.get("/v1/organization/company/approvals", headers=founder).json()
+    row = next(r for r in inbox if r["id"] == pending["request_id"])
+    assert row["founder_solo_mode"] is True and row["decided_by_level"] == "founder"
+    assert "Founder decides" in row["review_routing"]
+    assert "independent" not in row["review_routing"].lower()
+
+
+def test_sole_founder_decides_a_standalone_plan_that_had_no_human_reviewer(case):
+    """Live case: "First task workflow" (no intake project) waited since 2026-10-20."""
+    client, headers, info = case
+    founder = headers["founder"]
+    info["db"].execute("UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s",
+                       (info["tenant"], info["reviewer_id"]))
+    goal = post(client, "/v1/brain/goals", founder,
+                {"title": "AI shopping site", "description": "Create an AI shopping site"})
+    dept = department(client, founder)
+    worker = employee(client, founder, dept)
+    plan = post(client, "/v1/brain/plans", founder,
+                {"goal_id": goal["id"], "title": "First task workflow"})
+    post(client, "/v1/brain/plans/" + plan["id"] + "/steps", founder,
+         {"action": "internal:brief", "assignee_id": worker})
+    submitted = post(client, "/v1/brain/plans/" + plan["id"] + "/submit", founder)
+    decided = post(client, "/v1/governance/approvals/" + submitted["approval_id"] + "/decision",
+                   founder, {"approve": True, "reason": "Founder approves the plan"})
+    assert decided["status"] == "approved"
 
 
 def test_human_reviewer_can_review_operations_but_cannot_take_founder_role(case):

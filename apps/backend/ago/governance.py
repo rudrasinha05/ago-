@@ -175,32 +175,29 @@ class ApprovalRepository:
             """, (tenant_id, reviewer_id)).fetchone() is not None
             if not founder_only and not permitted:
                 raise PermissionError("Active independent reviewer permission required")
-            # Sole-Founder local internal validation is a very narrow fallback,
-            # never a replacement for constitutional/QA/calendar review. Even
-            # this fallback is forbidden while another real human approver exists.
+            # Founder rule (issue #8, 2026-11-06/07): the Founder is the ONLY human
+            # in an AGO company; everyone else is an AI employee. When no other
+            # active human approver exists, company-level requests come to the
+            # Founder (any environment). Project-scoped task work is decided by
+            # the AI hierarchy through approve_ceo_project_task; the Founder, as
+            # the top of that hierarchy, may still decide it. Where another real
+            # human approver exists, independent review stays mandatory.
             founder_self = reviewer_id == str(row["requester_id"])
             sole_local = False
             if founder_self and not founder_only and solo_founder and founder:
-                # Explicit development-only fallback; missing or production
-                # environment cannot turn one owner into a QA reviewer.
-                from os import getenv
-                local = getenv("AGO_ENVIRONMENT", "").lower() in (
-                    "development", "test", "testing"
-                )
-                if local and row["action"] in ("internal:brief", "research:brief"):
-                    other = self.connection.execute("""
-                        SELECT 1 FROM ago_users u
-                        JOIN ago_employees e ON e.tenant_id=u.tenant_id
-                          AND e.id=u.id AND e.kind='human'
-                        JOIN ago_user_roles r ON r.tenant_id=u.tenant_id
-                          AND r.user_id=u.id
-                        JOIN ago_role_permissions p ON p.tenant_id=r.tenant_id
-                          AND p.role=r.role AND p.permission='approval:decide'
-                        WHERE u.tenant_id=%s AND u.id<>%s AND u.active LIMIT 1
-                    """, (tenant_id, reviewer_id)).fetchone()
-                    sole_local = other is None
+                other = self.connection.execute("""
+                    SELECT 1 FROM ago_users u
+                    JOIN ago_employees e ON e.tenant_id=u.tenant_id
+                      AND e.id=u.id AND e.kind='human'
+                    JOIN ago_user_roles r ON r.tenant_id=u.tenant_id
+                      AND r.user_id=u.id
+                    JOIN ago_role_permissions p ON p.tenant_id=r.tenant_id
+                      AND p.role=r.role AND p.permission='approval:decide'
+                    WHERE u.tenant_id=%s AND u.id<>%s AND u.active LIMIT 1
+                """, (tenant_id, reviewer_id)).fetchone()
+                sole_local = other is None
                 if not sole_local:
-                    raise PermissionError("Operational self-review requires a genuine sole-Founder local internal task")
+                    raise PermissionError("Operational self-review requires a sole-Founder company; another human approver must decide")
             decided = current.decide(
                 reviewer_id=reviewer_id,
                 tenant_id=tenant_id,

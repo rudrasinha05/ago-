@@ -20,8 +20,8 @@ const canDecide=(a,me)=>a.status==='pending'&&(
  a.requires_founder_decision
   ? me.roles?.includes('founder')
   : (a.requester_id!==me.id&&!me.roles?.includes('founder')&&me.permissions?.includes('approval:decide')) ||
-    (a.founder_solo_mode&&me.roles?.includes('founder')&&
-     ['internal:brief','research:brief'].includes(a.action))
+    // Sole-Founder company (issue #8): the Founder decides company-level requests.
+    (a.founder_solo_mode&&me.roles?.includes('founder'))
 );
 // Presentation only: server re-verifies real human identity, exact authority,
 // Founder-only strategic scope, independently reviewed operations, bounded CEO work and immutable audit.
@@ -99,7 +99,9 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
  return <section id="company-approval-inbox" className="approval-inbox" aria-label="Approvals inbox">
   <header className="approval-header">
    <div><h3>Approvals inbox <span className="approval-badge">{actionable.length} need my review</span></h3>
-    <p>{pending.length} pending requests company-wide · Founder controls project strategy; CEO handles bounded approved project work; qualified independent humans review ordinary operations and QA.</p></div>
+    <p>{pending.length} pending requests company-wide · {(rows||[]).some(r=>r.founder_solo_mode)
+     ?'Founder decides company-level (major) requests; the AI CEO decides work inside Founder-approved projects. The Founder is the only human in AGO.'
+     :'Founder controls project strategy; CEO handles bounded approved project work; qualified independent humans review ordinary operations and QA.'}</p></div>
    <button type="button" onClick={()=>setShowAll(x=>!x)}>{showAll?'Show pending only':'Show history'}</button>
   </header>
   {rows===null?<p>Approval requests could not be loaded. Check permissions or connection.</p>:
@@ -164,7 +166,7 @@ export function CompanyApprovals({api,me,employees=[],refreshSignal=0,onData,onR
          required maxLength={3000} rows={3} placeholder="Explain the reviewed scope and your decision"/>
        <div className="approval-actions"><button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(true)}>Approve</button>
         <button type="button" disabled={!reason.trim()||busy} onClick={()=>decide(false)}>Deny</button></div>
-      </>:<p>{selected.requires_founder_decision?'Only an authenticated active human founder can decide this strategic request.':selected.founder_solo_mode?'The active Founder can decide this narrowly allowed standalone internal request.':'An independent authorized human reviews operations; CEO may verify only bounded, approved project tasks.'} You can still inspect its details.</p>}
+      </>:<p>{selected.requires_founder_decision?'Only an authenticated active human founder can decide this strategic request.':selected.founder_solo_mode?'The Founder decides this company-level request; AGO has no other human approver.':'An independent authorized human reviews operations; CEO may verify only bounded, approved project tasks.'} You can still inspect its details.</p>}
     </div>}
     {error&&<p role="alert">{error}</p>}{error&&<RecoveryHint error={failure}/>}
    </section>

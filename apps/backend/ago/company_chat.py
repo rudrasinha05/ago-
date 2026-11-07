@@ -1559,6 +1559,12 @@ class CompanyChat:
                    t.id AS task_id,t.action AS task_action,t.status AS task_status,
                    t.assignee_id AS task_assignee_id,
                    assignee.name AS task_assignee_name,
+                   EXISTS (
+                     SELECT 1 FROM ago_plan_steps task_step
+                     JOIN ago_founder_intakes task_i ON task_i.tenant_id=task_step.tenant_id
+                       AND task_i.plan_id=task_step.plan_id
+                     WHERE task_step.tenant_id=t.tenant_id AND task_step.task_id=t.id
+                   ) AS project_task,
                    COALESCE(d.name,td.name) AS department_name,
                    o.id AS opportunity_id,o.title AS opportunity_title,
                    o.target_customer AS opportunity_customer,
@@ -1645,15 +1651,22 @@ class CompanyChat:
                 item["founder_intake_id"] or item["founder_stage_scope"]
             )
             item["requires_founder_decision"] = strategic
-            item["founder_solo_mode"] = bool(
-                solo and not strategic and
-                item["action"] in ("internal:brief", "research:brief")
+            # Issue #8: the Founder is the only human; everyone else is AI.
+            # Company-level requests go to the Founder; project task work goes
+            # to the AI hierarchy (CEO verification), with the Founder on top.
+            item["founder_solo_mode"] = bool(solo and not strategic)
+            item["decided_by_level"] = (
+                "founder" if strategic else
+                "ai_ceo" if item["project_task"] else
+                "founder" if solo else "independent_human"
             )
             item["review_routing"] = (
-                "Authenticated human Founder only: original approved strategic project scope"
+                "Founder only: company-level (major) approval for the approved strategic scope"
                 if strategic else
-                "Founder may decide only narrowly allowed standalone internal work when no independent human reviewer exists; CEO verifies bounded approved-project tasks"
-                if item["founder_solo_mode"] else
+                "AI CEO decides inside the Founder-approved project (use Resume CEO verification on the project); the Founder may also decide"
+                if item["project_task"] else
+                "Founder decides: company-level approval (the Founder is the only human in AGO)"
+                if solo else
                 "Independent active human review of ordinary operations; CEO verifies bounded Founder-approved project tasks"
             )
             item["next_action"] = (

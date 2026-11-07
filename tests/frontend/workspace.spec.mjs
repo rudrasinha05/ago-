@@ -341,6 +341,25 @@ test('self-check stays silent when the server does not offer it (403)',async({pa
  expect(errors).toEqual([]);
 });
 
+test('in a sole-Founder company the Founder decides a standalone plan the old rule left without a reviewer',async({page})=>{
+ // Live case: "First task workflow" waited for a nonexistent independent human since 2026-10-20.
+ const {calls,errors}=await fixtures(page);
+ const plan={id:'30000000-0000-4000-8000-000000000051',action:'brain:activate:30000000-0000-4000-8000-000000000052',status:'pending',
+  requester_id:user,requester_name:'Founder',approval_type:'plan_review',plan_title:'First task workflow',founder_solo_mode:true,
+  requires_founder_decision:false,decided_by_level:'founder',created_at:'2026-10-20T03:41:38Z',
+  review_routing:'Founder decides: company-level approval (the Founder is the only human in AGO)'};
+ await page.route('**/v1/organization/company/approvals',route=>route.fulfill({status:200,json:[plan]}));
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Approvals/}).click();
+ const inbox=page.getByRole('region',{name:'Approvals inbox'});
+ await expect(inbox).toContainText('Founder decides company-level (major) requests; the AI CEO decides work inside Founder-approved projects.');
+ await expect(inbox.locator('.approval-entry')).toContainText('Your decision is required');
+ await expect(inbox).not.toContainText('qualified independent humans');
+ await accessibility(page);
+ expect(calls.filter(x=>x.method!=='GET'&&x.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('founder can create first real governed task then separately approve and dispatch once',async({page})=>{
  const {errors}=await fixtures(page);
  const rights=['brain:read','brain:manage','organization:read','organization:manage','task:read','task:create','approval:request','approval:read','approval:decide','approval:founder','agent:dispatch','task:execute'];
