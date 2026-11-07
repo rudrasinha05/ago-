@@ -174,3 +174,20 @@ def test_a_revision_carries_board_feedback_into_every_role_and_fits_the_bound():
     plain = run_four_role_chain(task=task, participants=participants, provider=first)
     assert not any("REVISION:" in p for p in first.prompts)
     assert len(first.prompts) == 7 and plain["revised_scope"] is None
+
+
+def test_a_missing_vote_gets_one_follow_up_question_and_is_kept_in_the_draft():
+    answers = ["BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: plan",
+               "### PROJECT SCOPE\n#### PROBLEM\nCopied the previous format, no vote.",
+               "BOARD_RECOMMENDATION: APPROVE"]
+    result = _chain(answers + ["BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: x"] * 6)
+    cto = result["board_recommendations"][1]
+    assert cto["recommendation"] == "approve" and cto["verifiable_model_output"] is True
+    assert result["handoffs"][1]["draft"].startswith("BOARD_RECOMMENDATION: APPROVE\n### PROJECT SCOPE")
+    assert result["board_blocked"] is False
+
+
+def test_a_follow_up_without_a_clear_vote_still_stops():
+    result = _chain(["BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: plan", "no vote here", "still no vote"])
+    assert result["blocked_by_board_seat"] == "Technology Oversight"
+    assert result["board_block_reason"] == "unverified"

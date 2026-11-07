@@ -230,7 +230,7 @@ test('a Board stop is revised and resubmitted; a crash is not',async()=>{
  assert.ok(AUTOMATIC.has('revise'));assert.equal(MAX_REVISIONS,2);
  assert.equal(revisionReason([{seat:'Strategy & Vision',recommendation:'deny',reason:'Brief lacks the problem it solves.'},
   {seat:'Technology Oversight',recommendation:'approve',reason:''},{seat:'Finance & Budget',recommendation:'unverified',reason:''}]),
-  'Revise to fix Board feedback: Strategy & Vision: Brief lacks the problem it solves.; Finance & Budget: denied without a stated reason');
+  'Revise to fix Board feedback: Strategy & Vision: Brief lacks the problem it solves.; Finance & Budget: gave no clear vote');
  assert.equal(revisionReason(null),'Revise to fix Board feedback: Board did not approve');
  assert.ok(revisionReason([{seat:'X',recommendation:'deny',reason:'r'.repeat(900)}]).length<=500);
  assert.match(stepLabel({kind:'revise_limit',stage:'discovery'}),/after 2 revisions/);

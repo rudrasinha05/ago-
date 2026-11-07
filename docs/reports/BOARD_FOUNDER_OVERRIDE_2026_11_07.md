@@ -82,3 +82,11 @@ The fix, when `revision_notes` is present:
 3. The result records `revised_scope`, the PM's draft. `roles_completed` still counts the 7 chain roles.
 
 Advance logs "<PM> (project manager) rewrote the scope…".
+
+## Missing vote follow-up (live run 8)
+The PM wrote a real improved scope: problem, users and a first version for universities and admissions teams. The AI CEO then copied that scope's format and wrote no vote line, so the vote was unverified. On the second revision the feedback degraded to "denied without a stated reason".
+
+Fixes:
+- **Missing-vote follow-up**, full Board only. When a seat's draft contains no BOARD_RECOMMENDATION at all, the same seat gets one short vote question (metered, bounded). A clear reply is prepended to the persisted draft, so the vote is stored with the evidence. A draft with conflicting votes is not asked again and stays unverified. The legacy two-seat mode is unchanged.
+- **Prompt:** Board prompts end with a reminder to start with the vote line and not to copy the previous draft's format.
+- **Feedback is carried forward:** `revision_notes` labels an unclear vote as "gave no clear vote". When the latest attempt has no stated reason, it appends the earlier recovery's feedback ("Earlier feedback: …").

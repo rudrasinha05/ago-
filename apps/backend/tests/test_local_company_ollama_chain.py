@@ -347,14 +347,18 @@ def test_full_board_deny_or_missing_verdict_stops_downstream(
         def __init__(self): self.calls=[]
         def generate(self, prompt):
             self.calls.append(prompt)
-            if "ROLE: "+stopping_role.upper()+"\n" in prompt:
+            # The seat's main answer AND its one follow-up vote question both
+            # come from the stopping seat ("ROLE: X" / "ROLE: X (Board vote)").
+            if "ROLE: "+stopping_role.upper()+"\n" in prompt or \
+                    "ROLE: "+stopping_role.upper()+" (Board vote)" in prompt:
                 if reason=="deny":
                     return "BOARD_RECOMMENDATION: DENY\nRISKS: Need founder review"
                 return "DECISION: model provided no reliable Board recommendation"
             return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Internal recommendation"
     model=Blocker()
     result=run_four_role_chain(task=db.task(),participants=people,provider=model)
-    assert len(model.calls)==expected_calls
+    # A missing vote gets exactly one follow-up vote question before stopping.
+    assert len(model.calls)==expected_calls+(1 if reason=="unverified" else 0)
     assert result["roles_completed"]==expected_calls
     assert result["handoff_complete"] is False
     assert result["board_blocked"] is True

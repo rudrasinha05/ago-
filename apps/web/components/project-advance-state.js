@@ -90,6 +90,6 @@ export function runBlocker(result){
 /** Recovery reason that carries the Board feedback into the next attempt. */
 export function revisionReason(votes){
  const points=(Array.isArray(votes)?votes:[]).filter(v=>v&&v.recommendation!=='approve')
-  .map(v=>v.seat+': '+(v.reason||'denied without a stated reason'));
+  .map(v=>v.seat+': '+(v.reason||(v.recommendation==='unverified'?'gave no clear vote':'denied without a stated reason')));
  return ('Revise to fix Board feedback: '+(points.join('; ')||'Board did not approve')).slice(0,500);
 }

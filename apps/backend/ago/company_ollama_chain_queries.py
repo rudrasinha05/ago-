@@ -165,8 +165,11 @@ class CompanyOllamaChainQueries:
         UUID(tenant_id)
         UUID(task_id)
         row = self.db.execute(
-            """SELECT v.reason,r.result FROM ago_plan_step_task_recoveries v
+            """SELECT v.reason,r.result,earlier.reason AS earlier_reason
+               FROM ago_plan_step_task_recoveries v
                LEFT JOIN ago_agent_runs r ON r.tenant_id=v.tenant_id AND r.task_id=v.failed_task_id
+               LEFT JOIN ago_plan_step_task_recoveries earlier
+                 ON earlier.tenant_id=v.tenant_id AND earlier.recovery_task_id=v.failed_task_id
                WHERE v.tenant_id=%s AND v.recovery_task_id=%s""",
             (tenant_id, task_id),
         ).fetchone()
@@ -175,11 +178,17 @@ class CompanyOllamaChainQueries:
         result = row["result"] if isinstance(row["result"], dict) else {}
         points = [
             str(v.get("seat")) + ": " + (str(v.get("denial_reason") or "").strip()
-                                         or "denied without a stated reason")
+                                         or ("gave no clear vote" if v.get("recommendation")
+                                             == "unverified" else "denied without a stated reason"))
             for v in result.get("board_recommendations") or []
             if isinstance(v, dict) and v.get("recommendation") in ("deny", "unverified")
         ]
         notes = "; ".join(points)
+        # A later attempt may be denied without a reason (or an unclear vote):
+        # carry the earlier Board feedback forward instead of losing it.
+        if row.get("earlier_reason") and ("without a stated reason" in notes
+                                         or "no clear vote" in notes):
+            notes += " | Earlier feedback: " + str(row["earlier_reason"])
         if row["reason"]:
             notes = (notes + " | Note: " if notes else "Note: ") + str(row["reason"])
         return notes[:700]
