@@ -40,9 +40,13 @@ def inspect() -> list[str]:
             '/ceo/reconcile' in founder_action,
         "human-only employee notification approval":
             'founder&&a.requires_founder_decision' in badge,
-        "bounded CEO verification":
+        # Issue #8 M2: project tasks are approved by the AI hierarchy
+        # (manager -> project manager -> AI CEO), picked by governance.
+        "bounded AI hierarchy verification":
             'approve_ceo_project_stage' in company and
-            'approve_ceo_project_task' in company,
+            'approve_project_task_by_hierarchy' in company and
+            'def approve_project_task_by_hierarchy' in governance and
+            'responsible for this decision' in governance,
         "nonfictional stage proposal authorization":
             "'pending_founder_decision'" in company,
     }
