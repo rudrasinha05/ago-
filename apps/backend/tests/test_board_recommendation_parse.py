@@ -73,3 +73,65 @@ def test_heading_form_still_needs_exactly_one_clear_vote():
         "BOARD_RECOMMENDATION: APPROVE\n### BOARD_RECOMMENDATION\nDENY") == "unverified"
     assert board_recommendation("BOARD_RECOMMENDATIONS: APPROVE") == "unverified"
     assert board_recommendation("### BOARD_RECOMMENDATION") == "unverified"
+
+
+def _chain(answers, overridden=frozenset()):
+    """A full five-seat Board + PM + worker with distinct AI employees."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from ago.company_ollama_chain import FULL_BOARD_STAGES, run_four_role_chain
+
+    class Scripted:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, prompt):
+            self.calls += 1
+            return answers[min(self.calls, len(answers)) - 1]
+
+    participants = [{"role": role, "employee_id": str(uuid4()), "employee_name": role.upper()}
+                    for role, _, _ in FULL_BOARD_STAGES]
+    task = SimpleNamespace(id=str(uuid4()), action="internal:brief", project_context={
+        "intake_id": str(uuid4()), "title": "AdmissionFlow", "brief": "Admissions tracker"})
+    return run_four_role_chain(task=task, participants=participants, provider=Scripted(),
+                               overridden_seats=overridden)
+
+
+APPROVE = "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: plan"
+FIN_DENY = "BOARD_RECOMMENDATION: DENY\nDENY_REASON: No cost estimate for the pilot.\nRISKS: budget"
+
+
+def test_finance_denial_after_ceo_and_cto_approve_is_offered_to_the_founder():
+    result = _chain([APPROVE, APPROVE, FIN_DENY])
+    assert result["board_blocked"] is True
+    assert result["blocked_by_board_seat"] == "Finance & Budget"
+    assert result["founder_override_available"] is True
+    finance = result["board_recommendations"][2]
+    assert finance["denial_reason"] == "No cost estimate for the pilot."
+    assert finance["founder_override"] is False
+
+
+def test_a_founder_allowed_seat_is_advice_and_the_team_continues():
+    result = _chain([APPROVE, APPROVE, FIN_DENY, APPROVE, APPROVE, "DECISION: x", "DECISION: y"],
+                    overridden=frozenset({"Finance & Budget"}))
+    assert result["board_blocked"] is False
+    assert result["founder_overrides_applied"] == ["Finance & Budget"]
+    assert result["board_recommendations"][2]["founder_override"] is True
+    assert result["board_review_cleared"] is False  # a DENY is never a clean Board pass
+    assert result["roles_completed"] == result["roles_expected"]
+
+
+def test_ceo_or_cto_denials_are_never_overridden():
+    cto_deny = _chain([APPROVE, FIN_DENY], overridden=frozenset({"Finance & Budget"}))
+    assert cto_deny["blocked_by_board_seat"] == "Technology Oversight"
+    assert cto_deny["founder_override_available"] is False
+    # An allowed Finance seat still blocks when the CTO did not approve first.
+    unclear_cto = _chain([APPROVE, "no vote", FIN_DENY], overridden=frozenset({"Finance & Budget"}))
+    assert unclear_cto["blocked_by_board_seat"] == "Technology Oversight"
+
+
+def test_denial_reason_needs_exactly_one_line():
+    from ago.company_ollama_chain import denial_reason
+    assert denial_reason("DENY_REASON: a\nDENY_REASON: b") == ""
+    assert denial_reason("**DENY_REASON:** budget unknown") == "budget unknown"
+    assert denial_reason("BOARD_RECOMMENDATION: DENY") == ""

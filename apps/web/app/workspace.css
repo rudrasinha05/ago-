@@ -650,3 +650,10 @@
 .founder-delivery-journey .project-advance-allow{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;gap:8px;text-align:left}
 .founder-delivery-journey .project-advance-allow input{width:18px;height:18px;min-height:0;margin:0;flex:0 0 auto}
 .founder-delivery-journey .project-advance .delivery-actions{justify-content:flex-start}
+/* Board votes on a stopped stage, with the Founder's allow option. */
+.board-denial{margin-top:6px;padding:10px 12px;border:1px solid #7a5a2a;border-radius:8px;background:#1d160b;display:grid;gap:6px;font-size:13px}
+.board-denial p,.board-denial ul{margin:0}.board-denial ul{padding-left:18px;display:grid;gap:3px}
+.board-denial li{display:grid}.board-denial .vote-approve b{color:#9ff0cf}.board-denial .vote-deny b,.board-denial .vote-unverified b{color:#ffb4a8}
+.board-denial-allow{display:grid;gap:6px}.board-denial-allow label{display:grid;gap:4px}
+.founder-delivery-journey .board-denial-confirm{display:flex;flex-direction:row;gap:8px;align-items:center}
+.founder-delivery-journey .board-denial-confirm input{width:18px;height:18px;min-height:0;margin:0}

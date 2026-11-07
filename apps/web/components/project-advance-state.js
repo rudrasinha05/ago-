@@ -69,7 +69,11 @@ export function runBlocker(result){
   const seat=typeof r.blocked_by_board_seat==='string'?r.blocked_by_board_seat:'A Board seat';
   const why=BOARD_REASONS[r.board_block_reason]||'it did not clear the work';
   const done=Number.isFinite(r.roles_completed)&&Number.isFinite(r.roles_expected)?' ('+r.roles_completed+' of '+r.roles_expected+' AI roles ran)':'';
-  return 'The Board stopped the AI team: '+seat+' — '+why+done+'. The stage is marked failed; recover it to try again.';
+  const reason=(Array.isArray(r.board_recommendations)?r.board_recommendations:[]).find(v=>v&&v.seat===seat)?.denial_reason;
+  const said=typeof reason==='string'&&reason?' Reason given: “'+reason+'”.':'';
+  return 'The Board stopped the AI team: '+seat+' — '+why+done+'.'+said+(r.founder_override_available===true
+   ?' The AI CEO and CTO approved, so you can allow the project on the stage card.'
+   :' The stage is marked failed; recover it to try again.');
  }
  if(result.status!=='completed')return 'The run ended as '+(result.status||'unknown')+'. Inspect the stage before anything else.';
  if(result.delivery_status&&result.delivery_status!=='completed'&&result.delivery_status!=='delivered')

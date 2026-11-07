@@ -401,6 +401,31 @@ def recover_failed_stage(project_id: UUID,
         translate_error(exc)
 
 
+class BoardOverrideInput(StrictInput):
+    failed_task_id: UUID
+    seat: Literal['Finance & Budget','Risk & Compliance','Quality & Release']
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@router.post('/projects/{project_id}/stages/{stage}/board-override')
+def board_override_stage(project_id: UUID,
+                         stage: Literal['discovery','architecture','implementation','quality','release'],
+                         data: BoardOverrideInput, actor=Depends(authenticated),
+                         repositories=Depends(repository_scope)):
+    """Founder allows a project past one Board seat's denial after CEO and CTO approved."""
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'approval:founder')
+    if 'founder' not in actor.roles:
+        translate_error(PermissionError('Only the project Founder may allow a Board denial'))
+    try:
+        return repositories.resolve(PlanExecutionPort).founder_board_override(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id),
+            stage=stage, failed_task_id=str(data.failed_task_id), seat=data.seat,
+            reason=data.reason)
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
 class StageAiQaInput(StrictInput):
     qa_employee_id: UUID
     operation_key: UUID

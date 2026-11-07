@@ -64,9 +64,20 @@ def board_recommendation(text: str) -> str:
     return votes[0].lower() if len(votes) == 1 and votes[0] in {"APPROVE", "DENY"} else "unverified"
 
 
+# Seats the Founder may allow past (never the CEO or CTO seat).
+OVERRIDABLE_SEATS = frozenset({"Finance & Budget", "Risk & Compliance", "Quality & Release"})
+
+
+def denial_reason(text: str) -> str:
+    """The seat's own one-line reason for a DENY ("DENY_REASON: ..."), or ''."""
+    lines = [part.strip().lstrip("#").replace("*", "").strip() for part in text.splitlines()]
+    reasons = [p.split(":", 1)[1].strip() for p in lines
+               if p.upper().startswith("DENY_REASON:") and p.split(":", 1)[1].strip()]
+    return reasons[0][:300] if len(reasons) == 1 else ""
+
 def run_four_role_chain(
     *, task, participants: list[dict], provider, engineering_candidates: bool = False,
-    on_role_completed=None, clock=None,
+    on_role_completed=None, clock=None, overridden_seats=frozenset(),
 ) -> dict:
     project=task.project_context
     title=str(project["title"])[:180]
@@ -90,6 +101,7 @@ def run_four_role_chain(
     maximum_seconds = 450  # Seven single-threaded bounded 60s model calls + margin.
     handoffs=[]
     board_advice=[]
+    founder_overrides=[]
     blocked_seat=None
     block_reason=None
     engineering_candidate=None
@@ -124,6 +136,9 @@ def run_four_role_chain(
             +("BOARD_ADVISORY: Your FIRST line must be exactly one of these two lines, "
               "with nothing else on it:\nBOARD_RECOMMENDATION: APPROVE\n"
               "BOARD_RECOMMENDATION: DENY\nWrite that line only once. "
+              "If you DENY, your second line must be DENY_REASON: one sentence naming a "
+              "concrete problem in YOUR seat's area. Review the work yourself from "
+              "your seat; do not copy the previous role's draft. "
               "This does NOT authorize execution, approval or release.\n"
               if role in BOARD_ROLE_SEATS else "")
             +"Founder project title (quoted data): "+title+"\n"
@@ -153,14 +168,25 @@ def run_four_role_chain(
             # excerpt is unverifiable. The prompt asks for the vote line FIRST.
             vote = board_recommendation(bounded)
             board_seat=BOARD_ROLE_SEATS[role]
+            # Founder rule: once the CEO and CTO seats approved in THIS run, a
+            # seat the Founder already allowed for this project is advice only.
+            leaders_approved = {
+                a["seat"] for a in board_advice if a["recommendation"] == "approve"
+            } >= {"Strategy & Vision", "Technology Oversight"}
+            overridden = (vote != "approve" and board_seat in OVERRIDABLE_SEATS
+                          and board_seat in overridden_seats and leaders_approved)
             board_advice.append({
                 "seat": board_seat,
                 "employee_id": person["employee_id"],
                 "recommendation": vote,
                 "verifiable_model_output": vote != "unverified",
                 "binding_authorization": False,
+                "denial_reason": denial_reason(bounded) if vote == "deny" else "",
+                "founder_override": overridden,
             })
-            if vote == "deny" or (full_board and vote != "approve"):
+            if overridden:
+                founder_overrides.append(board_seat)
+            elif vote == "deny" or (full_board and vote != "approve"):
                 blocked_seat=board_seat
                 block_reason="deny" if vote=="deny" else "unverified"
         handoffs.append({
@@ -204,6 +230,11 @@ def run_four_role_chain(
             and all(a["recommendation"]=="approve" for a in board_advice)
         ),
         "requires_founder_resolution":bool(blocked_seat),
+        "founder_overrides_applied":founder_overrides,
+        "founder_override_available":bool(
+            blocked_seat in OVERRIDABLE_SEATS and {
+                a["seat"] for a in board_advice if a["recommendation"] == "approve"
+            } >= {"Strategy & Vision", "Technology Oversight"}),
         "roles_completed":len(handoffs),
         "roles_expected":len(stages),
         "max_runtime_seconds":maximum_seconds,

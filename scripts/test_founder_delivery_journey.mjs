@@ -203,3 +203,21 @@ test('a failed stage whose AI run completed is explained as a Board stop',async(
  assert.equal(stageFailureReason({task_status:'failed',agent_run_status:null}),null);
  assert.equal(stageFailureReason({task_status:'completed',agent_run_status:'completed'}),null);
 });
+test('board votes show who denied and why; only Finance/Risk/Quality after CEO+CTO approve can be allowed',async()=>{
+ const {boardDenial}=await import('../apps/web/components/founder-delivery-state.js');
+ const {runBlocker}=await import('../apps/web/components/project-advance-state.js');
+ const v=(seat,recommendation,denial_reason='')=>({seat,recommendation,denial_reason});
+ const result={kind:'local_company_governed_handoff',board_blocked:true,blocked_by_board_seat:'Finance & Budget',board_block_reason:'deny',
+  founder_override_available:true,roles_completed:3,roles_expected:7,
+  board_recommendations:[v('Strategy & Vision','approve'),v('Technology Oversight','approve'),v('Finance & Budget','deny','No cost estimate.')]};
+ const view=boardDenial(result);
+ assert.equal(view.stoppedBy,'Finance & Budget');assert.equal(view.overridable,true);
+ assert.deepEqual(view.votes.map(x=>[x.seat,x.recommendation,x.reason]),[['Strategy & Vision','approve',''],
+  ['Technology Oversight','approve',''],['Finance & Budget','deny','No cost estimate.']]);
+ assert.equal(boardDenial({...result,blocked_by_board_seat:'Technology Oversight'}).overridable,false);
+ assert.equal(boardDenial({...result,board_recommendations:[v('Strategy & Vision','approve'),v('Technology Oversight','unverified')]}).overridable,false);
+ assert.equal(boardDenial({...result,board_blocked:false}),null);
+ assert.equal(boardDenial(null),null);
+ const line=runBlocker({status:'completed',delivery_status:'blocked',result});
+ assert.match(line,/Reason given: “No cost estimate\.”\. The AI CEO and CTO approved, so you can allow the project on the stage card\.$/);
+});

@@ -97,3 +97,23 @@ class PlanExecutionQueries:
                WHERE tenant_id=%s AND id=%s AND task_id=%s""",
             parameters,
         )
+
+    def select_board_block_11(self, parameters: Any = None) -> Cursor:
+        """(tenant_id, task_id): the task's single agent run status and result."""
+        return self.connection.execute(
+            """SELECT r.status,r.result FROM ago_agent_runs r
+               WHERE r.tenant_id=%s AND r.task_id=%s""",
+            parameters,
+        )
+
+    def insert_board_override_12(self, parameters: Any = None) -> Cursor:
+        """Append one immutable Founder override of a Board seat for a project."""
+        return self.connection.execute(
+            """INSERT INTO ago_board_founder_overrides
+               (id,tenant_id,intake_id,seat,denied_task_id,denial_vote,denial_reason,
+                founder_id,reason)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT (tenant_id,intake_id,seat) DO NOTHING
+               RETURNING created_at""",
+            parameters,
+        )

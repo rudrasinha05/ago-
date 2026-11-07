@@ -500,6 +500,11 @@ class PlanExecutionPort(Protocol):
         failed_task_id: str, reason: str,
     ) -> dict: ...
 
+    def founder_board_override(
+        self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
+        failed_task_id: str, seat: str, reason: str,
+    ) -> dict: ...
+
 
 @runtime_checkable
 class PlanExecutionQueriesPort(Protocol):
@@ -522,6 +527,10 @@ class PlanExecutionQueriesPort(Protocol):
     def insert_step_task_recovery_09(self, parameters: Any = None) -> Cursor: ...
 
     def relink_step_task_10(self, parameters: Any = None) -> Cursor: ...
+
+    def select_board_block_11(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_board_override_12(self, parameters: Any = None) -> Cursor: ...
 
 
 @runtime_checkable
@@ -1085,6 +1094,7 @@ class IntegrationStorePort(Protocol):
 @runtime_checkable
 class CompanyOllamaChainQueriesPort(Protocol):
     def assignments(self, *, tenant_id: str, actor_id: str, task: Any) -> list[dict]: ...
+    def founder_board_overrides(self, *, tenant_id: str, intake_id: str) -> frozenset: ...
     def record_verified_handoff(
         self, *, tenant_id: str, founder_id: str, task_id: str, role: str,
         employee_id: str, blocked: bool, participants: list[dict],

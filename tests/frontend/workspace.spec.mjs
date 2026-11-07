@@ -1157,6 +1157,46 @@ test('advance project stops at a self-check blocker and runs nothing',async({pag
  expect(errors).toEqual([]);
 });
 
+test('the Founder sees which Board seat denied and why, and allows the project after CEO and CTO approved',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const task='54000000-0000-4000-8000-000000000054',newTask='55000000-0000-4000-8000-000000000055';
+ const project={...deliveryProject(),delivery_state:'blocked',stages:[{stage:'discovery',position:1,employee:'Business Analyst',
+  task_id:task,task_status:'failed',agent_run_status:'completed',agent_failure_code:null,qa_verdict:null}]};
+ const vote=(seat,recommendation,denial_reason='')=>({seat,recommendation,denial_reason,founder_override:false});
+ let allowed=false;const posted=[];
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([
+  allowed?{...project,delivery_state:'awaiting_governed_execution',stages:[{...project.stages[0],task_id:newTask,task_status:'proposed',agent_run_status:null}]}:project])}));
+ await page.route('**/v1/organization/company/projects/'+project.project_id,route=>route.fulfill({status:200,json:{id:project.project_id,
+  title:project.title,plan_status:'active',stages:[{stage:'discovery',position:1,task_id:task,task_status:'failed',founder_agent_result:{
+   kind:'local_company_governed_handoff',board_blocked:true,blocked_by_board_seat:'Finance & Budget',board_block_reason:'deny',
+   founder_override_available:true,board_recommendations:[vote('Strategy & Vision','approve'),vote('Technology Oversight','approve'),
+    vote('Finance & Budget','deny','No cost estimate for the pilot.')]}}]}}));
+ await page.route(/\/stages\/discovery\/board-override$/,route=>{posted.push(route.request().postDataJSON());allowed=true;
+  return route.fulfill({status:200,json:{kind:'ago_board_founder_override_v1',project_id:project.project_id,stage:'discovery',
+   seat:'Finance & Budget',denial_vote:'deny',denial_reason:'No cost estimate for the pilot.',override_recorded:true,already_allowed:false,
+   recovery_task_id:newTask,recovery_task_status:'proposed',approval_required:true,run_started:false}});});
+ await login(page);await navigate(page,'Organization');
+ const card=page.getByRole('article',{name:'Delivery: '+project.title});
+ const votes=card.getByRole('group',{name:'AI Board votes for the discovery stage of '+project.title});
+ await expect(votes).toContainText('Strategy & Vision: APPROVE');
+ await expect(votes).toContainText('Technology Oversight: APPROVE');
+ await expect(votes).toContainText('Finance & Budget: DENY');
+ await expect(votes).toContainText('Reason: No cost estimate for the pilot.');
+ await expect(votes).toContainText('Stopped by Finance & Budget.');
+ await votes.getByRole('button',{name:'Founder: allow the discovery stage of '+project.title+' despite the Finance & Budget vote'}).click();
+ const go=votes.getByRole('button',{name:'Allow and create the new task'});
+ await votes.getByLabel('Why do you allow it?').fill('Local pilot, no spending.');
+ await expect(go).toBeDisabled();
+ await votes.getByRole('checkbox').check();
+ await go.click();
+ await expect(page.getByRole('status').filter({hasText:'Founder allowed '+project.title+' past the Finance & Budget vote.'})).toBeVisible();
+ await expect.poll(()=>posted).toEqual([{failed_task_id:task,seat:'Finance & Budget',reason:'Local pilot, no spending.'}]);
+ await expect(card).toContainText('Task: Proposed');
+ await accessibility(page);
+ expect(calls.filter(x=>/\/run$|\/decision$/.test(x.path))).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('a finished stage is checked by an independent AI QA employee chosen by the Founder',async({page})=>{
  const {calls,errors}=await deliveryFixtures(page);
  const doneTask='48000000-0000-4000-8000-000000000048',qa='49000000-0000-4000-8000-000000000049',

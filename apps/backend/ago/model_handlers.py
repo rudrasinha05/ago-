@@ -262,10 +262,14 @@ def optional_model_handlers(
                     blocked=blocked, participants=participants,
                 )
 
+            overrides = repositories.resolve(CompanyOllamaChainQueries).founder_board_overrides(
+                tenant_id=actor.tenant_id, intake_id=str(task.project_context["intake_id"]),
+            )
             return run_four_role_chain(
                 task=task, participants=participants, provider=MeteredLocalProvider(),
                 engineering_candidates=engineering_enabled,
                 on_role_completed=record_role_completed,
+                overridden_seats=overrides,
             )
 
         handlers["internal:brief"] = governed_company_handoff

@@ -146,6 +146,16 @@ class CompanyOllamaChainQueries:
                  "employee_name":item["name"]} for item in ordered]
 
 
+    def founder_board_overrides(self, *, tenant_id: str, intake_id: str) -> frozenset:
+        """Board seats the Founder allowed for this project (issue #8 Founder rule)."""
+        UUID(tenant_id)
+        UUID(intake_id)
+        rows = self.db.execute(
+            "SELECT seat FROM ago_board_founder_overrides WHERE tenant_id=%s AND intake_id=%s",
+            (tenant_id, intake_id),
+        ).fetchall()
+        return frozenset(str(r["seat"]) for r in rows)
+
     def record_verified_handoff(
         self, *, tenant_id: str, founder_id: str, task_id: str, role: str,
         employee_id: str, blocked: bool, participants: list[dict],

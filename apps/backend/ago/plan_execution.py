@@ -5,7 +5,7 @@ Materializing never authorizes actions. Every task requires a distinct M2 approv
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.governance import ApprovalRepository
@@ -143,6 +143,73 @@ class PlanExecution:
             "recovery_kind": "qa_rework" if rework else "failed_run",
             "recovery_id": int(record["id"]),
             "recorded_at": record["created_at"].isoformat(),
+            "approval_required": True,
+            "run_started": False,
+        }
+
+    def founder_board_override(
+        self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
+        failed_task_id: str, seat: str, reason: str,
+    ) -> dict:
+        """Founder allows a project past ONE Board seat's denial (Founder rule).
+
+        Only when, in the failed run, the AI CEO and AI CTO seats both
+        approved and the stopping seat is Finance, Risk or Quality. The seat's
+        later votes in this project become advice. The stage then gets a new
+        recovery task (needs its own approval). Nothing is run here.
+        """
+        for value in (tenant_id, founder_id, project_id, failed_task_id):
+            UUID(value)
+        if seat not in ("Finance & Budget", "Risk & Compliance", "Quality & Release"):
+            raise PermissionError("Only a Finance, Risk or Quality seat denial can be allowed")
+        reason = (reason or "").strip()
+        if not 1 <= len(reason) <= 500:
+            raise ValueError("A Founder reason of 1-500 characters is required")
+        queries = self.repositories.resolve(PlanExecutionQueries)
+        with self.db.transaction():
+            step = queries.select_founder_stage_step_07(
+                (stage, tenant_id, project_id, founder_id)
+            ).fetchone()
+            if step is None:
+                raise LookupError("Project stage not found")
+            if str(step["task_id"] or "") != failed_task_id:
+                raise ValueError("This stage is no longer linked to that task; refresh first")
+            run = queries.select_board_block_11((tenant_id, failed_task_id)).fetchone()
+            result = run["result"] if run else None
+            if (not isinstance(result, dict)
+                    or result.get("kind") != "local_company_governed_handoff"
+                    or result.get("board_blocked") is not True
+                    or result.get("blocked_by_board_seat") != seat
+                    or result.get("board_block_reason") not in ("deny", "unverified")):
+                raise ValueError("That seat did not stop this stage's AI run")
+            votes = {a.get("seat"): a for a in result.get("board_recommendations") or []
+                     if isinstance(a, dict)}
+            if any((votes.get(s) or {}).get("recommendation") != "approve"
+                   for s in ("Strategy & Vision", "Technology Oversight")):
+                raise PermissionError("The AI CEO and AI CTO must both have approved")
+            denied = votes.get(seat) or {}
+            recorded = queries.insert_board_override_12((
+                str(uuid4()), tenant_id, project_id, seat, failed_task_id,
+                result["board_block_reason"], str(denied.get("denial_reason") or "")[:500],
+                founder_id, reason,
+            )).fetchone()
+            recovery = self.recover_failed_stage(
+                tenant_id=tenant_id, founder_id=founder_id, project_id=project_id,
+                stage=stage, failed_task_id=failed_task_id,
+                reason=("Founder allowed the project over the " + seat + " denial: "
+                        + reason)[:500],
+            )
+        return {
+            "kind": "ago_board_founder_override_v1",
+            "project_id": project_id,
+            "stage": stage,
+            "seat": seat,
+            "denial_vote": result["board_block_reason"],
+            "denial_reason": str(denied.get("denial_reason") or ""),
+            "override_recorded": recorded is not None,
+            "already_allowed": recorded is None,
+            "recovery_task_id": recovery["recovery_task_id"],
+            "recovery_task_status": recovery["recovery_task_status"],
             "approval_required": True,
             "run_started": False,
         }

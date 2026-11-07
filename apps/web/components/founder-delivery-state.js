@@ -125,3 +125,16 @@ export function stageFailureReason(stage){
  if(stage.agent_run_status==='completed')return 'The AI Board stopped the work: a Board member gave no single clear APPROVE/DENY line, or said DENY. Recover the stage to try again.';
  return null;
 }
+const OVERRIDABLE=new Set(['Finance & Budget','Risk & Compliance','Quality & Release']);
+/** The recorded Board votes of a blocked AI run (Founder-only result), or null. */
+export function boardDenial(result){
+ if(!result||result.kind!=='local_company_governed_handoff'||result.board_blocked!==true)return null;
+ const votes=(Array.isArray(result.board_recommendations)?result.board_recommendations:[])
+  .filter(v=>v&&typeof v.seat==='string'&&typeof v.recommendation==='string')
+  .map(v=>({seat:v.seat,recommendation:v.recommendation,reason:typeof v.denial_reason==='string'?v.denial_reason:'',override:v.founder_override===true}));
+ const stoppedBy=typeof result.blocked_by_board_seat==='string'?result.blocked_by_board_seat:null;
+ if(!stoppedBy)return null;
+ const approved=new Set(votes.filter(v=>v.recommendation==='approve').map(v=>v.seat));
+ const overridable=OVERRIDABLE.has(stoppedBy)&&approved.has('Strategy & Vision')&&approved.has('Technology Oversight');
+ return {votes,stoppedBy,overridable};
+}
