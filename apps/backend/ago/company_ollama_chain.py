@@ -34,16 +34,34 @@ BOARD_ROLE_SEATS = {
 
 
 def board_recommendation(text: str) -> str:
-    """Only an explicit, unambiguous model line can become ADVISORY evidence."""
-    # Surrounding whitespace, Markdown bold and a final period are layout, not
-    # content; the rule stays: exactly ONE such line, APPROVE or DENY.
-    cleaned = [part.strip().replace("*", "").strip() for part in text.splitlines()]
-    lines = [
-        part.split(":", 1)[1].strip().rstrip(".").strip().upper()
-        for part in cleaned
-        if part.upper().startswith("BOARD_RECOMMENDATION:")
-    ]
-    return lines[0].lower() if len(lines) == 1 and lines[0] in {"APPROVE", "DENY"} else "unverified"
+    """Only an explicit, unambiguous model vote can become ADVISORY evidence.
+
+    A vote is the label BOARD_RECOMMENDATION with the value on the same line
+    ("BOARD_RECOMMENDATION: APPROVE") or, as small local models format it, as a
+    heading whose next non-empty line is the value ("### BOARD_RECOMMENDATION"
+    then "DENY"). Whitespace, Markdown heading marks, bold and a final period
+    are layout. The rule is unchanged: exactly ONE vote in the text, APPROVE or
+    DENY; anything else is unverified.
+    """
+    cleaned = [part.strip().lstrip("#").replace("*", "").strip() for part in text.splitlines()]
+    votes = []
+    for index, part in enumerate(cleaned):
+        upper = part.upper()
+        if not upper.startswith("BOARD_RECOMMENDATION"):
+            continue
+        rest = part[len("BOARD_RECOMMENDATION"):].strip()
+        if rest.startswith(":"):
+            rest = rest[1:].strip()
+        elif rest:
+            continue  # e.g. "BOARD_RECOMMENDATIONS" or prose, not the label
+        if not rest:
+            following = next((p for p in cleaned[index + 1:] if p), "")
+            value = following.rstrip(".").strip().upper()
+            if value in {"APPROVE", "DENY"}:
+                votes.append(value)
+            continue  # an empty label followed by other content is not a vote
+        votes.append(rest.rstrip(".").strip().upper())
+    return votes[0].lower() if len(votes) == 1 and votes[0] in {"APPROVE", "DENY"} else "unverified"
 
 
 def run_four_role_chain(
@@ -96,8 +114,8 @@ def run_four_role_chain(
              "Your response is NOT a committed file or passed test.\n"
              if code_author else
              "Generate one concrete INTERNAL artifact, never a claim of execution. "
-             +("Output text only, with headings: BOARD_RECOMMENDATION, DELIVERABLE, "
-               "RISKS, ACCEPTANCE. "
+             +("Output text only: first the single vote line described below, then "
+               "headings: DELIVERABLE, RISKS, ACCEPTANCE. "
                if role in BOARD_ROLE_SEATS else
                "Output text only, with headings: DECISION, DELIVERABLE, RISKS, ACCEPTANCE. ")+
              "No tools, links to private content, hiring, spending, code execution, "
