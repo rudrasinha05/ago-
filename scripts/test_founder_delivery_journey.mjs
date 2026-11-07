@@ -96,3 +96,13 @@ test('credit balance is read strictly and a low balance becomes a visible blocke
  assert.equal(creditBlocker(ok,null).ready,true,'unknown balance adds no invented blocker');
  assert.equal(creditBlocker(ok,undefined),ok);
 });
+test('failure reasons are plain text and only failed linked stages are recoverable',async()=>{
+ const {failureReason,recoverableStage}=await import('../apps/web/components/founder-delivery-state.js');
+ assert.match(failureReason('credit_budget_missing'),/credit allowance/);
+ assert.match(failureReason('model_unreachable'),/Ollama/);
+ assert.equal(failureReason('new_code'),'Recorded failure code: new_code');
+ assert.equal(failureReason(null),null);
+ assert.equal(recoverableStage({stage:'discovery',task_status:'failed',task_id:'t1'}),true);
+ for(const s of [{stage:'discovery',task_status:'completed',task_id:'t1'},{stage:'discovery',task_status:'failed',task_id:null},
+  {stage:'marketing',task_status:'failed',task_id:'t1'},null])assert.equal(recoverableStage(s),false);
+});

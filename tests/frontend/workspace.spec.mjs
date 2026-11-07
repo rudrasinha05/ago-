@@ -1003,6 +1003,39 @@ test('an approved stage task reads "ready to run", never "waiting", and nothing 
  expect(errors).toEqual([]);
 });
 
+test('a failed stage shows why it failed and the Founder creates a recovery task without running it',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const failedTask='46000000-0000-4000-8000-000000000046',newTask='47000000-0000-4000-8000-000000000047';
+ const project={...deliveryProject(),delivery_state:'blocked',stages:[{stage:'discovery',position:1,employee:'Business Analyst',
+  task_id:failedTask,task_status:'failed',agent_run_status:'failed',agent_failure_code:'credit_budget_missing',qa_verdict:null}]};
+ let recovered=false;const posted=[];
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([
+  recovered?{...project,delivery_state:'awaiting_governed_execution',stages:[{...project.stages[0],task_id:newTask,task_status:'proposed',
+   agent_run_status:null,agent_failure_code:null}]}:project])}));
+ await page.route(/\/stages\/discovery\/recovery$/,route=>{posted.push({url:new URL(route.request().url()).pathname,body:route.request().postDataJSON()});
+  recovered=true;return route.fulfill({status:200,json:{kind:'ago_stage_task_recovery_v1',project_id:project.project_id,stage:'discovery',
+   failed_task_id:failedTask,recovery_task_id:newTask,recovery_task_status:'proposed',approval_required:true,run_started:false}});});
+ await login(page);await navigate(page,'Organization');
+ const card=page.getByRole('article',{name:'Delivery: '+project.title});
+ await expect(card).toContainText('Why it failed: No internal AI credit allowance was set, so no model call was attempted.');
+ await card.getByRole('button',{name:'Recover the failed discovery stage of '+project.title}).click();
+ const box=card.getByRole('group',{name:'Recover the failed discovery stage of '+project.title});
+ const create=box.getByRole('button',{name:'Create recovery task'});
+ await expect(create).toBeDisabled();
+ await box.getByLabel('Why is it safe to try again?').fill('The AI credit allowance is now 30.');
+ await expect(create).toBeDisabled();
+ await box.getByRole('checkbox').check();
+ await create.click();
+ await expect(page.getByRole('status').filter({hasText:'Recovery task created for discovery'})).toBeVisible();
+ expect(posted).toEqual([{url:'/v1/organization/company/projects/'+project.project_id+'/stages/discovery/recovery',
+  body:{failed_task_id:failedTask,reason:'The AI credit allowance is now 30.'}}]);
+ await expect(card).toContainText('Task: Proposed');
+ await expect(card.getByRole('button',{name:/^Recover the failed/})).toHaveCount(0);
+ await accessibility(page);
+ expect(calls.filter(x=>/\/run$|\/decision$/.test(x.path))).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('late project details cannot replace the newly selected delivery project',async({page})=>{
  const {errors}=await deliveryFixtures(page);
  const first=deliveryProject(other,'First project'),second=deliveryProject(department,'Second project');

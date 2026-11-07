@@ -492,6 +492,11 @@ class PlanExecutionPort(Protocol):
 
     def materialize(self, *, tenant_id: str, plan_id: str) -> list[str]: ...
 
+    def recover_failed_stage(
+        self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
+        failed_task_id: str, reason: str,
+    ) -> dict: ...
+
 
 @runtime_checkable
 class PlanExecutionQueriesPort(Protocol):
@@ -506,6 +511,14 @@ class PlanExecutionQueriesPort(Protocol):
     def select_ago_plan_steps_05(self, parameters: Any = None) -> Cursor: ...
 
     def update_ago_plan_steps_06(self, parameters: Any = None) -> Cursor: ...
+
+    def select_founder_stage_step_07(self, parameters: Any = None) -> Cursor: ...
+
+    def select_task_for_recovery_08(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_step_task_recovery_09(self, parameters: Any = None) -> Cursor: ...
+
+    def relink_step_task_10(self, parameters: Any = None) -> Cursor: ...
 
 
 @runtime_checkable

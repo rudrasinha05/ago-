@@ -50,7 +50,7 @@ class AgentRuntimeQueries:
 
     def update_ago_agent_runs_07(self, parameters: Any = None) -> Cursor:
         return self.connection.execute(
-            "UPDATE ago_agent_runs SET status='failed',\n                       failure_code='handler_error',finished_at=now()\n                       WHERE tenant_id=%s AND id=%s AND status='running'",
+            "UPDATE ago_agent_runs SET status='failed',\n                       failure_code=%s,finished_at=now()\n                       WHERE tenant_id=%s AND id=%s AND status='running'",
             parameters,
         )
 

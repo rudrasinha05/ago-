@@ -1531,6 +1531,10 @@
         "materialize": {
           "arguments": "self, *, tenant_id: str, plan_id: str",
           "returns": "list[str]"
+        },
+        "recover_failed_stage": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str, failed_task_id: str, reason: str",
+          "returns": "dict"
         }
       }
     },
@@ -1558,6 +1562,22 @@
           "returns": "Cursor"
         },
         "update_ago_plan_steps_06": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_founder_stage_step_07": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_task_for_recovery_08": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_step_task_recovery_09": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "relink_step_task_10": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         }

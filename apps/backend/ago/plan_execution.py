@@ -5,6 +5,8 @@ Materializing never authorizes actions. Every task requires a distinct M2 approv
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.governance import ApprovalRepository
 from ago.plan_execution_queries import PlanExecutionQueries
@@ -70,3 +72,69 @@ class PlanExecution:
                 )
                 created.append(task.id)
         return created
+
+    def recover_failed_stage(
+        self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
+        failed_task_id: str, reason: str,
+    ) -> dict:
+        """Founder-authorized recovery of a FAILED project stage task (issue #10).
+
+        Creates a NEW proposed task with the step's own action and assignee,
+        records an append-only recovery row and relinks the step. The failed
+        task and its run stay immutable evidence; nothing is approved, replayed
+        or run. The new task needs its own approval through the existing flow.
+        """
+        for value in (tenant_id, founder_id, project_id, failed_task_id):
+            UUID(value)
+        if stage not in ("discovery", "architecture", "implementation", "quality", "release"):
+            raise ValueError("Unknown project stage")
+        reason = (reason or "").strip()
+        if not 1 <= len(reason) <= 500:
+            raise ValueError("A recovery reason of 1-500 characters is required")
+        queries = self.repositories.resolve(PlanExecutionQueries)
+        with self.db.transaction():
+            step = queries.select_founder_stage_step_07(
+                (stage, tenant_id, project_id, founder_id)
+            ).fetchone()
+            if step is None:
+                raise LookupError("Project stage not found")
+            if step["plan_status"] != "active":
+                raise PermissionError("Only an active approved plan may recover a stage task")
+            if str(step["task_id"] or "") != failed_task_id:
+                raise ValueError("This stage is no longer linked to that task; refresh first")
+            task = queries.select_task_for_recovery_08((tenant_id, failed_task_id)).fetchone()
+            if task is None:
+                raise LookupError("Task not found")
+            if task["already_recovered"]:
+                raise ValueError("This failed task was already recovered")
+            if task["status"] != "failed" or task["run_active"]:
+                raise ValueError("Only a failed task with no running work can be recovered")
+            if (task["action"] != step["action"]
+                    or str(task["assignee_id"]) != str(step["assignee_id"])):
+                raise ValueError("Failed task does not match this plan step")
+            created = self.repositories.resolve(TaskStore).propose(
+                tenant_id=tenant_id,
+                action=step["action"],
+                assignee_id=str(step["assignee_id"]),
+            )
+            record = queries.insert_step_task_recovery_09((
+                tenant_id, str(step["plan_id"]), str(step["plan_step_id"]),
+                failed_task_id, created.id, founder_id, reason,
+            )).fetchone()
+            relinked = queries.relink_step_task_10(
+                (created.id, tenant_id, str(step["plan_step_id"]), failed_task_id)
+            )
+            if relinked.rowcount != 1:
+                raise ValueError("Stage changed during recovery; refresh first")
+        return {
+            "kind": "ago_stage_task_recovery_v1",
+            "project_id": project_id,
+            "stage": stage,
+            "failed_task_id": failed_task_id,
+            "recovery_task_id": created.id,
+            "recovery_task_status": "proposed",
+            "recovery_id": int(record["id"]),
+            "recorded_at": record["created_at"].isoformat(),
+            "approval_required": True,
+            "run_started": False,
+        }

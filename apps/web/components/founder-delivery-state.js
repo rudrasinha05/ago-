@@ -79,3 +79,23 @@ export function stageTaskLabel(stage,approvalStates){
  }
  return TASK_STATUS[stage.task_status]||String(stage.task_status).replaceAll('_',' ');
 }
+// Safe failure codes recorded by the server (issue #10); never exception text.
+const FAILURE_REASONS={
+ credit_budget_missing:'No internal AI credit allowance was set, so no model call was attempted.',
+ credit_budget_exceeded:'The internal AI credit allowance ran out during the run.',
+ credit_budget_unavailable:'The internal AI credit allowance refused the run.',
+ model_timeout:'The local AI model did not answer in time.',
+ model_unreachable:'AGO could not reach the local AI model (Ollama).',
+ model_incomplete:'The local AI model returned an incomplete answer.',
+ worker_timeout:'The AI worker did not finish in time.',
+ handler_error:'The AI run stopped with an unclassified error (older runs record only this).',
+};
+export function failureReason(code){
+ if(typeof code!=='string'||!code)return null;
+ return FAILURE_REASONS[code]||'Recorded failure code: '+code;
+}
+const RECOVERY_STAGES=new Set(['discovery','architecture','implementation','quality','release']);
+/** A stage the Founder may recover: linked task failed (server re-checks everything). */
+export function recoverableStage(stage){
+ return Boolean(stage&&RECOVERY_STAGES.has(stage.stage)&&stage.task_status==='failed'&&identifier(stage.task_id));
+}

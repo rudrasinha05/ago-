@@ -14,6 +14,13 @@ from ago.agent_runtime_queries import AgentRuntimeQueries
 from ago.backend_contracts import RepositoryScope
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 
+# Mirrors agent_runtime.RUN_FAILURE_CODES (module policy forbids that import).
+RUN_FAILURE_CODES = (
+    "handler_error", "worker_timeout", "credit_budget_unavailable",
+    "credit_budget_missing", "credit_budget_exceeded", "model_timeout",
+    "model_unreachable", "model_incomplete",
+)
+
 BLOCKER_CODES = {
     "Approved founder project discovery task required": "project_discovery_link_missing",
     "Founder-owned ACTIVE plan and linked discovery task required":
@@ -127,6 +134,17 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
                 report["assigned_role_names"] = [p["role"] for p in participants]
             else:
                 report["blocking_checks"].append("seven_distinct_ai_employees_required")
+            # Each AI role call charges one virtual credit before the local model
+            # is contacted; a run with fewer credits fails before any handoff.
+            budget = db.execute(
+                "SELECT ceiling,consumed FROM ago_credit_budgets WHERE tenant_id=%s",
+                (tenant_id,),
+            ).fetchone()
+            remaining = (budget["ceiling"] - budget["consumed"]) if budget else 0
+            report["credits_required"] = len(participants)
+            report["credits_remaining"] = str(remaining)
+            if remaining < len(participants):
+                report["blocking_checks"].append("virtual_credit_budget_insufficient")
         except PermissionError as exc:
             failure_code = BLOCKER_CODES.get(str(exc), "company_hierarchy_not_verified")
             report["blocking_checks"].append(failure_code)
@@ -201,7 +219,7 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
         )
         report["latest_run_failure_code"] = (
             latest["failure_code"] if latest["failure_code"] in
-            ("handler_error", "worker_timeout") else None
+            RUN_FAILURE_CODES else None
         )
         report["blocking_checks"].append("prior_run_found_do_not_replay")
     report["blocking_checks"] = list(dict.fromkeys(report["blocking_checks"]))

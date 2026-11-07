@@ -13,3 +13,17 @@ def credits(value) -> Decimal:
     if amount.as_tuple().exponent < -4:
         raise ValueError("At most four decimal places supported")
     return amount
+
+
+class CreditBudgetUnavailable(PermissionError):
+    """Virtual credits refused an attempt. `failure_code` is a safe, fixed label."""
+
+    failure_code = "credit_budget_unavailable"
+
+
+class CreditBudgetMissing(CreditBudgetUnavailable):
+    failure_code = "credit_budget_missing"
+
+
+class CreditBudgetExceeded(CreditBudgetUnavailable):
+    failure_code = "credit_budget_exceeded"

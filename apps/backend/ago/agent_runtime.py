@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from dataclasses import replace
 from types import SimpleNamespace
+from urllib.error import URLError
 from uuid import UUID, uuid4
 
 from ago.agent_runtime_queries import AgentRuntimeQueries
@@ -15,6 +17,35 @@ from ago.task_store import TaskStore
 from ago.organizational_dna import GenomeStore
 from ago.enterprise_store import EnterpriseOperationsStore
 from ago.security_controls import SecurityControls
+
+
+# Fixed, secret-free labels for why a run failed. Exception text is never stored.
+RUN_FAILURE_CODES = frozenset({
+    "handler_error", "credit_budget_unavailable", "credit_budget_missing",
+    "credit_budget_exceeded", "model_timeout", "model_unreachable", "model_incomplete",
+})
+
+
+def run_failure_code(exc: BaseException) -> str:
+    """Classify a failed run by exception type only (walks __cause__/__context__)."""
+    seen = set()
+    current = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        code = getattr(type(current), "failure_code", None)
+        if isinstance(code, str) and code in RUN_FAILURE_CODES:
+            return code
+        if isinstance(current, (TimeoutError, socket.timeout)):
+            return "model_timeout"
+        if isinstance(current, URLError):
+            return ("model_timeout" if isinstance(current.reason, (TimeoutError, socket.timeout))
+                    else "model_unreachable")
+        if isinstance(current, ConnectionError):
+            return "model_unreachable"
+        if isinstance(current, RuntimeError) and str(current) == "Local model did not complete":
+            return "model_incomplete"
+        current = current.__cause__ or current.__context__
+    return "handler_error"
 
 
 class AgentRuntime:
@@ -124,7 +155,7 @@ class AgentRuntime:
         except Exception as exc:
             with self.db.transaction():
                 self.repositories.resolve(AgentRuntimeQueries).update_ago_agent_runs_07(
-                    (actor.tenant_id, run_id)
+                    (run_failure_code(exc), actor.tenant_id, run_id)
                 )
                 self.repositories.resolve(TaskStore).finish(
                     task_id=task.id,

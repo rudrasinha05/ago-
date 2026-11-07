@@ -608,3 +608,10 @@
 .credit-allowance-form{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin-top:6px}
 .credit-allowance-form label{display:grid;gap:4px;font-size:13px}.credit-allowance-form input[type=number]{width:140px}
 .credit-allowance-form .credit-confirm{display:flex;gap:6px;align-items:center;flex-basis:100%}
+/* Founder recovery of a failed stage (issue #10). */
+.stage-recovery{margin-top:6px;padding:10px 12px;border:1px solid #a8781e;border-radius:8px;background:#1c1508;display:grid;gap:8px;font-size:13px}
+.stage-recovery p{margin:0}.stage-recovery label{display:grid;gap:4px}
+.stage-recovery textarea{min-height:56px}
+.stage-recovery .stage-recovery-confirm{display:flex;gap:6px;align-items:center}
+.founder-delivery-journey .stage-recovery-open{justify-self:start;margin-top:4px;font-size:12px}
+.delivery-recovery-notice{padding:8px 12px;border-left:3px solid #4debb3;background:#08241c;border-radius:8px}

@@ -339,6 +339,7 @@
     "company_engineering_preflight": [
       "ago_agent_runs",
       "ago_approval_requests",
+      "ago_credit_budgets",
       "ago_employees",
       "ago_founder_intake_stages",
       "ago_founder_intakes",
@@ -636,7 +637,12 @@
     ],
     "plan_execution": [],
     "plan_execution_queries": [
+      "ago_agent_runs",
+      "ago_founder_intake_stages",
+      "ago_founder_intakes",
       "ago_goals",
+      "ago_governed_tasks",
+      "ago_plan_step_task_recoveries",
       "ago_plan_steps",
       "ago_strategy_plans"
     ],

@@ -16,12 +16,17 @@ class Cursor:
 
 
 class DB:
-    def __init__(self, task=None, approval=None, project=None, run=None):
+    def __init__(self, task=None, approval=None, project=None, run=None,
+                 budget=None):
+        from decimal import Decimal
         self.mapping = {
             "ago_governed_tasks": task,
             "ago_approval_requests": approval,
             "ago_founder_intakes": project,
             "ago_agent_runs": run,
+            # Default: enough credits, so older cases keep their blockers.
+            "ago_credit_budgets": budget if budget is not None else
+                {"ceiling": Decimal("100"), "consumed": Decimal("0")},
         }
         self.commands = []
     def execute(self, query, params=None):
@@ -171,3 +176,49 @@ def test_worker_pm_blocker_exposes_real_scoped_identities_no_fake_status(monkeyp
     assert report["task_post_authorized"] is False
     assert report["database_modified"] is False
     assert not any("UPDATE " in x or "INSERT " in x for x in db.commands)
+
+
+@pytest.mark.parametrize("ceiling,consumed,blocked", [
+    ("0", "0", True), ("10", "4", True), ("10", "3", False), (None, None, True),
+])
+def test_credit_allowance_below_one_chain_run_blocks_before_dispatch(
+    monkeypatch, ceiling, consumed, blocked,
+):
+    from decimal import Decimal
+    tenant, founder, task_id = (str(uuid4()) for _ in range(3))
+    budget = ({"ceiling": Decimal(ceiling), "consumed": Decimal(consumed)}
+              if ceiling is not None else False)
+    db = DB(
+        task={"action":"internal:brief", "status":"waiting_approval",
+              "approval_id":str(uuid4()), "assignee_id":str(uuid4())},
+        approval={"action":"internal:brief", "status":"approved"},
+        project={"id":str(uuid4())},
+        budget=budget,
+    )
+    if budget is False:
+        db.mapping["ago_credit_budgets"] = None
+    class Assignments:
+        def __init__(self, db):
+            self.db = db
+        def assignments(self, **_):
+            return [{"role": role, "employee_id": str(uuid4())}
+                    for role in ("ceo", "cto", "finance", "risk", "quality", "pm",
+                                 "employee")]
+    monkeypatch.setattr(p, "CompanyOllamaChainQueries", Assignments)
+    report = p.inspect_engineering_task(db, tenant_id=tenant,
+                                        founder_id=founder, task_id=task_id)
+    assert report["credits_required"] == 7
+    assert ("virtual_credit_budget_insufficient" in report["blocking_checks"]) is blocked
+    assert report["database_modified"] is False
+    assert all(cmd.startswith("SELECT") for cmd in db.commands)
+
+
+def test_new_safe_failure_codes_are_reported_back():
+    tenant, founder, task_id = (str(uuid4()) for _ in range(3))
+    db = DB(task={"action":"internal:brief", "status":"failed",
+                  "approval_id":None, "assignee_id":str(uuid4())},
+            run={"status":"failed", "failure_code":"credit_budget_missing"})
+    report = p.inspect_engineering_task(db, tenant_id=tenant,
+                                        founder_id=founder, task_id=task_id)
+    assert report["latest_run_failure_code"] == "credit_budget_missing"
+    assert "prior_run_found_do_not_replay" in report["blocking_checks"]

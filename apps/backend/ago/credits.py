@@ -9,6 +9,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
+from ago.credit_domain import CreditBudgetExceeded, CreditBudgetMissing
 from ago.credit_domain import credits as credits
 
 
@@ -53,7 +54,7 @@ class CreditBudget:
                 (tenant_id,),
             ).fetchone()
             if budget is None:
-                raise PermissionError("No configured virtual-credit budget")
+                raise CreditBudgetMissing("No configured virtual-credit budget")
             existing = self.db.execute(
                 """SELECT id,amount,category,actor_id
                    FROM ago_credit_usage
@@ -69,7 +70,7 @@ class CreditBudget:
                     raise PermissionError("Operation key cannot be reused differently")
                 return {"id": str(existing["id"]), "charged": False}
             if Decimal(budget["consumed"]) + qty > Decimal(budget["ceiling"]):
-                raise PermissionError("Virtual-credit budget exceeded")
+                raise CreditBudgetExceeded("Virtual-credit budget exceeded")
             usage_id = str(uuid4())
             self.db.execute(
                 """INSERT INTO ago_credit_usage

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import Field
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, repository_scope, translate_error
-from ago.repository_ports import CompanyChatPort
+from ago.repository_ports import CompanyChatPort, PlanExecutionPort
 
 router = APIRouter(prefix='/v1/organization/company', tags=['Company map'])
 
@@ -377,6 +377,29 @@ def founder_project_details(project_id: UUID,actor=Depends(authenticated),
             actor.tenant_id,str(project_id),reader_id=actor.subject)
     except (ValueError,LookupError) as exc:
         translate_error(exc)
+
+class StageRecoveryInput(StrictInput):
+    failed_task_id: UUID
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@router.post('/projects/{project_id}/stages/{stage}/recovery')
+def recover_failed_stage(project_id: UUID,
+                         stage: Literal['discovery','architecture','implementation','quality','release'],
+                         data: StageRecoveryInput, actor=Depends(authenticated),
+                         repositories=Depends(repository_scope)):
+    """Founder-only: new proposed task for a FAILED stage task; never approves or runs."""
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'approval:founder')
+    if 'founder' not in actor.roles:
+        translate_error(PermissionError('Only the project Founder may recover a stage task'))
+    try:
+        return repositories.resolve(PlanExecutionPort).recover_failed_stage(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id),
+            stage=stage, failed_task_id=str(data.failed_task_id), reason=data.reason)
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
 
 class ProjectManagerInput(StrictInput):
     employee_id: UUID

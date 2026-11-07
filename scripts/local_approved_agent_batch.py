@@ -380,8 +380,10 @@ def reconcile_attempts(journal: DurableAttemptJournal, tasks, runs) -> dict:
                                "running", "completed", "failed"):
             task_status = None
         failure_code = agent_run.get("failure_code") if agent_run else None
-        failure_code = (failure_code if failure_code in
-                        ("handler_error", "worker_timeout") else None)
+        failure_code = (failure_code if failure_code in (
+            "handler_error", "worker_timeout", "credit_budget_unavailable",
+            "credit_budget_missing", "credit_budget_exceeded", "model_timeout",
+            "model_unreachable", "model_incomplete") else None)
         roles = result.get("roles_completed")
         matched.append({
             "task_id": task_id,
