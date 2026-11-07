@@ -159,3 +159,28 @@ test('a QA FAIL on a finished stage is recoverable as rework; a PASS or no verdi
  for(const v of ['pass',null,undefined])assert.equal(recoverableStage({...done,qa_verdict:v}),false);
  assert.equal(recoverableStage({...done,task_status:'failed',qa_verdict:null}),true);
 });
+test('advance picks the one next step from the first stage that has not passed QA',async()=>{
+ const {nextAdvanceStep,pickQaReviewer,stepLabel,AUTOMATIC}=await import('../apps/web/components/project-advance-state.js');
+ const s=(stage,position,extra)=>({stage,position,task_id:stage+'-task',...extra});
+ const pass=s('discovery',1,{task_status:'completed',agent_run_status:'completed',qa_verdict:'pass'});
+ const kind=(...stages)=>nextAdvanceStep({stages}).kind;
+ assert.equal(kind(s('discovery',1,{task_status:'proposed'})),'request');
+ assert.equal(kind(s('discovery',1,{task_status:'waiting_approval',task_approval_status:'pending'})),'approve');
+ assert.equal(kind(s('discovery',1,{task_status:'waiting_approval',task_approval_status:'approved'})),'run');
+ assert.equal(kind(s('discovery',1,{task_status:'waiting_approval',task_approval_status:'rejected'})),'rejected');
+ assert.equal(kind(s('discovery',1,{task_status:'running'})),'running');
+ assert.equal(kind(s('discovery',1,{task_status:'completed',agent_run_status:'completed'})),'qa');
+ assert.equal(kind(s('discovery',1,{task_status:'completed',agent_run_status:'completed',qa_verdict:'fail'})),'rework');
+ assert.equal(kind(s('discovery',1,{task_status:'failed'})),'failed');
+ assert.equal(kind(s('discovery',1,{task_id:null})),'unstaffed');
+ // Order is by position, and passed stages are skipped.
+ const next=nextAdvanceStep({stages:[s('architecture',2,{task_status:'proposed'}),pass]});
+ assert.deepEqual([next.kind,next.stage,next.task_id],['request','architecture','architecture-task']);
+ assert.equal(kind(pass),'done');
+ assert.equal(nextAdvanceStep({stages:[]}).kind,'unstaffed');
+ assert.deepEqual([...AUTOMATIC].sort(),['approve','qa','request','run']);
+ assert.match(stepLabel({kind:'run',stage:'discovery'}),/Run the discovery task with the AI team \(uses 7 internal credits\)/);
+ const reviewers=[{id:'w'},{id:'q'}];
+ assert.equal(pickQaReviewer(reviewers,{approved_assignee_id:'w'}).id,'q');
+ assert.equal(pickQaReviewer([{id:'w'}],{suggested_assignee_id:'w'}),null);
+});

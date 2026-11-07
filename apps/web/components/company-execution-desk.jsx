@@ -29,7 +29,7 @@ export function CompanyExecutionDesk({api,me,tasks,approvals,employees,onChange,
     setNotice('Task approval submitted: '+response.status+'. Independent/founder decision required.');
    }else{
     const result=await api.request('/v1/agents/tasks/'+encodeURIComponent(task.id)+'/run',{method:'POST',timeoutMs:270000});
-    setNotice(result.status==='completed'?'AI execution recorded. Independent human QA required.':'Agent outcome: '+result.status+'. Verify persisted task status before further action.');
+    setNotice(result.status==='completed'?'AI execution recorded. Next: an independent AI QA check of this stage in the Delivery Journey.':'Agent outcome: '+result.status+'. Verify persisted task status before further action.');
    }
   }catch(e){
    setFailure(e);setError((e.message||'Task operation failed')+'. Check recorded task history before any retry. The server may have completed a run even if the browser timed out.');

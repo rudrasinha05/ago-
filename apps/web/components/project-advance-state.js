@@ -1,0 +1,58 @@
+// "Advance project": decide the ONE next step for a Founder-approved project
+// from the signed project detail. The server stays the authority for every
+// step (approval, hierarchy, self-check, credits, run, QA); this only chooses
+// which existing endpoint to call next, and stops whenever a person must act.
+import {CREDITS_PER_CHAIN_RUN} from './task-self-check-state.js';
+
+export const QA_CREDITS=1;
+const KINDS={
+ request:'Ask for approval of the {stage} task',
+ approve:'Get AI team approval for the {stage} task (manager → project manager → CEO)',
+ run:'Run the {stage} task with the AI team (uses '+CREDITS_PER_CHAIN_RUN+' internal credits)',
+ qa:'AI QA checks the {stage} stage (uses '+QA_CREDITS+' internal credit)',
+ running:'The {stage} task is running — wait for it to finish',
+ rework:'AI QA failed the {stage} stage — Founder: create a rework task',
+ failed:'The {stage} task failed — Founder: recover the stage',
+ rejected:'The {stage} task approval was rejected — Founder decides what to do',
+ unstaffed:'The {stage} stage has no AI worker — staff it first',
+ unknown:'The {stage} stage is in a state AGO cannot advance automatically',
+ done:'Every stage passed AI QA',
+};
+// Steps AGO can do by itself; every other kind needs a person and stops a loop.
+export const AUTOMATIC=new Set(['request','approve','run','qa']);
+
+export function stepLabel(step){
+ return KINDS[step.kind].replace('{stage}',step.stage||'');
+}
+
+/** First stage (by position) that has not passed QA decides the next step. */
+export function nextAdvanceStep(detail){
+ const stages=(Array.isArray(detail?.stages)?detail.stages:[]).slice()
+  .sort((a,b)=>Number(a.position)-Number(b.position));
+ if(!stages.length)return {kind:'unstaffed',stage:'first'};
+ for(const s of stages){
+  if(s.qa_verdict==='pass')continue;
+  const base={stage:s.stage,task_id:s.task_id||null};
+  if(!s.task_id)return {...base,kind:'unstaffed'};
+  if(s.qa_verdict==='fail')return {...base,kind:'rework'};
+  switch(s.task_status){
+   case 'failed':return {...base,kind:'failed'};
+   case 'proposed':return {...base,kind:'request'};
+   case 'waiting_approval':
+    if(s.task_approval_status==='approved')return {...base,kind:'run'};
+    if(s.task_approval_status==='rejected')return {...base,kind:'rejected'};
+    return {...base,kind:'approve'};
+   case 'running':return {...base,kind:'running'};
+   case 'completed':
+    return s.agent_run_status==='completed'?{...base,kind:'qa'}:{...base,kind:'unknown'};
+   default:return {...base,kind:'unknown'};
+  }
+ }
+ return {kind:'done',stage:''};
+}
+
+/** AI QA reviewer: a QA-role AI employee who is not this stage's worker (server re-checks). */
+export function pickQaReviewer(reviewers,stage){
+ const builders=new Set([stage?.approved_assignee_id,stage?.suggested_assignee_id].filter(Boolean));
+ return (Array.isArray(reviewers)?reviewers:[]).find(e=>!builders.has(e.id))||null;
+}

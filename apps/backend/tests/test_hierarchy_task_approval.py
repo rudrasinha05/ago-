@@ -73,8 +73,12 @@ def test_direct_ai_manager_approves_and_is_recorded_as_responsible(case):
     project, task_id = _waiting_task(client, founder)
     _set(db, tenant, project, task_id, manager=people['Engineering Manager'],
          project_manager=people['Project Manager'], founder_id=info['founder_id'])
+    detail = client.get(BASE+'/projects/'+project['id'], headers=founder).json()
+    assert next(x for x in detail['stages'] if x['task_id'] == task_id)['task_approval_status'] == 'pending'
     result = post(client, BASE+'/projects/'+project['id']+'/ceo/reconcile', founder)
     assert result['approved_task_ids'] == [task_id]
+    detail = client.get(BASE+'/projects/'+project['id'], headers=founder).json()
+    assert next(x for x in detail['stages'] if x['task_id'] == task_id)['task_approval_status'] == 'approved'
     assert result['task_approvers'] == [{'task_id': task_id,
         'approver_id': people['Engineering Manager'], 'approver_name': 'Engineering Manager',
         'approver_level': 'manager'}]

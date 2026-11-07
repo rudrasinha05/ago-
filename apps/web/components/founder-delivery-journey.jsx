@@ -5,16 +5,18 @@ import {RecoveryHint} from './recovery-hint';
 import {aiQaReadyStage,canReadDelivery,deliveryPage,DELIVERY_STATES,deliveryEvidence,failureReason,founderDecisions,projectTaskIds,recoverableStage,reviewedStages,stageTaskLabel,taskApprovalStates} from './founder-delivery-state';
 import {StageRecovery} from './stage-recovery';
 import {StageAiQa} from './stage-ai-qa';
+import {ProjectAdvance} from './project-advance';
 
 export function FounderDeliveryJourney({api,me,profiles=[],active=true,refreshSignal=0,onProject,onWork,onSection,onApproval}){
  const [page,setPage]=useState(null),[offset,setOffset]=useState(0),[loading,setLoading]=useState(false);
  const [error,setError]=useState(''),[failure,setFailure]=useState(null),[refresh,setRefresh]=useState(0);
  const [approvalStates,setApprovalStates]=useState(()=>new Map()),[recoveryNotice,setRecoveryNotice]=useState('');
  const [qaNotice,setQaNotice]=useState('');
+ const shownOffset=useRef(null);
  const sequence=useRef(0);
  const readable=canReadDelivery(me);
  useEffect(()=>{
-  if(!readable||!active){sequence.current++;setPage(null);return undefined;}
+  if(!readable||!active){sequence.current++;setPage(null);shownOffset.current=null;return undefined;}
   let live=true;
   async function load(){
    const version=++sequence.current;setLoading(true);
@@ -26,7 +28,10 @@ export function FounderDeliveryJourney({api,me,profiles=[],active=true,refreshSi
    }catch(e){if(live&&version===sequence.current){setPage(null);setFailure(e);setError(e.message||'Delivery overview unavailable.');}}
    finally{if(live&&version===sequence.current)setLoading(false);}
   }
-  setPage(null);load();
+  // Only a page change clears the cards. A refresh keeps them mounted, so a running
+  // Advance project step log (or any open form) is never wiped by a background reload.
+  if(shownOffset.current!==offset){setPage(null);shownOffset.current=offset;}
+  load();
   const timer=setInterval(load,15000);
   return()=>{live=false;sequence.current++;clearInterval(timer);};
  },[api,readable,active,offset,refresh,refreshSignal]);
@@ -64,6 +69,8 @@ export function FounderDeliveryJourney({api,me,profiles=[],active=true,refreshSi
       setQaNotice('AI QA '+r.verdict.toUpperCase()+' recorded for '+r.stage+' of '+p.title+' by '+r.qa_employee_name+' (receipt '+r.receipt_id.slice(0,8)+'…).');
       setRefresh(x=>x+1);}}/>}
     </li>)}</ol>
+    {p.plan_status==='active'&&me.roles?.includes('founder')&&<ProjectAdvance api={api} project={p} profiles={profiles}
+     onChanged={()=>setRefresh(x=>x+1)}/>}
     <ul className="delivery-evidence" aria-label={'Delivery evidence for '+p.title}>{deliveryEvidence(p).map(e=>
      <li key={e.key} className={e.verified?'verified':undefined}>{e.label}: {e.verified?'Verified':'Not verified'}</li>)}</ul>
     {p.pending_approvals.length>0&&<p>{p.pending_approvals.length} linked pending request(s) in the current approval inbox.</p>}

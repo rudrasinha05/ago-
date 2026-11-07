@@ -1232,6 +1232,7 @@ class CompanyChat:
                    s.plan_step_id,t.id AS task_id,t.status AS task_status,
                    t.action AS task_action,executor.name AS executing_employee,
                    q.verdict AS qa_verdict,q.evidence AS qa_evidence,
+                   ta.status AS task_approval_status,
                    q.created_at AS qa_reviewed_at,ar.status AS agent_run_status,
                    ar.failure_code AS agent_failure_code,ar.started_at AS agent_started_at,
                    ar.finished_at AS agent_finished_at,
@@ -1249,6 +1250,7 @@ class CompanyChat:
             LEFT JOIN ago_governed_tasks t ON t.tenant_id=step.tenant_id AND t.id=step.task_id
             LEFT JOIN ago_employees executor ON executor.tenant_id=t.tenant_id AND executor.id=t.assignee_id
             LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id AND q.task_id=t.id
+            LEFT JOIN ago_approval_requests ta ON ta.tenant_id=t.tenant_id AND ta.id=t.approval_id
             LEFT JOIN ago_agent_runs ar ON ar.tenant_id=t.tenant_id AND ar.task_id=t.id
             LEFT JOIN ago_project_stage_delegation_activations assigned
               ON assigned.tenant_id=s.tenant_id AND assigned.intake_id=s.intake_id

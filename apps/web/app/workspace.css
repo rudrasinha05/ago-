@@ -640,3 +640,13 @@
 .project-portfolio-overview button:hover:not(:disabled){background:#1b4263}
 .project-portfolio-overview button:focus-visible{outline:3px solid #80b9ff;outline-offset:3px}
 .portfolio-row>.delivery-actions{justify-content:flex-end}@media (max-width:760px){.portfolio-row>.delivery-actions{justify-content:flex-start}}
+/* Advance project: AGO does the next governed step(s) and shows each one. */
+.project-advance{margin-top:10px;padding:12px 14px;border:1px solid #2f5d86;border-radius:10px;background:#0c1a2b;display:grid;gap:8px;font-size:13px}
+.project-advance p{margin:0}
+.project-advance-allow{display:flex;gap:6px;align-items:center}
+.project-advance-log{margin:0;padding-left:20px;display:grid;gap:3px;max-height:260px;overflow:auto}
+.project-advance-log time{color:#9fb3cc;font-variant-numeric:tabular-nums}
+.project-advance-log .tone-ok{color:#9ff0cf}.project-advance-log .tone-stop{color:#ffd18a}
+.founder-delivery-journey .project-advance-allow{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;gap:8px;text-align:left}
+.founder-delivery-journey .project-advance-allow input{width:18px;height:18px;min-height:0;margin:0;flex:0 0 auto}
+.founder-delivery-journey .project-advance .delivery-actions{justify-content:flex-start}

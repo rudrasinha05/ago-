@@ -1086,6 +1086,77 @@ test('a stage that failed AI QA offers a rework task and keeps the QA FAIL as ev
  expect(errors).toEqual([]);
 });
 
+test('advance project walks one stage through approval, AI team approval, run and AI QA, showing every step',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const task='4f000000-0000-4000-8000-00000000004f',qa='50000000-0000-4000-8000-000000000050',worker='51000000-0000-4000-8000-000000000051';
+ const project={...deliveryProject(),stages:[{stage:'discovery',position:1,employee:'Business Analyst',task_id:task,task_status:'proposed',qa_verdict:null}]};
+ const stage={stage:'discovery',position:1,task_id:task,approved_assignee_id:worker,task_status:'proposed',task_approval_status:null,
+  agent_run_status:null,qa_verdict:null};
+ const sequence=[];
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([project])}));
+ await page.route('**/v1/organization/company/governance',route=>route.fulfill({status:200,json:{board:[],employees:[
+  {id:worker,name:'Bea',kind:'ai',role_title:'QA Engineer'},{id:qa,name:'Quinn',kind:'ai',role_title:'QA Engineer'}]}}));
+ await page.route('**/v1/organization/company/projects/'+project.project_id,route=>route.fulfill({status:200,json:{
+  id:project.project_id,title:project.title,plan_status:'active',stages:[{...stage}]}}));
+ await page.route('**/v1/console/tasks/'+task+'/request-approval',route=>{sequence.push('request');
+  Object.assign(stage,{task_status:'waiting_approval',task_approval_status:'pending'});return route.fulfill({status:200,json:{status:'waiting_approval'}});});
+ await page.route('**/v1/organization/company/projects/'+project.project_id+'/ceo/reconcile',route=>{sequence.push('approve');
+  stage.task_approval_status='approved';
+  return route.fulfill({status:200,json:{approved_task_ids:[task],blocked_task_ids:[],task_approvers:[
+   {task_id:task,approver_id:qa,approver_name:'Mira',approver_level:'project_manager'}]}});});
+ await page.route('**/v1/agents/tasks/'+task+'/engineering-preflight',route=>{sequence.push('self-check');
+  return route.fulfill({status:200,json:{kind:'ago_founder_engineering_preflight_v1',blocking_checks:[],unverified_execution_gates:[],assigned_role_names:['CEO','PM']}});});
+ await page.route('**/v1/insights/scorecard',route=>route.fulfill({status:200,json:{virtual_credit_budget:{ceiling:30,consumed:0,remaining:30}}}));
+ await page.route('**/v1/agents/tasks/'+task+'/run',route=>{sequence.push('run');
+  Object.assign(stage,{task_status:'completed',agent_run_status:'completed'});return route.fulfill({status:200,json:{status:'completed'}});});
+ await page.route(/\/stages\/discovery\/ai-qa$/,route=>{sequence.push('qa:'+route.request().postDataJSON().qa_employee_id);
+  stage.qa_verdict='pass';
+  return route.fulfill({status:200,json:{kind:'ago_ai_qa_review_v1',task_id:task,verdict:'pass',qa_employee_name:'Quinn',review_recorded:true,
+   receipt_id:'52000000-0000-4000-8000-000000000052',executed_or_released:false}});});
+ await login(page);await navigate(page,'Organization');
+ const card=page.getByRole('article',{name:'Delivery: '+project.title});
+ const box=card.getByRole('group',{name:'Advance '+project.title});
+ await box.getByRole('button',{name:'Show the next step for '+project.title}).click();
+ await expect(box).toContainText('Next step: Ask for approval of the discovery task.');
+ const keep=box.getByRole('button',{name:'Keep going until I am needed'});
+ await expect(keep).toBeDisabled();
+ await box.getByRole('checkbox').check();
+ await keep.click();
+ const steps=box.getByRole('list',{name:'Steps AGO took for '+project.title});
+ await expect(steps).toContainText('Every stage passed AI QA. AGO stopped here.',{timeout:15000});
+ await expect(steps).toContainText('Mira (project manager) approved the discovery task and is responsible for it.');
+ await expect(steps).toContainText('The AI team finished the discovery task.');
+ await expect(steps).toContainText('AI QA by Quinn: PASS for discovery.');
+ // The builder (Bea) is never chosen as QA, even though her role is QA.
+ expect(sequence).toEqual(['request','approve','self-check','run','qa:'+qa]);
+ await expect(box.getByRole('checkbox')).not.toBeChecked();
+ await accessibility(page);
+ expect(errors).toEqual([]);
+ expect(calls.filter(x=>/\/decision$/.test(x.path))).toEqual([]);
+});
+
+test('advance project stops at a self-check blocker and runs nothing',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const task='53000000-0000-4000-8000-000000000053';
+ const project={...deliveryProject(),stages:[{stage:'discovery',position:1,employee:'Business Analyst',task_id:task,task_status:'waiting_approval',qa_verdict:null}]};
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([project])}));
+ await page.route('**/v1/organization/company/projects/'+project.project_id,route=>route.fulfill({status:200,json:{
+  id:project.project_id,title:project.title,plan_status:'active',stages:[{stage:'discovery',position:1,task_id:task,
+   task_status:'waiting_approval',task_approval_status:'approved',qa_verdict:null}]}}));
+ await page.route('**/v1/agents/tasks/'+task+'/engineering-preflight',route=>route.fulfill({status:200,json:{
+  kind:'ago_founder_engineering_preflight_v1',blocking_checks:['board_appointments_incomplete'],unverified_execution_gates:[]}}));
+ await page.route('**/v1/insights/scorecard',route=>route.fulfill({status:200,json:{virtual_credit_budget:{ceiling:0,consumed:0,remaining:0}}}));
+ await login(page);await navigate(page,'Organization');
+ const box=page.getByRole('article',{name:'Delivery: '+project.title}).getByRole('group',{name:'Advance '+project.title});
+ await box.getByRole('checkbox').check();
+ await box.getByRole('button',{name:'Do the next step'}).click();
+ const steps=box.getByRole('list',{name:'Steps AGO took for '+project.title});
+ await expect(steps).toContainText('Self-check blocked the run: Not all five AI Board seats');
+ await expect(steps).toContainText('Not enough internal AI credits: 0 left');
+ expect(calls.filter(x=>/\/run$/.test(x.path))).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
 test('a finished stage is checked by an independent AI QA employee chosen by the Founder',async({page})=>{
  const {calls,errors}=await deliveryFixtures(page);
  const doneTask='48000000-0000-4000-8000-000000000048',qa='49000000-0000-4000-8000-000000000049',
