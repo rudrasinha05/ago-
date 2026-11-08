@@ -18,7 +18,10 @@ from urllib.request import Request, urlopen
 from uuid import UUID
 
 from local_approved_agent_batch import (
-    CONFIRM, DurableAttemptJournal, founder_login, local_url,
+    CONFIRM,
+    DurableAttemptJournal,
+    founder_login,
+    local_url,
 )
 
 QUEUE="/v1/operations/enterprise/work-queue"
