@@ -644,9 +644,11 @@
     "model_provider": [],
     "organization": [],
     "organization_store": [
+      "ago_department_lifecycle_events",
       "ago_departments",
       "ago_employees",
-      "ago_memory_records"
+      "ago_memory_records",
+      "ago_personnel_events"
     ],
     "organizational_dna": [
       "ago_approval_requests",

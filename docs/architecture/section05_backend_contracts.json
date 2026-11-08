@@ -1530,6 +1530,10 @@
         "list_employees": {
           "arguments": "self, *, tenant_id: str, department_id: str",
           "returns": "list[Employee]"
+        },
+        "eligible_ai_staff": {
+          "arguments": "self, *, tenant_id: str",
+          "returns": "list[dict]"
         }
       }
     },

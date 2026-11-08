@@ -4,9 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from ago.backend_contracts import ActiveWorkforcePort, RepositoryScope
 from ago.company_chat import CompanyChat
-from ago.enterprise_store import EnterpriseOperationsStore
 
 
 class Cursor:
@@ -57,10 +55,7 @@ def person():
 
 
 def staffing(db):
-    scope=RepositoryScope(db,bindings={
-        ActiveWorkforcePort: EnterpriseOperationsStore,
-    })
-    return CompanyChat(db,repositories=scope)
+    return CompanyChat(db)
 
 
 def test_ceo_accountable_staffing_proposals_use_only_actual_unassigned_stages():

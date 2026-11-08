@@ -28,12 +28,6 @@ class DatabaseConnection(Protocol):
 T = TypeVar("T")
 
 
-class ActiveWorkforcePort(Protocol):
-    """Read-only operations-owned lifecycle eligibility across domain boundaries."""
-
-    def eligible_ai_staff(self, *, tenant_id: str) -> list[dict]: ...
-
-
 class RepositoryScope:
     """One connection and cache per dependency scope, with cascading overrides."""
 
