@@ -1521,8 +1521,9 @@ class EnterpriseOperationsStore:
             (str(UUID(tenant_id)),),
         ).fetchall()]
 
-    def work_queue(self, *, tenant_id: str) -> list[dict]:
+    def work_queue(self, *, tenant_id: str, plan_id: str | None = None) -> list[dict]:
         tenant = str(UUID(tenant_id))
+        plan = str(UUID(plan_id)) if plan_id is not None else None
         return [dict(row) for row in self.connection.execute(
             """SELECT q.id,q.task_id,q.operation_key,q.priority,q.eligible_at,
                       q.created_at,t.status AS task_status,t.action AS task_action,
@@ -1539,8 +1540,15 @@ class EnterpriseOperationsStore:
                  ORDER BY sequence DESC LIMIT 1
                ) e ON true
                WHERE q.tenant_id=%s
+                 AND (%s::uuid IS NULL OR EXISTS (
+                   SELECT 1 FROM ago_plan_steps scope
+                   JOIN ago_strategy_plans root
+                     ON root.tenant_id=scope.tenant_id AND root.id=scope.plan_id
+                   WHERE scope.tenant_id=t.tenant_id AND scope.task_id=t.id
+                     AND scope.plan_id=%s::uuid AND root.status='active'
+                 ))
                ORDER BY q.created_at DESC,q.id LIMIT 100""",
-            (tenant,),
+            (tenant,plan,plan),
         ).fetchall()]
 
     def queue_work(self, *, actor: Principal, task_id: str, operation_key: str,
@@ -1590,9 +1598,10 @@ class EnterpriseOperationsStore:
                 "idempotent": False, "executed": False}
 
     def claim_work(self, *, actor: Principal, lease_seconds: int,
-                   offline_only: bool = False) -> dict:
+                   offline_only: bool = False, plan_id: str | None = None) -> dict:
         if type(lease_seconds) is not int or not 300 <= lease_seconds <= 3600:
             raise ValueError("Lease must be between five and sixty minutes")
+        plan = str(UUID(plan_id)) if plan_id is not None else None
         with self.connection.transaction():
             self._tenant_lock(actor.tenant_id)
             if self.effective_mode(tenant_id=actor.tenant_id)["mode"] != "active":
@@ -1616,7 +1625,14 @@ class EnterpriseOperationsStore:
                    ) last ON true
                    WHERE q.tenant_id=%s AND q.eligible_at<=clock_timestamp()
                      AND (%s=false OR t.action='internal:brief')
-                     AND t.status='waiting_approval'
+                      AND (%s::uuid IS NULL OR EXISTS (
+                        SELECT 1 FROM ago_plan_steps scope
+                        JOIN ago_strategy_plans root
+                          ON root.tenant_id=scope.tenant_id AND root.id=scope.plan_id
+                        WHERE scope.tenant_id=t.tenant_id AND scope.task_id=t.id
+                          AND scope.plan_id=%s::uuid AND root.status='active'
+                      ))
+                      AND t.status='waiting_approval'
                      AND a.status='approved' AND a.action=t.action
                      AND (last.state IS NULL OR last.state='released')
                       -- Expired leases are UNKNOWN outcomes. A restart may
@@ -1630,7 +1646,7 @@ class EnterpriseOperationsStore:
                        (clock_timestamp()-q.created_at))/3600)::int))) DESC,
                        q.created_at,q.id
                    LIMIT 100""",
-                (actor.tenant_id, offline_only),
+                (actor.tenant_id, offline_only, plan, plan),
             ).fetchall()
             limits = self.capacity_limits(tenant_id=actor.tenant_id)
             caps = {}

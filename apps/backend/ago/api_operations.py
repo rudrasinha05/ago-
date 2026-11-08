@@ -1213,6 +1213,7 @@ class EnterpriseQueueInput(StrictInput):
 
 class EnterpriseQueueClaimInput(StrictInput):
     lease_seconds: int = Field(default=600, ge=300, le=3600)
+    plan_id: UUID | None = None
 
 
 class EnterpriseQueueCloseInput(StrictInput):
@@ -1222,12 +1223,14 @@ class EnterpriseQueueCloseInput(StrictInput):
 
 @router.get("/enterprise/work-queue")
 def enterprise_work_queue(
+    plan_id: UUID | None = None,
     db=Depends(db_connection), actor: Principal = Depends(authenticated),
     repositories: RepositoryScope = Depends(repository_scope),
 ):
     allowed(repositories, actor, "operations:read")
     return repositories.resolve(EnterpriseOperationsStorePort).work_queue(
-        tenant_id=actor.tenant_id)
+        tenant_id=actor.tenant_id,
+        plan_id=str(plan_id) if plan_id is not None else None)
 
 
 @router.post("/enterprise/work-queue")
@@ -1253,7 +1256,8 @@ def enterprise_claim_work(
     allowed(repositories, actor, "task:execute")
     return enterprise_call(lambda: repositories.resolve(
         EnterpriseOperationsStorePort).claim_work(
-        actor=actor, lease_seconds=data.lease_seconds))
+        actor=actor, lease_seconds=data.lease_seconds,
+         plan_id=str(data.plan_id) if data.plan_id is not None else None))
 
 
 @router.post("/enterprise/work-queue/{queue_id}/release")
@@ -1502,7 +1506,8 @@ def enterprise_claim_offline_work(
     allowed(repositories, actor, "task:execute")
     allowed(repositories, actor, "agent:dispatch")
     return enterprise_call(lambda: repositories.resolve(EnterpriseOperationsStorePort).claim_work(
-        actor=actor, lease_seconds=data.lease_seconds, offline_only=True))
+        actor=actor, lease_seconds=data.lease_seconds, offline_only=True,
+         plan_id=str(data.plan_id) if data.plan_id is not None else None))
 
 
 class EnterpriseActionIntentInput(StrictInput):

@@ -859,7 +859,7 @@
           "returns": "list[dict]"
         },
         "work_queue": {
-          "arguments": "self, *, tenant_id: str",
+      "arguments": "self, *, tenant_id: str, plan_id: str | None=None",
           "returns": "list[dict]"
         },
         "queue_work": {
@@ -867,7 +867,7 @@
           "returns": "dict"
         },
         "claim_work": {
-          "arguments": "self, *, actor: Principal, lease_seconds: int, offline_only: bool=False",
+      "arguments": "self, *, actor: Principal, lease_seconds: int, offline_only: bool=False, plan_id: str | None=None",
           "returns": "dict"
         },
         "resolve_work_lease": {
