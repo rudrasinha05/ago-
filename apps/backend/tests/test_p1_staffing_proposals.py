@@ -17,8 +17,10 @@ class Cursor:
 
 
 class DB:
-    def __init__(self, *, active=True, board=True, existing_role=False):
+    def __init__(self, *, active=True, board=True, existing_role=False,
+                 activated_stage=None):
         self.active, self.board, self.existing_role = active, board, existing_role
+        self.activated_stage = activated_stage
         self.calls = []
         self.hired = False
     def execute(self, sql, args):
@@ -31,9 +33,12 @@ class DB:
             return Cursor([{"id":uuid4()}] if self.board else [])
         if "FROM ago_founder_intake_stages" in sql:
             return Cursor([
-                {"stage":"discovery","position":1,"suggested_assignee_id":uuid4()},
-                {"stage":"architecture","position":2,"suggested_assignee_id":None},
-                {"stage":"implementation","position":3,"suggested_assignee_id":None},
+                {"stage":"discovery","position":1,"suggested_assignee_id":uuid4(),
+                 "approved_assignee_id":None},
+                {"stage":"architecture","position":2,"suggested_assignee_id":None,
+                 "approved_assignee_id":uuid4() if self.activated_stage=="architecture" else None},
+                {"stage":"implementation","position":3,"suggested_assignee_id":None,
+                 "approved_assignee_id":uuid4() if self.activated_stage=="implementation" else None},
             ])
         if "FROM ago_employees" in sql:
             return Cursor([{"role":"software developer"}] if self.existing_role else [])
@@ -74,3 +79,12 @@ def test_draft_projects_unappointed_ceo_and_untrusted_actor_fail_without_writes(
     with pytest.raises(PermissionError):
         CompanyChat(db).staffing_proposals(actor,str(uuid4()))
     assert db.calls==[]
+
+
+def test_readonly_staffing_proposals_do_not_reopen_reviewed_assignment():
+    db=DB(existing_role=True,activated_stage="implementation")
+    result=CompanyChat(db).staffing_proposals(person(),str(uuid4()))
+    assert [item["stage"] for item in result["proposals"]]==["architecture"]
+    assert result["charter_granted"] is False
+    assert result["personnel_hired"] is False
+    assert all(sql.strip().upper().startswith("SELECT") for sql,_ in db.calls)

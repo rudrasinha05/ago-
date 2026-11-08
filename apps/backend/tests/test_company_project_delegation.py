@@ -46,11 +46,31 @@ def test_local_project_stage_delegation_is_real_audited_and_uses_founder_control
     post(client,gate,founder,{"approve":True,"reason":"Approve bounded local project goals"})
     post(client,"/v1/brain/plans/"+project["plan_id"]+"/activate",founder)
 
+    before=client.get(BASE+"/projects/"+project["id"],headers=founder).json()
+    summary_before=next(p for p in client.get(BASE+"/projects",headers=founder).json()
+                        if str(p["id"])==project["id"])
+    workload_before=client.get(BASE+"/management/workload",headers=founder).json()
+    assert any(str(s["project_id"])==project["id"] and s["stage"]=="implementation"
+               for s in workload_before["unassigned_project_stages"])
+
     assignment=post(client,apply,founder,{})
     assert assignment["assignee_id"]==developer
     assert assignment["stage"]=="implementation"
     assert assignment["reused"] is False
     assert assignment["task_executed"] is False
+    detail=client.get(BASE+"/projects/"+project["id"],headers=founder).json()
+    stage=next(s for s in detail["stages"] if s["stage"]=="implementation")
+    assert str(stage["approved_assignee_id"])==developer
+    assert detail["unassigned_stages"]==before["unassigned_stages"]-1
+    summary=next(p for p in client.get(BASE+"/projects",headers=founder).json()
+                 if str(p["id"])==project["id"])
+    assert summary["staffing_gaps"]==summary_before["staffing_gaps"]-1
+    summary_stage=next(s for s in summary["stages"] if s["stage"]=="implementation")
+    assert str(summary_stage["approved_assignee_id"])==developer
+    assert summary_stage["approved_assignee_name"]=="Backend Engineer"
+    workload=client.get(BASE+"/management/workload",headers=founder).json()
+    assert not any(str(s["project_id"])==project["id"] and s["stage"]=="implementation"
+                   for s in workload["unassigned_project_stages"])
     assert post(client,apply,founder,{})["reused"] is True
     post(client,apply,reviewer,{},expected=403)
     queue=client.get(path,headers=founder)

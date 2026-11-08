@@ -372,9 +372,13 @@ class CompanyChat:
         if chief is None:
             raise PermissionError('Real founder-appointed AI CEO required')
         stages=self.db.execute("""
-            SELECT stage,position,suggested_assignee_id
-            FROM ago_founder_intake_stages
-            WHERE tenant_id=%s AND intake_id=%s ORDER BY position
+            SELECT s.stage,s.position,s.suggested_assignee_id,
+                   a.assignee_id AS approved_assignee_id
+            FROM ago_founder_intake_stages s
+            LEFT JOIN ago_project_stage_delegation_activations a
+              ON a.tenant_id=s.tenant_id AND a.intake_id=s.intake_id
+                 AND a.stage=s.stage
+            WHERE s.tenant_id=%s AND s.intake_id=%s ORDER BY s.position
         """,(actor.tenant_id,project_id)).fetchall()
         titles=self.db.execute("""
             SELECT DISTINCT lower(trim(role_title)) AS role
@@ -391,7 +395,9 @@ class CompanyChat:
         }
         proposals=[]
         for stage in stages:
-            if stage["suggested_assignee_id"] is not None:
+            if (stage["suggested_assignee_id"] is not None
+                    or stage["approved_assignee_id"] is not None):
+                # Already suggested or actually activated: no duplicate staffing.
                 continue
             role=roles.get(stage["stage"])
             if role is None:
@@ -1081,14 +1087,28 @@ class CompanyChat:
               l.commercial_objective,l.commercial_stage,l.verified_revenue_inr,
               (SELECT COUNT(*) FROM ago_founder_intake_stages s
                WHERE s.tenant_id=i.tenant_id AND s.intake_id=i.id
-                 AND s.suggested_assignee_id IS NULL) AS staffing_gaps,
+                 AND s.suggested_assignee_id IS NULL
+                 AND NOT EXISTS (
+                   SELECT 1 FROM ago_project_stage_delegation_activations a
+                   WHERE a.tenant_id=s.tenant_id AND a.intake_id=s.intake_id
+                     AND a.stage=s.stage
+                 )) AS staffing_gaps,
               (SELECT COALESCE(json_agg(json_build_object(
                   'stage',s.stage,'deliverable',s.deliverable,
                   'suggested_assignee_id',s.suggested_assignee_id,
                   'suggested_assignee_name',e.name,
-                  'suggested_role',e.role_title,'plan_step_id',s.plan_step_id
+                  'suggested_role',e.role_title,'plan_step_id',s.plan_step_id,
+                  'approved_assignee_id',approved_assignment.assignee_id,
+                  'approved_assignee_name',approved_employee.name
                ) ORDER BY s.position),'[]'::json)
                FROM ago_founder_intake_stages s
+               LEFT JOIN ago_project_stage_delegation_activations approved_assignment
+                 ON approved_assignment.tenant_id=s.tenant_id
+                    AND approved_assignment.intake_id=s.intake_id
+                    AND approved_assignment.stage=s.stage
+               LEFT JOIN ago_employees approved_employee
+                 ON approved_employee.tenant_id=approved_assignment.tenant_id
+                    AND approved_employee.id=approved_assignment.assignee_id
                LEFT JOIN ago_employees e
                  ON e.tenant_id=s.tenant_id AND e.id=s.suggested_assignee_id
                WHERE s.tenant_id=i.tenant_id AND s.intake_id=i.id) AS stages
@@ -1266,7 +1286,13 @@ class CompanyChat:
         result['stage_count'] = len(stages)
         result['completion_percent'] = round(100*completed/max(len(stages),1))
         result['reviewed_delegations_count'] = sum(s['approved_assignee_id'] is not None for s in stages)
-        result['unassigned_stages'] = sum(s['suggested_assignee_id'] is None for s in stages)
+        # An actually approved delegation covers a stage even if the draft
+        # did not have a suitable employee suggestion. Preserve the existing
+        # definition of a gap: neither suggested nor approved specialist.
+        result['unassigned_stages'] = sum(
+            s['suggested_assignee_id'] is None and s['approved_assignee_id'] is None
+            for s in stages
+        )
         result['running_stages'] = sum(s['task_status']=='running' for s in stages)
         result['failed_stages'] = sum(s['task_status']=='failed' or s['qa_verdict']=='fail'
                                       for s in stages)
@@ -1735,6 +1761,11 @@ class CompanyChat:
             JOIN ago_employees owner ON owner.tenant_id=l.tenant_id
                  AND owner.id=l.accountable_manager_id
             WHERE s.tenant_id=%s AND s.suggested_assignee_id IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_project_stage_delegation_activations a
+                WHERE a.tenant_id=s.tenant_id AND a.intake_id=s.intake_id
+                  AND a.stage=s.stage
+              )
             ORDER BY i.created_at,s.position LIMIT 50
         """,(tenant_id,)).fetchall()
         counts = [dict(e) for e in employees]
