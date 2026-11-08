@@ -361,16 +361,22 @@ export function CompanyMap({api,me,data,onRefresh}) {
     userMoved.current=true;pendingFocus.current=null;
     setPan(p=>boundedPan(p.x-dx,p.y-dy));
   }
-  // Keyboard focus may land on a card outside the visible map in any
-  // direction (the browser cannot scroll to negative offsets): pan to it.
+  // Native focus scrolling can happen after React captures focus. Re-check
+  // the actually focused element in the next frame to avoid racing scroll
+  // restoration against a stale geometry-based pan.
   function mapFocus(e){
-    const el=e.target,box=e.currentTarget.getBoundingClientRect(),r=el.getBoundingClientRect?.();
-    if(!r||el===e.currentTarget||el.closest('.map-controls,.map-legend'))return;
-    const inside=r.left>=box.left&&r.right<=box.right&&r.top>=box.top&&r.bottom<=box.bottom;
-    if(inside)return;
-    const dx=(box.left+box.width/2)-(r.left+r.width/2),dy=(box.top+box.height/2)-(r.top+r.height/2);
-    userMoved.current=true;pendingFocus.current=null;
-    setPan(p=>boundedPan(p.x+dx,p.y+dy));
+    const el=e.target,canvas=e.currentTarget;
+    if(el===canvas||el.closest('.map-controls,.map-legend'))return;
+    requestAnimationFrame(()=>{
+      if(viewport.current!==canvas||document.activeElement!==el)return;
+      const box=canvas.getBoundingClientRect(),r=el.getBoundingClientRect?.();
+      if(!r)return;
+      const inside=r.left>=box.left&&r.right<=box.right&&r.top>=box.top&&r.bottom<=box.bottom;
+      if(inside)return;
+      const dx=(box.left+box.width/2)-(r.left+r.width/2),dy=(box.top+box.height/2)-(r.top+r.height/2);
+      userMoved.current=true;pendingFocus.current=null;
+      setPan(p=>boundedPan(p.x+dx,p.y+dy));
+    });
   }
   function mapClickCapture(e){
     // A drag or pinch must not also open the card it ended on.

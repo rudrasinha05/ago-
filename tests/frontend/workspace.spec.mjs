@@ -720,6 +720,14 @@ test('keyboard focus on an off-screen map card pans the map instead of scrolling
  // Move focus into the Founder card, now far outside the visible map.
  await page.getByLabel('Talk to your company',{exact:true}).focus();
  await expect.poll(()=>canvas.evaluate(el=>el.scrollLeft+el.scrollTop)).toBe(0);
+ // Focus-triggered native scrolling and React state updates can finish on
+ // different frames. Wait for real focused-element geometry, not a timer.
+ await expect.poll(async()=>{
+  const box=await canvas.boundingBox(),field=await page.getByLabel('Talk to your company',{exact:true}).boundingBox();
+  if(!box||!field)return false;
+  const cx=field.x+field.width/2,cy=field.y+field.height/2;
+  return cx>box.x&&cx<box.x+box.width&&cy>box.y&&cy<box.y+box.height;
+ }).toBe(true);
  const box=await canvas.boundingBox(),field=await page.getByLabel('Talk to your company',{exact:true}).boundingBox();
  // The focused field is brought inside the map area by panning.
  expect(field.x+field.width/2).toBeGreaterThan(box.x);
