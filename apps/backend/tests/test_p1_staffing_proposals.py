@@ -40,8 +40,12 @@ class DB:
                 {"stage":"implementation","position":3,"suggested_assignee_id":None,
                  "approved_assignee_id":uuid4() if self.activated_stage=="implementation" else None},
             ])
-        if "FROM ago_employees" in sql:
-            return Cursor([{"role":"software developer"}] if self.existing_role else [])
+        if "FROM ago_employees e" in sql:
+            return Cursor([{"id":uuid4(),"name":"Software Developer",
+                            "role_title":"Software Developer"}]
+                          if self.existing_role else [])
+        if "FROM ago_founder_project_lead" in sql:
+            return Cursor([{"accountable_manager_id":uuid4()}])
         raise AssertionError("Unreviewed staffing query")
 
 
@@ -59,6 +63,9 @@ def test_ceo_accountable_staffing_proposals_use_only_actual_unassigned_stages():
     assert [p["suggested_role"] for p in result["proposals"]]==[
         "Solution Architect", "Software Developer"]
     assert result["proposals"][1]["decision"]=="review_existing_staff"
+    assert result["proposals"][1]["eligible_existing_count"]==1
+    assert result["proposals"][1]["eligible_candidates"][0]["employee_name"]=="Software Developer"
+    assert not result["proposals"][0]["eligible_candidates"]
     assert result["charter_granted"] is False
     assert result["personnel_hired"] is False
     assert result["permission_granted"] is False
@@ -88,3 +95,48 @@ def test_readonly_staffing_proposals_do_not_reopen_reviewed_assignment():
     assert result["charter_granted"] is False
     assert result["personnel_hired"] is False
     assert all(sql.strip().upper().startswith("SELECT") for sql,_ in db.calls)
+
+
+def test_readonly_specialist_query_filters_terminated_and_closed_workers():
+    db=DB(existing_role=True)
+    CompanyChat(db).staffing_proposals(person(),str(uuid4()))
+    sql=next(query for query,_ in db.calls if "FROM ago_employees e" in query)
+    assert "h.change_kind='terminated'" in sql
+    assert "d.action='closed'" in sql
+    assert "h.tenant_id=e.tenant_id" in sql
+    assert "d.tenant_id=e.tenant_id" in sql
+
+
+def test_quality_suggestion_excludes_implementer_and_project_manager():
+    actor=person()
+    class GuardedDb(DB):
+        def __init__(self):
+            super().__init__()
+            self.worker=uuid4()
+            self.qa=uuid4()
+        def execute(self,sql,args):
+            if "FROM ago_founder_intake_stages" in sql:
+                self.calls.append((sql,args))
+                return Cursor([
+                    {"stage":"implementation","position":1,
+                     "suggested_assignee_id":self.worker,
+                     "approved_assignee_id":None},
+                    {"stage":"quality","position":2,"suggested_assignee_id":None,
+                     "approved_assignee_id":None},
+                ])
+            if "FROM ago_founder_project_lead" in sql:
+                self.calls.append((sql,args))
+                return Cursor([{"accountable_manager_id":self.qa}])
+            if "FROM ago_employees e" in sql:
+                self.calls.append((sql,args))
+                return Cursor([
+                    {"id":self.worker,"name":"QA Developer","role_title":"QA Engineer"},
+                    {"id":self.qa,"name":"QA Manager","role_title":"QA Specialist"},
+                    {"id":uuid4(),"name":"Independent QA","role_title":"QA Engineer"},
+                ])
+            return super().execute(sql,args)
+    result=CompanyChat(GuardedDb()).staffing_proposals(actor,str(uuid4()))
+    quality=result["proposals"][0]
+    assert quality["stage"]=="quality"
+    assert quality["eligible_existing_count"]==1
+    assert quality["eligible_candidates"][0]["employee_name"]=="Independent QA"

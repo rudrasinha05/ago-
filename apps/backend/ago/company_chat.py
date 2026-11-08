@@ -380,12 +380,36 @@ class CompanyChat:
                  AND a.stage=s.stage
             WHERE s.tenant_id=%s AND s.intake_id=%s ORDER BY s.position
         """,(actor.tenant_id,project_id)).fetchall()
-        titles=self.db.execute("""
-            SELECT DISTINCT lower(trim(role_title)) AS role
-            FROM ago_employees
-            WHERE tenant_id=%s AND kind='ai' AND role_title IS NOT NULL
+        # An old title is not evidence of a usable employee: exclude people
+        # formally terminated and departments formally closed. Project staffing
+        # remains a read-only proposal, never an automatic hire or approval.
+        eligible=self.db.execute("""
+            SELECT e.id,e.name,e.role_title
+            FROM ago_employees e
+            WHERE e.tenant_id=%s AND e.kind='ai'
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_personnel_events h
+                WHERE h.tenant_id=e.tenant_id AND h.employee_id=e.id
+                  AND h.change_kind='terminated'
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_department_lifecycle_events d
+                WHERE d.tenant_id=e.tenant_id AND d.department_id=e.department_id
+                  AND d.action='closed'
+              )
+            ORDER BY lower(e.name),e.id
         """,(actor.tenant_id,)).fetchall()
-        existing={str(row["role"]) for row in titles}
+        lead=self.db.execute("""
+            SELECT accountable_manager_id FROM ago_founder_project_lead
+            WHERE tenant_id=%s AND intake_id=%s
+        """,(actor.tenant_id,project_id)).fetchone()
+        manager_id=str(lead["accountable_manager_id"]) if lead else None
+        implementation=next(
+            (str(s["approved_assignee_id"] or s["suggested_assignee_id"])
+             for s in stages if s["stage"]=="implementation"
+             and (s["approved_assignee_id"] or s["suggested_assignee_id"])),
+            None,
+        )
         roles={
             'discovery':'Research Analyst',
             'architecture':'Solution Architect',
@@ -393,25 +417,63 @@ class CompanyChat:
             'quality':'Independent QA Engineer',
             'release':'Release Engineer',
         }
+        keywords={
+            'discovery':('research','analyst','product'),
+            'architecture':('architect','technical lead','cto'),
+            'implementation':('developer','engineer','programmer'),
+            'quality':('quality','qa specialist','qa engineer','tester'),
+            'release':('devops','release','operations','delivery'),
+        }
         proposals=[]
         for stage in stages:
             if (stage["suggested_assignee_id"] is not None
                     or stage["approved_assignee_id"] is not None):
                 # Already suggested or actually activated: no duplicate staffing.
                 continue
-            role=roles.get(stage["stage"])
+            stage_name=stage["stage"]
+            role=roles.get(stage_name)
             if role is None:
                 raise ValueError('Unknown founder project stage')
+            candidates=[]
+            for employee in eligible:
+                employee_id=str(employee["id"])
+                if employee_id==str(chief["id"]):
+                    continue
+                identity=(str(employee["name"])+" "+
+                          str(employee["role_title"] or "")).casefold()
+                if not any(term in identity for term in keywords[stage_name]):
+                    continue
+                if stage_name=='implementation' and any(
+                    term in identity for term in
+                    ('quality','qa specialist','qa engineer','tester')
+                ):
+                    continue
+                if stage_name=='quality' and employee_id in (
+                    implementation,manager_id
+                ):
+                    # Never recommend self-QA or a project's accountable PM.
+                    continue
+                candidates.append({
+                    "employee_id":employee_id,
+                    "employee_name":str(employee["name"]),
+                    "role_title":employee["role_title"],
+                })
             proposals.append({
-                "stage":stage["stage"],
+                "stage":stage_name,
                 "suggested_role":role,
-                "existing_specialization_recorded":role.lower() in existing,
-                "decision":"review_existing_staff" if role.lower() in existing
+                "existing_specialization_recorded":bool(candidates),
+                "eligible_existing_count":len(candidates),
+                "eligible_candidates":candidates[:5],
+                "decision":"review_existing_staff" if candidates
                            else "propose_specialist_staffing",
             })
         digest=hashlib.sha256((
             project_id+"|"+str(chief["id"])+"|"+
-            "|".join(p["stage"]+":"+p["suggested_role"] for p in proposals)
+            "|".join(
+                p["stage"]+":"+p["suggested_role"]+":"+
+                ",".join(c["employee_id"] for c in p["eligible_candidates"])
+                for p in proposals
+            )
         ).encode()).hexdigest()
         return {
             "kind":"ago_p1_readonly_staffing_proposals",
