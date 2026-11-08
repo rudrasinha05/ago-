@@ -198,5 +198,10 @@ def test_two_project_priority_isolation_in_real_postgres(case):
     empty=post(client,path+"/offline-claim",founder,
                {"lease_seconds":600,"plan_id":str(uuid4())})
     assert empty["queue_id"] is None
-    assert client.get(path,headers=reviewer,
-                      params={"plan_id":projects[0]["plan_id"]}).status_code==403
+    # Reviewer already has operations:read in this tenant; scoped filtering
+    # must preserve existing RBAC, not falsely claim Founder-only metadata.
+    reviewer_view=client.get(path,headers=reviewer,
+                             params={"plan_id":projects[0]["plan_id"]})
+    assert reviewer_view.status_code==200,reviewer_view.text
+    assert [r["id"] for r in reviewer_view.json()]==[qa["id"]]
+    assert client.get(path,params={"plan_id":projects[0]["plan_id"]}).status_code==401
