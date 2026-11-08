@@ -6,6 +6,7 @@ Assignment records do not start AI tasks or certify QA.
 from uuid import uuid4
 from test_m7_http_postgres import case as case, post
 from test_enterprise_http_21_27 import department, employee
+from test_enterprise_hr_21 import _change
 
 BASE="/v1/organization/company"
 
@@ -168,3 +169,67 @@ def test_confidential_registry_denies_unassigned_company_readers(case):
     founder_list=client.get(BASE+"/projects",headers=founder)
     assert any(x["id"]==project["id"] for x in founder_list.json())
     assert client.get(BASE+"/projects/"+project["id"],headers=founder).status_code==200
+
+
+def test_stage_assignment_rechecks_approved_worker_after_termination(case):
+    """A reviewed-but-not-yet-activated request cannot revive terminated staff."""
+    client,headers,ctx=case
+    founder,reviewer=headers["founder"],headers["reviewer"]
+    dept=department(client,founder)
+    employee(client,founder,dept)
+    project=post(client,BASE+"/projects/start",founder,{
+        "brief":"Build safe customer onboarding with independently reviewed engineer assignment",
+        "operation_key":str(uuid4()),
+    })
+    worker=post(client,"/v1/organization/employees",founder,{
+        "department_id":dept,"name":"Backend Engineer","kind":"ai",
+    })["id"]
+    path=BASE+"/projects/"+project["id"]+"/delegations"
+    proposal=post(client,path,founder,{
+        "stage":"implementation","assignee_id":worker,
+    })
+    post(client,"/v1/governance/approvals/"+proposal["approval_id"]+"/decision",
+         founder,{"approve":True,"reason":"Review named engineer and bounded stage"})
+    strategy=post(client,"/v1/brain/plans/"+project["plan_id"]+"/submit",founder)
+    post(client,"/v1/governance/approvals/"+strategy["approval_id"]+"/decision",
+         founder,{"approve":True,"reason":"Approve bounded scope"})
+    post(client,"/v1/brain/plans/"+project["plan_id"]+"/activate",founder)
+    _change(client,founder,reviewer,"terminated",worker)
+    post(client,path+"/"+proposal["proposal_id"]+"/activate",founder,{},expected=403)
+    assert ctx["db"].execute("""
+      SELECT 1 FROM ago_project_stage_delegation_activations
+      WHERE tenant_id=%s AND intake_id=%s AND stage='implementation'
+    """,(ctx["tenant"],project["id"])).fetchone() is None
+    post(client,path,founder,{
+        "stage":"release","assignee_id":worker,
+    },expected=403)
+
+
+def test_implementation_and_qa_worker_must_be_independent_at_proposal(case):
+    client,headers,ctx=case
+    founder=headers["founder"]
+    dept=department(client,founder)
+    employee(client,founder,dept)
+    project=post(client,BASE+"/projects/start",founder,{
+        "brief":"Create guarded source delivery with independent quality and implementation reviews",
+        "operation_key":str(uuid4()),
+    })
+    builder=post(client,"/v1/organization/employees",founder,{
+        "department_id":dept,"name":"Backend Engineer","kind":"ai",
+    })["id"]
+    path=BASE+"/projects/"+project["id"]+"/delegations"
+    proposal=post(client,path,founder,{
+        "stage":"implementation","assignee_id":builder,
+    })
+    post(client,"/v1/governance/approvals/"+proposal["approval_id"]+"/decision",
+         founder,{"approve":True,"reason":"Approve bounded implementation assignment"})
+    strategy=post(client,"/v1/brain/plans/"+project["plan_id"]+"/submit",founder)
+    post(client,"/v1/governance/approvals/"+strategy["approval_id"]+"/decision",
+         founder,{"approve":True,"reason":"Approve project scope"})
+    post(client,"/v1/brain/plans/"+project["plan_id"]+"/activate",founder)
+    post(client,path+"/"+proposal["proposal_id"]+"/activate",founder,{})
+    post(client,path,founder,{"stage":"quality","assignee_id":builder},expected=403)
+    assert ctx["db"].execute("""
+      SELECT 1 FROM ago_project_stage_delegation_proposals
+      WHERE tenant_id=%s AND intake_id=%s AND stage='quality'
+    """,(ctx["tenant"],project["id"])).fetchone() is None

@@ -1415,6 +1415,47 @@ class CompanyChat:
             project['promotion_authorized']=False
             return project
 
+    def _require_eligible_stage_owner(
+        self, *, tenant_id: str, project_id: str, stage: str,
+        assignee_id: str, accountable_manager_id: str | None,
+    ) -> None:
+        """Fail closed on stale HR status and self-QA before any stage activation.
+
+        A historical suggestion or approval is not continuing authorization.
+        Existing governed HR operations own termination/closure state; this
+        method only reads their approved eligibility projection.
+        """
+        active=self.repositories.resolve(OrganizationStore).eligible_ai_staff(
+            tenant_id=tenant_id
+        )
+        if not any(str(e["id"])==assignee_id for e in active):
+            raise PermissionError(
+                "Selected AI specialist is terminated, inactive or unavailable"
+            )
+        if stage=="quality" and accountable_manager_id==assignee_id:
+            raise PermissionError("QA stage specialist must not be the delivery manager")
+        other=(
+            "implementation" if stage=="quality"
+            else "quality" if stage=="implementation"
+            else None
+        )
+        if other is None:
+            return
+        row=self.db.execute("""
+            SELECT s.suggested_assignee_id,
+                   a.assignee_id AS approved_assignee_id
+            FROM ago_founder_intake_stages s
+            LEFT JOIN ago_project_stage_delegation_activations a
+              ON a.tenant_id=s.tenant_id AND a.intake_id=s.intake_id
+                 AND a.stage=s.stage
+            WHERE s.tenant_id=%s AND s.intake_id=%s AND s.stage=%s
+        """,(tenant_id,project_id,other)).fetchone()
+        if row and assignee_id in {
+            str(x) for x in (row["suggested_assignee_id"],
+                             row["approved_assignee_id"]) if x is not None
+        }:
+            raise PermissionError("Implementation and QA must have independent specialists")
+
     def propose_stage_delegation(self, actor, project_id: str, stage: str,
                                  assignee_id: str) -> dict:
         """Create a real scoped operational review, not an agent instruction."""
@@ -1456,8 +1497,11 @@ class CompanyChat:
                 raise LookupError('Selected worker not in this company')
             if worker['kind']!='ai':
                 raise PermissionError('CEO delivery stages require an existing AI specialist')
-            if stage=='quality' and str(worker['id'])==str(project['accountable_manager_id']):
-                raise PermissionError('QA stage specialist must not be the delivery manager')
+            self._require_eligible_stage_owner(
+                tenant_id=actor.tenant_id,project_id=project_id,stage=stage,
+                assignee_id=assignee_id,
+                accountable_manager_id=str(project['accountable_manager_id']),
+            )
             if position['plan_step_id']:
                 planned=self.db.execute("""
                    SELECT assignee_id FROM ago_plan_steps
@@ -1513,9 +1557,11 @@ class CompanyChat:
             raise PermissionError('Human founder must apply reviewed personnel decisions')
         with self.db.transaction():
             project=self.db.execute("""
-                SELECT i.id,i.plan_id,p.status
+                SELECT i.id,i.plan_id,p.status,l.accountable_manager_id
                 FROM ago_founder_intakes i JOIN ago_strategy_plans p
                   ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                JOIN ago_founder_project_lead l
+                  ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
                 WHERE i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
             """,(actor.tenant_id,project_id)).fetchone()
             if project is None:
@@ -1541,6 +1587,13 @@ class CompanyChat:
                         'reused':True,'task_executed':False}
             if project['status']!='active':
                 raise PermissionError('Founder strategic plan must be approved and active')
+            # A valid historical approval does not authorize a now-terminated
+            # worker or same-person implementation and QA at activation time.
+            self._require_eligible_stage_owner(
+                tenant_id=actor.tenant_id,project_id=project_id,
+                stage=proposed['stage'],assignee_id=str(proposed['assignee_id']),
+                accountable_manager_id=str(project['accountable_manager_id']),
+            )
             # The local single-founder exception must still be in force when
             # the reviewed stage assignment is actually activated, not only
             # when its approval row was originally written. Never replay this
