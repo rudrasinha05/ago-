@@ -1525,7 +1525,7 @@ class EnterpriseOperationsStore:
         tenant = str(UUID(tenant_id))
         return [dict(row) for row in self.connection.execute(
             """SELECT q.id,q.task_id,q.operation_key,q.priority,q.eligible_at,
-                      q.created_at,t.status AS task_status,
+                      q.created_at,t.status AS task_status,t.action AS task_action,
                       e.state AS lease_state,e.expires_at AS lease_expires_at,
                       e.sequence AS lease_sequence,
                        coalesce(e.state='leased' AND e.expires_at<=clock_timestamp(),false)
