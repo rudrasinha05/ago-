@@ -18,7 +18,7 @@ concurrency:
 jobs:
   comparative-architecture:
     name: Section28 Native Graph and Organizational Governance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -76,7 +76,7 @@ jobs:
 
   database-architecture:
     name: Sections 7-9 Real Model Redis Memory and Recovery
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -135,7 +135,7 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.11", "3.14"]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -261,7 +261,7 @@ jobs:
 
   release-image-smoke:
     name: M10 Nonroot Image Smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -327,7 +327,7 @@ jobs:
 
   disaster-recovery-drill:
     name: M10 PostgreSQL Backup & Restore
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 18
     permissions:
       contents: read
@@ -390,7 +390,7 @@ jobs:
 
   pilot-browser-chromium:
     name: M11 Real Chromium Pilot
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -467,7 +467,7 @@ jobs:
 
   monorepo-shells:
     name: Section 4 Next.js Workspaces
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -493,7 +493,7 @@ jobs:
 
   frontend-browser:
     name: Section 6 Next.js Browser and Accessibility
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:

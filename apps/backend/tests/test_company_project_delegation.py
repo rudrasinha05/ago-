@@ -15,11 +15,14 @@ def test_local_project_stage_delegation_is_real_audited_and_uses_founder_control
     founder,reviewer=headers["founder"],headers["reviewer"]
     dept=department(client,founder)
     employee(client,founder,dept)  # Real AI discovery agent, seeds a bounded plan step.
-    developer=post(client,"/v1/organization/employees",founder,
-                   {"department_id":dept,"name":"Backend Engineer","kind":"ai"})["id"]
+    # First create an unstaffed implementation stage. Only then is a qualified
+    # specialist hired and manually delegated; otherwise auto-suggestion
+    # hides the exact real-world stale-vacancy bug this regression tests.
     project=post(client,BASE+"/projects/start",founder,
                  {"brief":"Build a secure admission workflow with working modules, reviewed CI and documentation",
                   "operation_key":str(uuid4())})
+    developer=post(client,"/v1/organization/employees",founder,
+                   {"department_id":dept,"name":"Backend Engineer","kind":"ai"})["id"]
     path=BASE+"/projects/"+project["id"]+"/delegations"
     payload={"stage":"implementation","assignee_id":developer}
     post(client,path,reviewer,payload,expected=403)
