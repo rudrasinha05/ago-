@@ -142,3 +142,57 @@ def test_expired_unknown_lease_requires_reconciliation_never_automatic_replay(ca
                  founder, {"lease_seconds": 600})
     assert after["queue_id"] is None
     assert after["reason"] == "no_safe_approved_task"
+
+
+def test_two_project_priority_isolation_in_real_postgres(case):
+    """Atomic plan scope: a high-priority unrelated project cannot be claimed."""
+    from test_enterprise_capacity_21 import _approved_task
+    client,headers,context=case
+    founder,reviewer=headers["founder"],headers["reviewer"]
+    agent=employee(client,founder,department(client,founder))
+    projects=[]
+    for name in ("Alpha","Beta"):
+        project=post(client,"/v1/organization/company/projects/start",founder,{
+            "brief":"Build an auditable "+name+" application with safe validated engineering workflows",
+            "operation_key":str(uuid4()),
+        })
+        approval=post(client,"/v1/brain/plans/"+project["plan_id"]+"/submit",founder)
+        post(client,"/v1/governance/approvals/"+approval["approval_id"]+"/decision",
+             founder,{"approve":True,"reason":"Approve bounded project plan"})
+        post(client,"/v1/brain/plans/"+project["plan_id"]+"/activate",founder)
+        projects.append(project)
+    task_a=_approved_task(client,founder,reviewer,agent)
+    task_b=_approved_task(client,founder,reviewer,agent)
+    for project,task in zip(projects,(task_a,task_b)):
+        step=project["stages"][0]["plan_step_id"]
+        assert step is not None
+        # Disposable test DB only; attach a separately approved task to the
+        # persisted discovery plan step for the scoped admission check.
+        with context["db"].transaction():
+            context["db"].execute(
+                """UPDATE ago_plan_steps SET task_id=%s
+                   WHERE tenant_id=%s AND id=%s AND plan_id=%s""",
+                (task,context["tenant"],step,project["plan_id"]),
+            )
+    qa=_enqueue(client,founder,task_a,1)
+    qb=_enqueue(client,founder,task_b,99)
+    path="/v1/operations/enterprise/work-queue"
+    scoped=client.get(path,headers=founder,
+                      params={"plan_id":projects[0]["plan_id"]})
+    assert scoped.status_code==200,scoped.text
+    assert [x["id"] for x in scoped.json()]==[qa["id"]]
+    assert client.get(path,headers=founder,
+                      params={"plan_id":projects[1]["plan_id"]}).json()[0]["id"]==qb["id"]
+    first=post(client,path+"/offline-claim",founder,
+               {"lease_seconds":600,"plan_id":projects[0]["plan_id"]})
+    assert first["queue_id"]==qa["id"]
+    assert first["task_id"]==task_a
+    second=post(client,path+"/offline-claim",founder,
+                {"lease_seconds":600,"plan_id":projects[1]["plan_id"]})
+    assert second["queue_id"]==qb["id"]
+    assert second["task_id"]==task_b
+    empty=post(client,path+"/offline-claim",founder,
+               {"lease_seconds":600,"plan_id":str(uuid4())})
+    assert empty["queue_id"] is None
+    assert client.get(path,headers=reviewer,
+                      params={"plan_id":projects[0]["plan_id"]}).status_code==403

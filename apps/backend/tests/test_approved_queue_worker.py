@@ -189,3 +189,50 @@ def test_actual_postgres_queue_worker_executes_only_one_approved_packet(case,tmp
         "SELECT count(*) AS total FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s",
         (info["tenant"],task)).fetchone()
     assert row["total"]==1
+
+
+def test_selected_project_is_scoped_before_any_lease_or_execution(tmp_path):
+    selected=str(uuid4())
+    plan=str(uuid4())
+    first=item()
+    other=item()
+    calls=[]
+    def request(method,path,body=None):
+        calls.append((method,path,body))
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if path=="/v1/organization/company/projects/"+selected:
+            return {"id":selected,"plan_id":plan,"plan_status":"active"}
+        if path==worker.QUEUE+"?plan_id="+plan:
+            return [first]
+        if path==worker.OFFLINE:
+            assert body=={"lease_seconds":600,"plan_id":plan}
+            return lease(first)
+        if path==worker.QUEUE+"/"+first["id"]+"/run":
+            return receipt(first)
+        raise AssertionError("Unexpected cross-project request: "+path)
+    journal=DurableAttemptJournal(tmp_path/"journal")
+    result=worker.run_session(request,apply=True,confirmation=CONFIRM,
+                              journal=journal,max_tasks=1,project_id=selected)
+    assert result["completed_task_ids"]==[first["task_id"]]
+    assert not journal.has_claim(other["task_id"])
+    assert all(path!=worker.QUEUE for _,path,_ in calls)
+
+
+def test_wrong_or_inactive_project_fails_closed_before_queue_read():
+    selected=str(uuid4())
+    calls=[]
+    def wrong(method,path,body=None):
+        calls.append(path)
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        return {"id":str(uuid4()),"plan_id":str(uuid4()),"plan_status":"active"}
+    with pytest.raises(PermissionError):
+        worker.run_session(wrong,project_id=selected)
+    assert all(not path.startswith(worker.QUEUE) for path in calls)
+    def inactive(method,path,body=None):
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        return {"id":selected,"plan_id":str(uuid4()),"plan_status":"draft"}
+    with pytest.raises(PermissionError):
+        worker.run_session(inactive,project_id=selected)

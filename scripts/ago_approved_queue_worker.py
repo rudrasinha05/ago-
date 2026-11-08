@@ -34,8 +34,9 @@ def uid(raw):
     return raw
 
 
-def inspection(request):
-    rows=request("GET",QUEUE)
+def inspection(request, *, plan_id=None):
+    path=QUEUE+("?plan_id="+plan_id if plan_id is not None else "")
+    rows=request("GET",path)
     if not isinstance(rows,list) or len(rows)>100:
         raise PermissionError("Invalid or truncated-looking queue")
     seen=set()
@@ -97,7 +98,7 @@ def verify_run(reply,q,t):
 
 def run_session(request, *, apply=False, confirmation=None, journal=None,
                 minutes=5, max_tasks=3, interval=15, lease_seconds=600,
-                clock=None, pause=None):
+                project_id=None, clock=None, pause=None):
     """One bounded founder-approved session; no background scheduling or replay.
 
     The journal fsync must succeed BEFORE the single network execution POST.
@@ -118,7 +119,16 @@ def run_session(request, *, apply=False, confirmation=None, journal=None,
     if (not isinstance(principal,dict) or
             "founder" not in principal.get("roles",[])):
         raise PermissionError("Current Founder login required")
-    rows=inspection(request)
+    plan_id=None
+    if project_id is not None:
+        project_id=uid(project_id)
+        project=request("GET","/v1/organization/company/projects/"+project_id)
+        if (not isinstance(project,dict)
+                or project.get("id")!=project_id
+                or project.get("plan_status")!="active"):
+            raise PermissionError("A signed, active Founder project is required")
+        plan_id=uid(project.get("plan_id"))
+    rows=inspection(request,plan_id=plan_id)
     if not apply:
         return {"status":"read_only_preview","queue_count":len(rows),
                 "candidate_ids":[x["id"] for x in candidates(rows)],
@@ -132,7 +142,7 @@ def run_session(request, *, apply=False, confirmation=None, journal=None,
     completed=[]
     polls=0
     while clock()<end and len(completed)<max_tasks:
-        rows=inspection(request)
+        rows=inspection(request,plan_id=plan_id)
         ready=candidates(rows)
         polls+=1
         earlier=[r["task_id"] for r in ready if journal.has_claim(r["task_id"])]
@@ -142,7 +152,10 @@ def run_session(request, *, apply=False, confirmation=None, journal=None,
                     "completed_task_ids":completed,
                     "automatic_replay":False}
         if ready:
-            claim=request("POST",OFFLINE,{"lease_seconds":lease_seconds})
+            body={"lease_seconds":lease_seconds}
+            if plan_id is not None:
+                body["plan_id"]=plan_id
+            claim=request("POST",OFFLINE,body)
             lease=verify_claim(claim,rows)
             if lease is not None:
                 q,task,lease_id=lease
@@ -179,12 +192,19 @@ def main(argv=None):
     parser.add_argument("--max-tasks",type=int,default=3)
     parser.add_argument("--interval-seconds",type=int,default=15)
     parser.add_argument("--lease-seconds",type=int,default=600)
+    parser.add_argument("--project-id",help="Exact Founder project UUID")
+    parser.add_argument("--all-projects",action="store_true",
+                        help="Explicit opt-in to unscoped tenant queue (higher risk)")
     parser.add_argument("--attempt-journal")
     args=parser.parse_args(argv)
     try:
         base=local_url(args.local_url)
         if args.apply and args.confirm!=CONFIRM:
             raise PermissionError("Explicit Founder confirmation required")
+        if args.project_id and args.all_projects:
+            raise ValueError("Choose one project OR explicitly all projects")
+        if args.apply and not (args.project_id or args.all_projects):
+            raise PermissionError("Use --project-id or explicitly --all-projects")
         if not args.apply and args.confirm is not None:
             raise PermissionError("Preview must remain read-only")
         if args.login:
@@ -211,7 +231,8 @@ def main(argv=None):
         ) if args.apply else None)
         report=run_session(request,apply=args.apply,confirmation=args.confirm,
             journal=journal,minutes=args.minutes,max_tasks=args.max_tasks,
-            interval=args.interval_seconds,lease_seconds=args.lease_seconds)
+            interval=args.interval_seconds,lease_seconds=args.lease_seconds,
+            project_id=args.project_id)
     except KeyboardInterrupt:
         print(json.dumps({"status":"stopped_by_founder","automatic_replay":False}))
         return 130
