@@ -1,6 +1,7 @@
 """Founder-triggered, localhost-only, one-pass approved internal AI task batch.
 
-Default is READ ONLY. No scheduling, startup registration, model calls, cloud,
+Default is READ ONLY. Optional --project-id binds work to the current stage of
+an exact project. No scheduling, startup registration, model calls, cloud,
 GitHub writes, replay, recovery loop or automatic publication. The existing
 authenticated AGO API independently checks signed identity, approved action,
 calendar, strategy, prerequisite QA and per-task execution permissions.
@@ -264,6 +265,55 @@ def verify_real_board_handoffs(response, task_id):
     }
 
 
+
+def scoped_approved_project_tasks(records, *, project_id: str, snapshot: dict) -> list[dict]:
+    """Read-only filter: one currently actionable stage in one approved project.
+
+    A fresh authenticated project snapshot is required at EVERY watch poll.
+    Never dispatch future stages while the current one awaits independent QA.
+    """
+    target=str(UUID(project_id))
+    if not isinstance(records,list) or not isinstance(snapshot,dict):
+        raise TypeError("Authenticated project and task evidence required")
+    if str(snapshot.get("id"))!=target or snapshot.get("plan_status")!="active":
+        raise PermissionError("Exact active founder-approved project required")
+    try:
+        plan_id=str(UUID(str(snapshot["plan_id"])))
+    except (ValueError,TypeError,KeyError) as exc:
+        raise PermissionError("Missing validated project plan linkage") from exc
+    stages=snapshot.get("stages")
+    if not isinstance(stages,list) or not 1<=len(stages)<=20:
+        raise PermissionError("Missing bounded stage evidence")
+    if any(not isinstance(s,dict) or type(s.get("position")) is not int
+           or not 1<=s["position"]<=20 for s in stages):
+        raise PermissionError("Invalid stage order evidence")
+    ordered=sorted(stages,key=lambda s:s["position"])
+    if len({s["position"] for s in ordered})!=len(ordered):
+        raise PermissionError("Duplicate stage positions")
+    selected=None
+    for stage in ordered:
+        if stage.get("qa_verdict")=="pass":
+            continue
+        if stage.get("qa_verdict") is not None or stage.get("task_status") not in (
+            "proposed","waiting_approval","ready"
+        ):
+            return []
+        if stage.get("task_id") is None:
+            return []
+        try:
+            selected=str(UUID(str(stage["task_id"])))
+        except (ValueError,TypeError) as exc:
+            raise PermissionError("Invalid current stage task") from exc
+        break
+    if selected is None:
+        return []
+    return [
+        task for task in records
+        if isinstance(task,dict) and str(task.get("id"))==selected
+        and str(task.get("plan_id"))==plan_id
+    ]
+
+
 def batch(records: list[dict], approvals: list[dict], dispatch, *, limit: int, apply: bool,
           confirm: str | None, claim=None, require_engineering: bool = False) -> dict:
     if not 1<=limit<=10:
@@ -497,6 +547,8 @@ def main(argv=None) -> int:
     parser.add_argument("--require-engineering",action="store_true",
                         help="Reject deterministic internal handlers when real Ollama coding is not opted in")
     parser.add_argument("--watch-minutes",type=int,default=0,help="0: one pass; 1..60: founder-started bounded polling of approved work")
+    parser.add_argument("--project-id",default=None,
+                        help="Restrict approved work to one active founder project and its current stage")
     parser.add_argument("--attempt-journal",default=None,
                         help="Owner-local durable attempt directory; defaults to ~/.ago/approved_attempts")
     parser.add_argument("--interval-seconds",type=int,default=15,help="Watch polling interval: 10..120 seconds")
@@ -511,6 +563,10 @@ def main(argv=None) -> int:
         if args.reconcile_only and (args.apply or args.confirm is not None
                                     or args.watch_minutes or args.diagnose_task):
             raise PermissionError("Reconciliation must be read-only")
+        if args.project_id is not None:
+            args.project_id=str(UUID(args.project_id))
+            if args.reconcile_only or args.diagnose_task:
+                raise PermissionError("Project-scoped execution cannot combine with diagnostic modes")
         if args.diagnose_task is not None:
             UUID(args.diagnose_task)
             if args.apply or args.confirm is not None or args.watch_minutes:
@@ -556,8 +612,14 @@ def main(argv=None) -> int:
                 request("GET","/v1/agents/engineering-capabilities")
             )
         def fetch():
-            return (request("GET","/v1/organization/company/activity"),
-                    request("GET","/v1/organization/company/approvals"))
+            records=request("GET","/v1/organization/company/activity")
+            approvals=request("GET","/v1/organization/company/approvals")
+            if args.project_id:
+                project=request("GET","/v1/organization/company/projects/"+args.project_id)
+                records=scoped_approved_project_tasks(
+                    records,project_id=args.project_id,snapshot=project
+                )
+            return records,approvals
         dispatch=lambda task_id:request("POST","/v1/agents/tasks/"+task_id+"/run")
         # The durable record prevents duplicate network dispatch after a crash.
         # A dry-run never creates a receipt folder.

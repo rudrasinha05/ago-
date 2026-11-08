@@ -606,3 +606,80 @@ def test_operator_has_separate_explicit_readonly_reconciliation_command():
     assert '--login --reconcile-only' in ps
     assert 'run-approved-engineering' in ps
     assert 'EXECUTE_APPROVED_INTERNAL_TASKS' in ps
+
+
+def test_project_scope_selects_only_current_approved_project_stage():
+    project,plan,t1,t2=str(uuid4()),str(uuid4()),str(uuid4()),str(uuid4())
+    records=[
+        {"id":t2,"plan_id":plan,"action":"internal:brief",
+         "status":"waiting_approval","approval_id":"approved"},
+        {"id":t1,"plan_id":str(uuid4()),"action":"internal:brief",
+         "status":"waiting_approval","approval_id":"approved"},
+        {"id":t1,"plan_id":plan,"action":"internal:brief",
+         "status":"waiting_approval","approval_id":"approved"},
+    ]
+    snapshot={"id":project,"plan_id":plan,"plan_status":"active","stages":[
+        {"position":1,"stage":"discovery","task_id":t1,
+         "task_status":"waiting_approval","qa_verdict":None},
+        {"position":2,"stage":"architecture","task_id":t2,
+         "task_status":"waiting_approval","qa_verdict":None},
+    ]}
+    scoped=module.scoped_approved_project_tasks(records,project_id=project,snapshot=snapshot)
+    assert [item["id"] for item in scoped]==[t1]
+    snapshot["stages"][0]["task_status"]="completed"
+    assert module.scoped_approved_project_tasks(records,project_id=project,snapshot=snapshot)==[]
+    snapshot["stages"][0]["qa_verdict"]="pass"
+    scoped=module.scoped_approved_project_tasks(records,project_id=project,snapshot=snapshot)
+    assert [item["id"] for item in scoped]==[t2]
+    snapshot["stages"][1]["qa_verdict"]="fail"
+    assert module.scoped_approved_project_tasks(records,project_id=project,snapshot=snapshot)==[]
+
+
+def test_project_scope_rejects_cross_project_draft_and_ambiguous_stage():
+    project,plan,task=str(uuid4()),str(uuid4()),str(uuid4())
+    snapshot={"id":project,"plan_id":plan,"plan_status":"active",
+              "stages":[{"position":1,"stage":"discovery","task_id":task,
+                         "task_status":"waiting_approval","qa_verdict":None}]}
+    records=[{"id":task,"plan_id":plan}]
+    with pytest.raises(PermissionError):
+        module.scoped_approved_project_tasks(records,project_id=str(uuid4()),snapshot=snapshot)
+    snapshot["plan_status"]="draft"
+    with pytest.raises(PermissionError):
+        module.scoped_approved_project_tasks(records,project_id=project,snapshot=snapshot)
+    snapshot["plan_status"]="active"
+    assert module.scoped_approved_project_tasks(
+        [{**records[0],"plan_id":str(uuid4())}],
+        project_id=project,snapshot=snapshot
+    )==[]
+    snapshot["stages"][0]["position"]=0
+    with pytest.raises(PermissionError):
+        module.scoped_approved_project_tasks(records,project_id=project,snapshot=snapshot)
+
+
+def test_project_scoped_durable_watch_cannot_dispatch_next_stage(tmp_path):
+    project,plan,first,second=str(uuid4()),str(uuid4()),str(uuid4()),str(uuid4())
+    snapshot={"id":project,"plan_id":plan,"plan_status":"active","stages":[
+        {"position":1,"stage":"discovery","task_id":first,
+         "task_status":"waiting_approval","qa_verdict":None},
+        {"position":2,"stage":"architecture","task_id":second,
+         "task_status":"waiting_approval","qa_verdict":None},
+    ]}
+    tasks=[{"id":t,"plan_id":plan,"action":"internal:brief",
+            "status":"waiting_approval","approval_id":"a"} for t in (second,first)]
+    approvals=[{"id":"a","action":"internal:brief","status":"approved"}]
+    seen=[]
+    ticks=[0]
+    def fetch():
+        ticks[0]+=20
+        return module.scoped_approved_project_tasks(
+            tasks,project_id=project,snapshot=snapshot
+        ),approvals
+    journal=module.DurableAttemptJournal(tmp_path/"watch")
+    result=module.watch(fetch,lambda t:(seen.append(t) or
+                         {"status":"completed","task_id":t}),minutes=1,
+                        max_tasks=2,interval=10,confirm=module.CONFIRM,
+                        clock=lambda:ticks[0],pause=lambda _:None,claim=journal.claim)
+    assert seen==[first]
+    assert result["attempted_task_count"]==1
+    assert journal.has_claim(first)
+    assert not journal.has_claim(second)
