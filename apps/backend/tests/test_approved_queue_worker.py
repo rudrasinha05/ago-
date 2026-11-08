@@ -12,7 +12,7 @@ sys.path.insert(0,str(DIR))
 spec=spec_from_file_location("ago_approved_queue_worker",DIR/"ago_approved_queue_worker.py")
 worker=module_from_spec(spec)
 spec.loader.exec_module(worker)
-from local_approved_agent_batch import DurableAttemptJournal, CONFIRM
+from local_approved_agent_batch import DurableAttemptJournal, CONFIRM  # noqa: E402
 
 
 def item(**changes):
@@ -40,8 +40,10 @@ def test_preview_is_read_only_without_journal_or_execution(tmp_path):
     requests=[]
     def request(method,path,body=None):
         requests.append(method)
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if path==worker.QUEUE:return [row]
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if path==worker.QUEUE:
+            return [row]
         raise AssertionError(path)
     result=worker.run_session(request)
     assert result["candidate_ids"]==[row["id"]]
@@ -56,9 +58,12 @@ def test_founder_explicitly_runs_bounded_two_approved_tasks(tmp_path):
     attempts=[]
     def request(method,path,body=None):
         attempts.append(path)
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if path==worker.QUEUE:return rows
-        if path==worker.OFFLINE:return lease(rows[0])
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if path==worker.QUEUE:
+            return rows
+        if path==worker.OFFLINE:
+            return lease(rows[0])
         for r in (first,second):
             if path==worker.QUEUE+"/"+r["id"]+"/run":
                 rows.remove(r)
@@ -80,10 +85,14 @@ def test_crash_keeps_durable_attempt_and_does_not_replay_after_restart(tmp_path)
     calls=[]
     def request(method,path,body=None):
         calls.append(path)
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if path==worker.QUEUE:return [row]
-        if path==worker.OFFLINE:return lease(row)
-        if path.endswith("/run"):raise OSError("uncertain transport")
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if path==worker.QUEUE:
+            return [row]
+        if path==worker.OFFLINE:
+            return lease(row)
+        if path.endswith("/run"):
+            raise OSError("uncertain transport")
         raise AssertionError(path)
     with pytest.raises(OSError):
         worker.run_session(request,apply=True,confirmation=CONFIRM,journal=journal)
@@ -99,9 +108,12 @@ def test_expired_lease_requires_reconcile_but_other_task_can_run(tmp_path):
     available=item()
     rows=[expired,available]
     def request(method,path,body=None):
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if path==worker.QUEUE:return rows
-        if path==worker.OFFLINE:return lease(available)
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if path==worker.QUEUE:
+            return rows
+        if path==worker.OFFLINE:
+            return lease(available)
         if path==worker.QUEUE+"/"+available["id"]+"/run":
             rows.remove(available)
             return receipt(available)
@@ -119,9 +131,12 @@ def test_untrusted_claim_and_false_success_fail_closed(tmp_path):
     called=[]
     def spoof(method,path,body=None):
         called.append(path)
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if path==worker.QUEUE:return [row]
-        if path==worker.OFFLINE:return lease(item())
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if path==worker.QUEUE:
+            return [row]
+        if path==worker.OFFLINE:
+            return lease(item())
         raise AssertionError("Task run MUST NOT be invoked")
     with pytest.raises(PermissionError):
         worker.run_session(spoof,apply=True,confirmation=CONFIRM,
