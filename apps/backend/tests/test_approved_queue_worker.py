@@ -5,6 +5,7 @@ import sys
 from uuid import uuid4
 
 import pytest
+from test_m7_http_postgres import case as case
 
 DIR=Path(__file__).resolve().parents[3]/"scripts"
 sys.path.insert(0,str(DIR))
