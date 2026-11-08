@@ -25,7 +25,7 @@ from ago.ai_qa_review import AiQaReview as _AiQaReview
 from ago.ai_qa_review_queries import AiQaReviewQueries as _AiQaReviewQueries
 from ago.agent_runtime_queries import AgentRuntimeQueries as _AgentRuntimeQueries
 from ago.approvals import ApprovalRequest
-from ago.backend_contracts import Cursor, DatabaseConnection
+from ago.backend_contracts import ActiveWorkforcePort, Cursor, DatabaseConnection
 from ago.calendar_store import CalendarStore as _CalendarStore
 from ago.console_service import ConsoleService as _ConsoleService
 from ago.console_store import ConsoleStore as _ConsoleStore
@@ -1151,6 +1151,7 @@ class CompanyChatPort(Protocol):
 
 
 REPOSITORY_BINDINGS = {
+    ActiveWorkforcePort: _EnterpriseOperationsStore,
     CompanyChatPort: _CompanyChat,
     CompanyOllamaChainQueriesPort: _CompanyOllamaChainQueries,
     DocumentVaultPort: _DocumentVault,

@@ -82,6 +82,29 @@ class EnterpriseOperationsStore:
         self.connection = connection
         self.repositories = repositories or RepositoryScope(connection)
 
+    def eligible_ai_staff(self, *, tenant_id: str) -> list[dict]:
+        """Read active, tenant-scoped AI staff through the operations HR boundary.
+
+        No hires, reviews, approvals, authorizations or task dispatch occur.
+        """
+        rows=self.connection.execute("""
+            SELECT e.id,e.name,e.role_title
+            FROM ago_employees e
+            WHERE e.tenant_id=%s AND e.kind='ai'
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_personnel_events h
+                WHERE h.tenant_id=e.tenant_id AND h.employee_id=e.id
+                  AND h.change_kind='terminated'
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_department_lifecycle_events d
+                WHERE d.tenant_id=e.tenant_id AND d.department_id=e.department_id
+                  AND d.action='closed'
+              )
+            ORDER BY lower(e.name),e.id
+        """,(str(UUID(tenant_id)),)).fetchall()
+        return [dict(row) for row in rows]
+
     def _tenant_lock(self, tenant_id: str) -> None:
         if not self.connection.execute(
             "SELECT 1 FROM ago_tenants WHERE id=%s FOR UPDATE",

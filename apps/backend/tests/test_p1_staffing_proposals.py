@@ -4,7 +4,9 @@ from uuid import uuid4
 
 import pytest
 
+from ago.backend_contracts import ActiveWorkforcePort, RepositoryScope
 from ago.company_chat import CompanyChat
+from ago.enterprise_store import EnterpriseOperationsStore
 
 
 class Cursor:
@@ -54,10 +56,17 @@ def person():
                            roles=("founder",))
 
 
+def staffing(db):
+    scope=RepositoryScope(db,bindings={
+        ActiveWorkforcePort: EnterpriseOperationsStore,
+    })
+    return CompanyChat(db,repositories=scope)
+
+
 def test_ceo_accountable_staffing_proposals_use_only_actual_unassigned_stages():
     actor=person()
     db=DB(existing_role=True)
-    result=CompanyChat(db).staffing_proposals(actor,str(uuid4()))
+    result=staffing(db).staffing_proposals(actor,str(uuid4()))
     assert result["kind"]=="ago_p1_readonly_staffing_proposals"
     assert len(result["proposals"])==2
     assert [p["suggested_role"] for p in result["proposals"]]==[
@@ -78,19 +87,19 @@ def test_draft_projects_unappointed_ceo_and_untrusted_actor_fail_without_writes(
     for options in ({"active":False},{"board":False}):
         db=DB(**options)
         with pytest.raises(PermissionError):
-            CompanyChat(db).staffing_proposals(person(),str(uuid4()))
+            staffing(db).staffing_proposals(person(),str(uuid4()))
         assert all("INSERT" not in query for query,_ in db.calls)
     db=DB()
     actor=person()
     actor.roles=("reviewer",)
     with pytest.raises(PermissionError):
-        CompanyChat(db).staffing_proposals(actor,str(uuid4()))
+        staffing(db).staffing_proposals(actor,str(uuid4()))
     assert db.calls==[]
 
 
 def test_readonly_staffing_proposals_do_not_reopen_reviewed_assignment():
     db=DB(existing_role=True,activated_stage="implementation")
-    result=CompanyChat(db).staffing_proposals(person(),str(uuid4()))
+    result=staffing(db).staffing_proposals(person(),str(uuid4()))
     assert [item["stage"] for item in result["proposals"]]==["architecture"]
     assert result["charter_granted"] is False
     assert result["personnel_hired"] is False
@@ -99,7 +108,7 @@ def test_readonly_staffing_proposals_do_not_reopen_reviewed_assignment():
 
 def test_readonly_specialist_query_filters_terminated_and_closed_workers():
     db=DB(existing_role=True)
-    CompanyChat(db).staffing_proposals(person(),str(uuid4()))
+    staffing(db).staffing_proposals(person(),str(uuid4()))
     sql=next(query for query,_ in db.calls if "FROM ago_employees e" in query)
     assert "h.change_kind='terminated'" in sql
     assert "d.action='closed'" in sql
@@ -135,7 +144,7 @@ def test_quality_suggestion_excludes_implementer_and_project_manager():
                     {"id":uuid4(),"name":"Independent QA","role_title":"QA Engineer"},
                 ])
             return super().execute(sql,args)
-    result=CompanyChat(GuardedDb()).staffing_proposals(actor,str(uuid4()))
+    result=staffing(GuardedDb()).staffing_proposals(actor,str(uuid4()))
     quality=result["proposals"][0]
     assert quality["stage"]=="quality"
     assert quality["eligible_existing_count"]==1

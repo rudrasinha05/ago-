@@ -4,7 +4,7 @@ from __future__ import annotations
 from ago.governance import founder_solo_eligible
 from uuid import UUID
 from dataclasses import asdict
-from ago.backend_contracts import DatabaseConnection, RepositoryScope
+from ago.backend_contracts import ActiveWorkforcePort, DatabaseConnection, RepositoryScope
 from ago.organization_store import OrganizationStore
 from ago.governance import ApprovalRepository
 
@@ -383,22 +383,9 @@ class CompanyChat:
         # An old title is not evidence of a usable employee: exclude people
         # formally terminated and departments formally closed. Project staffing
         # remains a read-only proposal, never an automatic hire or approval.
-        eligible=self.db.execute("""
-            SELECT e.id,e.name,e.role_title
-            FROM ago_employees e
-            WHERE e.tenant_id=%s AND e.kind='ai'
-              AND NOT EXISTS (
-                SELECT 1 FROM ago_personnel_events h
-                WHERE h.tenant_id=e.tenant_id AND h.employee_id=e.id
-                  AND h.change_kind='terminated'
-              )
-              AND NOT EXISTS (
-                SELECT 1 FROM ago_department_lifecycle_events d
-                WHERE d.tenant_id=e.tenant_id AND d.department_id=e.department_id
-                  AND d.action='closed'
-              )
-            ORDER BY lower(e.name),e.id
-        """,(actor.tenant_id,)).fetchall()
+        eligible=self.repositories.resolve(ActiveWorkforcePort).eligible_ai_staff(
+            tenant_id=actor.tenant_id
+        )
         lead=self.db.execute("""
             SELECT accountable_manager_id FROM ago_founder_project_lead
             WHERE tenant_id=%s AND intake_id=%s
