@@ -149,7 +149,11 @@ def test_two_project_priority_isolation_in_real_postgres(case):
     from test_enterprise_capacity_21 import _approved_task
     client,headers,context=case
     founder,reviewer=headers["founder"],headers["reviewer"]
-    agent=employee(client,founder,department(client,founder))
+    # Separate real workers/departments: the existing company capacity gate
+    # correctly refuses two simultaneous leases of one AI employee.
+    # This checks project isolation without weakening that independent gate.
+    agent_a=employee(client,founder,department(client,founder))
+    agent_b=employee(client,founder,department(client,founder))
     projects=[]
     for name in ("Alpha","Beta"):
         project=post(client,"/v1/organization/company/projects/start",founder,{
@@ -161,8 +165,8 @@ def test_two_project_priority_isolation_in_real_postgres(case):
              founder,{"approve":True,"reason":"Approve bounded project plan"})
         post(client,"/v1/brain/plans/"+project["plan_id"]+"/activate",founder)
         projects.append(project)
-    task_a=_approved_task(client,founder,reviewer,agent)
-    task_b=_approved_task(client,founder,reviewer,agent)
+    task_a=_approved_task(client,founder,reviewer,agent_a)
+    task_b=_approved_task(client,founder,reviewer,agent_b)
     for project,task in zip(projects,(task_a,task_b)):
         step=project["stages"][0]["plan_step_id"]
         assert step is not None

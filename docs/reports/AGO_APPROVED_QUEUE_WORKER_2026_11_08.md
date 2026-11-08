@@ -8,7 +8,7 @@ Read-only preview from repository root on Windows:
 
 Founder authorizes one bounded session (two tasks, five minutes):
 
-    py scripts/ago_approved_queue_worker.py --local-url http://127.0.0.1:8010 --login --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS --minutes 5 --max-tasks 2
+    py scripts/ago_approved_queue_worker.py --local-url http://127.0.0.1:8010 --login --project-id YOUR_PROJECT_UUID --apply --confirm EXECUTE_APPROVED_INTERNAL_TASKS --minutes 5 --max-tasks 2
 
 Stop with Ctrl+C. A private local journal at ~/.ago/approved_attempts fsyncs before each task POST. Any error, unknown remote outcome, expired lease or permission denial stops that task; it is NEVER automatically replayed. Reconcile separately with exact signed task/run evidence. Owner database not altered by documentation/CI; integration tests use disposable migrated PostgreSQL.
 
