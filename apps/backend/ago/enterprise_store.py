@@ -1527,7 +1527,9 @@ class EnterpriseOperationsStore:
             """SELECT q.id,q.task_id,q.operation_key,q.priority,q.eligible_at,
                       q.created_at,t.status AS task_status,
                       e.state AS lease_state,e.expires_at AS lease_expires_at,
-                      e.sequence AS lease_sequence
+                      e.sequence AS lease_sequence,
+                       coalesce(e.state='leased' AND e.expires_at<=clock_timestamp(),false)
+                         AS requires_reconciliation
                FROM ago_oos_queue_items q
                JOIN ago_governed_tasks t ON t.tenant_id=q.tenant_id AND t.id=q.task_id
                LEFT JOIN LATERAL (
@@ -1616,8 +1618,10 @@ class EnterpriseOperationsStore:
                      AND (%s=false OR t.action='internal:brief')
                      AND t.status='waiting_approval'
                      AND a.status='approved' AND a.action=t.action
-                     AND (last.state IS NULL OR last.state='released'
-                       OR (last.state='leased' AND last.expires_at<=clock_timestamp()))
+                     AND (last.state IS NULL OR last.state='released')
+                      -- Expired leases are UNKNOWN outcomes. A restart may
+                      -- NEVER turn them into a new automatic dispatch attempt.
+                      -- The original founder claimant must first reconcile.
                      AND NOT EXISTS(
                        SELECT 1 FROM ago_agent_runs r
                        WHERE r.tenant_id=q.tenant_id AND r.task_id=q.task_id)

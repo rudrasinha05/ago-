@@ -1,5 +1,6 @@
 """Section 21: durable fair queue never replays governed side effects."""
 from datetime import datetime, timedelta, timezone
+import time
 from uuid import uuid4
 
 import pytest
@@ -83,3 +84,61 @@ def test_unapproved_task_cannot_enter_durable_queue(case):
         "task_id": pending["id"], "operation_key": str(uuid4()),
         "priority": 50, "eligible_at": datetime.now(timezone.utc).isoformat(),
     }, expected=403)
+
+
+def test_expired_unknown_lease_requires_reconciliation_never_automatic_replay(case):
+    """Real PostgreSQL expiry: neither claim API nor direct SQL may replay.
+
+    A subsecond lease is inserted only in the disposable integration DB.
+    The normal public claim API enforces 300..3600 second leases.
+    """
+    client, headers, context = case
+    founder, reviewer = headers["founder"], headers["reviewer"]
+    worker = employee(client, founder, department(client, founder))
+    task = _approved_task(client, founder, reviewer, worker)
+    item = _enqueue(client, founder, task, 50)
+    db = context["db"]
+    with db.transaction():
+        db.execute(
+            """INSERT INTO ago_oos_queue_events
+               (id,tenant_id,queue_id,actor_id,state,sequence,expires_at,explanation)
+               VALUES (%s,%s,%s,%s,'leased',1,
+                       clock_timestamp()+interval '1 second',%s)""",
+            (str(uuid4()), context["tenant"], item["id"],
+             context["founder_id"], "Disposable DB: simulate uncertain expiry"),
+        )
+    time.sleep(1.3)
+    queue = client.get(
+        "/v1/operations/enterprise/work-queue", headers=founder,
+    )
+    assert queue.status_code == 200, queue.text
+    entry = next(row for row in queue.json() if row["id"] == item["id"])
+    assert entry["lease_state"] == "leased"
+    assert entry["requires_reconciliation"] is True
+    claim = post(client, "/v1/operations/enterprise/work-queue/claim",
+                 founder, {"lease_seconds": 600})
+    assert claim["queue_id"] is None
+    assert claim["reason"] == "no_safe_approved_task"
+    with pytest.raises(Exception, match="Existing work lease cannot be stolen or replayed"):
+        with db.transaction():
+            db.execute(
+                """INSERT INTO ago_oos_queue_events
+                   (id,tenant_id,queue_id,actor_id,state,sequence,expires_at,explanation)
+                   VALUES (%s,%s,%s,%s,'leased',2,
+                           clock_timestamp()+interval '10 minutes',%s)""",
+                (str(uuid4()), context["tenant"], item["id"],
+                 context["founder_id"], "Malicious raw SQL replay attempt"),
+            )
+    release = f"/v1/operations/enterprise/work-queue/{item['id']}/release"
+    post(client, release, founder,
+         {"status": "released", "explanation": "Unsafe replay of expired lease"},
+         expected=403)
+    resolved = post(client, release, founder,
+                    {"status": "reconciled",
+                     "explanation": "Founder inspected unknown outcome: no retry"})
+    assert resolved["state"] == "reconciled"
+    assert resolved["replayed"] is False
+    after = post(client, "/v1/operations/enterprise/work-queue/claim",
+                 founder, {"lease_seconds": 600})
+    assert after["queue_id"] is None
+    assert after["reason"] == "no_safe_approved_task"
