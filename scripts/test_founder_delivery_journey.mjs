@@ -243,3 +243,55 @@ test('an invalid code proposal is retried automatically and explained',async()=>
  assert.match(stepLabel(step),/code failed AGO's code check/);
  assert.match(failureReason('engineering_candidate_invalid'),/failed AGO's code check twice/);
 });
+
+
+// Staff assignment never trusts browser name/role matching over the scoped HR receipt.
+test('Founder project staffing never uses missing, cross-project or fabricated eligibility',async()=>{
+ const {verifiedStaffing,stageCandidates}=await import('../apps/web/components/project-stage-routing-state.js');
+ const project={id:'project-one',plan_status:'active',stages:[{stage:'implementation'}]};
+ const members=[{id:'e1',name:'Software Developer',kind:'ai'}];
+ const trust={kind:'ago_p1_readonly_staffing_proposals',project_id:'project-one',
+  is_live_project_evidence:true,requires_founder_review:true,
+  personnel_hired:false,permission_granted:false,charter_granted:false,
+  source_sha256:'a'.repeat(64),eligible_employee_ids:['e1'],
+  proposals:[{stage:'implementation',eligible_candidates:[{employee_id:'e1'}]}]};
+ for(const wrong of [null,{}, {...trust,project_id:'other'}, {...trust,personnel_hired:true},
+  {...trust,requires_founder_review:false},{...trust,source_sha256:'invalid'},
+  {...trust,eligible_employee_ids:null},{...trust,proposals:null}]){
+  assert.equal(verifiedStaffing(project,wrong),null);
+  assert.deepEqual(stageCandidates(project,project.stages[0],members,[],wrong),[]);
+ }
+ assert.equal(stageCandidates(project,project.stages[0],members,[],trust)[0].id,'e1');
+ assert.deepEqual(stageCandidates(project,project.stages[0],members,[],{
+  ...trust,eligible_employee_ids:[],
+ }),[]);
+});
+
+test('Active Founder stage roster excludes terminated, inappropriate and self-QA workers',async()=>{
+ const {stageCandidates,defaultStageCandidate}=await import('../apps/web/components/project-stage-routing-state.js');
+ const members=[
+  {id:'manager',name:'QA Manager',kind:'ai'},
+  {id:'builder',name:'Software Developer',kind:'ai'},
+  {id:'qa',name:'Independent QA Engineer',kind:'ai'},
+  {id:'inactive',name:'QA Engineer Former',kind:'ai'},
+  {id:'human',name:'QA Reviewer',kind:'human'},
+ ];
+ const project={id:'p1',plan_status:'active',accountable_manager_id:'manager',
+  stages:[{stage:'implementation',suggested_assignee_id:'builder'},
+          {stage:'quality',suggested_assignee_id:null}]};
+ const receipt={kind:'ago_p1_readonly_staffing_proposals',project_id:'p1',
+  is_live_project_evidence:true,requires_founder_review:true,
+  personnel_hired:false,permission_granted:false,charter_granted:false,
+  source_sha256:'b'.repeat(64),
+  eligible_employee_ids:['manager','builder','qa','human'],
+  proposals:[{stage:'quality',eligible_candidates:[
+   {employee_id:'manager'},{employee_id:'builder'},{employee_id:'qa'},
+   {employee_id:'inactive'},{employee_id:'human'}]}]};
+ const list=stageCandidates(project,project.stages[1],members,[],receipt);
+ assert.deepEqual(list.map(x=>x.id),['qa']);
+ assert.equal(defaultStageCandidate(project,project.stages[1],members,[],receipt),'qa');
+ const formerlySuggested={...project.stages[0],suggested_assignee_id:'inactive'};
+ assert.deepEqual(stageCandidates(project,formerlySuggested,members,[],receipt),[]);
+ const draft={...project,plan_status:'draft'};
+ assert.ok(stageCandidates(draft,draft.stages[1],members,[],null).some(x=>x.id==='qa'));
+});

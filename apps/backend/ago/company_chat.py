@@ -454,8 +454,10 @@ class CompanyChat:
                 "decision":"review_existing_staff" if candidates
                            else "propose_specialist_staffing",
             })
+        eligible_ids=sorted(str(e["id"]) for e in eligible)
         digest=hashlib.sha256((
             project_id+"|"+str(chief["id"])+"|"+
+            ",".join(eligible_ids)+"|"+
             "|".join(
                 p["stage"]+":"+p["suggested_role"]+":"+
                 ",".join(c["employee_id"] for c in p["eligible_candidates"])
@@ -467,6 +469,7 @@ class CompanyChat:
             "project_id":project_id,
             "ceo_employee_id":str(chief["id"]),
             "proposals":proposals,
+            "eligible_employee_ids":eligible_ids,
             "source_sha256":digest,
             "is_live_project_evidence":True,
             "charter_granted":False,

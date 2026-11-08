@@ -74,6 +74,8 @@ def test_ceo_accountable_staffing_proposals_use_only_actual_unassigned_stages():
     assert result["personnel_hired"] is False
     assert result["permission_granted"] is False
     assert result["requires_founder_review"] is True
+    assert result["eligible_employee_ids"]
+    assert all(isinstance(identifier,str) for identifier in result["eligible_employee_ids"])
     assert len(result["source_sha256"])==64
     assert all(actor.tenant_id in str(args) for _,args in db.calls)
 
