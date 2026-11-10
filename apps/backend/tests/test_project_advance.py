@@ -13,6 +13,7 @@ from uuid import uuid4
 import pytest
 
 import ago.api_agents as api_agents
+import ago.ai_qa_review as ai_qa_review
 from ago.credit_domain import CreditBudgetMissing
 from ago.stage_progression import next_step
 from test_m7_http_postgres import case as case, post
@@ -103,6 +104,42 @@ def test_advance_never_reruns_a_task_and_reports_a_missing_tester(company):
     assert (held['step'], held['needs_founder']) == ('qa', True)
     assert 'No independent AI tester' in held['message']
     assert len(c.seen) == 1 and c.qa_prompts == []
+
+
+@pytest.mark.parametrize('model_failure', [False, True])
+def test_advance_reports_qa_attempt_charges_without_claiming_no_record(company, monkeypatch,
+                                                                    model_failure):
+    c = company
+    for _ in range(3):
+        post(c.client, c.advance, c.founder)
+    task_id = str(c.stage('discovery')['task_id'])
+    c.qa_answer = 'The evidence is inconclusive.'
+    if model_failure:
+        class FailingModel:
+            def generate(self, prompt):
+                raise TimeoutError('local test timeout')
+
+        monkeypatch.setattr(ai_qa_review, 'local_qa_provider',
+                            lambda: (FailingModel(), 'qwen-test'))
+    for attempts in (1, 2):
+        reply = post(c.client, c.advance, c.founder)
+        assert reply['step'] == 'qa' and reply['progressed'] is False
+        assert 'nothing was recorded' not in reply['message']
+        assert 'virtual-credit charge' in reply['message'] or 'virtual credit' in reply['message']
+        usage = c.db.execute(
+            "SELECT count(*) AS n FROM ago_credit_usage WHERE tenant_id=%s "
+            "AND operation_key LIKE %s", (c.tenant, 'ai-qa:'+task_id+':%')).fetchone()
+        assert usage['n'] == attempts
+        receipts = c.db.execute(
+            "SELECT verdict FROM ago_ai_qa_reviews WHERE tenant_id=%s AND task_id=%s",
+            (c.tenant, task_id)).fetchall()
+        assert len(receipts) == (0 if model_failure else attempts)
+        assert all(row['verdict'] == 'unverified' for row in receipts)
+        assert c.db.execute(
+            "SELECT count(*) AS n FROM ago_task_reviews WHERE tenant_id=%s AND task_id=%s",
+            (c.tenant, task_id)).fetchone()['n'] == 0
+    assert len(c.seen) == 1
+    assert c.stage('architecture')['plan_step_id'] is None
 
 
 def test_next_step_is_decided_from_recorded_state_only():

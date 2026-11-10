@@ -276,14 +276,17 @@ def _qa(actor, repositories, project_id, step) -> dict:
     except (TimeoutError, OSError, RuntimeError):
         return _outcome(step, progressed=False, needs_founder=False, qa_verdict=None,
                         message="The AI QA model call failed for " + stage
-                                + "; nothing was recorded. It can be tried again.")
+                                + "; no QA verdict was returned. The attempt may have consumed "
+                                "a virtual credit. The next advance checks recorded state "
+                                "before retrying.")
     verdict = review["verdict"]
     return _outcome(
         step, progressed=verdict in ("pass", "fail"), needs_founder=False, qa_verdict=verdict,
         qa_employee_name=review["qa_employee_name"], decision=review.get("continuation"),
         message=("AI QA by " + review["qa_employee_name"] + ": " + verdict.upper() + " for "
                  + stage + "." if verdict in ("pass", "fail")
-                 else "AI QA gave no clear verdict for " + stage + "; nothing was recorded."))
+                 else "AI QA gave no clear verdict for " + stage
+                      + "; the review receipt and one virtual-credit charge were recorded."))
 
 
 @router.post("/projects/{project_id}/advance")
