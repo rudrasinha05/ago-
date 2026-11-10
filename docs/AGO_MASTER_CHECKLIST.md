@@ -911,8 +911,8 @@ section and a founder amendment indicates traceability, not a reason to merge.
   - *DONE* — Live-proved: seven distinct identities ran bounded sequential roles with receipts
 - [x] AI-004 — Work output must derive from actual authorized model inference, not a hardcoded fabricated response.
   - *DONE* — Every draft carries a model receipt; fabricated output is refused
-- [ ] AI-005 — Real engineering workers must produce validated source files, matching tests and required docs.
-  - *NOT STARTED* — BLOCKER: the AI engineer has never produced a valid source+test set on the real laptop
+- [~] AI-005 — Real engineering workers must produce validated source files, matching tests and required docs.
+  - *PARTIAL* — BLOCKER still open: no valid source+test set from an AGO run yet. Fix built at 990f164 (fence unwrap, code goal, JSON-schema answer; tests test_one_wrapping_markdown_fence_is_unwrapped_before_json_check, test_code_author_answer_is_schema_constrained_only_when_provider_supports_it; CI green on 990f164). Direct Ollama on the Founder laptop 2026-11-10: qwen2.5-coder:3b returned a candidate that passes the static check. Needs one live AGO run to prove.
 - [x] AI-006 — Validate path allowlists, content limits, syntax, source hash and API shape before staging code.
   - *DONE* — Path allowlist, size, syntax, secret scan and API shape checked before staging
 - [x] AI-007 — Attempt bounded self-correction after invalid code and classify continued invalidity safely.
@@ -931,10 +931,10 @@ section and a founder amendment indicates traceability, not a reason to merge.
 ### QA — Software, sandbox, correction and verified delivery
 - [x] QA-001 — Generated code must be staged separately without overwriting trusted existing source.
   - *DONE* — Candidate code staged separately; trusted source never overwritten
-- [ ] QA-002 — Execute candidate code/tests in an isolated non-root, no-network, resource-bounded Docker container.
-  - *NOT STARTED* — BLOCKER: no isolated Docker execution of candidate code
-- [ ] QA-003 — Real tests must run; zero-test success or synthetic pass must not count as software acceptance.
-  - *NOT STARTED* — No real test execution yet, so no software acceptance is possible
+- [~] QA-002 — Execute candidate code/tests in an isolated non-root, no-network, resource-bounded Docker container.
+  - *PARTIAL* — BLOCKER still open: no AGO-generated candidate has been executed. Runner exists (scripts/ago_verify_candidate.py: user 65534, network none, read-only, 256m, 1 cpu, 64 pids) and real Docker runs it in CI step "Run actual offline Docker candidate QA with trusted static fixtures" (run 42831565453, green on 990f164). Not yet run on the Founder laptop.
+- [~] QA-003 — Real tests must run; zero-test success or synthetic pass must not count as software acceptance.
+  - *PARTIAL* — Runner exits 4 on zero tests; CI Docker smoke runs a known-correct and a known-broken fixture and requires pass/fail to match (run 42831565453 on 990f164; test_failure_or_zero_tests_never_marks_candidate_passed). No real test run of an AGO-generated candidate yet, so no software acceptance.
 - [~] QA-004 — Preserve source digests, exact test evidence, failure category and bounded private-output redaction.
   - *PARTIAL* — Source digests and failure categories stored; execution evidence absent
 - [~] QA-005 — Source-only repair after test FAIL cannot rewrite original tests or bypass approvals.
