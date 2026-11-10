@@ -100,6 +100,17 @@ def run_four_role_chain(
 ) -> dict:
     project=task.project_context
     title=str(project["title"])[:180]
+    # PROJ-006: a later stage's task runs the same governed chain, but its
+    # worker is asked for THAT stage's deliverable. Code candidates belong to
+    # implementation (and the legacy discovery run) only.
+    project_stage=str(project.get("stage") or "discovery")
+    if project_stage not in ("discovery","implementation"):
+        engineering_candidates=False
+    stage_goal=None if project_stage=="discovery" else (
+        "Produce the "+project_stage+" stage deliverable of this project: "
+        +str(project.get("deliverable") or "")[:300]
+        +". Build on the earlier stages, which already passed independent QA."
+    )
     # A revision adds Board feedback; keep the whole prompt inside the 4000 bound.
     revision_notes=str(revision_notes or "")[:500]
     brief=str(project["brief"])[:1100 if revision_notes else 1500]
@@ -193,7 +204,9 @@ def run_four_role_chain(
                "Output text only, with headings: DECISION, DELIVERABLE, RISKS, ACCEPTANCE. ")+
              "No tools, links to private content, hiring, spending, code execution, "
              "GitHub operations, publishing or approvals. Human QA is pending.\n")
-            +"ROLE: "+role.upper()+"\nROLE_GOAL: "+(CODE_AUTHOR_GOAL if code_author else goal)+"\n"
+            +"ROLE: "+role.upper()+"\nROLE_GOAL: "+(
+                CODE_AUTHOR_GOAL if code_author
+                else stage_goal if role=="employee" and stage_goal else goal)+"\n"
             +("BOARD_ADVISORY: Your FIRST line must be exactly one of these two lines, "
               "with nothing else on it:\nBOARD_RECOMMENDATION: APPROVE\n"
               "BOARD_RECOMMENDATION: DENY\nWrite that line only once. "
@@ -326,6 +339,7 @@ def run_four_role_chain(
         "kind":"local_company_governed_handoff",
         "project_id":str(project["intake_id"]),
         "task_id":task.id,
+        "project_stage":project_stage,
         "engineering_candidate":engineering_candidate,
         "engineering_authorization":(
             "implementation_stage_verified" if engineering_candidates

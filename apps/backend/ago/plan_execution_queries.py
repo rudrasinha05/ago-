@@ -85,8 +85,9 @@ class PlanExecutionQueries:
     def insert_step_task_recovery_09(self, parameters: Any = None) -> Cursor:
         return self.connection.execute(
             """INSERT INTO ago_plan_step_task_recoveries
-               (tenant_id,plan_id,plan_step_id,failed_task_id,recovery_task_id,actor_id,reason)
-               VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id,created_at""",
+               (tenant_id,plan_id,plan_step_id,failed_task_id,recovery_task_id,actor_id,reason,
+                decided_by_employee_id)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id,created_at""",
             parameters,
         )
 

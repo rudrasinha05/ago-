@@ -165,7 +165,7 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
                     JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id
                       AND l.intake_id=i.id
                     JOIN ago_founder_intake_stages st ON st.tenant_id=i.tenant_id
-                      AND st.intake_id=i.id AND st.stage='discovery'
+                      AND st.intake_id=i.id
                     JOIN ago_plan_steps ps ON ps.tenant_id=st.tenant_id
                       AND ps.id=st.plan_step_id AND ps.plan_id=i.plan_id
                     JOIN ago_governed_tasks t ON t.tenant_id=i.tenant_id
@@ -179,7 +179,8 @@ def inspect_engineering_task(db, *, tenant_id: str, founder_id: str,
                       AND engineering.stage='implementation'
                       AND engineering.suggested_assignee_id=implementation.assignee_id
                     JOIN ago_employees w ON w.tenant_id=t.tenant_id
-                      AND w.id=CASE WHEN %s THEN engineering.suggested_assignee_id
+                      AND w.id=CASE WHEN %s AND st.stage='discovery'
+                                    THEN engineering.suggested_assignee_id
                                     ELSE t.assignee_id END
                     JOIN ago_employees pm ON pm.tenant_id=i.tenant_id
                       AND pm.id=l.accountable_manager_id

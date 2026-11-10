@@ -2,7 +2,7 @@
 import {useRef,useState} from 'react';
 import {aiQaReviewers} from './founder-delivery-state';
 import {creditBalance,creditBlocker,selfCheck,CREDITS_PER_CHAIN_RUN} from './task-self-check-state';
-import {AUTOMATIC,MAX_REVISIONS,QA_CREDITS,nextAdvanceStep,pickQaReviewer,revisionReason,runBlocker,stepLabel} from './project-advance-state';
+import {AUTOMATIC,MANAGER_DECISIONS,MAX_REVISIONS,QA_CREDITS,nextAdvanceStep,pickQaReviewer,revisionReason,runBlocker,stepLabel} from './project-advance-state';
 import {boardDenial} from './founder-delivery-state';
 
 const BASE='/v1/organization/company/projects/';
@@ -29,6 +29,10 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
   setPreview(step);
   if(!AUTOMATIC.has(step.kind)){add(stepLabel(step)+'. AGO stopped here.',step.kind==='done'?'ok':'stop');return false;}
   add('Next: '+stepLabel(step)+'…');
+  if(MANAGER_DECISIONS.has(step.kind)){
+   // PROJ-006: the server decides this in the name of the project's AI manager and records it.
+   return managerDecision(await api.request(BASE+id+'/continue',{method:'POST'}));
+  }
   const stage=current.stages.find(s=>s.task_id===step.task_id);
   if(step.kind==='revise'||step.kind==='retry_code'){
    if(revisions.current>=MAX_REVISIONS){add(stepLabel({...step,kind:'revise_limit'})+'. AGO stopped here.','stop');return false;}
@@ -76,9 +80,30 @@ export function ProjectAdvance({api,project,profiles,onChanged}){
   if(!reviewer){add('No AI employee with a QA role who did not build this work. Hire or retitle one as “QA Engineer”.','stop');return false;}
   const r=await api.request(BASE+id+'/stages/'+encodeURIComponent(step.stage)+'/ai-qa',
    {method:'POST',body:{qa_employee_id:reviewer.id,operation_key:crypto.randomUUID()}});
-  if(r?.verdict==='pass'){add('AI QA by '+r.qa_employee_name+': PASS for '+step.stage+'.','ok');return true;}
-  if(r?.verdict==='fail'){add('AI QA by '+r.qa_employee_name+': FAIL for '+step.stage+'. Create a rework task.','stop');return false;}
+  if(r?.verdict==='pass'){
+   add('AI QA by '+r.qa_employee_name+': PASS for '+step.stage+'.','ok');
+   // The server's AI manager may already have opened the next stage.
+   return r.continuation?managerDecision(r.continuation,true):true;
+  }
+  if(r?.verdict==='fail'){
+   if(r.continuation){add('AI QA by '+r.qa_employee_name+': FAIL for '+step.stage+'.','info');return managerDecision(r.continuation);}
+   add('AI QA by '+r.qa_employee_name+': FAIL for '+step.stage+'. Create a rework task.','stop');return false;
+  }
   add('AI QA gave no clear verdict for '+step.stage+'. Nothing was recorded as QA; try again.','stop');return false;
+ }
+
+ // Shows what the AI project manager decided on the server; true when the loop may go on.
+ function managerDecision(r,quietWhenIdle=false){
+  const who=(r?.decided_by_name||'The AI project manager')+' (AI project manager)';
+  if(r?.action==='opened_stage'){
+   add(who+' opened the '+r.stage+' stage and assigned its task to '+(r.assignee_name||'the approved specialist')+'.','ok');return true;
+  }
+  if(r?.action==='recovered_stage'){
+   add(who+' created a new '+r.stage+' task (automatic attempt '+r.ai_recovery_attempt+' of '+r.ai_recovery_limit+'): '+r.reason,'ok');return true;
+  }
+  if(quietWhenIdle&&r?.needs_founder===false)return true;
+  add((r?.reason||'The AI project manager could not decide the next step.')+' AGO stopped here.',r?.state==='all_stages_passed'?'ok':'stop');
+  return false;
  }
 
  async function go(keepGoing){

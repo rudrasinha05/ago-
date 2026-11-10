@@ -20,6 +20,7 @@ from ago.credits import CreditBudget
 from ago.model_provider import OllamaLocalTextProvider
 from ago.quality import Verdict
 from ago.quality_store import QualityStore
+from ago.stage_progression import StageProgression
 
 STAGES = ("discovery", "architecture", "implementation", "quality", "release")
 QA_ROLE = re.compile(r"\b(qa|quality|test(er|ing)?)\b", re.IGNORECASE)
@@ -130,10 +131,12 @@ class AiQaReview:
 
     def review_stage(
         self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
-        qa_employee_id: str, operation_key: str,
+        qa_employee_id: str | None = None, operation_key: str,
     ) -> dict:
-        for value in (tenant_id, founder_id, project_id, qa_employee_id, operation_key):
+        for value in (tenant_id, founder_id, project_id, operation_key):
             UUID(value)
+        if qa_employee_id is not None:
+            UUID(qa_employee_id)
         if stage not in STAGES:
             raise ValueError("Unknown project stage")
         configured = local_qa_provider()
@@ -143,7 +146,20 @@ class AiQaReview:
             )
         provider, model = configured
         queries = self.repositories.resolve(AiQaReviewQueries)
+        auto_selected = qa_employee_id is None
         with self.db.transaction():
+            if auto_selected:
+                # PROJ-006: the server, not the browser, puts the tester on the
+                # stage - an independent QA-role AI employee who did not build it.
+                work = queries.select_stage_task_01(
+                    (stage, tenant_id, project_id, founder_id)).fetchone()
+                if work is None:
+                    raise LookupError("Project stage task not found")
+                qa_employee_id = str(self.repositories.resolve(StageProgression).pick_qa_reviewer(
+                    tenant_id=tenant_id, project_id=project_id,
+                    excluded=builder_ids(work["run_result"]) | {
+                        str(work["assignee_id"]), str(work["run_agent_id"])},
+                )["id"])
             row, reviewer = self._eligible(
                 queries, tenant_id=tenant_id, founder_id=founder_id, project_id=project_id,
                 stage=stage, qa_employee_id=qa_employee_id,
@@ -190,6 +206,13 @@ class AiQaReview:
                     tenant_id=tenant_id, task_id=task_id, qa_employee_id=qa_employee_id,
                     verdict=Verdict(verdict), evidence=evidence,
                 )
+        # PASS opens the next stage, FAIL creates the rework task - decided by
+        # the project's AI manager on the server, with no browser involved.
+        continuation = (
+            self.repositories.resolve(StageProgression).after_task_event(
+                tenant_id=tenant_id, founder_id=founder_id, task_id=task_id)
+            if verdict in ("pass", "fail") else None
+        )
         return {
             "kind": "ago_ai_qa_review_v1",
             "project_id": project_id,
@@ -198,6 +221,8 @@ class AiQaReview:
             "receipt_id": receipt_id,
             "qa_employee_id": qa_employee_id,
             "qa_employee_name": reviewer["name"],
+            "qa_reviewer_auto_selected": auto_selected,
+            "continuation": continuation,
             "model": model,
             "verdict": verdict,
             "review_recorded": verdict in ("pass", "fail"),

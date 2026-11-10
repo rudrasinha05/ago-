@@ -219,7 +219,9 @@
     "tool_enrollment_queries": "operations",
     "tool_runtime": "operations",
     "tool_runtime_queries": "operations",
-    "workflows": "workforce"
+    "workflows": "workforce",
+    "stage_progression": "strategy",
+    "stage_progression_queries": "strategy"
   },
   "sql_access": {
     "__init__": [],
@@ -766,6 +768,24 @@
       "ago_tool_run_evidence",
       "ago_tool_runs"
     ],
-    "workflows": []
+    "workflows": [],
+    "stage_progression": [],
+    "stage_progression_queries": [
+      "ago_agent_runs",
+      "ago_company_chat",
+      "ago_employees",
+      "ago_founder_intake_stages",
+      "ago_founder_intakes",
+      "ago_founder_project_lead",
+      "ago_goals",
+      "ago_governed_tasks",
+      "ago_personnel_events",
+      "ago_plan_step_task_recoveries",
+      "ago_plan_steps",
+      "ago_project_stage_delegation_activations",
+      "ago_project_stage_progressions",
+      "ago_strategy_plans",
+      "ago_task_reviews"
+    ]
   }
 }

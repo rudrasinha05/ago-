@@ -886,7 +886,7 @@ section and a founder amendment indicates traceability, not a reason to merge.
 - [x] PROJ-005 — Founder can view next safe step or run bounded 'keep going until I am needed'.
   - *DONE* — Advance project: next step or keep going; live-proved 2026-11-07
 - [~] PROJ-006 — Automatic next-stage approval, dispatch, QA and continuation should be durable server-side, not dependent on an open browser.
-  - *PARTIAL* — Bounded offline worker only; no durable always-on server-side continuation
+  - *PARTIAL* — Server-side continuation by the project's AI manager now exists: next-stage task after QA PASS, recovery after QA FAIL / retryable run failure, server-picked independent tester (apps/backend/tests/test_stage_progression.py: 7 tests, 6 of them on real PostgreSQL; migration 075). Still missing: an always-on unattended runner (a session must still start each approve/run/QA step) and a live run on the Founder's laptop
 - [x] PROJ-007 — Keep the Founder informed of actual work, blockers, retries, decisions and QA results.
   - *DONE* — Live timestamped log of approvals, runs, denials, QA and retries
 - [x] PROJ-008 — Failure classifications distinguish Board denial, code invalid, QA FAIL, timeout, credit, unstaffed and unknown outcome.

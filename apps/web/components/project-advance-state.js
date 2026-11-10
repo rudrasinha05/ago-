@@ -11,7 +11,8 @@ const KINDS={
  run:'Run the {stage} task with the AI team (uses '+CREDITS_PER_CHAIN_RUN+' internal credits)',
  qa:'AI QA checks the {stage} stage (uses '+QA_CREDITS+' internal credit)',
  running:'The {stage} task is running — wait for it to finish',
- rework:'AI QA failed the {stage} stage — Founder: create a rework task',
+ rework:'AI QA failed the {stage} stage — the AI project manager creates a rework task',
+ open_stage:'The AI project manager opens the {stage} stage and assigns its task',
  failed:'The {stage} task failed — Founder: recover the stage',
  revise:'Revise the {stage} proposal to fix the Board feedback and resubmit it',
  retry_code:'Retry the {stage} task: the AI developer\'s code failed AGO\'s code check',
@@ -22,7 +23,10 @@ const KINDS={
  done:'Every stage passed AI QA',
 };
 // Steps AGO can do by itself; every other kind needs a person and stops a loop.
-export const AUTOMATIC=new Set(['request','approve','run','qa','revise','retry_code']);
+// The server decides open_stage and rework in the name of the project's AI manager
+// (POST …/continue) and says when the Founder is needed instead.
+export const AUTOMATIC=new Set(['request','approve','run','qa','revise','retry_code','rework','open_stage']);
+export const MANAGER_DECISIONS=new Set(['rework','open_stage']);
 export const MAX_REVISIONS=2;
 
 export function stepLabel(step){
@@ -37,7 +41,9 @@ export function nextAdvanceStep(detail){
  for(const s of stages){
   if(s.qa_verdict==='pass')continue;
   const base={stage:s.stage,task_id:s.task_id||null};
-  if(!s.task_id)return {...base,kind:'unstaffed'};
+  // Every earlier stage passed QA here. A later stage with an approved specialist
+  // but no task yet is opened by the AI project manager on the server.
+  if(!s.task_id)return {...base,kind:Number(s.position)>1&&s.approved_assignee_id?'open_stage':'unstaffed'};
   if(s.qa_verdict==='fail')return {...base,kind:'rework'};
   switch(s.task_status){
    case 'failed':

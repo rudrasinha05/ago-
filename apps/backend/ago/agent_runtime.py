@@ -17,6 +17,7 @@ from ago.task_store import TaskStore
 from ago.organizational_dna import GenomeStore
 from ago.enterprise_store import EnterpriseOperationsStore
 from ago.security_controls import SecurityControls
+from ago.stage_progression import StageProgression
 
 
 # Fixed, secret-free labels for why a run failed. Exception text is never stored.
@@ -91,6 +92,8 @@ class AgentRuntime:
             project_context = ({
                 "title": context_row["title"], "brief": context_row["brief"],
                 "intake_id": str(context_row["id"]),
+                "stage": context_row["stage"],
+                "deliverable": context_row["deliverable"],
             } if context_row else None)
             # Validate the explicit founder-appointed four-agent chain BEFORE
             # consuming an approved task or inserting an agent run.
@@ -153,6 +156,7 @@ class AgentRuntime:
                     tenant_id=actor.tenant_id,
                     success=not board_hold,
                 )
+            continuation = self._continue_project(task, actor) if board_hold else None
         except Exception as exc:
             with self.db.transaction():
                 self.repositories.resolve(AgentRuntimeQueries).update_ago_agent_runs_07(
@@ -163,12 +167,22 @@ class AgentRuntime:
                     tenant_id=actor.tenant_id,
                     success=False,
                 )
+            self._continue_project(task, actor)
             raise RuntimeError("Governed agent execution failed") from exc
         return {
             "id": run_id, "task_id": task.id, "status": "completed",
             "delivery_status": "blocked" if board_hold else "completed",
             "result": result,
+            "continuation": continuation,
         }
+
+    def _continue_project(self, task, actor) -> dict | None:
+        """PROJ-006: a failed or Board-stopped project stage run is handed to the
+        project's AI manager at once (recovery task or a plain 'Founder needed')."""
+        if not getattr(task, "project_context", None):
+            return None
+        return self.repositories.resolve(StageProgression).after_task_event(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, task_id=task.id)
 
     def recover_stale(self, *, tenant_id: str, minimum_age_seconds: int = 3600) -> int:
         """Mark abandoned runs failed; never auto-replay possible side effects."""

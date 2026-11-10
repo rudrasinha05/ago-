@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, repository_scope, translate_error
-from ago.repository_ports import AiQaReviewPort, CompanyChatPort, PlanExecutionPort
+from ago.repository_ports import (
+    AiQaReviewPort, CompanyChatPort, PlanExecutionPort, StageProgressionPort,
+)
 
 router = APIRouter(prefix='/v1/organization/company', tags=['Company map'])
 
@@ -427,7 +429,8 @@ def board_override_stage(project_id: UUID,
 
 
 class StageAiQaInput(StrictInput):
-    qa_employee_id: UUID
+    # Omitted: the server puts an independent AI tester on the stage (PROJ-006).
+    qa_employee_id: UUID | None = None
     operation_key: UUID
 
 
@@ -444,12 +447,32 @@ def ai_qa_stage(project_id: UUID,
     try:
         return repositories.resolve(AiQaReviewPort).review_stage(
             tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id),
-            stage=stage, qa_employee_id=str(data.qa_employee_id),
+            stage=stage,
+            qa_employee_id=str(data.qa_employee_id) if data.qa_employee_id else None,
             operation_key=str(data.operation_key))
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)
     except (TimeoutError,OSError,RuntimeError) as exc:
         raise HTTPException(502,'AI QA model call failed; the credit attempt is recorded') from exc
+
+
+@router.post('/projects/{project_id}/continue')
+def continue_project(project_id: UUID, actor=Depends(authenticated),
+                     repositories=Depends(repository_scope)):
+    """The project's AI manager makes its ONE pending decision on the server.
+
+    Opens the next stage after a QA PASS, or creates the recovery task for a
+    failed stage. Idempotent; never approves, runs or releases anything.
+    """
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'approval:founder')
+    if 'founder' not in actor.roles:
+        translate_error(PermissionError('Only the project Founder may continue a project'))
+    try:
+        return repositories.resolve(StageProgressionPort).continue_project(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
 
 
 class ProjectManagerInput(StrictInput):

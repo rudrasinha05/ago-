@@ -75,7 +75,7 @@ class PlanExecution:
 
     def recover_failed_stage(
         self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
-        failed_task_id: str, reason: str,
+        failed_task_id: str, reason: str, decided_by_employee_id: str | None = None,
     ) -> dict:
         """Founder-authorized recovery of a FAILED project stage task (issue #10).
 
@@ -87,7 +87,13 @@ class PlanExecution:
         records an append-only recovery row and relinks the step. The failed
         task and its run stay immutable evidence; nothing is approved, replayed
         or run. The new task needs its own approval through the existing flow.
+
+        decided_by_employee_id is set only by the server-side continuation
+        (PROJ-006) when the project's AI manager decides the recovery inside
+        the Founder's session; it is recorded next to the Founder's actor_id.
         """
+        if decided_by_employee_id is not None:
+            UUID(decided_by_employee_id)
         for value in (tenant_id, founder_id, project_id, failed_task_id):
             UUID(value)
         if stage not in ("discovery", "architecture", "implementation", "quality", "release"):
@@ -126,7 +132,7 @@ class PlanExecution:
             )
             record = queries.insert_step_task_recovery_09((
                 tenant_id, str(step["plan_id"]), str(step["plan_step_id"]),
-                failed_task_id, created.id, founder_id, reason,
+                failed_task_id, created.id, founder_id, reason, decided_by_employee_id,
             )).fetchone()
             relinked = queries.relink_step_task_10(
                 (created.id, tenant_id, str(step["plan_step_id"]), failed_task_id)
@@ -142,6 +148,7 @@ class PlanExecution:
             "recovery_task_status": "proposed",
             "recovery_kind": "qa_rework" if rework else "failed_run",
             "recovery_id": int(record["id"]),
+            "decided_by_employee_id": decided_by_employee_id,
             "recorded_at": record["created_at"].isoformat(),
             "approval_required": True,
             "run_started": False,

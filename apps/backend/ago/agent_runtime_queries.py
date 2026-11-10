@@ -81,10 +81,10 @@ class AgentRuntimeQueries:
     def select_ago_founder_project_12(self, parameters: Any = None, *, lock: bool = False) -> Cursor:
         """Lock project ownership through admission, including newly materialized tasks."""
         return self.connection.execute("""
-            SELECT i.id,i.title,i.brief,i.founder_id FROM ago_founder_intakes i
+            SELECT i.id,i.title,i.brief,i.founder_id,s.stage,s.deliverable
+            FROM ago_founder_intakes i
             JOIN ago_founder_intake_stages s
               ON s.tenant_id=i.tenant_id AND s.intake_id=i.id
-             AND s.stage='discovery'
             JOIN ago_plan_steps ps
               ON ps.tenant_id=i.tenant_id AND ps.plan_id=i.plan_id
              AND ps.id=s.plan_step_id

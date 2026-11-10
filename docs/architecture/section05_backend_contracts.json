@@ -859,7 +859,7 @@
           "returns": "list[dict]"
         },
         "work_queue": {
-      "arguments": "self, *, tenant_id: str, plan_id: str | None=None",
+          "arguments": "self, *, tenant_id: str, plan_id: str | None=None",
           "returns": "list[dict]"
         },
         "queue_work": {
@@ -867,7 +867,7 @@
           "returns": "dict"
         },
         "claim_work": {
-      "arguments": "self, *, actor: Principal, lease_seconds: int, offline_only: bool=False, plan_id: str | None=None",
+          "arguments": "self, *, actor: Principal, lease_seconds: int, offline_only: bool=False, plan_id: str | None=None",
           "returns": "dict"
         },
         "resolve_work_lease": {
@@ -1549,7 +1549,7 @@
           "returns": "list[str]"
         },
         "recover_failed_stage": {
-          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str, failed_task_id: str, reason: str",
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str, failed_task_id: str, reason: str, decided_by_employee_id: str | None=None",
           "returns": "dict"
         },
         "founder_board_override": {
@@ -1964,7 +1964,7 @@
       "module": "ai_qa_review",
       "methods": {
         "review_stage": {
-          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str, qa_employee_id: str, operation_key: str",
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str, qa_employee_id: str | None=None, operation_key: str",
           "returns": "dict"
         }
       }
@@ -1981,6 +1981,64 @@
           "returns": "Cursor"
         },
         "insert_ai_qa_review_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        }
+      }
+    },
+    "StageProgression": {
+      "module": "stage_progression",
+      "methods": {
+        "continue_project": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, revise_board_stop: bool=True",
+          "returns": "dict"
+        },
+        "after_task_event": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, task_id: str",
+          "returns": "dict | None"
+        },
+        "pick_qa_reviewer": {
+          "arguments": "self, *, tenant_id: str, project_id: str, excluded: set[str]",
+          "returns": "dict"
+        }
+      }
+    },
+    "StageProgressionQueries": {
+      "module": "stage_progression_queries",
+      "methods": {
+        "select_project_01": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_stages_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_stage_step_03": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "link_step_task_04": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "link_stage_step_05": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_progression_06": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_project_notice_07": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_project_of_task_08": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_qa_candidates_09": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         }

@@ -70,6 +70,7 @@
         "enterprise_store",
         "organizational_dna",
         "security_controls",
+        "stage_progression",
         "task_store"
       ]
     },
@@ -963,6 +964,8 @@
         "security_controls",
         "semantic_memory_store",
         "session_service",
+        "stage_progression",
+        "stage_progression_queries",
         "task_store",
         "tool_catalog_queries",
         "tool_enrollment",
@@ -1155,11 +1158,30 @@
         "credits",
         "model_provider",
         "quality",
-        "quality_store"
+        "quality_store",
+        "stage_progression"
       ]
     },
     "ai_qa_review_queries": {
       "context": "governance",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
+    "stage_progression": {
+      "context": "strategy",
+      "layer": "service",
+      "imports": [
+        "backend_contracts",
+        "organization_store",
+        "plan_execution",
+        "stage_progression_queries",
+        "task_store"
+      ]
+    },
+    "stage_progression_queries": {
+      "context": "strategy",
       "layer": "persistence",
       "imports": [
         "backend_contracts"

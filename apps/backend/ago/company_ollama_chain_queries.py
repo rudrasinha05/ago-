@@ -22,13 +22,13 @@ class CompanyOllamaChainQueries:
         UUID(str(project["intake_id"]))
         row=self.db.execute("""
             SELECT i.id,i.title,i.founder_id,p.status AS plan_status,
-                   l.accountable_manager_id
+                   l.accountable_manager_id,s.stage
             FROM ago_founder_intakes i
             JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
             JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id
               AND l.intake_id=i.id
             JOIN ago_founder_intake_stages s ON s.tenant_id=i.tenant_id
-              AND s.intake_id=i.id AND s.stage='discovery'
+              AND s.intake_id=i.id
             JOIN ago_plan_steps ps ON ps.tenant_id=s.tenant_id
               AND ps.plan_id=s.plan_id AND ps.id=s.plan_step_id
             WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
@@ -74,7 +74,11 @@ class CompanyOllamaChainQueries:
         """,(tenant_id,row["accountable_manager_id"])).fetchone()
         if not pm or not worker or worker["action"]!="internal:brief":
             raise PermissionError("Real accountable PM and discovery assignee required")
-        if os.getenv("AGO_LOCAL_ENGINEERING_CANDIDATES")=="true":
+        if (os.getenv("AGO_LOCAL_ENGINEERING_CANDIDATES")=="true"
+                and row.get("stage","discovery")=="discovery"):
+            # A later stage's task already belongs to that stage's own
+            # approved specialist (PROJ-006); only the legacy discovery run
+            # borrows the separately activated implementation developer.
             # Discovery is authorized by the research task, but engineering
             # belongs to its OWN separately approved implementation stage.
             # The model cannot promote the discovery researcher into a coder.
@@ -246,7 +250,7 @@ class CompanyOllamaChainQueries:
                 JOIN ago_plan_steps ps ON ps.tenant_id=t.tenant_id
                   AND ps.task_id=t.id
                 JOIN ago_founder_intake_stages s ON s.tenant_id=ps.tenant_id
-                  AND s.plan_step_id=ps.id AND s.stage='discovery'
+                  AND s.plan_step_id=ps.id
                 JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id
                   AND i.id=s.intake_id AND i.founder_id=%s
                 JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id

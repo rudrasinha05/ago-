@@ -61,6 +61,8 @@ from ago.organization_store import OrganizationStore as _OrganizationStore
 from ago.organizational_dna import GenomeStore as _GenomeStore
 from ago.plan_execution import PlanExecution as _PlanExecution
 from ago.plan_execution_queries import PlanExecutionQueries as _PlanExecutionQueries
+from ago.stage_progression import StageProgression as _StageProgression
+from ago.stage_progression_queries import StageProgressionQueries as _StageProgressionQueries
 from ago.plan_store import PlanStore as _PlanStore
 from ago.quality import Review, Verdict
 from ago.quality_store import QualityStore as _QualityStore
@@ -499,7 +501,7 @@ class PlanExecutionPort(Protocol):
 
     def recover_failed_stage(
         self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
-        failed_task_id: str, reason: str,
+        failed_task_id: str, reason: str, decided_by_employee_id: str | None = None,
     ) -> dict: ...
 
     def founder_board_override(
@@ -574,8 +576,45 @@ class QualityStorePort(Protocol):
 class AiQaReviewPort(Protocol):
     def review_stage(
         self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
-        qa_employee_id: str, operation_key: str,
+        qa_employee_id: str | None = None, operation_key: str,
     ) -> dict: ...
+
+
+@runtime_checkable
+class StageProgressionPort(Protocol):
+    def continue_project(
+        self, *, tenant_id: str, founder_id: str, project_id: str,
+        revise_board_stop: bool = True,
+    ) -> dict: ...
+
+    def after_task_event(
+        self, *, tenant_id: str, founder_id: str, task_id: str,
+    ) -> dict | None: ...
+
+    def pick_qa_reviewer(
+        self, *, tenant_id: str, project_id: str, excluded: set[str],
+    ) -> dict: ...
+
+
+@runtime_checkable
+class StageProgressionQueriesPort(Protocol):
+    def select_project_01(self, parameters: Any = None) -> Cursor: ...
+
+    def select_stages_02(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_stage_step_03(self, parameters: Any = None) -> Cursor: ...
+
+    def link_step_task_04(self, parameters: Any = None) -> Cursor: ...
+
+    def link_stage_step_05(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_progression_06(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_project_notice_07(self, parameters: Any = None) -> Cursor: ...
+
+    def select_project_of_task_08(self, parameters: Any = None) -> Cursor: ...
+
+    def select_qa_candidates_09(self, parameters: Any = None) -> Cursor: ...
 
 
 @runtime_checkable
@@ -1196,6 +1235,8 @@ REPOSITORY_BINDINGS = {
     OrganizationStorePort: _OrganizationStore,
     PlanExecutionPort: _PlanExecution,
     PlanExecutionQueriesPort: _PlanExecutionQueries,
+    StageProgressionPort: _StageProgression,
+    StageProgressionQueriesPort: _StageProgressionQueries,
     PlanStorePort: _PlanStore,
     QualityStorePort: _QualityStore,
     ScorecardPort: _Scorecard,
