@@ -40,7 +40,7 @@ class StageProgressionQueries:
                       a.assignee_id AS approved_assignee_id,
                       w.name AS approved_assignee_name,
                       ps.task_id,t.status AS task_status,
-                      q.verdict AS qa_verdict,
+                      q.verdict AS qa_verdict,q.evidence AS qa_evidence,
                       r.status AS run_status,r.failure_code,r.result AS run_result,
                       -- Automatic attempts since the Founder last decided a recovery
                       -- himself: his decision is a fresh mandate for the AI manager.
@@ -64,6 +64,87 @@ class StageProgressionQueries:
                ORDER BY s.position""",
             parameters,
         )
+
+    def select_followup_context_10(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT i.id,i.title,i.founder_id,l.accountable_manager_id,
+                      s.stage,ps.task_id,ps.assignee_id,q.verdict AS qa_verdict
+               FROM ago_founder_intakes i
+               JOIN ago_founder_intake_stages s ON s.tenant_id=i.tenant_id AND s.intake_id=i.id
+               LEFT JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
+               LEFT JOIN ago_plan_steps ps ON ps.tenant_id=s.tenant_id AND ps.id=s.plan_step_id
+               LEFT JOIN ago_task_reviews q ON q.tenant_id=ps.tenant_id AND q.task_id=ps.task_id
+               WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s AND s.stage=%s
+               FOR UPDATE OF i""", parameters)
+
+    def select_followup_owners_11(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT e.id,e.name,e.kind,e.role_title,b.seat
+               FROM ago_employees e
+               LEFT JOIN ago_company_board_appointments b ON b.tenant_id=e.tenant_id
+                 AND b.employee_id=e.id
+               WHERE e.tenant_id=%s AND NOT EXISTS (
+                 SELECT 1 FROM ago_personnel_events p WHERE p.tenant_id=e.tenant_id
+                   AND p.employee_id=e.id AND p.change_kind='terminated')
+               ORDER BY e.id""", parameters)
+
+    def insert_followup_12(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """INSERT INTO ago_project_followups
+               (id,tenant_id,project_id,stage,source_key,source_task_id,work_task_id,
+                owner_id,founder_id,code,feedback,next_action,status,eligible_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT(tenant_id,project_id,stage,source_key) DO NOTHING
+               RETURNING *""", parameters)
+
+    def select_followup_13(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT * FROM ago_project_followups WHERE tenant_id=%s AND project_id=%s
+               AND stage=%s AND source_key=%s""", parameters)
+
+    def insert_followup_notice_14(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """INSERT INTO ago_company_chat
+               (tenant_id,channel,author_id,author_name,body,kind,employee_id,task_id,operation_key)
+               VALUES (%s,%s,%s,'AGO work routing',%s,'project',%s,%s,%s)
+               ON CONFLICT(tenant_id,author_id,operation_key) DO NOTHING""", parameters)
+
+    def resolve_followups_15(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """UPDATE ago_project_followups SET status='resolved',resolved_at=clock_timestamp()
+               WHERE tenant_id=%s AND project_id=%s AND stage=%s AND status<>'resolved'""",
+            parameters)
+
+    def select_scheduled_followup_16(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT f.*,e.name AS owner_name FROM ago_project_followups f
+               JOIN ago_employees e ON e.tenant_id=f.tenant_id AND e.id=f.owner_id
+               WHERE f.tenant_id=%s AND f.project_id=%s AND f.work_task_id=%s
+                 AND f.status IN ('assigned','scheduled') AND f.eligible_at>clock_timestamp()
+               ORDER BY f.eligible_at DESC LIMIT 1""", parameters)
+
+    def select_qa_attempts_17(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT count(*) AS n FROM ago_credit_usage
+               WHERE tenant_id=%s AND operation_key LIKE %s""", parameters)
+
+    def select_project_lock_18(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            "SELECT pg_try_advisory_lock(hashtextextended(%s,7781)) AS acquired", parameters)
+
+    def release_project_lock_19(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            "SELECT pg_advisory_unlock(hashtextextended(%s,7781)) AS released", parameters)
+
+    def select_followup_task_20(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT 1 FROM ago_founder_intake_stages s
+               JOIN ago_plan_steps ps ON ps.tenant_id=s.tenant_id AND ps.id=s.plan_step_id
+               WHERE s.tenant_id=%s AND s.intake_id=%s AND s.stage=%s
+                 AND (ps.task_id=%s OR EXISTS (
+                   SELECT 1 FROM ago_plan_step_task_recoveries r
+                   WHERE r.tenant_id=s.tenant_id AND r.plan_step_id=ps.id
+                     AND (r.failed_task_id=%s OR r.recovery_task_id=%s)))""", parameters)
 
     def insert_stage_step_03(self, parameters: Any = None) -> Cursor:
         """(id, tenant_id, plan_id, position, assignee_id, depends_on); the
@@ -114,12 +195,12 @@ class StageProgressionQueries:
         """(tenant_id, task_id, founder_id): the Founder project whose stage
         step is linked to this task, if any."""
         return self.connection.execute(
-            """SELECT i.id AS project_id,s.stage
+            """SELECT i.id AS project_id,i.founder_id,s.stage
                FROM ago_plan_steps ps
                JOIN ago_founder_intake_stages s ON s.tenant_id=ps.tenant_id
                 AND s.plan_id=ps.plan_id AND s.plan_step_id=ps.id
                JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id AND i.id=s.intake_id
-               WHERE ps.tenant_id=%s AND ps.task_id=%s AND i.founder_id=%s""",
+               WHERE ps.tenant_id=%s AND ps.task_id=%s AND (%s::uuid IS NULL OR i.founder_id=%s)""",
             parameters,
         )
 

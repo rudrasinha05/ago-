@@ -238,6 +238,7 @@
       "ago_founder_intake_stages",
       "ago_founder_intakes",
       "ago_governed_tasks",
+      "ago_plan_step_task_recoveries",
       "ago_plan_steps",
       "ago_task_reviews"
     ],
@@ -344,6 +345,7 @@
       "ago_marketing_drafts",
       "ago_notification_read_cursors",
       "ago_plan_steps",
+      "ago_project_followups",
       "ago_project_stage_delegation_activations",
       "ago_project_stage_delegation_proposals",
       "ago_role_permissions",
@@ -773,7 +775,9 @@
     "stage_progression": [],
     "stage_progression_queries": [
       "ago_agent_runs",
+      "ago_company_board_appointments",
       "ago_company_chat",
+      "ago_credit_usage",
       "ago_employees",
       "ago_founder_intake_stages",
       "ago_founder_intakes",
@@ -783,6 +787,7 @@
       "ago_personnel_events",
       "ago_plan_step_task_recoveries",
       "ago_plan_steps",
+      "ago_project_followups",
       "ago_project_stage_delegation_activations",
       "ago_project_stage_progressions",
       "ago_strategy_plans",

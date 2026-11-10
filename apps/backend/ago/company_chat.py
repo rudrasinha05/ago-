@@ -83,12 +83,8 @@ class CompanyChat:
               (SELECT id FROM ago_employees WHERE tenant_id=%s AND department_id::text=substring(%s from 12))))
           AND (%s::bigint IS NULL OR c.id < %s)
           AND (%s::boolean OR c.channel='global' OR %s<>'global')
-          AND (c.kind<>'project' OR EXISTS (
-              SELECT 1 FROM ago_founder_intakes i
-              WHERE i.tenant_id=c.tenant_id AND i.founder_id=%s))
-          AND (parent.kind IS DISTINCT FROM 'project' OR EXISTS (
-              SELECT 1 FROM ago_founder_intakes i
-              WHERE i.tenant_id=parent.tenant_id AND i.founder_id=%s))
+          AND (c.kind<>'project' OR c.author_id=%s)
+          AND (parent.kind IS DISTINCT FROM 'project' OR parent.author_id=%s)
           ORDER BY c.id DESC LIMIT %s''',
           (tenant, channel, channel, channel, tenant, channel, before, before,
            founder,channel,reader_id,reader_id,limit+1)).fetchall()
@@ -249,6 +245,8 @@ class CompanyChat:
         kinds, visibility, scope = self._notification_scope(tenant_id, reader_id)
         founder = not visibility
         params = list(scope)
+        routing_filter = " AND (author_name<>'AGO work routing' OR author_id=%s)"
+        params.append(reader_id)
         cursor_filter=""
         if after_id is not None:
             cursor_filter=" AND id>%s"
@@ -258,7 +256,7 @@ class CompanyChat:
             SELECT id,employee_id,task_id,body,kind,created_at
             FROM ago_company_chat
             WHERE tenant_id=%s {visibility} AND kind IN {kinds}
-            {cursor_filter} ORDER BY id {order} LIMIT %s
+            {routing_filter} {cursor_filter} ORDER BY id {order} LIMIT %s
         """,tuple([*params,101 if after_id is not None else 100])).fetchall()
         recent=list(records[:100])
         if founder:
@@ -1333,6 +1331,15 @@ class CompanyChat:
         """,(reader_id,tenant_id,project_id)).fetchall()
         result = dict(row)
         result['stages'] = [dict(stage) for stage in stages]
+        result['followups'] = [dict(item) for item in self.db.execute("""
+            SELECT f.id,f.stage,f.code,f.source_task_id,f.work_task_id,f.owner_id,
+                   e.name AS owner_name,f.feedback,f.next_action,f.status,f.eligible_at,
+                   f.created_at,f.resolved_at
+            FROM ago_project_followups f JOIN ago_employees e
+              ON e.tenant_id=f.tenant_id AND e.id=f.owner_id
+            WHERE f.tenant_id=%s AND f.project_id=%s
+            ORDER BY f.created_at DESC,f.id LIMIT 100
+        """, (tenant_id,project_id)).fetchall()]
         completed = sum(s['qa_verdict']=='pass' for s in stages)
         result['qa_passed_stages'] = completed
         result['stage_count'] = len(stages)

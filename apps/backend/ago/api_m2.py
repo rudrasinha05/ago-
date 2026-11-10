@@ -32,6 +32,7 @@ from ago.repository_ports import (
     MemoryStorePort,
     OrganizationStorePort,
     QualityStorePort,
+    StageProgressionPort,
     SecurityControlsPort,
     SessionServicePort,
     TaskStorePort,
@@ -520,7 +521,9 @@ def review_task(
             verdict=data.verdict,
             evidence=data.evidence,
         )
-        return asdict(review)
+        continuation = repositories.resolve(StageProgressionPort).after_task_event(
+            tenant_id=actor.tenant_id, founder_id=None, task_id=str(task_id))
+        return {**asdict(review), "continuation": continuation}
     except (PermissionError, ValueError) as exc:
         translate_error(exc)
 

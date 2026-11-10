@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -183,6 +184,40 @@ def _manager(step: dict, decision: dict) -> dict:
 
 
 def advance_once(db, actor: Principal, repositories: RepositoryScope, project_id: str) -> dict:
+    """One owner-scoped, serialized step with durable routing of every refusal."""
+    detail = repositories.resolve(CompanyChatPort).project_details(
+        actor.tenant_id, project_id, reader_id=actor.subject)
+    router = repositories.resolve(StageProgressionPort)
+    with router.advance_guard(tenant_id=actor.tenant_id, project_id=project_id) as acquired:
+        if not acquired:
+            return _outcome({'step': 'running'}, progressed=False, needs_founder=False,
+                            message='Another request is advancing this project; waiting for its result.')
+        reply = _advance_once(db, actor, repositories, project_id)
+        unclear = reply['step'] == 'qa' and not reply['progressed'] and not reply.get('scheduled')
+        if (reply['needs_founder'] or reply.get('schedule_at') or unclear) and not (
+                reply.get('followup') or (reply.get('decision') or {}).get('followup')):
+            stage = reply.get('stage') or next_step(detail['stages']).get('stage') or 'discovery'
+            kind = reply['step']
+            owner = ('worker' if reply.get('schedule_at') else
+                     'ceo' if kind == 'unstaffed' else
+                     'quality' if kind == 'qa' else
+                     'founder' if kind in ('inactive', 'rejected', 'unknown') else 'manager')
+            checks = reply.get('blocking_checks') or []
+            if any('credit' in c for c in checks) or str(reply.get('failure_code') or '').startswith('credit_'):
+                owner = 'founder'
+            reply['followup'] = router.route_followup(
+                tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=project_id,
+                stage=stage, code=('calendar_wait' if reply.get('schedule_at') else
+                                  reply['failure_code'] if reply.get('failure_code')
+                                  else 'qa_unavailable' if kind == 'qa'
+                                  else kind + '_blocked'),
+                feedback=reply['message'], source_task_id=reply.get('task_id'),
+                owner_kind=owner, blocked=reply['needs_founder'],
+                eligible_at=reply.get('schedule_at'))
+        return reply
+
+
+def _advance_once(db, actor: Principal, repositories: RepositoryScope, project_id: str) -> dict:
     """Choose and perform exactly one step. Raises only for bad requests."""
     detail = repositories.resolve(CompanyChatPort).project_details(
         actor.tenant_id, project_id, reader_id=actor.subject)
@@ -191,6 +226,14 @@ def advance_once(db, actor: Principal, repositories: RepositoryScope, project_id
                         message="The project plan is not approved and active.")
     step = next_step(detail["stages"])
     kind, stage, task_id = step["step"], step.get("stage"), step.get("task_id")
+    if kind in ('run', 'qa'):
+        scheduled = repositories.resolve(StageProgressionPort).scheduled_work(
+            tenant_id=actor.tenant_id, project_id=project_id, task_id=task_id)
+        if scheduled:
+            return _outcome(step, progressed=False, needs_founder=False,
+                            message='Work assigned to ' + scheduled['owner_name'] + '; scheduled for '
+                                    + scheduled['eligible_at'].isoformat() + '.',
+                            followup=scheduled, scheduled=True)
     if kind == "done":
         return _outcome(step, progressed=False, needs_founder=False, done=True,
                         message="Every stage passed independent AI QA.")
@@ -224,17 +267,35 @@ def advance_once(db, actor: Principal, repositories: RepositoryScope, project_id
                 message=str(who["approver_name"]) + " (" + str(who["approver_level"]).replace(
                     "_", " ") + ") approved the " + stage + " task and is responsible for it.")
         if kind == "run":
-            return _run(db, actor, repositories, step)
+            assigned = next(s for s in detail['stages'] if str(s.get('task_id')) == task_id)
+            return _run(db, actor, repositories, {**step, 'assignee_id':
+                        assigned.get('approved_assignee_id') or assigned.get('suggested_assignee_id')})
         return _qa(actor, repositories, project_id, step)
     except PermissionError as exc:
         # A refused step is a reason for the Founder, not a crash of the advance.
-        return _outcome(step, progressed=False, needs_founder=True, message=str(exc))
+        return _outcome(step, progressed=False, needs_founder=True, message=str(exc),
+                        failure_code=getattr(exc, 'failure_code', None))
 
 
 def _run(db, actor, repositories, step) -> dict:
     stage, task_id = step["stage"], step["task_id"]
     allowed(repositories, actor, "agent:dispatch")
-    repositories.resolve(CalendarStorePort).require_execution(actor=actor, task_id=task_id)
+    calendar = repositories.resolve(CalendarStorePort)
+    try:
+        calendar.require_execution(actor=actor, task_id=task_id)
+    except PermissionError:
+        if not step.get('assignee_id'):
+            raise
+        eligibility = calendar.eligibility(
+            actor=actor, employee_id=str(step['assignee_id']), task_id=task_id,
+            at=datetime.now(timezone.utc), search_days=14)
+        next_at = eligibility.get('next_eligible_at')
+        return _outcome(step, progressed=False, needs_founder=next_at is None,
+                        message=('The assigned worker is unavailable: '
+                                 + ', '.join(eligibility['reasons'])
+                                 + ('. Work is scheduled for the next allowed window.' if next_at
+                                    else '. No allowed slot was found in 14 days; the manager must reschedule.')),
+                        schedule_at=next_at)
     if _chain_enabled():
         # Same read-only self-check the Founder sees: never burn an approved
         # task on a run that the hierarchy or the credit allowance would stop.
@@ -267,6 +328,12 @@ def _run(db, actor, repositories, step) -> dict:
 
 def _qa(actor, repositories, project_id, step) -> dict:
     stage = step["stage"]
+    if repositories.resolve(StageProgressionPort).qa_attempts(
+            tenant_id=actor.tenant_id, task_id=step['task_id']) >= 3:
+        return _outcome(step, progressed=False, needs_founder=True,
+                        failure_code='qa_attempt_limit',
+                        message='Three QA attempts produced no accepted verdict. The QA owner must '
+                                'review the evidence; select an independent tester explicitly to resume.')
     try:
         review = repositories.resolve(AiQaReviewPort).review_stage(
             tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=project_id,
@@ -281,8 +348,11 @@ def _qa(actor, repositories, project_id, step) -> dict:
                                 "before retrying.")
     verdict = review["verdict"]
     return _outcome(
-        step, progressed=verdict in ("pass", "fail"), needs_founder=False, qa_verdict=verdict,
+        step, progressed=verdict in ("pass", "fail"),
+        needs_founder=bool((review.get('continuation') or {}).get('needs_founder')),
+        qa_verdict=verdict,
         qa_employee_name=review["qa_employee_name"], decision=review.get("continuation"),
+        followup=review.get('followup'),
         message=("AI QA by " + review["qa_employee_name"] + ": " + verdict.upper() + " for "
                  + stage + "." if verdict in ("pass", "fail")
                  else "AI QA gave no clear verdict for " + stage

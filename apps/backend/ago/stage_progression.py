@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import logging
 import re
-from uuid import UUID, uuid4
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4, uuid5
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
@@ -103,6 +105,107 @@ class StageProgression:
 
     # -- public entry points -------------------------------------------------
 
+    @contextmanager
+    def advance_guard(self, *, tenant_id: str, project_id: str):
+        """Session lock: serialize model/approval work without a long DB transaction.
+
+        A crashed connection releases this lock; recorded task/run state still
+        decides whether execution is safe. A lock is never permission to replay.
+        """
+        key = str(UUID(tenant_id)) + ':' + str(UUID(project_id))
+        queries = self.repositories.resolve(StageProgressionQueries)
+        acquired = queries.select_project_lock_18((key,)).fetchone()['acquired']
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                queries.release_project_lock_19((key,))
+
+    def qa_attempts(self, *, tenant_id: str, task_id: str) -> int:
+        UUID(tenant_id)
+        UUID(task_id)
+        return int(self.repositories.resolve(StageProgressionQueries).select_qa_attempts_17(
+            (tenant_id, 'ai-qa:' + task_id + ':%')).fetchone()['n'])
+
+    def scheduled_work(self, *, tenant_id: str, project_id: str, task_id: str) -> dict | None:
+        for value in (tenant_id, project_id, task_id):
+            UUID(value)
+        row = self.repositories.resolve(StageProgressionQueries).select_scheduled_followup_16(
+            (tenant_id, project_id, task_id)).fetchone()
+        return dict(row) if row else None
+
+    def route_followup(self, *, tenant_id: str, founder_id: str, project_id: str,
+                       stage: str, code: str, feedback: str, source_task_id: str | None = None,
+                       work_task_id: str | None = None, eligible_at: datetime | None = None,
+                       owner_kind: str = 'manager', blocked: bool = True) -> dict:
+        """Persist a real owner's follow-up and a private Brain signal atomically.
+
+        Called only by governed server operations, never with a client-selected
+        owner. Duplicate observation does not create more work or notifications.
+        It does not grant permissions or execute the assigned work.
+        """
+        for value in (tenant_id, founder_id, project_id):
+            UUID(value)
+        if stage not in STAGES or not re.fullmatch(r'[a-z0-9_]{1,100}', code):
+            raise ValueError('Invalid follow-up stage or code')
+        queries = self.repositories.resolve(StageProgressionQueries)
+        with self.db.transaction():
+            context = queries.select_followup_context_10(
+                (tenant_id, project_id, founder_id, stage)).fetchone()
+            if context is None:
+                raise LookupError('Project stage not found')
+            source = source_task_id or (str(context['task_id']) if context['task_id'] else None)
+            work = work_task_id or (str(context['task_id']) if context['task_id'] else None)
+            for task in {source, work} - {None}:
+                UUID(task)
+                if not queries.select_followup_task_20(
+                        (tenant_id, project_id, stage, task, task, task)).fetchone():
+                    raise PermissionError('Follow-up task must belong to this project stage')
+            people = [dict(p) for p in queries.select_followup_owners_11((tenant_id,)).fetchall()]
+            by_id = {str(p['id']): p for p in people}
+            manager = by_id.get(str(context['accountable_manager_id']))
+            founder = by_id.get(founder_id)
+            seat = {'ceo': 'Strategy & Vision', 'technology': 'Technology Oversight',
+                    'quality': 'Quality & Release'}.get(owner_kind)
+            owner = (by_id.get(str(context['assignee_id'])) if owner_kind == 'worker'
+                     else founder if owner_kind == 'founder'
+                     else next((p for p in people if p['seat'] == seat and p['kind'] == 'ai'), None)
+                     if seat else manager)
+            owner = owner or manager or founder
+            if owner is None:
+                raise PermissionError('No active responsible person is available')
+            owner_id = str(owner['id'])
+            action = ('Complete the assigned corrective task, address the recorded feedback, '
+                      'then submit to independent QA.' if not blocked else
+                      'Resolve this blocker within your authority, then resume this project. '
+                      'Do not replay unknown work or bypass approvals.')
+            if owner_id == founder_id:
+                action = 'Review the recorded blocker and authorize the required correction before resuming.'
+            if eligible_at is not None:
+                if eligible_at.tzinfo is None:
+                    raise ValueError('Follow-up schedule requires a timezone')
+                action += ' Earliest retry: ' + eligible_at.isoformat() + '; calendar is checked again.'
+            status = 'blocked' if blocked else 'scheduled' if eligible_at else 'assigned'
+            key = (source or stage) + ':' + code + ':' + owner_id
+            if eligible_at:
+                key += ':' + eligible_at.isoformat()
+            row = queries.insert_followup_12((
+                str(uuid4()), tenant_id, project_id, stage, key, source, work,
+                owner_id, founder_id, code, (feedback.strip() or code)[:4000], action[:1000],
+                status, eligible_at)).fetchone()
+            if row is None:
+                row = queries.select_followup_13((tenant_id, project_id, stage, key)).fetchone()
+            else:
+                body = ('Assigned to @' + owner['name'] + ' — ' + context['title'][:220]
+                        + ' / ' + stage + '\nFeedback: ' + row['feedback']
+                        + '\nNext: ' + action + '\nStatus: ' + status
+                        + ('\nWork task: ' + work if work else '')
+                        + '\nFollow-up: ' + str(row['id']))
+                queries.insert_followup_notice_14((
+                    tenant_id, 'employee:' + owner_id, founder_id, body[:6000], owner_id,
+                    work, str(uuid5(UUID(project_id), key))))
+            return {**dict(row), 'owner_name': owner['name'], 'executed': False}
+
     def continue_project(
         self, *, tenant_id: str, founder_id: str, project_id: str,
         revise_board_stop: bool = True,
@@ -129,59 +232,104 @@ class StageProgression:
                 "run_started": False,
             }
             if project["plan_status"] != "active" or project["goal_status"] != "active":
-                return {**base, **self._wait("project_not_active", True,
-                                             "The project plan is not approved and active.")}
+                result = {**base, **self._wait("project_not_active", True,
+                                              "The project plan is not approved and active.")}
+                result['followup'] = self.route_followup(
+                    tenant_id=tenant_id, founder_id=founder_id, project_id=project_id,
+                    stage='discovery', code='project_not_active', feedback=result['reason'],
+                    owner_kind='founder')
+                return result
             manager_id = str(project["accountable_manager_id"])
             staff = {
                 str(e["id"]) for e in
                 self.repositories.resolve(OrganizationStore).eligible_ai_staff(tenant_id=tenant_id)
             }
             if project["manager_kind"] != "ai" or manager_id not in staff:
-                return {**base, **self._wait(
+                result = {**base, **self._wait(
                     "no_ai_project_manager", True,
                     "The project has no active AI manager; assign one so the work can continue.")}
+                result['followup'] = self.route_followup(
+                    tenant_id=tenant_id, founder_id=founder_id, project_id=project_id,
+                    stage='discovery', code='no_ai_project_manager', feedback=result['reason'],
+                    owner_kind='ceo')
+                return result
             base["decided_by_employee_id"] = manager_id
             base["decided_by_name"] = project["manager_name"]
             stages = queries.select_stages_02((tenant_id, project_id)).fetchall()
             current = next((s for s in stages if s["qa_verdict"] != "pass"), None)
+            for passed in stages:
+                if passed['qa_verdict'] == 'pass':
+                    queries.resolve_followups_15((tenant_id, project_id, passed['stage']))
             if current is None:
                 return {**base, **self._wait("all_stages_passed", False,
                                              "Every stage passed independent QA.")}
             base["stage"] = current["stage"]
             if current["plan_step_id"] is None:
-                return {**base, **self._open_stage(
+                result = {**base, **self._open_stage(
                     queries, tenant_id=tenant_id, founder_id=founder_id, project=project,
                     stages=stages, current=current, staff=staff)}
-            return {**base, **self._recover_stage(
-                tenant_id=tenant_id, founder_id=founder_id, project=project,
-                current=current, queries=queries, revise_board_stop=revise_board_stop)}
+            else:
+                result = {**base, **self._recover_stage(
+                    tenant_id=tenant_id, founder_id=founder_id, project=project,
+                    current=current, queries=queries, revise_board_stop=revise_board_stop)}
+            if result.get('action') == 'recovered_stage' or result.get('needs_founder') \
+                    or result.get('state') == 'board_stopped':
+                recovered = result.get('action') == 'recovered_stage'
+                code = result.get('recovery_kind') or result['state']
+                owner_kind = ('worker' if code == 'qa_rework' else
+                              'worker' if code == 'retry' else
+                              'founder' if code in ('failure_needs_founder', 'recovery_limit_reached')
+                              else 'ceo' if 'staff' in code or 'specialist' in code else 'manager')
+                delay = (datetime.now(timezone.utc) + timedelta(seconds=30)
+                         if recovered and code == 'retry' else None)
+                result['followup'] = self.route_followup(
+                    tenant_id=tenant_id, founder_id=founder_id, project_id=project_id,
+                    stage=current['stage'], code=code,
+                    feedback=(result['reason'] + ('\nQA findings: ' + str(current['qa_evidence'])
+                                                  if current['qa_verdict'] == 'fail' else '')),
+                    source_task_id=str(current['task_id']) if current['task_id'] else None,
+                    work_task_id=result.get('task_id'), owner_kind=owner_kind,
+                    blocked=not recovered, eligible_at=delay)
+            return result
 
-    def after_task_event(self, *, tenant_id: str, founder_id: str, task_id: str) -> dict | None:
+    def after_task_event(self, *, tenant_id: str, founder_id: str | None, task_id: str) -> dict | None:
         """Called by the server right after a stage task failed or was reviewed.
 
         Never raises: the triggering run or QA record is already stored, so a
         continuation problem is reported in the result (and the log) instead.
         """
+        row = None
         try:
             with self.db.transaction():
                 row = self.repositories.resolve(StageProgressionQueries).select_project_of_task_08(
-                    (tenant_id, task_id, founder_id)).fetchone()
+                    (tenant_id, task_id, founder_id, founder_id)).fetchone()
                 if row is None:
                     return None
                 # A Board denial is shown to the Founder before it is revised:
                 # the revision happens on the next explicit continue.
                 return self.continue_project(
-                    tenant_id=tenant_id, founder_id=founder_id,
+                    tenant_id=tenant_id, founder_id=str(row["founder_id"]),
                     project_id=str(row["project_id"]), revise_board_stop=False)
         except Exception as exc:  # noqa: BLE001 - reported, never hidden
             log.warning("AGO stage continuation did not complete: %s", type(exc).__name__)
-            return {
+            result = {
                 "kind": "ago_project_continuation_v1", "action": "error",
                 "needs_founder": True, "state": "continuation_error",
                 "reason": "The automatic next step could not be recorded ("
                           + type(exc).__name__ + "). Press Advance to try it again.",
                 "task_approved": False, "run_started": False,
             }
+            if row:
+                try:
+                    result['followup'] = self.route_followup(
+                        tenant_id=tenant_id, founder_id=str(row['founder_id']),
+                        project_id=str(row['project_id']), stage=row['stage'],
+                        source_task_id=task_id, code='continuation_error', owner_kind='manager',
+                        feedback=result['reason'])
+                except Exception:  # noqa: BLE001 - do not misreport the already recorded run
+                    result['followup_recorded'] = False
+                    log.warning('AGO continuation follow-up could not be persisted')
+            return result
 
     def pick_qa_reviewer(self, *, tenant_id: str, project_id: str, excluded: set[str]) -> dict:
         """The independent AI tester for a stage review.
@@ -283,7 +431,9 @@ class StageProgression:
                               "The " + stage + " stage has a plan step but no task yet.")
         result = current["run_result"] if isinstance(current["run_result"], dict) else {}
         if status == "completed" and current["qa_verdict"] == "fail":
-            kind, reason = "qa_rework", "Rework after the independent AI tester's FAIL verdict"
+            kind = "qa_rework"
+            reason = ("QA rework: " + str(current.get('qa_evidence') or
+                       "Independent QA failed; inspect the original review before retrying"))[:500]
         elif status == "failed" and current["run_status"] != "running":
             if current["run_status"] == "completed" and result.get("board_blocked") is True:
                 kind = "board_revision"
@@ -293,7 +443,8 @@ class StageProgression:
                         "board_stopped", False,
                         "The Board stopped the " + stage + " stage ("
                         + str(result.get("blocked_by_board_seat") or "a Board seat")
-                        + "). The denial stays on the stage for the Founder to read; on the "
+                        + "): " + _board_feedback(result)[:500]
+                        + ". The denial stays on the stage for the Founder to read; on the "
                         "next advance the AI manager revises the proposal and resubmits it.")
             elif current["failure_code"] in RETRYABLE_FAILURES:
                 kind = "retry"
@@ -313,6 +464,11 @@ class StageProgression:
                 "recovery_limit_reached", True,
                 "The AI manager already retried the " + stage + " stage "
                 + str(MAX_AI_RECOVERIES) + " times. The Founder decides what happens next.")
+        active = {str(e['id']) for e in self.repositories.resolve(OrganizationStore).eligible_ai_staff(
+            tenant_id=tenant_id)}
+        if str(current['approved_assignee_id']) not in active:
+            return self._wait('stage_specialist_unavailable', True,
+                              'The responsible worker is unavailable; leadership must review a replacement.')
         manager_id = str(project["accountable_manager_id"])
         recovery = self.repositories.resolve(PlanExecution).recover_failed_stage(
             tenant_id=tenant_id, founder_id=founder_id, project_id=str(project["id"]),

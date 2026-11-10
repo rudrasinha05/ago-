@@ -3,6 +3,20 @@
 ## Purpose
 Artificial General Organization (AGO) is a governed, persistent AI-native enterprise operating system. The founder defines goals; organizational AI agents operate through hierarchical departments, managers, workers, testers and auditors, with persistent organizational memory and human approval for consequential actions.
 
+## Project failure routing — 2026-11-11
+
+Founder-requested behavior: corrective work goes directly to its responsible employee; Brain is a visibility surface. Migration `077_project_followups.sql` retains the source task, actual work task, owner, feedback, next action, earliest retry and resolution. The failed task/run/review remain evidence. A routed notice is not proof of execution or completion. A stage's follow-ups resolve only after its independent QA passes.
+
+`POST /v1/agents/projects/{id}/advance` is now the browser and local runner's canonical one-step operation. Concurrent advance and AI QA requests share a project lock. QA FAIL creates a proposed task for the same worker with the recorded findings and failed deliverable in its bounded model context. The new task still needs approval and a fresh independent review. Safe model failures receive a 30-second backoff; Board revisions belong to the project manager. Automatic recoveries remain limited to two until the Founder explicitly authorizes a new recovery.
+
+Calendar refusal saves the next eligible worker window; no window in the bounded 14-day search becomes a manager blocker. Missing staff routes to AI leadership, unavailable leadership falls back to the project manager or Founder, and unknown/stale execution outcomes, rejected authority, credits and exhausted recovery require a decision. Unknown work is never replayed. Automatic QA attempts are counted from persisted charges and stop after three; an explicit independent tester selection is required to attempt QA again. Unverified/model-failed QA retains its charge/receipt evidence where produced and routes to the QA owner. A credit refusal belongs to the Founder. Human task reviews and stale-run reconciliation also request project continuation; continuation failure reports the saved work and attempts to persist a manager follow-up.
+
+The project detail and delivery-overview responses include `followups`. Each owner notice is deduplicated and restricted to the project Founder; the Brain employee marker identifies responsibility. Delivery cards show the owner, feedback, next action and schedule. Manual recovery and explicit tester controls remain available. The original task's QA FAIL is never turned into a PASS by creating a replacement.
+
+Scheduling is durable, but execution still requires an authorized active project session. The bounded local project runner can wait and resume due work without a browser; a closed browser does not itself start a background service. Session expiry, revocation, containment, approvals, calendar checks and credit limits continue to apply. This change does not authorize external publishing, GitHub delivery or release, nor claim to handle every failure in unrelated AGO subsystems.
+
+Behavior evidence is in `test_project_followups.py`, the project advance/progression/QA/recovery suites, and the delivery browser scenarios in `tests/frontend/workspace.spec.mjs`. The models in these regression tests are injected test providers; they do not establish live Ollama deliverable quality or an independently audited release.
+
 ## Approved Architecture
 The previously drafted AI Company Enterprise Architecture Blueprint comprises Sections 0–35, covering the Company Brain, Meta Brain, Corporate Constitution, Organizational DNA, Executive Council, Organizational Operating System (OOS), departments, AI employees, workflow orchestration, tool execution, QA/testing, independent audit, memory, knowledge graph, economics, marketplace, analytics, digital twin, organizational calendar, API platform, and security. AGO research ambitions include organizational self-design, adaptation, genome-inspired organization policies, fitness evaluation, and evolutionary experiments. Those research directions are future scope, not implemented capabilities.
 

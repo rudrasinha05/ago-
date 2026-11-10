@@ -103,6 +103,8 @@ class AgentRuntime:
                 "intake_id": str(context_row["id"]),
                 "stage": context_row["stage"],
                 "deliverable": context_row["deliverable"],
+                "recovery_feedback": context_row.get("recovery_feedback") or "",
+                "failed_work": stage_deliverable(context_row.get("failed_work")),
                 # What the earlier stages delivered and independent QA passed:
                 # a later stage builds on that, not on the bare brief.
                 "prior_work": [
@@ -228,4 +230,7 @@ class AgentRuntime:
                         "Worker timed out; manual reconciliation required",
                     )
                 )
+        for row in rows:
+            self.repositories.resolve(StageProgression).after_task_event(
+                tenant_id=tenant_id, founder_id=None, task_id=str(row['task_id']))
         return len(rows)

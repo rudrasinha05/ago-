@@ -141,6 +141,47 @@ class AiQaReview:
         self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
         qa_employee_id: str | None = None, operation_key: str,
     ) -> dict:
+        router = self.repositories.resolve(StageProgression)
+        for value in (tenant_id, founder_id, project_id, operation_key):
+            UUID(value)
+        if stage not in STAGES:
+            raise ValueError("Unknown project stage")
+        with router.advance_guard(tenant_id=tenant_id, project_id=project_id) as acquired:
+            if not acquired:
+                raise PermissionError("Another request is reviewing or advancing this project")
+            try:
+                result = self._review_stage(
+                    tenant_id=tenant_id, founder_id=founder_id, project_id=project_id,
+                    stage=stage, qa_employee_id=qa_employee_id, operation_key=operation_key)
+            except (PermissionError, TimeoutError, OSError, RuntimeError) as exc:
+                # Only a real owned, completed stage may receive a model/QA blocker.
+                row = self.repositories.resolve(AiQaReviewQueries).select_stage_task_01(
+                    (stage, tenant_id, project_id, founder_id)).fetchone()
+                if row and row['plan_status'] == 'active' and row['task_status'] == 'completed' \
+                        and not row['already_reviewed']:
+                    credit_code = getattr(exc, 'failure_code', '')
+                    credit_blocked = credit_code in (
+                        'credit_budget_missing', 'credit_budget_exceeded', 'credit_budget_unavailable')
+                    router.route_followup(
+                        tenant_id=tenant_id, founder_id=founder_id, project_id=project_id,
+                        stage=stage, code=credit_code if credit_blocked else 'qa_unavailable',
+                        owner_kind='founder' if credit_blocked else 'quality',
+                        source_task_id=str(row['task_id']),
+                        feedback='Independent QA could not complete. Check the tester, model availability, '
+                                 'recorded attempt charges and authorization before retrying.')
+                raise
+            if result['verdict'] == 'unverified':
+                result['followup'] = router.route_followup(
+                    tenant_id=tenant_id, founder_id=founder_id, project_id=project_id,
+                    stage=stage, code='qa_unverified', owner_kind='quality',
+                    feedback='QA returned no accepted verdict. Review the receipt and request an '
+                             'independent assessment; automatic attempts are limited to three.')
+            return result
+
+    def _review_stage(
+        self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
+        qa_employee_id: str | None = None, operation_key: str,
+    ) -> dict:
         for value in (tenant_id, founder_id, project_id, operation_key):
             UUID(value)
         if qa_employee_id is not None:
@@ -173,6 +214,10 @@ class AiQaReview:
                 stage=stage, qa_employee_id=qa_employee_id,
             )
         task_id = str(row["task_id"])
+        if auto_selected and self.repositories.resolve(StageProgression).qa_attempts(
+                tenant_id=tenant_id, task_id=task_id) >= 3:
+            raise PermissionError('Three QA attempts produced no accepted verdict; select an independent '
+                                  'tester explicitly after reviewing the evidence')
         prompt = qa_prompt(
             title=str(row["project_title"]), stage=stage,
             acceptance=str(row["deliverable"] or ""),

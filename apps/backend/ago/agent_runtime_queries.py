@@ -101,12 +101,18 @@ class AgentRuntimeQueries:
     def select_ago_founder_project_12(self, parameters: Any = None, *, lock: bool = False) -> Cursor:
         """Lock project ownership through admission, including newly materialized tasks."""
         return self.connection.execute("""
-            SELECT i.id,i.title,i.brief,i.founder_id,s.stage,s.deliverable
+            SELECT i.id,i.title,i.brief,i.founder_id,s.stage,s.deliverable,
+                   COALESCE(q.evidence,v.reason) AS recovery_feedback,
+                   r.result AS failed_work
             FROM ago_founder_intakes i
             JOIN ago_founder_intake_stages s
               ON s.tenant_id=i.tenant_id AND s.intake_id=i.id
             JOIN ago_plan_steps ps
               ON ps.tenant_id=i.tenant_id AND ps.plan_id=i.plan_id
              AND ps.id=s.plan_step_id
+            LEFT JOIN ago_plan_step_task_recoveries v ON v.tenant_id=ps.tenant_id
+              AND v.recovery_task_id=ps.task_id
+            LEFT JOIN ago_task_reviews q ON q.tenant_id=v.tenant_id AND q.task_id=v.failed_task_id
+            LEFT JOIN ago_agent_runs r ON r.tenant_id=v.tenant_id AND r.task_id=v.failed_task_id
             WHERE ps.task_id=%s AND i.tenant_id=%s LIMIT 1
         """ + (" FOR SHARE OF i" if lock else ""), parameters)

@@ -119,7 +119,7 @@ def run_session(request, *, project_id: str, apply: bool = False, confirmation=N
             steps += 1
             unclear = 0
             continue
-        if reply["step"] == "qa":
+        if reply["step"] == "qa" and not reply.get("scheduled"):
             unclear += 1
             if unclear >= MAX_UNCLEAR_QA:
                 return result("founder_needed", step="qa", stage=reply.get("stage"),

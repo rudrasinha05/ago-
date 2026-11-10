@@ -582,6 +582,13 @@ def test_later_stage_roles_see_the_approved_earlier_work_within_the_prompt_bound
             sized = prompts(stage, revision, title='T'*400, brief='b'*5000,
                             deliverable='d'*400, prior_work=huge)
             assert max(len(p) for p in sized) <= 4000
+            repaired = prompts(stage, revision, title='T'*400, brief='b'*5000,
+                               deliverable='d'*400, prior_work=huge,
+                               recovery_feedback='Add the acceptance checklist. '+ 'f'*4000,
+                               failed_work='failed work '*500)
+            assert max(len(p) for p in repaired) <= 4000
+            assert all('Add the acceptance checklist.' in p for p in repaired)
+            assert all('untrusted' in p for p in repaired)
     # Malformed context is ignored, never trusted.
     assert all('Approved' not in p for p in prompts('architecture', prior_work=[{'stage': 'x'}, 7]))
 

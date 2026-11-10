@@ -73,7 +73,13 @@ export function FounderDeliveryJourney({api,me,profiles=[],active=true,refreshSi
       setQaNotice('AI QA '+r.verdict.toUpperCase()+' recorded for '+r.stage+' of '+p.title+' by '+r.qa_employee_name+' (receipt '+r.receipt_id.slice(0,8)+'…).');
       setRefresh(x=>x+1);}}/>}
     </li>)}</ol>
-    {p.plan_status==='active'&&me.roles?.includes('founder')&&<ProjectAdvance api={api} project={p} profiles={profiles}
+    {Array.isArray(p.followups)&&p.followups.length>0&&<section aria-label={'Assigned follow-ups for '+p.title}>
+     <h4>Assigned follow-ups</h4><ul>{p.followups.map(f=><li key={f.id}>
+      <strong>{f.owner_name}</strong> · {f.stage} · {f.status==='resolved'?'Resolved after QA passed':f.status}
+      <p>{f.feedback}</p><p>{f.next_action}</p>
+      {f.eligible_at&&<small>Earliest retry: {new Date(f.eligible_at).toLocaleString()}. An authorized running session is required.</small>}
+     </li>)}</ul></section>}
+    {p.plan_status==='active' &&me.roles?.includes('founder')&&<ProjectAdvance api={api} project={p} profiles={profiles}
      onChanged={()=>setRefresh(x=>x+1)}/>}
     <ul className="delivery-evidence" aria-label={'Delivery evidence for '+p.title}>{deliveryEvidence(p).map(e=>
      <li key={e.key} className={e.verified?'verified':undefined}>{e.label}: {e.verified?'Verified':'Not verified'}</li>)}</ul>

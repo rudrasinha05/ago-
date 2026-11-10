@@ -73,7 +73,14 @@ def test_server_advances_a_whole_project_one_governed_step_at_a_time(company):
                         (c.tenant,)).fetchone()['n'] == runs == 5
 
 
-def test_advance_recovers_what_the_ai_manager_may_and_stops_for_the_founder(company):
+def test_advance_recovers_what_the_ai_manager_may_and_stops_for_the_founder(company, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import ago.stage_progression as progression
+    class Earlier(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(timezone.utc) - timedelta(minutes=1)
+    monkeypatch.setattr(progression, 'datetime', Earlier)
     c = company
     c.failures = [TimeoutError('model timed out'), CreditBudgetMissing('No budget')]
     steps = [post(c.client, c.advance, c.founder) for _ in range(3)]

@@ -1997,12 +1997,28 @@
     "StageProgression": {
       "module": "stage_progression",
       "methods": {
+        "advance_guard": {
+          "arguments": "self, *, tenant_id: str, project_id: str",
+          "returns": "Any"
+        },
+        "qa_attempts": {
+          "arguments": "self, *, tenant_id: str, task_id: str",
+          "returns": "int"
+        },
+        "scheduled_work": {
+          "arguments": "self, *, tenant_id: str, project_id: str, task_id: str",
+          "returns": "dict | None"
+        },
+        "route_followup": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str, code: str, feedback: str, source_task_id: str | None=None, work_task_id: str | None=None, eligible_at: datetime | None=None, owner_kind: str='manager', blocked: bool=True",
+          "returns": "dict"
+        },
         "continue_project": {
           "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, revise_board_stop: bool=True",
           "returns": "dict"
         },
         "after_task_event": {
-          "arguments": "self, *, tenant_id: str, founder_id: str, task_id: str",
+          "arguments": "self, *, tenant_id: str, founder_id: str | None, task_id: str",
           "returns": "dict | None"
         },
         "pick_qa_reviewer": {
@@ -2019,6 +2035,50 @@
           "returns": "Cursor"
         },
         "select_stages_02": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_followup_context_10": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_followup_owners_11": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_followup_12": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_followup_13": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_followup_notice_14": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "resolve_followups_15": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_scheduled_followup_16": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_qa_attempts_17": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_project_lock_18": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "release_project_lock_19": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_followup_task_20": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         },

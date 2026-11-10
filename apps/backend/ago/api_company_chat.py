@@ -262,6 +262,7 @@ def delivery_overview_record(project: dict, detail: dict, pending: list[dict]) -
             'awaiting_governed_execution'
         ),
         'stages': result_stages,
+        'followups': detail.get('followups', []),
         'pending_approvals': [
             {
                 'approval_id': a.get('id'),
