@@ -332,3 +332,52 @@ def test_cli_stages_reviewable_github_draft_without_dispatch(tmp_path, capsys):
     assert spec["operation"] == "commit_files"
     assert spec["payload"]["files"] == candidate()["files"]
     assert not (output / ".git").exists()
+
+
+def test_one_wrapping_markdown_fence_is_unwrapped_before_json_check():
+    # Live qwen2.5:3b, qwen2.5-coder:1.5b and qwen2.5-coder:3b on the Founder PC
+    # (2026-11-10) all wrapped the JSON in ```json ... ``` despite the instruction.
+    plain = json.dumps(candidate())
+    expected = reviewed_candidate(plain)["candidate_sha256"]
+    for fenced in ("```json\n" + plain + "\n```", "```\n" + plain + "\n```",
+                   "  ```JSON\n" + plain + "\n```  \n"):
+        assert reviewed_candidate(fenced)["candidate_sha256"] == expected
+
+
+@pytest.mark.parametrize("wrapper", [
+    "```json\n{body}\n```\n\n**acceptance_checks**: extra prose after the fence",
+    "Here is the code:\n```json\n{body}\n```",
+    "```python\n{body}\n```",
+    "```json\n{body}",
+    "```json {body} ```",
+])
+def test_fence_with_prose_or_other_language_is_still_rejected(wrapper):
+    with pytest.raises(ValueError, match="not one JSON document"):
+        reviewed_candidate(wrapper.replace("{body}", json.dumps(candidate())))
+
+
+def test_code_author_gets_a_code_goal_and_the_runner_import_rule():
+    class SevenRoleModel:
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, prompt):
+            self.calls.append(prompt)
+            if "ROLE: EMPLOYEE\n" in prompt:
+                return "```json\n" + json.dumps(candidate()) + "\n```"
+            return "BOARD_RECOMMENDATION: APPROVE\nDECISION: scoped work"
+
+    model = SevenRoleModel()
+    result = run_four_role_chain(
+        task=fake_task(), participants=participants(),
+        provider=model, engineering_candidates=True,
+    )
+    engineer_prompt = model.calls[-1]
+    assert len(model.calls) == 7  # fenced answer accepted first time: no retry call
+    assert "discovery deliverable" not in engineer_prompt
+    assert "ROLE_GOAL: Write the small Python source file" in engineer_prompt
+    assert "from src.example import name" in engineer_prompt
+    assert len(engineer_prompt) <= 4000
+    assert result["engineering_candidate_status"] == "syntax_reviewed"
+    # Text roles keep their own stage goal.
+    assert all("Write the small Python source file" not in call for call in model.calls[:-1])

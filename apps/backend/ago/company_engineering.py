@@ -27,12 +27,28 @@ _SECRET = re.compile(
 )
 
 
+def _without_code_fence(raw: str) -> str:
+    """Remove ONE Markdown code fence that wraps the whole answer, nothing else.
+
+    Small local models wrap valid JSON in ```json ... ``` even when told not to.
+    Only an answer that both starts and ends with a fence is unwrapped; prose
+    before or after the fence is left in place and still fails the JSON check.
+    """
+    text = raw.strip()
+    if not (text.startswith("```") and text.endswith("```")) or len(text) < 6:
+        return raw
+    first_line, separator, body = text[3:-3].partition("\n")
+    if not separator or first_line.strip().lower() not in ("", "json"):
+        return raw
+    return body.strip()
+
+
 def reviewed_candidate(raw: str) -> dict:
     """Return an exact-file, syntax-checked candidate; never execute it."""
     if not isinstance(raw, str) or not 1 <= len(raw.encode("utf-8")) <= 12000:
         raise ValueError("AI engineering response outside allowed size")
     try:
-        document = json.loads(raw)
+        document = json.loads(_without_code_fence(raw))
     except (TypeError, ValueError) as exc:
         raise ValueError("AI engineering response is not one JSON document") from exc
     if not isinstance(document, dict) or set(document) != {"files", "acceptance_checks"}:

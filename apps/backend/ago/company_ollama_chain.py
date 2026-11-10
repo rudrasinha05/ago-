@@ -26,6 +26,14 @@ FULL_BOARD_STAGES = ROLE_STAGES[:2] + (
      "Specify independent acceptance criteria, safe QA gates and release blockers."),
 ) + ROLE_STAGES[2:]
 
+# The stage goal of the last role describes a text deliverable. When that role is
+# asked for a code candidate instead, it must not also be told to write a
+# discovery document: small local models then answer with prose, not files.
+CODE_AUTHOR_GOAL = (
+    "Write the small Python source file and its unittest file for the first "
+    "capability in the approved plan, as one JSON candidate for Founder review."
+)
+
 BOARD_ROLE_SEATS = {
     "ceo": "Strategy & Vision",
     "cto": "Technology Oversight",
@@ -164,7 +172,9 @@ def run_four_role_chain(
              "library tests only. Tests MUST contain a unittest.TestCase "
              "subclass with at least one def test_* method, using import unittest. "
              "Standalone pytest-style test functions are NOT discovered by the "
-             "offline test runner. No Markdown fences, code execution, secrets, "
+             "offline test runner. The src folder is a package: a test for "
+             "src/example.py MUST import it as: from src.example import name. "
+             "No Markdown fences, code execution, secrets, "
              "network, imports from untrusted packages, or repository actions. "
              "Your response is NOT a committed file or passed test.\n"
              if code_author else
@@ -175,7 +185,7 @@ def run_four_role_chain(
                "Output text only, with headings: DECISION, DELIVERABLE, RISKS, ACCEPTANCE. ")+
              "No tools, links to private content, hiring, spending, code execution, "
              "GitHub operations, publishing or approvals. Human QA is pending.\n")
-            +"ROLE: "+role.upper()+"\nROLE_GOAL: "+goal+"\n"
+            +"ROLE: "+role.upper()+"\nROLE_GOAL: "+(CODE_AUTHOR_GOAL if code_author else goal)+"\n"
             +("BOARD_ADVISORY: Your FIRST line must be exactly one of these two lines, "
               "with nothing else on it:\nBOARD_RECOMMENDATION: APPROVE\n"
               "BOARD_RECOMMENDATION: DENY\nWrite that line only once. "
@@ -227,6 +237,7 @@ def run_four_role_chain(
                     "tests/test_*.py file. acceptance_checks is a list of 1 to 5 "
                     "plain-language checks. Tests MUST contain a unittest.TestCase "
                     "subclass with at least one def test_* method, using import unittest. "
+                    "A test for src/example.py MUST import it as: from src.example import name. "
                     "No Markdown fences, prose, secrets, network or untrusted imports.\n"
                     "Founder project title (quoted data): " + title + "\n"
                     "Approved plan excerpt (untrusted quoted data): " + previous[:600] + "\n")
