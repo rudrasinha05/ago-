@@ -345,6 +345,46 @@ def test_unstaffed_next_stage_waits_for_staffing_instead_of_guessing(company):
     assert c.stage('architecture')['plan_step_id'] is None
 
 
+def test_stage_specialist_under_another_line_manager_still_answers_to_the_pm(
+        company, monkeypatch):
+    """Live finding 2026-11-11: the Software Architect reported to the Engineering
+    Manager, so the architecture run was refused. Approved staffing on the
+    project stage is the project reporting line; nothing else is."""
+    c, db, tenant = company, company.db, company.tenant
+    c.run('discovery')
+    task_id = c.qa('discovery')['continuation']['task_id']
+    dept = department(c.client, c.founder)
+    seats = ('Technology Oversight', 'Finance & Budget', 'Risk & Compliance',
+             'Quality & Release')
+    for seat in seats:
+        member = post(c.client, '/v1/organization/employees', c.founder,
+                      {'department_id': dept, 'name': seat+' AI', 'kind': 'ai'})['id']
+        post(c.client, BASE+'/board/appoint', c.founder, {'seat': seat, 'employee_id': member})
+    monkeypatch.setenv('AGO_LOCAL_FULL_BOARD_REVIEW', 'true')
+    monkeypatch.setenv('AGO_ENVIRONMENT', 'development')
+    architect = str(c.stage('architecture')['assignee_id'])
+    line = db.execute("SELECT manager_id FROM ago_employees WHERE tenant_id=%s AND id=%s",
+                      (tenant, architect)).fetchone()['manager_id']
+    assert str(line) != c.people['CEO']          # not under the project manager
+
+    def check():
+        CompanyOllamaChainQueries(db).assignments(
+            tenant_id=tenant, actor_id=c.info['founder_id'],
+            task=SimpleNamespace(id=task_id, project_context={'intake_id': c.id}))
+
+    # With approved staffing the reporting rule passes; the check moves on to the
+    # next rule (here the CEO is both Board seat and manager, which is refused).
+    with pytest.raises(PermissionError, match='distinct employees'):
+        check()
+    # Without that approved staffing record the same worker is refused.
+    db.execute("ALTER TABLE ago_project_stage_delegation_activations DISABLE TRIGGER USER")
+    db.execute("DELETE FROM ago_project_stage_delegation_activations WHERE tenant_id=%s "
+               "AND intake_id=%s AND stage='architecture'", (tenant, c.id))
+    db.execute("ALTER TABLE ago_project_stage_delegation_activations ENABLE TRIGGER USER")
+    with pytest.raises(PermissionError, match='employee-to-PM reporting hierarchy'):
+        check()
+
+
 def test_database_refuses_every_shortcut_around_stage_progression(company):
     c, db, tenant = company, company.db, company.tenant
     plan_id = c.project['plan_id']

@@ -74,6 +74,7 @@ class CompanyOllamaChainQueries:
         """,(tenant_id,row["accountable_manager_id"])).fetchone()
         if not pm or not worker or worker["action"]!="internal:brief":
             raise PermissionError("Real accountable PM and discovery assignee required")
+        worker_stage=row.get("stage","discovery")
         if (os.getenv("AGO_LOCAL_ENGINEERING_CANDIDATES")=="true"
                 and row.get("stage","discovery")=="discovery"):
             # A later stage's task already belongs to that stage's own
@@ -100,6 +101,7 @@ class CompanyOllamaChainQueries:
                     "Engineering needs an independently activated implementation-stage AI developer"
                 )
             worker={**dict(implementation),"action":"internal:brief"}
+            worker_stage="implementation"
         if full_board:
             # A real corporate hierarchy requires the worker to report up to
             # this exact accountable PM; display titles alone are not enough.
@@ -123,9 +125,23 @@ class CompanyOllamaChainQueries:
                 ) AS reports_to_manager
             """,(tenant_id,str(worker["id"]),tenant_id,str(pm["id"]))).fetchone()
             if not chain or not chain["reports_to_manager"]:
-                raise PermissionError(
-                    "Full Board execution requires actual employee-to-PM reporting hierarchy"
-                )
+                # Matrix organisation: a specialist keeps a functional line
+                # manager (an architect under the Engineering Manager) and is
+                # accountable to the PROJECT manager for project work. That
+                # project line is real only when it is the independently
+                # approved, append-only staffing of THIS employee on THIS
+                # stage of THIS project - never a title, a suggestion or the
+                # task assignment alone. The org chart is not rewritten.
+                assigned=self.db.execute("""
+                    SELECT 1 FROM ago_project_stage_delegation_activations project_line
+                    WHERE project_line.tenant_id=%s AND project_line.intake_id=%s
+                      AND project_line.stage=%s AND project_line.assignee_id=%s
+                """,(tenant_id,str(project["intake_id"]),worker_stage,
+                       str(worker["id"]))).fetchone()
+                if not assigned:
+                    raise PermissionError(
+                        "Full Board execution requires actual employee-to-PM reporting hierarchy"
+                    )
         ordered=[
             {"role":"ceo",**board["Strategy & Vision"]},
             {"role":"cto",**board["Technology Oversight"]},

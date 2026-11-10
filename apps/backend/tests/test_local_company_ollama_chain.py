@@ -48,6 +48,7 @@ class ApprovedProjectDb:
         self.extra_board_missing = extra_board_missing
         self.human_board = human_board
         self.wrong_manager = wrong_manager
+        self.project_line = False
         self.queries = []
         self.events = []
 
@@ -115,6 +116,10 @@ class ApprovedProjectDb:
                 return Cursor([])
             return Cursor([{"id":self.implementer,"name":"Software Developer",
                             "kind":"ai"}])
+        if "ago_project_stage_delegation_activations project_line" in sql:
+            # Approved staffing of this worker on this project stage, if any.
+            assert parameters[:2]==(self.tenant,self.intake)
+            return Cursor([{"?column?":1}] if self.project_line else [])
         if "WITH RECURSIVE reporting_chain" in sql:
             return Cursor([{"reports_to_manager":not self.wrong_manager}])
         if "FROM ago_governed_tasks t" in sql:
@@ -381,6 +386,27 @@ def test_full_board_preflight_rejects_missing_duplicates_and_human_impostors(
     with pytest.raises(PermissionError):
         CompanyOllamaChainQueries(db).assignments(
             tenant_id=db.tenant,actor_id=db.founder,task=db.task())
+
+
+def test_approved_project_stage_staffing_is_the_project_reporting_line(monkeypatch):
+    """Matrix organisation: a specialist under another line manager is accountable
+    to the project manager through approved staffing on that project stage."""
+    monkeypatch.setenv("AGO_LOCAL_FULL_BOARD_REVIEW","true")
+    monkeypatch.setenv("AGO_ENVIRONMENT","development")
+    db=ApprovedProjectDb(wrong_manager=True)
+    db.project_line=True
+    people=CompanyOllamaChainQueries(db).assignments(
+        tenant_id=db.tenant,actor_id=db.founder,task=db.task())
+    assert [p["role"] for p in people][-2:]==["pm","employee"]
+    asked=[parameters for sql,parameters in db.queries
+           if "ago_project_stage_delegation_activations project_line" in sql]
+    # Exactly this project, this stage and this worker - nothing broader.
+    assert asked==[(db.tenant,db.intake,"discovery",db.employee)]
+    # The line hierarchy alone still passes without asking for staffing evidence.
+    direct=ApprovedProjectDb()
+    CompanyOllamaChainQueries(direct).assignments(
+        tenant_id=direct.tenant,actor_id=direct.founder,task=direct.task())
+    assert not any("project_line" in sql for sql,_ in direct.queries)
 
 
 def test_full_board_unavailable_in_production(monkeypatch):

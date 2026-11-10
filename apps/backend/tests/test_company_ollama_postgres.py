@@ -191,11 +191,11 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
             info['db'], tenant_id=info['tenant'], founder_id=info['founder_id'],
             task_id=task_id,
         )
-        evidence = diagnostic['reporting_repair_evidence']
-        assert evidence['worker_id'] == developer
-        assert evidence['worker_id'] != worker
-        assert evidence['worker_manager_id'] == cto
-        assert evidence['accountable_pm_id'] == pm
+        # Matrix organisation: the developer now has another line manager, but
+        # is still the approved implementation staffing of THIS project, so the
+        # project line to the PM holds and no org-chart repair is demanded.
+        assert 'worker_pm_reporting_path_missing' not in diagnostic['blocking_checks']
+        assert diagnostic['reporting_repair_evidence'] is None
         assert diagnostic['task_post_authorized'] is False
         assert calls == []
         restored = client.put(BASE+'/employees/'+developer+'/manager', headers=founder,

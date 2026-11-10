@@ -15,7 +15,7 @@ const BLOCKERS={
  local_environment_not_allowed:['Local AI runs are only allowed on your local development AGO.','Run AGO locally with START_AGO.cmd.'],
  board_appointments_incomplete:['Not all five AI Board seats (CEO, CTO, CFO, CISO, CQO) are appointed.','Founder: appoint them in Board & Roles.'],
  pm_or_discovery_employee_missing:['The project has no accountable manager or no discovery worker.','Founder or CEO: staff the project in Projects.'],
- worker_pm_reporting_path_missing:['The worker does not report to the project manager.','Fix the reporting line in Board & Roles → Review employee reporting links.'],
+ worker_pm_reporting_path_missing:['The worker is neither approved staff of this project stage nor in the project manager’s reporting line.','Approve the stage staffing in Projects, or fix the reporting line in Board & Roles → Review employee reporting links.'],
  board_pm_or_worker_not_ai:['The project manager, a Board seat or the worker is not an AI employee (for example, the Founder is recorded as project manager).','Assign an AI Project Manager to the project (backend request: GitHub issue #9).'],
  board_pm_worker_identities_not_distinct:['One employee holds two roles in the AI chain.','Give each Board seat, the manager and the worker to different employees.'],
  implementation_stage_not_activated:['No AI developer is activated for the implementation stage.','Founder or CEO: activate the implementation stage in Projects.'],
