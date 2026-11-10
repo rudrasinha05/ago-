@@ -4,7 +4,7 @@ You are collaborating with ChatGPT/JARVIS on the **same** AGO repository `rudras
 
 **MANDATORY FIRST READ:** [docs/AI_COLLABORATION.md](docs/AI_COLLABORATION.md). Then read your current [GitHub work issue #3](https://github.com/rudrasinha05/ago-/issues/3), current project docs and latest `develop`/CI state.
 
-Your **primary scope**: `apps/web/**`, `tests/frontend/**`; professional functional Founder Command Center, employee/Board/Company Brain visuals, project delivery UX, real-state notifications, accessibility and browser tests. Start with Issue #3 P0 WebKit CI failures unless Founder updates the priority.
+Your **primary scope**: `apps/web/**`, `tests/frontend/**`; professional functional Founder Command Center, employee/Board/Company Brain visuals, project delivery UX, real-state notifications, accessibility and browser tests. Current priority (Founder, 2026-11-10): the blocking line in `docs/AGO_MASTER_CHECKLIST.md` section 2 — AI-005 (the AI engineer cannot produce valid code on the Founder's laptop), then QA-002 (no isolated Docker execution), then GitHub connection (ACC-147). Issue #3 is resolved.
 
 JARVIS owns `apps/backend/ago/**`, `apps/backend/tests/**`, `deploy/sql/**` and AI/delegation/GitHub-delivery backend. Do not unilaterally edit its paths or shared contracts/workflows; open an explicit handoff request in GitHub and wait for coordination. A frontend mock is temporary and must be labeled; do not assert it demonstrates a real AI worker or GitHub commit.
 
