@@ -42,9 +42,15 @@ class StageProgressionQueries:
                       ps.task_id,t.status AS task_status,
                       q.verdict AS qa_verdict,
                       r.status AS run_status,r.failure_code,r.result AS run_result,
+                      -- Automatic attempts since the Founder last decided a recovery
+                      -- himself: his decision is a fresh mandate for the AI manager.
                       (SELECT count(*) FROM ago_plan_step_task_recoveries v
                        WHERE v.tenant_id=s.tenant_id AND v.plan_step_id=s.plan_step_id
-                         AND v.decided_by_employee_id IS NOT NULL) AS ai_recoveries
+                         AND v.decided_by_employee_id IS NOT NULL
+                         AND v.id > COALESCE((
+                           SELECT max(f.id) FROM ago_plan_step_task_recoveries f
+                           WHERE f.tenant_id=s.tenant_id AND f.plan_step_id=s.plan_step_id
+                             AND f.decided_by_employee_id IS NULL), 0)) AS ai_recoveries
                FROM ago_founder_intake_stages s
                LEFT JOIN ago_project_stage_delegation_activations a
                  ON a.tenant_id=s.tenant_id AND a.intake_id=s.intake_id AND a.stage=s.stage

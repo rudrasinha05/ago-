@@ -295,6 +295,10 @@ def test_failed_stage_is_recovered_by_the_ai_manager_within_a_limit(company):
                   {'failed_task_id': third, 'reason': 'Founder retries after the limit'})
     assert manual['decided_by_employee_id'] is None
     assert c.recoveries('architecture')[-1]['decided_by_employee_id'] is None
+    # The Founder's own decision is a fresh mandate: the AI manager may retry again.
+    c.run('architecture', fail=TimeoutError('model timed out'), expected=502)
+    again = c.recoveries('architecture')
+    assert len(again) == 4 and str(again[-1]['decided_by_employee_id']) == c.people['CEO']
 
     # The Founder's retry then passes, and the project moves on by itself.
     c.run('architecture')
