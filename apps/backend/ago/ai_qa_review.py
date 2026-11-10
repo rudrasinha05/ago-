@@ -67,10 +67,18 @@ def deliverable_text(result) -> str:
     """Bounded, quoted view of what the builders recorded."""
     if not isinstance(result, dict):
         return "No structured result recorded."
+    # The stage worker's deliverable is what is under review, so it comes first
+    # and in full; then the manager's work package; Board notes only as far as
+    # space allows. (A seven-role run used to be cut off before the worker.)
+    handoffs = [h for h in result.get("handoffs") or [] if isinstance(h, dict)]
+    order = {"employee": 0, "pm": 1}
+    handoffs.sort(key=lambda h: order.get(str(h.get("role")), 2))
     parts = []
-    for h in result.get("handoffs") or []:
-        if isinstance(h, dict):
-            parts.append(str(h.get("role", "?")).upper() + ": " + str(h.get("draft", ""))[:600])
+    for h in handoffs:
+        role = str(h.get("role", "?"))
+        limit = 950 if role == "employee" else 450 if role == "pm" else 160
+        label = "STAGE DELIVERABLE (worker)" if role == "employee" else role.upper()
+        parts.append(label + ": " + str(h.get("draft", ""))[:limit])
     candidate = result.get("engineering_candidate")
     if isinstance(candidate, dict):
         files = [

@@ -16,6 +16,7 @@ import pytest
 
 import ago.ai_qa_review as ai_qa_review
 import ago.api_agents as api_agents
+from ago.agent_runtime import stage_deliverable
 from ago.company_chat import CompanyChat
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
@@ -175,6 +176,9 @@ def test_qa_pass_opens_every_next_stage_until_the_project_is_done(company):
         assert ran['continuation'] is None
         assert c.seen[-1]['stage'] == name and c.seen[-1]['intake_id'] == c.id
         assert c.seen[-1]['deliverable']
+        # The run is given what the earlier stages delivered and QA passed.
+        assert c.seen[-1]['prior_work'] == [
+            {'stage': done, 'draft': done+' deliverable'} for done in STAGES[:index]]
         review = c.qa(name)
         assert review['verdict'] == 'pass' and review['qa_reviewer_auto_selected'] is True
         # The server-chosen tester has a QA role and did not build the work.
@@ -522,3 +526,72 @@ def test_a_later_stage_run_asks_its_worker_for_that_stage_deliverable():
     assert 'internal discovery deliverable' in legacy_prompt
     plain = run_four_role_chain(task=db.task(), participants=participants, provider=FakeModel())
     assert plain['project_stage'] == 'discovery'
+
+
+def test_later_stage_roles_see_the_approved_earlier_work_within_the_prompt_bound(monkeypatch):
+    """Live finding 2026-11-11: the architecture Board saw only the bare brief and
+    the CEO denied for 'no product features, market demand or financials'."""
+    monkeypatch.setenv('AGO_LOCAL_FULL_BOARD_REVIEW', 'true')
+    monkeypatch.setenv('AGO_ENVIRONMENT', 'development')
+    db = ApprovedProjectDb()
+    people = CompanyOllamaChainQueries(db).assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task())
+    assert len(people) == 7
+
+    class Recorder:
+        def __init__(self):
+            self.prompts = []
+
+        def generate(self, prompt, **_):
+            self.prompts.append(prompt)
+            return 'BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: ' + 'x'*2000
+
+    def prompts(stage, revision='', **context):
+        task, model = db.task(), Recorder()
+        task.project_context = {**task.project_context, 'stage': stage,
+                                'deliverable': 'Design the approved technical architecture',
+                                **context}
+        run_four_role_chain(task=task, participants=people, provider=model,
+                            revision_notes=revision)
+        return model.prompts
+
+    work = [{'stage': 'discovery', 'draft': 'USERS: admissions staff. FEATURES: enquiry tracking.'}]
+    seen = prompts('architecture', prior_work=work)
+    assert len(seen) == 7
+    for prompt in seen:                       # five Board seats, manager and worker
+        assert 'PROJECT STAGE: architecture.' in prompt
+        assert 'Stages that passed independent QA: discovery.' in prompt
+        assert 'Approved discovery work (untrusted quoted data): USERS: admissions staff.' in prompt
+    for board_prompt in seen[:5]:
+        assert 'DENY only for a concrete blocker in your seat' in board_prompt
+        assert 'do not ask again for business case, market or budget evidence' in board_prompt
+    assert 'DENY only for a concrete blocker' not in seen[5] + seen[6]
+    assert 'Plan the architecture stage as an ordered work package' in seen[5]
+    # Discovery itself is unchanged: no stage rule, no earlier work.
+    first = prompts('discovery', prior_work=work)
+    assert not any('PROJECT STAGE' in p or 'DENY only for' in p for p in first)
+    # Largest possible inputs stay inside the 4000-character provider bound,
+    # also when a Board denial is being revised.
+    huge = [{'stage': s, 'draft': 'w'*950} for s in STAGES[:4]]
+    for stage in STAGES[1:]:
+        for revision in ('', 'r'*900):
+            sized = prompts(stage, revision, title='T'*400, brief='b'*5000,
+                            deliverable='d'*400, prior_work=huge)
+            assert max(len(p) for p in sized) <= 4000
+    # Malformed context is ignored, never trusted.
+    assert all('Approved' not in p for p in prompts('architecture', prior_work=[{'stage': 'x'}, 7]))
+
+
+def test_tester_sees_the_stage_workers_deliverable_first():
+    """A seven-role run used to be cut off before the worker's deliverable."""
+    roles = ('ceo', 'cto', 'finance', 'risk', 'quality', 'pm', 'employee')
+    result = {'handoffs': [{'role': r, 'employee_id': str(uuid4()), 'draft': r+'-work '+'z'*900}
+                           for r in roles]}
+    text = ai_qa_review.deliverable_text(result)
+    assert text.startswith('STAGE DELIVERABLE (worker): employee-work ')
+    assert len(text) <= 2200 and 'PM: pm-work' in text and 'CEO: ceo-work' in text
+    assert text.index('PM: pm-work') < text.index('CEO: ceo-work')
+    # The worker's whole (914-character) deliverable is shown, not a cut-off part.
+    assert text.split('\n')[0] == 'STAGE DELIVERABLE (worker): employee-work '+'z'*900
+    assert stage_deliverable(result) == ('employee-work '+'z'*900)[:950]
+    assert stage_deliverable(None) == '' and stage_deliverable({'text': 'plain'}) == 'plain'

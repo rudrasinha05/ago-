@@ -78,6 +78,26 @@ class AgentRuntimeQueries:
             parameters,
         )
 
+    def select_passed_stage_work_13(self, parameters: Any = None) -> Cursor:
+        """(tenant_id, intake_id, stage): recorded results of the EARLIER stages of
+        this project that completed and passed independent QA, in delivery order."""
+        return self.connection.execute("""
+            SELECT s.stage,r.result
+            FROM ago_founder_intake_stages s
+            JOIN ago_founder_intake_stages cur ON cur.tenant_id=s.tenant_id
+              AND cur.intake_id=s.intake_id AND cur.stage=%s AND s.position<cur.position
+            JOIN ago_plan_steps ps ON ps.tenant_id=s.tenant_id AND ps.plan_id=s.plan_id
+              AND ps.id=s.plan_step_id
+            JOIN ago_governed_tasks t ON t.tenant_id=ps.tenant_id AND t.id=ps.task_id
+              AND t.status='completed'
+            JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id AND q.task_id=t.id
+              AND q.verdict='pass'
+            JOIN ago_agent_runs r ON r.tenant_id=t.tenant_id AND r.task_id=t.id
+              AND r.status='completed'
+            WHERE s.tenant_id=%s AND s.intake_id=%s
+            ORDER BY s.position
+        """, parameters)
+
     def select_ago_founder_project_12(self, parameters: Any = None, *, lock: bool = False) -> Cursor:
         """Lock project ownership through admission, including newly materialized tasks."""
         return self.connection.execute("""

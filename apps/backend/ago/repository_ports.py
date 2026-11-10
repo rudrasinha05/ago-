@@ -126,6 +126,8 @@ class AgentRuntimeQueriesPort(Protocol):
 
     def select_ago_founder_project_12(self, parameters: Any = None, *, lock: bool = False) -> Cursor: ...
 
+    def select_passed_stage_work_13(self, parameters: Any = None) -> Cursor: ...
+
 
 @runtime_checkable
 class ApprovalRepositoryPort(Protocol):

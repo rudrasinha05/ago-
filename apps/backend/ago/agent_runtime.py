@@ -50,6 +50,15 @@ def run_failure_code(exc: BaseException) -> str:
     return "handler_error"
 
 
+def stage_deliverable(result) -> str:
+    """The stage worker's own recorded deliverable from a run result (bounded)."""
+    if not isinstance(result, dict):
+        return ""
+    drafts = [str(h.get("draft") or "") for h in result.get("handoffs") or []
+              if isinstance(h, dict) and h.get("role") == "employee"]
+    return (drafts[-1] if drafts else str(result.get("text") or ""))[:950]
+
+
 class AgentRuntime:
     def __init__(
         self, db: DatabaseConnection, *, handlers=None, repositories: RepositoryScope | None = None
@@ -94,6 +103,15 @@ class AgentRuntime:
                 "intake_id": str(context_row["id"]),
                 "stage": context_row["stage"],
                 "deliverable": context_row["deliverable"],
+                # What the earlier stages delivered and independent QA passed:
+                # a later stage builds on that, not on the bare brief.
+                "prior_work": [
+                    {"stage": done["stage"], "draft": stage_deliverable(done["result"])}
+                    for done in self.repositories.resolve(AgentRuntimeQueries)
+                    .select_passed_stage_work_13(
+                        (context_row["stage"], actor.tenant_id, str(context_row["id"])))
+                    .fetchall()
+                ],
             } if context_row else None)
             # Validate the explicit founder-appointed four-agent chain BEFORE
             # consuming an approved task or inserting an agent run.
