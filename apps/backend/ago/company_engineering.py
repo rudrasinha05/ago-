@@ -27,6 +27,27 @@ _SECRET = re.compile(
 )
 
 
+# Shape of one candidate, given to a local provider that can constrain its
+# answer. It only shapes the model output; reviewed_candidate stays the gate.
+ENGINEERING_CANDIDATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "files": {
+            "type": "array", "minItems": 2, "maxItems": 6,
+            "items": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
+                "required": ["path", "content"], "additionalProperties": False,
+            },
+        },
+        "acceptance_checks": {
+            "type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string"},
+        },
+    },
+    "required": ["files", "acceptance_checks"], "additionalProperties": False,
+}
+
+
 def _without_code_fence(raw: str) -> str:
     """Remove ONE Markdown code fence that wraps the whole answer, nothing else.
 

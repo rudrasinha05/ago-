@@ -376,8 +376,37 @@ def test_code_author_gets_a_code_goal_and_the_runner_import_rule():
     assert len(model.calls) == 7  # fenced answer accepted first time: no retry call
     assert "discovery deliverable" not in engineer_prompt
     assert "ROLE_GOAL: Write the small Python source file" in engineer_prompt
-    assert "from src.example import name" in engineer_prompt
+    assert "from src.<module> import <name>" in engineer_prompt
     assert len(engineer_prompt) <= 4000
     assert result["engineering_candidate_status"] == "syntax_reviewed"
     # Text roles keep their own stage goal.
     assert all("Write the small Python source file" not in call for call in model.calls[:-1])
+
+
+def test_code_author_answer_is_schema_constrained_only_when_provider_supports_it():
+    from ago.company_engineering import ENGINEERING_CANDIDATE_SCHEMA
+
+    class SchemaModel:
+        supports_response_schema = True
+
+        def __init__(self):
+            self.schemas = []
+
+        def generate(self, prompt, *, response_schema=None):
+            self.schemas.append(response_schema)
+            if "ROLE: EMPLOYEE\n" in prompt:
+                return json.dumps(candidate())
+            return "BOARD_RECOMMENDATION: APPROVE\nDECISION: scoped work"
+
+    model = SchemaModel()
+    result = run_four_role_chain(
+        task=fake_task(), participants=participants(),
+        provider=model, engineering_candidates=True,
+    )
+    assert result["engineering_candidate_status"] == "syntax_reviewed"
+    # Six text roles are free text; only the code author is constrained.
+    assert model.schemas[:-1] == [None] * 6
+    assert model.schemas[-1] == ENGINEERING_CANDIDATE_SCHEMA
+    # The schema is the shape reviewed_candidate already enforces.
+    assert set(ENGINEERING_CANDIDATE_SCHEMA["required"]) == {"files", "acceptance_checks"}
+    assert ENGINEERING_CANDIDATE_SCHEMA["properties"]["files"]["maxItems"] == 6

@@ -15,7 +15,7 @@ skips sync rather than refusing to launch AGO.
 param(
     [switch]$Update,
     [switch]$SoloFounder,
-    [ValidateSet("qwen2.5:3b", "qwen2.5:1.5b", "qwen2.5-coder:1.5b")]
+    [ValidateSet("qwen2.5:3b", "qwen2.5:1.5b", "qwen2.5-coder:1.5b", "qwen2.5-coder:3b")]
     [string]$Model = "qwen2.5-coder:1.5b",
     [ValidateRange(1024,65535)]
     [int]$Port = 8000

@@ -244,7 +244,10 @@ def optional_model_handlers(
                 def __init__(self):
                     self.attempts = 0
 
-                def generate(self, prompt):
+                supports_response_schema = getattr(
+                    provider, "supports_response_schema", False)
+
+                def generate(self, prompt, **options):
                     self.attempts += 1
                     repositories.resolve(CreditBudget).charge(
                         tenant_id=actor.tenant_id,
@@ -253,7 +256,7 @@ def optional_model_handlers(
                         amount="1",
                         category="local_model_attempt",
                     )
-                    return provider.generate(prompt)
+                    return provider.generate(prompt, **options)
 
             def record_role_completed(role: str, employee_id: str, blocked: bool):
                 repositories.resolve(CompanyOllamaChainQueries).record_verified_handoff(

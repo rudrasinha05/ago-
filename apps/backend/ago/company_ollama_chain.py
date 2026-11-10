@@ -3,7 +3,8 @@
 import time
 
 from ago.company_engineering import (
-    EngineeringCandidateInvalid, assert_discoverable_unittest, reviewed_candidate,
+    ENGINEERING_CANDIDATE_SCHEMA, EngineeringCandidateInvalid,
+    assert_discoverable_unittest, reviewed_candidate,
 )
 
 ROLE_STAGES=(
@@ -33,6 +34,13 @@ CODE_AUTHOR_GOAL = (
     "Write the small Python source file and its unittest file for the first "
     "capability in the approved plan, as one JSON candidate for Founder review."
 )
+
+def _ask(provider, prompt: str, *, code_author: bool) -> str:
+    """One bounded model call; a code answer is schema-constrained when possible."""
+    if code_author and getattr(provider, "supports_response_schema", False) is True:
+        return provider.generate(prompt, response_schema=ENGINEERING_CANDIDATE_SCHEMA)
+    return provider.generate(prompt)
+
 
 BOARD_ROLE_SEATS = {
     "ceo": "Strategy & Vision",
@@ -172,8 +180,8 @@ def run_four_role_chain(
              "library tests only. Tests MUST contain a unittest.TestCase "
              "subclass with at least one def test_* method, using import unittest. "
              "Standalone pytest-style test functions are NOT discovered by the "
-             "offline test runner. The src folder is a package: a test for "
-             "src/example.py MUST import it as: from src.example import name. "
+             "offline test runner. The src folder is a package: tests MUST import "
+             "the source as from src.<module> import <name>, never as a bare module name. "
              "No Markdown fences, code execution, secrets, "
              "network, imports from untrusted packages, or repository actions. "
              "Your response is NOT a committed file or passed test.\n"
@@ -210,7 +218,7 @@ def run_four_role_chain(
         if len(prompt)>4000:
             raise ValueError("Local project prompt exceeds bounded provider input")
         role_started = clock()
-        output=provider.generate(prompt).strip()
+        output=_ask(provider, prompt, code_author=bool(code_author)).strip()
         duration = clock() - role_started
         if not 0 <= duration <= 60 or not 0 <= clock() - started <= maximum_seconds:
             raise TimeoutError("Local inference exceeded per-role or overall time budget")
@@ -237,12 +245,12 @@ def run_four_role_chain(
                     "tests/test_*.py file. acceptance_checks is a list of 1 to 5 "
                     "plain-language checks. Tests MUST contain a unittest.TestCase "
                     "subclass with at least one def test_* method, using import unittest. "
-                    "A test for src/example.py MUST import it as: from src.example import name. "
+                    "Tests MUST import the source as from src.<module> import <name>. "
                     "No Markdown fences, prose, secrets, network or untrusted imports.\n"
                     "Founder project title (quoted data): " + title + "\n"
                     "Approved plan excerpt (untrusted quoted data): " + previous[:600] + "\n")
                 fix_started = clock()
-                output = provider.generate(fix_prompt).strip()
+                output = _ask(provider, fix_prompt, code_author=True).strip()
                 if not 0 <= clock() - fix_started <= 60 or not 0 <= clock() - started <= maximum_seconds:
                     raise TimeoutError("Local inference exceeded per-role or overall time budget")
                 try:

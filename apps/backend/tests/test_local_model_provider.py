@@ -58,3 +58,25 @@ def test_no_unattended_local_credential_or_paid_provider_fallback(monkeypatch):
     assert sorted(tasks)==["project:plan","research:brief"]
     monkeypatch.setenv("AGO_LLM_PROVIDER","unknown_cloud_provider")
     assert optional_model_handlers(None,None)=={}
+
+
+def test_local_provider_sends_bounded_json_schema_only_when_asked():
+    import json as _json
+    from ago.model_provider import OllamaLocalTextProvider
+    bodies=[]
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self,*_): return False
+        def read(self,_n): return _json.dumps({"done":True,"response":"{}"}).encode()
+    def opener(req,timeout):
+        bodies.append(_json.loads(req.data))
+        return Response()
+    provider=OllamaLocalTextProvider(model="small-local:1b",opener=opener)
+    schema={"type":"object","properties":{"files":{"type":"array"}},"required":["files"]}
+    provider.generate("A bounded internal note")
+    provider.generate("A bounded internal note",response_schema=schema)
+    assert "format" not in bodies[0] and bodies[1]["format"]==schema
+    import pytest as _pytest
+    for bad in ("json",{"type":"array"},{"type":"object","x":"y"*3000}):
+        with _pytest.raises(ValueError):
+            provider.generate("A bounded internal note",response_schema=bad)

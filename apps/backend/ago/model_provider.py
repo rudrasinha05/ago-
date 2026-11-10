@@ -99,9 +99,18 @@ class OllamaLocalTextProvider:
         # fallback, proxy exfiltration or SSRF via a malicious local endpoint.
         self.opener=opener or build_opener(ProxyHandler({}), _DenyRedirect()).open
 
-    def generate(self, prompt: str) -> str:
+    # Ollama can constrain the answer to a JSON schema ("format"). Small local
+    # models otherwise wrap code in fences or break the JSON string escaping.
+    supports_response_schema = True
+
+    def generate(self, prompt: str, *, response_schema: dict | None = None) -> str:
         if not 1 <= len(prompt.strip()) <= 4000:
             raise ValueError("Prompt out of bounds")
+        if response_schema is not None and (
+                not isinstance(response_schema, dict)
+                or response_schema.get("type") != "object"
+                or len(json.dumps(response_schema)) > 2000):
+            raise ValueError("Bounded JSON object schema required")
         body={"model":self.model,"prompt":
               "Internal AGO review only. Flag uncertainty. Never claim that you "
               "approved, executed, hired, coded, published, spent or sent anything. "
@@ -109,6 +118,8 @@ class OllamaLocalTextProvider:
               "stream":False,"keep_alive":self.keep_alive,
               "options":{"num_ctx":2048,"num_predict":self.max_output_tokens,
                          "temperature":0}}
+        if response_schema is not None:
+            body["format"]=response_schema
         req=Request(self.ENDPOINT,data=json.dumps(body).encode("utf-8"),
                     method="POST",headers={"Content-Type":"application/json"})
         with self.opener(req,timeout=self.timeout) as response:
