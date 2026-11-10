@@ -1,6 +1,9 @@
 {
   "schema": "ago_p0_p1_p2_48_task_delivery_v1",
   "purpose": "Unfinished scope only, no asserted completion without evidence",
+  "superseded_on": "2026-11-10",
+  "superseded_by": "docs/AGO_MASTER_CHECKLIST.md",
+  "superseded_reason": "Founder ordered one single checklist. These 48 gate IDs and acceptance wording are carried into section 6 of the master checklist with refreshed status. The statuses here are a stale 2026-10-24 baseline and are no longer updated.",
   "baseline": "2026-10-24",
   "verified_p0_ci_baseline": {
     "sha": "97b4d4a33b3015ddb13353dbd0156ecea387fa0b",

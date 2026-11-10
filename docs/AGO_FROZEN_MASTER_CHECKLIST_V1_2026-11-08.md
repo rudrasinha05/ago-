@@ -1,3 +1,8 @@
+> **SUPERSEDED on 2026-11-10 by the Founder.**
+> The single source of truth is now **`docs/AGO_MASTER_CHECKLIST.md`**, which carries every
+> requirement ID and wording from this file **unchanged**, plus an evidence-based status per item.
+> This file is kept for history. Do not update it and do not treat it as scope.
+
 # AGO — FROZEN MASTER CHECKLIST v1.0
 Freeze date: 2026-11-08 | Project: BABA GROUPS / AGO | Repo: rudrasinha05/ago- | Audit commit: ecb8464
 

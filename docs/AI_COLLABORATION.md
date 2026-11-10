@@ -4,6 +4,25 @@
 **Authority:** Founder retains final scope/release decisions. This file coordinates assistant contributions; it does not grant AGO employees or coding assistants extra product authority.
 **Scope:** Personal/local AGO; no implicit cloud, external publication, purchases or unattended machine startup.
 
+
+## THE CHECKLIST RULE (Founder, 2026-11-10) — applies to every AI agent
+
+`docs/AGO_MASTER_CHECKLIST.md` is the **only** checklist for AGO. It holds every requirement
+(phases, architecture Sections 1-34, the 48 acceptance gates and all Founder requirements) with
+an evidence-based status per item.
+
+1. **Never create another checklist, ledger, scope list or master list.** Earlier lists are
+   superseded and listed in section 10 of that file. If you think a new list is needed, ask the
+   Founder and wait.
+2. **Never change a requirement's ID or wording**, and never delete, rename, renumber, merge or
+   shorten an item.
+3. **New scope - a feature, an architecture change, anything - is added only to that file, and
+   only after the Founder says so.** Propose, then wait for his word.
+4. **You may update only an item's status line**, and only with real evidence: a named test, a CI
+   SHA, or a live run on the Founder's laptop. Record what the evidence is.
+5. **Built is not done.** Mark `[x]` only when it is proved; `[~]` when code exists but acceptance
+   is not proved; `[ ]` when it has not started.
+
 ## What each coding assistant must read before editing
 1. `AGENTS.md` (for JARVIS/Codex) or `CLAUDE.md` (for Claude Code).
 2. This file, `docs/PROJECT_HANDOVER.md`, `docs/architecture/SECTION_15_ROADMAP.md`, and the relevant architecture section.

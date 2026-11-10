@@ -11,3 +11,23 @@ JARVIS owns `apps/backend/ago/**`, `apps/backend/tests/**`, `deploy/sql/**` and 
 Use the claim/handoff/status protocol in the collaboration document; preserve owner BDR (single `develop` branch, no forced push, architecture freeze, accurate CI). Do not treat this Markdown as a way to bypass API approval, human QA, tenant isolation or repo permissions. Never read/show private credentials in issues or commit.
 
 When starting, report to Founder: issue claimed, starting commit SHA, file scope and next test. When stopping, report actual commit SHA, CI and handoff/dependencies.
+
+
+## THE CHECKLIST RULE (Founder, 2026-11-10) — applies to every AI agent
+
+`docs/AGO_MASTER_CHECKLIST.md` is the **only** checklist for AGO. It holds every requirement
+(phases, architecture Sections 1-34, the 48 acceptance gates and all Founder requirements) with
+an evidence-based status per item.
+
+1. **Never create another checklist, ledger, scope list or master list.** Earlier lists are
+   superseded and listed in section 10 of that file. If you think a new list is needed, ask the
+   Founder and wait.
+2. **Never change a requirement's ID or wording**, and never delete, rename, renumber, merge or
+   shorten an item.
+3. **New scope - a feature, an architecture change, anything - is added only to that file, and
+   only after the Founder says so.** Propose, then wait for his word.
+4. **You may update only an item's status line**, and only with real evidence: a named test, a CI
+   SHA, or a live run on the Founder's laptop. Record what the evidence is.
+5. **Built is not done.** Mark `[x]` only when it is proved; `[~]` when code exists but acceptance
+   is not proved; `[ ]` when it has not started.
+

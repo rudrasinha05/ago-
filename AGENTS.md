@@ -9,3 +9,23 @@ Current issue [#4](https://github.com/rudrasinha05/ago-/issues/4) is a **P1 queu
 Preserve original full AGO phases/34 sections and owner personal/local-only scope. The 48-task acceptance ledger is **not** the entire project. Founder approves final consequential actions. Never manufacture QA, real model/laptop evidence, external provider access or release; keep independent review, tenant isolation, and accurate same-head CI.
 
 Before any change: check actual head and scoped issue, claim if starting, inspect concurrent writes. No forced push or `main` change. Upon completion: post commit SHA, tests, failure cases, API handoff and accurate status to GitHub issue.
+
+
+## THE CHECKLIST RULE (Founder, 2026-11-10) — applies to every AI agent
+
+`docs/AGO_MASTER_CHECKLIST.md` is the **only** checklist for AGO. It holds every requirement
+(phases, architecture Sections 1-34, the 48 acceptance gates and all Founder requirements) with
+an evidence-based status per item.
+
+1. **Never create another checklist, ledger, scope list or master list.** Earlier lists are
+   superseded and listed in section 10 of that file. If you think a new list is needed, ask the
+   Founder and wait.
+2. **Never change a requirement's ID or wording**, and never delete, rename, renumber, merge or
+   shorten an item.
+3. **New scope - a feature, an architecture change, anything - is added only to that file, and
+   only after the Founder says so.** Propose, then wait for his word.
+4. **You may update only an item's status line**, and only with real evidence: a named test, a CI
+   SHA, or a live run on the Founder's laptop. Record what the evidence is.
+5. **Built is not done.** Mark `[x]` only when it is proved; `[~]` when code exists but acceptance
+   is not proved; `[ ]` when it has not started.
+
