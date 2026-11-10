@@ -38,10 +38,48 @@ QA_ROLE = re.compile(r"\b(qa|quality|test(er|ing)?)\b", re.IGNORECASE)
 # The AI manager retries a stage at most this many times; then the Founder decides.
 MAX_AI_RECOVERIES = 2
 # Run failures a retry can fix. Credit, unstaffed and unknown outcomes are not here.
+# worker_timeout is an abandoned run with an UNKNOWN outcome: never retried here.
 RETRYABLE_FAILURES = frozenset({
     "engineering_candidate_invalid", "model_timeout", "model_unreachable",
-    "model_incomplete", "worker_timeout",
+    "model_incomplete",
 })
+# Steps of ProjectAdvance that the AI manager decides (continue_project).
+MANAGER_STEPS = frozenset({"open_stage", "recover"})
+
+
+def next_step(stages: list[dict]) -> dict:
+    """The ONE next step of a project, from its signed stage details.
+
+    Pure decision (the server-side twin of the browser's nextAdvanceStep): the
+    first stage in delivery order without a QA PASS decides. It performs
+    nothing; every step it names is re-checked by the service that does it.
+    """
+    ordered = sorted(stages, key=lambda s: int(s["position"]))
+    if not ordered:
+        return {"step": "unstaffed", "stage": None, "task_id": None}
+    for s in ordered:
+        if s.get("qa_verdict") == "pass":
+            continue
+        task_id = str(s["task_id"]) if s.get("task_id") else None
+        base = {"stage": s["stage"], "task_id": task_id}
+        if task_id is None:
+            staffed = int(s["position"]) > 1 and s.get("approved_assignee_id")
+            return {**base, "step": "open_stage" if staffed else "unstaffed"}
+        status = s.get("task_status")
+        if s.get("qa_verdict") == "fail" or status == "failed":
+            return {**base, "step": "recover"}
+        if status == "proposed":
+            return {**base, "step": "request"}
+        if status == "waiting_approval":
+            approval = s.get("task_approval_status")
+            return {**base, "step": "run" if approval == "approved"
+                    else "rejected" if approval == "rejected" else "approve"}
+        if status == "running":
+            return {**base, "step": "running"}
+        if status == "completed" and s.get("agent_run_status") == "completed":
+            return {**base, "step": "qa"}
+        return {**base, "step": "unknown"}
+    return {"step": "done", "stage": None, "task_id": None}
 
 
 def _board_feedback(result) -> str:

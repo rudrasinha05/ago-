@@ -13,7 +13,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [ai_qa_review](../../apps/backend/ago/ai_qa_review.py) | governance | service | ai_qa_review_queries, backend_contracts, credits, model_provider, quality, quality_store, stage_progression |
 | [ai_qa_review_queries](../../apps/backend/ago/ai_qa_review_queries.py) | governance | persistence | backend_contracts |
 | [analytics_store](../../apps/backend/ago/analytics_store.py) | strategy | persistence | architecture_guard, backend_contracts, graph_store, reviewed_changes, security, security_controls |
-| [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, company_engineering_preflight, model_handlers, repository_ports, security |
+| [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, company_engineering_preflight, model_handlers, repository_ports, security, stage_progression |
 | [api_brain](../../apps/backend/ago/api_brain.py) | transport | transport | api_contracts, api_m2, backend_contracts, repository_ports, security |
 | [api_company_chat](../../apps/backend/ago/api_company_chat.py) | transport | transport | api_contracts, api_m2, repository_ports |
 | [api_contracts](../../apps/backend/ago/api_contracts.py) | transport | transport | None |

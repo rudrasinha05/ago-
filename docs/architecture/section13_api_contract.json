@@ -314,7 +314,8 @@
     "POST /v1/organization/company/projects/{project_id}/stages/{stage}/recovery": "af191715e6e57b289a4da8657980295a895c7d7307b72d7137a89e81b5ed7603",
     "POST /v1/organization/company/projects/{project_id}/stages/{stage}/ai-qa": "59d4858ad0b1992c902e24485b32e19101b0acef6235178a14537416914b164f",
     "POST /v1/organization/company/projects/{project_id}/stages/{stage}/board-override": "c1ea5d66fd6372f83c000771e2f324bc4c263aa5a10077fd3fbf53a235c18846",
-    "POST /v1/organization/company/projects/{project_id}/continue": "b25f4e45eee4a5e56d91da0cc755399dd9d3b096cf2483327a0e22ad0588af91"
+    "POST /v1/organization/company/projects/{project_id}/continue": "b25f4e45eee4a5e56d91da0cc755399dd9d3b096cf2483327a0e22ad0588af91",
+    "POST /v1/agents/projects/{project_id}/advance": "b2ef4716ff0ecb6c1d6eac1d5edac7636821c7c5e047c137fa12765c24578460"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",

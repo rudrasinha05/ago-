@@ -717,7 +717,7 @@ merely to raise a percentage. Some gate numbers are non-contiguous by design.
 - [x] ACC-140 — Actual founder laptop local model verification | Owner Windows Ollama inference measured with model, device and identity evidence
   - *DONE* — Live-proved 2026-11-07 on Founder Windows laptop with real Ollama inference
 - [~] ACC-152 — Bounded continuous active employee work | Founder-started local process runs multiple approved tasks safely while powered on
-  - *PARTIAL* — Bounded offline queue worker built 2026-11-08; no always-on unattended run
+  - *PARTIAL* — Bounded offline queue worker built 2026-11-08. Founder-started project runner added 2026-11-10 (scripts/ago_project_runner.py: whole project, all five stages, up to 24 h, no browser; apps/backend/tests/test_project_advance.py). Not yet run live on the Founder's laptop
 - [x] ACC-154 — Reliable interrupted execution recovery | Restarted worker resumes only safe queued work and does not duplicate unknown writes
   - *DONE* — Interrupted runs resume only safe queued work; recovery tested
 
@@ -886,7 +886,7 @@ section and a founder amendment indicates traceability, not a reason to merge.
 - [x] PROJ-005 — Founder can view next safe step or run bounded 'keep going until I am needed'.
   - *DONE* — Advance project: next step or keep going; live-proved 2026-11-07
 - [~] PROJ-006 — Automatic next-stage approval, dispatch, QA and continuation should be durable server-side, not dependent on an open browser.
-  - *PARTIAL* — Server-side continuation by the project's AI manager now exists: next-stage task after QA PASS, recovery after QA FAIL / retryable run failure, server-picked independent tester (apps/backend/tests/test_stage_progression.py: 7 tests, 6 of them on real PostgreSQL; migration 075). Still missing: an always-on unattended runner (a session must still start each approve/run/QA step) and a live run on the Founder's laptop
+  - *PARTIAL* — Built and test-proved, not yet live-proved: (1) the project's AI manager opens the next stage after QA PASS, recovers after QA FAIL / retryable run failure and the server picks the independent tester (apps/backend/tests/test_stage_progression.py, migration 075); (2) one server operation does the next governed step (POST /v1/agents/projects/{id}/advance) and a Founder-started local runner keeps a project moving with no browser (scripts/ago_project_runner.py; apps/backend/tests/test_project_advance.py, 7 tests, 5 on real PostgreSQL). Missing for [x]: a live run on the Founder's laptop with the real local model. The runner is Founder-started and bounded (max 24 h), not a boot-time service
 - [x] PROJ-007 — Keep the Founder informed of actual work, blockers, retries, decisions and QA results.
   - *DONE* — Live timestamped log of approvals, runs, denials, QA and retries
 - [x] PROJ-008 — Failure classifications distinguish Board denial, code invalid, QA FAIL, timeout, credit, unstaffed and unknown outcome.

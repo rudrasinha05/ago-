@@ -103,7 +103,8 @@
         "company_engineering_preflight",
         "model_handlers",
         "repository_ports",
-        "security"
+        "security",
+        "stage_progression"
       ]
     },
     "api_brain": {
