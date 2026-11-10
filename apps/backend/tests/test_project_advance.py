@@ -128,7 +128,7 @@ def test_next_step_is_decided_from_recorded_state_only():
     # Order is by position; a later stage without a task needs an approved specialist.
     assert next_step([s('architecture', 2, task_status='proposed'), done])['stage'] == 'architecture'
     assert kind(done, s('architecture', 2, task_id=None, approved_assignee_id='a')) == 'open_stage'
-    assert kind(done, s('architecture', 2, task_id=None)) == 'unstaffed'
+    assert kind(done, s('architecture', 2, task_id=None)) == 'open_stage'
 
 
 def _through(c, expire_after=None):

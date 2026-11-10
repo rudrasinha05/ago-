@@ -299,12 +299,24 @@
           "arguments": "self, tenant_id: str, reader_id: str | None=None, after_id: int | None=None",
           "returns": "dict"
         },
+        "mark_notifications_read": {
+          "arguments": "self, tenant_id: str, reader_id: str, through_id: int",
+          "returns": "dict"
+        },
         "staffing_proposals": {
+          "arguments": "self, actor, project_id: str",
+          "returns": "dict"
+        },
+        "ceo_reconcile": {
           "arguments": "self, actor, project_id: str",
           "returns": "dict"
         },
         "governance": {
           "arguments": "self, tenant_id: str",
+          "returns": "dict"
+        },
+        "set_reporting_manager": {
+          "arguments": "self, actor, employee_id: str, manager_id: str | None",
           "returns": "dict"
         },
         "profile": {
@@ -331,24 +343,8 @@
           "arguments": "self, tenant_id: str, limit: int=30, offset: int=0, reader_id: str | None=None",
           "returns": "list[dict]"
         },
-        "approval_inbox": {
-          "arguments": "self, tenant_id: str, limit: int=100, reader_id: str | None=None",
-          "returns": "list[dict]"
-        },
-        "management_workload": {
-          "arguments": "self, tenant_id: str",
-          "returns": "dict"
-        },
-        "opportunity_radar": {
-          "arguments": "self, tenant_id: str, limit: int=30",
-          "returns": "list[dict]"
-        },
-        "scan_opportunities": {
-          "arguments": "self, tenant_id: str",
-          "returns": "dict"
-        },
-        "market_intelligence": {
-          "arguments": "self, tenant_id: str, limit: int=100",
+        "reassign_project_manager": {
+          "arguments": "self, actor, project_id: str, employee_id: str, expected_manager_id: str | None=None",
           "returns": "dict"
         },
         "project_details": {
@@ -357,6 +353,10 @@
         },
         "approved_signal_project": {
           "arguments": "self, actor, signal_id: str",
+          "returns": "dict"
+        },
+        "ceo_fill_stage": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str",
           "returns": "dict"
         },
         "propose_stage_delegation": {
@@ -371,20 +371,24 @@
           "arguments": "self, tenant_id: str, project_id: str, reader_id: str | None=None",
           "returns": "list[dict]"
         },
-        "ceo_reconcile": {
-          "arguments": "self, actor, project_id: str",
+        "approval_inbox": {
+          "arguments": "self, tenant_id: str, limit: int=100, reader_id: str | None=None",
+          "returns": "list[dict]"
+        },
+        "management_workload": {
+          "arguments": "self, tenant_id: str",
           "returns": "dict"
         },
-        "set_reporting_manager": {
-          "arguments": "self, actor, employee_id: str, manager_id: str | None",
+        "market_intelligence": {
+          "arguments": "self, tenant_id: str, limit: int=100",
           "returns": "dict"
         },
-        "mark_notifications_read": {
-          "arguments": "self, tenant_id: str, reader_id: str, through_id: int",
-          "returns": "dict"
+        "opportunity_radar": {
+          "arguments": "self, tenant_id: str, limit: int=30",
+          "returns": "list[dict]"
         },
-        "reassign_project_manager": {
-          "arguments": "self, actor, project_id: str, employee_id: str, expected_manager_id: str | None=None",
+        "scan_opportunities": {
+          "arguments": "self, tenant_id: str",
           "returns": "dict"
         }
       }

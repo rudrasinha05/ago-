@@ -26,6 +26,7 @@ import re
 from uuid import UUID, uuid4
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
+from ago.company_chat import CompanyChat
 from ago.organization_store import OrganizationStore
 from ago.plan_execution import PlanExecution
 from ago.stage_progression_queries import StageProgressionQueries
@@ -63,8 +64,9 @@ def next_step(stages: list[dict]) -> dict:
         task_id = str(s["task_id"]) if s.get("task_id") else None
         base = {"stage": s["stage"], "task_id": task_id}
         if task_id is None:
-            staffed = int(s["position"]) > 1 and s.get("approved_assignee_id")
-            return {**base, "step": "open_stage" if staffed else "unstaffed"}
+            # A later stage is opened by the AI manager; if it has no staffing
+            # the AI CEO fills it or the server names the missing role.
+            return {**base, "step": "open_stage" if int(s["position"]) > 1 else "unstaffed"}
         status = s.get("task_status")
         if s.get("qa_verdict") == "fail" or status == "failed":
             return {**base, "step": "recover"}
@@ -213,11 +215,20 @@ class StageProgression:
         stage = current["stage"]
         assignee = (str(current["approved_assignee_id"])
                     if current["approved_assignee_id"] else None)
+        staffed_by = None
         if assignee is None:
-            return self._wait(
-                "stage_not_staffed", True,
-                "The " + stage + " stage has no approved AI specialist yet; approve its "
-                "staffing so the AI manager can assign the task.")
+            # Founder rule: unassigned roles are filled by the AI leadership from
+            # existing employees. The AI CEO does that here; with nobody suitable
+            # the Founder gets the exact missing role instead of a silent stop.
+            try:
+                filled = self.repositories.resolve(CompanyChat).ceo_fill_stage(
+                    tenant_id=tenant_id, founder_id=founder_id,
+                    project_id=str(project["id"]), stage=stage)
+            except PermissionError as exc:
+                return self._wait("stage_not_staffed", True, str(exc))
+            assignee, staffed_by = filled["assignee_id"], filled["ceo_name"]
+            current = {**current, "approved_assignee_id": assignee,
+                       "approved_assignee_name": filled["assignee_name"]}
         if assignee not in staff:
             return self._wait(
                 "stage_specialist_unavailable", True,
@@ -259,6 +270,7 @@ class StageProgression:
             "reason": previous["stage"] + " passed QA",
             "from_stage": previous["stage"], "task_id": task.id, "plan_step_id": step_id,
             "assignee_id": assignee, "assignee_name": current["approved_assignee_name"],
+            "staffed_by_ceo": staffed_by,
             "progression_id": int(record["id"]),
             "recorded_at": record["created_at"].isoformat(),
         }

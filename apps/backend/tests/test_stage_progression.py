@@ -16,6 +16,7 @@ import pytest
 
 import ago.ai_qa_review as ai_qa_review
 import ago.api_agents as api_agents
+from ago.company_chat import CompanyChat
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.credit_domain import CreditBudgetMissing
@@ -39,7 +40,7 @@ PEOPLE = (
 class Company:
     """One Founder-approved, CEO-staffed project and the steps a session can take."""
 
-    def __init__(self, case, monkeypatch):
+    def __init__(self, case, monkeypatch, late_hires=(), never_hired=()):
         self.client, headers, self.info = case
         self.founder, self.reviewer = headers['founder'], headers['reviewer']
         self.db, self.tenant = self.info['db'], self.info['tenant']
@@ -49,7 +50,8 @@ class Company:
         self.qa_prompts = []
         dept = department(self.client, self.founder)
         self.people = {}
-        for name, title in PEOPLE:
+
+        def hire(name, title):
             self.people[name] = post(self.client, '/v1/organization/employees', self.founder, {
                 'department_id': dept, 'name': name, 'kind': 'ai'})['id']
             update = self.client.put(BASE+'/employees/'+self.people[name]+'/role',
@@ -57,12 +59,20 @@ class Company:
                 'role_title': title, 'core_responsibilities': 'Deliver the assigned stage',
                 'extra_responsibilities': 'Record evidence'})
             assert update.status_code == 200, update.text
+
+        for name, title in PEOPLE:
+            if name not in late_hires and name not in never_hired:
+                hire(name, title)
         post(self.client, BASE+'/board/appoint', self.founder, {
             'seat': 'Strategy & Vision', 'employee_id': self.people['CEO']})
         self.project = post(self.client, BASE+'/projects/start', self.founder, {
             'brief': 'Build a local admissions tracker with reviewed acceptance criteria',
             'operation_key': str(uuid4())})
         self.id, plan_id = self.project['id'], self.project['plan_id']
+        # Hired only after the project scope was recorded: no stage suggests them.
+        for name, title in PEOPLE:
+            if name in late_hires:
+                hire(name, title)
         self.url = BASE+'/projects/'+self.id
         plan = post(self.client, '/v1/brain/plans/'+plan_id+'/submit', self.founder)
         post(self.client, '/v1/governance/approvals/'+plan['approval_id']+'/decision',
@@ -383,6 +393,61 @@ def test_stage_specialist_under_another_line_manager_still_answers_to_the_pm(
     db.execute("ALTER TABLE ago_project_stage_delegation_activations ENABLE TRIGGER USER")
     with pytest.raises(PermissionError, match='employee-to-PM reporting hierarchy'):
         check()
+
+
+def test_ai_ceo_fills_a_stage_the_project_scope_left_unstaffed(case, monkeypatch):
+    """Live finding 2026-11-11: AdmissionFlow's quality stage had no employee, and
+    nothing but a manual Founder request could ever staff it."""
+    c = Company(case, monkeypatch, late_hires=('QA Specialist', 'Second Tester'),
+                never_hired=('DevOps Release Specialist',))
+    db, tenant = c.db, c.tenant
+    suggested = db.execute("""SELECT stage FROM ago_founder_intake_stages WHERE tenant_id=%s
+        AND intake_id=%s AND suggested_assignee_id IS NULL ORDER BY position""",
+        (tenant, c.id)).fetchall()
+    assert [s['stage'] for s in suggested] == ['quality', 'release']
+    chat = CompanyChat(db)
+    ids = {'tenant_id': tenant, 'founder_id': c.info['founder_id'], 'project_id': c.id}
+    # A stage the Founder-approved scope already staffed is never touched by the CEO.
+    with pytest.raises(PermissionError, match='already has a suggested specialist'):
+        chat.ceo_fill_stage(stage='architecture', **ids)
+
+    for name in ('discovery', 'architecture'):
+        c.run(name)
+        assert c.qa(name)['continuation']['action'] == 'opened_stage'
+    c.run('implementation')
+    opened = c.qa('implementation')['continuation']
+    # The AI CEO filled quality with an existing tester; the AI manager opened it.
+    assert (opened['action'], opened['stage'], opened['staffed_by_ceo']) == (
+        'opened_stage', 'quality', 'CEO')
+    testers = {c.people['QA Specialist'], c.people['Second Tester']}
+    assert opened['assignee_id'] in testers
+    record = db.execute("""
+        SELECT a.assignee_id,r.reviewer_id,r.status,d.requester_id
+        FROM ago_project_stage_delegation_activations a
+        JOIN ago_project_stage_delegation_proposals d ON d.tenant_id=a.tenant_id
+          AND d.id=a.proposal_id
+        JOIN ago_approval_requests r ON r.tenant_id=d.tenant_id AND r.id=d.approval_id
+        WHERE a.tenant_id=%s AND a.intake_id=%s AND a.stage='quality'""",
+        (tenant, c.id)).fetchone()
+    assert str(record['assignee_id']) == opened['assignee_id']
+    assert (str(record['reviewer_id']), record['status']) == (c.people['CEO'], 'approved')
+    assert str(record['requester_id']) == c.info['founder_id']
+    assert c.stage('quality')['status'] == 'proposed'          # nothing ran
+    with pytest.raises(PermissionError, match='already has staffing'):
+        chat.ceo_fill_stage(stage='quality', **ids)
+
+    # The quality work is reviewed by the OTHER tester.
+    c.run('quality')
+    review = c.qa('quality')
+    assert {review['qa_employee_id'], opened['assignee_id']} == testers
+    # Nobody with a release role exists: the Founder is told exactly what is missing.
+    held = review['continuation']
+    assert (held['action'], held['state'], held['needs_founder']) == (
+        'none', 'stage_not_staffed', True)
+    assert 'release stage' in held['reason'] and 'devops / release' in held['reason']
+    assert c.stage('release')['plan_step_id'] is None
+    assert db.execute("SELECT count(*) AS n FROM ago_employees WHERE tenant_id=%s AND kind='ai'",
+                      (tenant,)).fetchone()['n'] == len(c.people)   # nobody was hired
 
 
 def test_database_refuses_every_shortcut_around_stage_progression(company):

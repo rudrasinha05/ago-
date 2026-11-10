@@ -122,7 +122,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [session_service](../../apps/backend/ago/session_service.py) | governance | service | backend_contracts, identity, identity_security_store, login_security, security |
 | [simulation](../../apps/backend/ago/simulation.py) | strategy | service | credits |
 | [sso_provider](../../apps/backend/ago/sso_provider.py) | governance | foundation | security, security_material |
-| [stage_progression](../../apps/backend/ago/stage_progression.py) | strategy | service | backend_contracts, organization_store, plan_execution, stage_progression_queries, task_store |
+| [stage_progression](../../apps/backend/ago/stage_progression.py) | strategy | service | backend_contracts, company_chat, organization_store, plan_execution, stage_progression_queries, task_store |
 | [stage_progression_queries](../../apps/backend/ago/stage_progression_queries.py) | strategy | persistence | backend_contracts |
 | [storage_adapters](../../apps/backend/ago/storage_adapters.py) | platform | foundation | None |
 | [storage_ops](../../apps/backend/ago/storage_ops.py) | entrypoints | composition | backend_contracts, database_store, storage_adapters |

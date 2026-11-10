@@ -445,7 +445,10 @@ class ApprovalRepository:
                     or row["review_status"]!="pending"
                     or row["review_action"]!="company:stage-delegation:"+proposal_id
                     or row["worker_kind"]!="ai"
-                    or str(row["suggested_assignee_id"])!=str(row["assignee_id"])
+                    # A recorded suggestion is never replaced; a stage the scope
+                    # left unstaffed (no suggestion) may be filled (076).
+                    or (row["suggested_assignee_id"] is not None and
+                        str(row["suggested_assignee_id"])!=str(row["assignee_id"]))
                     or (row["planned_worker"] is not None and
                         str(row["planned_worker"])!=str(row["assignee_id"]))
                     or (row["stage"]=="quality" and row["accountable_manager_id"]

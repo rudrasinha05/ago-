@@ -1175,6 +1175,7 @@
       "layer": "service",
       "imports": [
         "backend_contracts",
+        "company_chat",
         "organization_store",
         "plan_execution",
         "stage_progression_queries",

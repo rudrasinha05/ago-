@@ -1418,6 +1418,147 @@ class CompanyChat:
             project['promotion_authorized']=False
             return project
 
+    # Role words that qualify an existing AI employee for a delivery stage.
+    STAGE_ROLE_WORDS = {
+        'discovery': ('research', 'analyst', 'product'),
+        'architecture': ('architect', 'technical lead'),
+        'implementation': ('developer', 'engineer', 'programmer'),
+        'quality': ('quality', 'qa specialist', 'qa engineer', 'tester'),
+        'release': ('devops', 'release', 'operations', 'delivery'),
+    }
+
+    def ceo_fill_stage(self, *, tenant_id: str, founder_id: str, project_id: str,
+                       stage: str) -> dict:
+        """The AI CEO staffs ONE project stage that has no staffing at all (076).
+
+        Founder rule: unassigned roles are assigned by the AI leadership to
+        their existing employees. This never hires, never replaces a suggested
+        or approved worker, and never creates or runs a task. It picks an
+        existing, active AI employee whose role fits the stage and who is not
+        the CEO, a Board member, the project manager or (for implementation /
+        quality) the other side's specialist. With nobody suitable it refuses
+        with the reason, so the Founder knows exactly which role is missing.
+        """
+        from ago.governance import ApprovalRepository
+        from uuid import uuid4
+        for value in (tenant_id, founder_id, project_id):
+            UUID(value)
+        words = self.STAGE_ROLE_WORDS.get(stage)
+        if words is None:
+            raise ValueError('Unknown delivery stage')
+        if not founder_solo_eligible(self.db, tenant_id, founder_id):
+            raise PermissionError('Only the authenticated founder session can staff a stage')
+        with self.db.transaction():
+            row = self.db.execute("""
+                SELECT s.suggested_assignee_id,s.plan_step_id,p.status,
+                       l.accountable_manager_id,
+                       EXISTS (SELECT 1 FROM ago_project_stage_delegation_activations a
+                               WHERE a.tenant_id=s.tenant_id AND a.intake_id=s.intake_id
+                                 AND a.stage=s.stage) AS activated,
+                       EXISTS (SELECT 1 FROM ago_project_stage_delegation_proposals d
+                               WHERE d.tenant_id=s.tenant_id AND d.intake_id=s.intake_id
+                                 AND d.stage=s.stage) AS proposed
+                FROM ago_founder_intakes i
+                JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
+                JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
+                JOIN ago_founder_intake_stages s ON s.tenant_id=i.tenant_id
+                  AND s.intake_id=i.id AND s.stage=%s
+                WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s FOR UPDATE OF i
+            """, (stage, tenant_id, project_id, founder_id)).fetchone()
+            if row is None or row['status'] != 'active':
+                raise PermissionError('Founder-owned active approved project required')
+            if row['activated'] or row['plan_step_id'] is not None:
+                raise PermissionError('This stage already has staffing in the approved scope')
+            if row['suggested_assignee_id'] is not None:
+                # The scope already names a worker. The CEO may confirm exactly
+                # that one (ceo_reconcile); replacing it is the Founder's call.
+                raise PermissionError(
+                    'The '+stage+' stage already has a suggested specialist in the approved '
+                    'scope that is not confirmed yet; the Founder decides its staffing in '
+                    'Projects.')
+            if row['proposed']:
+                # Never silently override a pending manual staffing request.
+                raise PermissionError(
+                    'A staffing request for the '+stage+' stage is already waiting for a decision')
+            board = self.db.execute("""
+                SELECT b.seat,b.employee_id,e.name,e.kind
+                FROM ago_company_board_appointments b
+                JOIN ago_employees e ON e.tenant_id=b.tenant_id AND e.id=b.employee_id
+                WHERE b.tenant_id=%s
+            """, (tenant_id,)).fetchall()
+            ceo = next((b for b in board if b['seat'] == 'Strategy & Vision'), None)
+            if ceo is None or ceo['kind'] != 'ai':
+                raise PermissionError('An actual appointed AI CEO is required')
+            manager_id = str(row['accountable_manager_id'])
+            excluded = {str(b['employee_id']) for b in board} | {manager_id}
+            busy = {str(r['assignee_id']): int(r['n']) for r in self.db.execute("""
+                SELECT a.assignee_id,count(*) AS n
+                FROM ago_project_stage_delegation_activations a
+                WHERE a.tenant_id=%s GROUP BY a.assignee_id
+            """, (tenant_id,)).fetchall()}
+            staff = self.repositories.resolve(OrganizationStore).eligible_ai_staff(
+                tenant_id=tenant_id)
+            # Least-loaded first, then by name: a deterministic, explainable pick.
+            staff.sort(key=lambda e: (busy.get(str(e['id']), 0), str(e['name']).casefold(),
+                                      str(e['id'])))
+            chosen = None
+            for employee in staff:
+                employee_id = str(employee['id'])
+                identity = (str(employee['name'])+' '+str(employee['role_title'] or '')).casefold()
+                if employee_id in excluded or not any(word in identity for word in words):
+                    continue
+                if stage == 'implementation' and any(
+                        word in identity for word in self.STAGE_ROLE_WORDS['quality']):
+                    continue
+                try:
+                    self._require_eligible_stage_owner(
+                        tenant_id=tenant_id, project_id=project_id, stage=stage,
+                        assignee_id=employee_id, accountable_manager_id=manager_id)
+                except PermissionError:
+                    continue
+                chosen = employee
+                break
+            if chosen is None:
+                raise PermissionError(
+                    'No existing AI employee fits the '+stage+' stage (role: '
+                    + ' / '.join(words)+') who is not a Board member, the project manager '
+                    'or the other side of implementation/QA. Add or retitle one.')
+            worker_id = str(chosen['id'])
+            proposal_id = str(uuid4())
+            approvals = self.repositories.resolve(ApprovalRepository)
+            approval = approvals.propose(
+                tenant_id=tenant_id, requester_id=founder_id,
+                action='company:stage-delegation:'+proposal_id)
+            self.db.execute("""
+                INSERT INTO ago_project_stage_delegation_proposals
+                  (id,tenant_id,intake_id,stage,assignee_id,requester_id,approval_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """, (proposal_id, tenant_id, project_id, stage, worker_id, founder_id,
+                  approval.request_id))
+            approvals.approve_ceo_project_stage(
+                tenant_id=tenant_id, founder_id=founder_id, ceo_id=str(ceo['employee_id']),
+                project_id=project_id, proposal_id=proposal_id,
+                approval_id=approval.request_id,
+                reason='CEO filled the unstaffed '+stage+' stage of project '+project_id
+                       +' with an existing AI employee; authorized Founder session '+founder_id)
+            self.db.execute("""
+                INSERT INTO ago_project_stage_delegation_activations
+                  (id,tenant_id,proposal_id,intake_id,stage,assignee_id,applied_by)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """, (str(uuid4()), tenant_id, proposal_id, project_id, stage, worker_id,
+                  founder_id))
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                  (tenant_id,channel,author_id,author_name,body,kind,employee_id)
+                VALUES (%s,'global',%s,%s,%s,'project',%s)
+            """, (tenant_id, founder_id, str(ceo['name'])+' (AI CEO)',
+                  'The '+stage+' stage had no staffing. I assigned '+str(chosen['name'])
+                  +' ('+str(chosen['role_title'] or 'AI employee')+') to it. No task was '
+                  'created or run by this decision.', worker_id))
+        return {'stage': stage, 'assignee_id': worker_id, 'assignee_name': chosen['name'],
+                'role_title': chosen['role_title'], 'ceo_id': str(ceo['employee_id']),
+                'ceo_name': ceo['name'], 'task_executed': False, 'personnel_hired': False}
+
     def _require_eligible_stage_owner(
         self, *, tenant_id: str, project_id: str, stage: str,
         assignee_id: str, accountable_manager_id: str | None,

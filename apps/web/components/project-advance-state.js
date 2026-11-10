@@ -43,7 +43,7 @@ export function nextAdvanceStep(detail){
   const base={stage:s.stage,task_id:s.task_id||null};
   // Every earlier stage passed QA here. A later stage with an approved specialist
   // but no task yet is opened by the AI project manager on the server.
-  if(!s.task_id)return {...base,kind:Number(s.position)>1&&s.approved_assignee_id?'open_stage':'unstaffed'};
+  if(!s.task_id)return {...base,kind:Number(s.position)>1?'open_stage':'unstaffed'};
   if(s.qa_verdict==='fail')return {...base,kind:'rework'};
   switch(s.task_status){
    case 'failed':

@@ -181,7 +181,8 @@ test('advance picks the one next step from the first stage that has not passed Q
  assert.deepEqual([...AUTOMATIC].sort(),['approve','open_stage','qa','request','retry_code','revise','rework','run']);
  // PROJ-006: after QA PASS a later stage with an approved specialist but no task is opened by the AI manager.
  assert.equal(kind(pass,s('architecture',2,{task_id:null,approved_assignee_id:'a'})),'open_stage');
- assert.equal(kind(pass,s('architecture',2,{task_id:null})),'unstaffed');
+ // Without staffing the server lets the AI CEO fill the stage or names the missing role.
+ assert.equal(kind(pass,s('architecture',2,{task_id:null})),'open_stage');
  assert.match(stepLabel({kind:'run',stage:'discovery'}),/Run the discovery task with the AI team \(uses 7 internal credits\)/);
  const reviewers=[{id:'w'},{id:'q'}];
  assert.equal(pickQaReviewer(reviewers,{approved_assignee_id:'w'}).id,'q');
