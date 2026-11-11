@@ -12,8 +12,10 @@ import re
 
 
 class GlobalChatOrders:
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, storage):
+        # This is a helper within CompanyChat's existing reviewed persistence
+        # component; never register a second repository/port for it.
+        self.db = storage
 
     @staticmethod
     def _uuid(value):
