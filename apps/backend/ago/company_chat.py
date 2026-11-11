@@ -202,6 +202,121 @@ class GlobalChatOrders:
             items.append(item)
         return items
 
+    def claim_ai_reply(self, actor, message_id, employee_id):
+        """Reserve one *real* model answer without holding a DB lock during inference.
+
+        Only an authenticated Founder may cause an AI to speak in this phase.
+        Claim tokens fence retries, and claims expire after the provider's hard
+        60-second call limit. A claim does NOT acknowledge the order.
+        """
+        if 'founder' not in actor.roles:
+            raise PermissionError("Founder authority required for AI chat inference")
+        employee_id=self._uuid(employee_id)
+        with self.db.transaction():
+            worker=self.db.execute("""
+                SELECT w.id,w.ack_message_id,w.response_claim_token,
+                       w.response_claimed_at,w.response_attempts,
+                       w.accountable_ceo_id,e.name,e.kind,c.body AS request_body
+                FROM ago_chat_work_items w
+                JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+                JOIN ago_company_chat c ON c.tenant_id=w.tenant_id AND c.id=w.message_id
+                WHERE w.tenant_id=%s AND w.message_id=%s AND w.assignee_id=%s
+                FOR UPDATE OF w
+            """,(actor.tenant_id,message_id,employee_id)).fetchone()
+            if worker is None or worker['kind']!='ai':
+                raise ValueError("An assigned AI employee is required")
+            current=self._employees(actor.tenant_id)
+            if employee_id not in current:
+                raise PermissionError("This AI employee is no longer eligible")
+            ceo=self._ceo(actor.tenant_id,current)
+            if ceo is None or str(ceo['id'])!=str(worker['accountable_ceo_id']):
+                raise PermissionError("Current appointed CEO must own the routed message")
+            if worker['ack_message_id'] is not None:
+                return {'status':'already_replied','message_id':message_id,
+                        'ack_message_id':worker['ack_message_id']}
+            # One model call at a time per worker/message. A stalled attempt
+            # may be retried only after the 90-second fenced lease.
+            active=self.db.execute("""
+                SELECT %s::timestamptz > now()-interval '90 seconds' AS active
+            """,(worker['response_claimed_at'],)).fetchone()
+            if worker['response_claim_token'] and active['active']:
+                return {'status':'already_processing','message_id':message_id}
+            # Three retries per order; founder can send a new follow-up instead
+            # of an infinite/costly hidden model retry loop.
+            if int(worker['response_attempts'])>=3:
+                return {'status':'retry_limit','message_id':message_id}
+            token=str(uuid4())
+            self.db.execute("""
+                UPDATE ago_chat_work_items
+                SET response_claim_token=%s,response_claimed_at=now(),
+                    response_attempts=response_attempts+1,updated_at=now()
+                WHERE tenant_id=%s AND id=%s
+            """,(token,actor.tenant_id,worker['id']))
+            return {'status':'claimed','message_id':message_id,
+                    'employee_id':employee_id,'employee_name':worker['name'],
+                    'claim_token':token,'request_body':worker['request_body'][:1500]}
+
+    def commit_ai_reply(self, actor, message_id, employee_id, token, text):
+        """Append actual local-model text and its ACK atomically."""
+        if 'founder' not in actor.roles:
+            raise PermissionError("Founder authority required")
+        employee_id=self._uuid(employee_id)
+        self._uuid(token)
+        text=text.strip()
+        if not 1 <= len(text) <= 5000:
+            raise ValueError("Model answer is empty or too long")
+        with self.db.transaction():
+            row=self.db.execute("""
+                SELECT w.id,w.ack_message_id,w.response_claim_token,
+                       w.response_claimed_at,e.name
+                FROM ago_chat_work_items w
+                JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+                WHERE w.tenant_id=%s AND w.message_id=%s AND w.assignee_id=%s
+                FOR UPDATE OF w
+            """,(actor.tenant_id,message_id,employee_id)).fetchone()
+            if row is None or str(row['response_claim_token']) != token or (
+                    row['ack_message_id'] is not None):
+                raise PermissionError("AI response claim was replaced or already settled")
+            fresh=self.db.execute("""
+                SELECT %s::timestamptz > now()-interval '90 seconds' AS valid
+            """,(row['response_claimed_at'],)).fetchone()
+            if not fresh['valid']:
+                raise PermissionError("Expired AI response claim; no message written")
+            # Crucial: no invented human identity/approval. Real inference is
+            # labelled as unverified AI text, with source linked by reply_to.
+            message=self.db.execute("""
+                INSERT INTO ago_company_chat
+                    (tenant_id,channel,author_name,body,reply_to,kind,employee_id)
+                VALUES (%s,'global',%s,%s,%s,'message',%s)
+                RETURNING id
+            """,(actor.tenant_id,'AGO local AI · '+row['name'],
+                 'Local model reply (not task execution/QA evidence):\n'+text,
+                 message_id,employee_id)).fetchone()
+            self.db.execute("""
+                UPDATE ago_chat_work_items
+                SET ack_message_id=%s,response_claim_token=NULL,
+                    response_claimed_at=NULL,
+                    status=CASE WHEN linked_task_id IS NULL THEN 'acknowledged'
+                                ELSE 'task_linked' END,
+                    updated_at=now()
+                WHERE tenant_id=%s AND id=%s
+            """,(message['id'],actor.tenant_id,row['id']))
+            return {'status':'responded','message_id':message_id,
+                    'employee_id':employee_id,'ack_message_id':message['id'],
+                    'source':'local_ollama_model','task_executed':False,
+                    'qa_verified':False}
+
+    def abort_ai_reply(self, actor, message_id, employee_id, token):
+        """Release a failed lease without forging a reply; keep attempt count."""
+        with self.db.transaction():
+            self.db.execute("""
+                UPDATE ago_chat_work_items
+                SET response_claim_token=NULL,updated_at=now()
+                WHERE tenant_id=%s AND message_id=%s AND assignee_id=%s
+                  AND response_claim_token=%s AND ack_message_id IS NULL
+            """,(actor.tenant_id,message_id,self._uuid(employee_id),self._uuid(token)))
+
+
     def record_human_acknowledgement(self, *, tenant_id, actor_id,
                                      parent_id, response_id):
         """Only the actual signed human addressee's reply counts as acknowledgement.
@@ -435,6 +550,21 @@ class CompanyChat:
                         parent_id=original['message_id'] if original else reply_to,
                         response_id=row['id'])
             return result
+
+    def claim_ai_chat_reply(self, actor, message_id: int, employee_id: str) -> dict:
+        if not self._channel_permission(actor.tenant_id,actor.subject,'global'):
+            raise PermissionError('Global Chat access denied')
+        return GlobalChatOrders(self.db).claim_ai_reply(actor,message_id,employee_id)
+
+    def commit_ai_chat_reply(self, actor, message_id: int, employee_id: str,
+                             claim_token: str, answer: str) -> dict:
+        return GlobalChatOrders(self.db).commit_ai_reply(
+            actor,message_id,employee_id,claim_token,answer)
+
+    def abort_ai_chat_reply(self, actor, message_id: int, employee_id: str,
+                            claim_token: str) -> None:
+        GlobalChatOrders(self.db).abort_ai_reply(
+            actor,message_id,employee_id,claim_token)
 
     def chat_order_inbox(self, actor, limit: int=50) -> list[dict]:
         if 'founder' not in actor.roles or not self._channel_permission(
