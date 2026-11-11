@@ -295,6 +295,10 @@
           "arguments": "self, actor, message_id: int, employee_id: str, task_id: str",
           "returns": "dict"
         },
+        "chat_order_inbox": {
+          "arguments": "self, actor, limit: int=50",
+          "returns": "list[dict]"
+        },
         "activity": {
           "arguments": "self, tenant_id, reader_id: str | None=None",
           "returns": "Any"
