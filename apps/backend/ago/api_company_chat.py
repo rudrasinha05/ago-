@@ -47,6 +47,18 @@ def send(data: ChatInput, actor=Depends(authenticated), repositories=Depends(rep
         translate_error(exc)
 
 
+@router.get('/chat/orders')
+def chat_orders(limit: int = Query(default=50, ge=1, le=100),
+                actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    """Founder can audit every pending CEO/agent order regardless of pagination."""
+    allowed(repositories, actor, 'organization:read')
+    allowed(repositories, actor, 'messages:read')
+    try:
+        return repositories.resolve(CompanyChatPort).chat_order_inbox(actor, limit)
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+
 class LinkChatTaskInput(StrictInput):
     employee_id: UUID
     task_id: UUID
