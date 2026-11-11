@@ -113,7 +113,8 @@ def run_session(request, *, apply=False, confirmation=None, hours=4,
                            pending_ai_replies=0,
                            blocked_without_ceo=sum(
                                o.get("state")=="blocked_no_ceo" for o in orders))
-        lost = 0
+        # A successful queue read does not prove the prior POST completed.
+        # Preserve the lost-answer counter until a verified response arrives.
         message_id, employee_id = pending[0]
         requests += 1
         try:
