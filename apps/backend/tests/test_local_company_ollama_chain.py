@@ -340,6 +340,51 @@ def test_full_board_all_five_clear_before_management_drafting(monkeypatch):
     assert result["github_commits_created"] is False
 
 
+def test_implementation_quality_board_reviews_plan_before_code_tests_not_false_pass():
+    """The AI Quality Board must not demand finished tests before the coder
+    role even runs; the later real Docker and independent QA gates stay intact.
+    An approving model here is a stub, not evidence of any actual tests.
+    """
+    db = ApprovedProjectDb()
+    task = db.task()
+    task.project_context.update({
+        "stage": "implementation",
+        "deliverable": "Generate Python source and discoverable unittest cases",
+        "prior_work": [{"stage": "architecture", "draft": "Reviewed local design"}],
+    })
+    participants = [
+        {"role": role, "employee_id": employee_id, "employee_name": role}
+        for role, employee_id in (
+            ("ceo", db.ceo), ("cto", db.cto), ("finance", db.finance),
+            ("risk", db.risk), ("quality", db.quality), ("pm", db.pm),
+            ("employee", db.implementer),
+        )
+    ]
+    class ReviewModel:
+        def __init__(self):
+            self.prompts = []
+        def generate(self, prompt):
+            self.prompts.append(prompt)
+            if "BOARD_ADVISORY:" in prompt:
+                return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Plan review only"
+            return "DECISION: Work proposed; execution and QA still pending"
+    model = ReviewModel()
+    result = run_four_role_chain(task=task, participants=participants, provider=model)
+    assert result["board_review_cleared"] is True
+    assert result["project_released"] is False
+    assert result["requires_human_qa"] is True
+    assert result["roles_completed"] == 7
+    quality_prompt = model.prompts[4]
+    assert "PRE-EXECUTION QUALITY REVIEW" in quality_prompt
+    assert "tests have not executed YET" in quality_prompt
+    assert "isolated local Docker test gate" in quality_prompt
+    assert "never claim" in quality_prompt.lower()
+    assert "PRE-EXECUTION QUALITY REVIEW" not in model.prompts[3]
+    assert all(len(p) <= 4000 for p in model.prompts)
+
+
+
+
 @pytest.mark.parametrize("stopping_role,reason,expected_calls",[
     ("ceo","deny",1),("risk","deny",4),("finance","unverified",3),
 ])
