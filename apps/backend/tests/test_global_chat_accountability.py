@@ -357,3 +357,42 @@ def test_real_governed_task_status_and_qa_are_not_conflated_with_ack(case):
     assert item['ack_message_id'] is None
     assert item['release_verified'] is False
 
+
+
+def test_tagged_specialist_receives_only_verified_saved_ceo_model_context(case):
+    client,headers,info=case
+    ceo,worker=make_staff(client,headers['founder'])
+    msg=send(client,headers['founder'],
+             'Founder order: plan UI implementation with CEO handoff',
+             intent='order',mentions=[worker])
+    actor=Principal(subject=info['founder_id'],tenant_id=info['tenant'],roles=('founder',))
+    store=CompanyChat(info['db'])
+
+    class CeoModel:
+        def generate(self,prompt):
+            assert 'Previously recorded AI team replies' in prompt
+            assert '[]' in prompt
+            return 'CEO reviewed the scope. Engineering should draft a test plan.'
+
+    first=respond_company_chat(actor=actor,store=store,message_id=msg['id'],
+                               employee_id=ceo,provider=CeoModel())
+    assert first['status']=='responded'
+
+    class EngineerModel:
+        def generate(self,prompt):
+            assert 'CEO Chat Acceptance' not in prompt
+            assert 'Company Executive' in prompt
+            assert 'Engineering should draft a test plan' in prompt
+            assert 'NOT task completion or approval evidence' in prompt
+            return 'Understood CEO handoff. I will prepare a proposed test plan.'
+
+    second=respond_company_chat(actor=actor,store=store,message_id=msg['id'],
+                                employee_id=worker,provider=EngineerModel())
+    assert second['status']=='responded'
+    inbox=store.chat_order_inbox(actor)
+    order=next(x for x in inbox if x['message_id']==msg['id'])
+    assert order['real_ai_replies']==2
+    assert order['awaiting_ack_count']==0
+    assert order['verified_acknowledgements']==2
+    assert all(x['evidence_state']=='acknowledged' for x in order['work_items'])
+    assert all(not x['has_execution_evidence'] for x in order['work_items'])
