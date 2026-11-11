@@ -880,7 +880,7 @@ section and a founder amendment indicates traceability, not a reason to merge.
 - [x] PROJ-002 — Deliver discovery → architecture → implementation → QA → release with explicit dependencies.
   - *DONE* — discovery -> architecture -> implementation -> quality -> release with dependencies
 - [~] PROJ-003 — Real project team is selected/assigned based on role, skill and availability.
-  - *PARTIAL* — Eligible shortlist by role exists; skill and availability matching is thin
+  - *PARTIAL* — Eligible shortlist by role exists; new intake selects an active independent AI PM reporting to the appointed CEO without engineering flags and persists deduplicated proposed team notices. PostgreSQL: test_intake_assigns_independent_pm_without_engineering_flags (2026-11-11). Skill and availability matching, PM-owned repository/test-repair integration and live acceptance remain incomplete.
 - [x] PROJ-004 — Do not fake an assignment or create an executable task merely from a suggested assignee.
   - *DONE* — A suggested assignee never becomes an executable task by itself
 - [x] PROJ-005 — Founder can view next safe step or run bounded 'keep going until I am needed'.

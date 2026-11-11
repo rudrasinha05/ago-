@@ -241,10 +241,23 @@ class GlobalChatOrders:
             FROM ago_chat_orders o
             JOIN ago_company_chat c ON c.tenant_id=o.tenant_id AND c.id=o.message_id
             WHERE o.tenant_id=%s AND o.founder_order
-            ORDER BY o.message_id DESC LIMIT %s
+            ORDER BY
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ago_chat_work_items w
+                WHERE w.tenant_id=o.tenant_id AND w.message_id=o.message_id
+                  AND w.ack_message_id IS NULL
+              ) OR o.state='blocked_no_ceo' THEN 0 ELSE 1 END,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ago_chat_work_items w
+                WHERE w.tenant_id=o.tenant_id AND w.message_id=o.message_id
+                  AND w.ack_message_id IS NULL
+              ) OR o.state='blocked_no_ceo' THEN o.message_id END ASC,
+              o.message_id DESC LIMIT %s
         """,(tenant_id,limit)).fetchall()
         items=[]
-        for row in records:
+        # Keep the UI's newest-first display contract after selecting the
+        # oldest pending work. Completed history cannot crowd out that work.
+        for row in sorted(records, key=lambda item: item['message_id'], reverse=True):
             item=self.details(tenant_id,row['message_id'])
             item.update(author_name=row['author_name'], body=row['body'])
             item['awaiting_ack_count']=sum(
@@ -1509,6 +1522,8 @@ class CompanyChat:
                     SELECT id,name,kind,role_title,department_id,manager_id FROM ago_employees
                     WHERE tenant_id=%s ORDER BY name,id
                 """, (actor.tenant_id,)).fetchall()
+                eligible = GlobalChatOrders(self.db)._employees(actor.tenant_id)
+                employees = [e for e in employees if str(e['id']) in eligible]
                 # CEO owns operations after founder approves the complete plan.
                 available_ai = [e for e in employees if e['kind']=='ai']
                 discovery = next((e for e in available_ai
@@ -1546,16 +1561,10 @@ class CompanyChat:
                 # The five reviewed Board members provide executive oversight;
                 # the seven-identity local AI workflow additionally needs an
                 # independent AI PROJECT manager. Never count CEO twice.
-                # This flag is explicit localhost-only engineering mode; normal
-                # CEO-owned project intake retains the existing contract.
-                import os
-                engineering_pm_mode = (
-                    os.getenv('AGO_LOCAL_FULL_BOARD_REVIEW','').lower() == 'true'
-                    and os.getenv('AGO_LOCAL_ENGINEERING_CANDIDATES','').lower() == 'true'
-                    and os.getenv('AGO_ENVIRONMENT','development').lower()
-                       in ('development','test','testing')
-                )
-                if engineering_pm_mode:
+                # PM ownership is a company responsibility, not an engineering
+                # feature flag. Preserve the existing executive fallback when
+                # no eligible, independent PM reports to the appointed CEO.
+                if available_ai:
                     ceo_seat=self.db.execute("""
                         SELECT b.employee_id
                         FROM ago_company_board_appointments b
@@ -1564,14 +1573,18 @@ class CompanyChat:
                         WHERE b.tenant_id=%s AND b.seat='Strategy & Vision'
                     """,(actor.tenant_id,)).fetchone()
                     ceo_id=(str(ceo_seat['employee_id']) if ceo_seat else None)
-                    if ceo_id:
+                    if ceo_id in eligible:
+                        board_ids = {str(b['employee_id']) for b in self.db.execute(
+                            'SELECT employee_id FROM ago_company_board_appointments '
+                            'WHERE tenant_id=%s', (actor.tenant_id,)).fetchall()}
                         pm_candidates=[
                             e for e in available_ai
                             if (e['role_title'] or '').strip().lower()
                                in ('project manager','ai project manager',
                                    'ai project manager (pm)',
                                    'technical project manager')
-                            and str(e['id'])!=ceo_id
+                            and str(e['id']) not in board_ids
+                            and (discovery is None or str(e['id']) != str(discovery['id']))
                             and str(e['manager_id'] or '')==ceo_id
                         ]
                         if pm_candidates:
@@ -1629,6 +1642,8 @@ class CompanyChat:
                         assignee = discovery
                     else:
                         def eligible_for_stage(e):
+                            if str(e['id']) == str(leader['id']):
+                                return False
                             identity=(e['name']+' '+(e['role_title'] or '')).lower()
                             if not any(keyword in identity for keyword in keywords):
                                 return False
@@ -1661,6 +1676,27 @@ class CompanyChat:
                             'Leadership accountable for delivery; founder project saved: ' || %s,
                             'project',%s)
                 """, (actor.tenant_id,actor.subject,title,leader['id']))
+                # Durable team handoff, emitted only on first intake. These
+                # are proposed assignments, not model ACKs or execution grants.
+                team = self.db.execute("""
+                    SELECT suggested_assignee_id,
+                           string_agg(stage, ', ' ORDER BY position) AS stages
+                    FROM ago_founder_intake_stages
+                    WHERE tenant_id=%s AND intake_id=%s
+                      AND suggested_assignee_id IS NOT NULL
+                    GROUP BY suggested_assignee_id
+                """, (actor.tenant_id,intake_id)).fetchall()
+                for member in team:
+                    employee_id = str(member['suggested_assignee_id'])
+                    self.db.execute("""
+                        INSERT INTO ago_company_chat
+                        (tenant_id,channel,author_id,author_name,body,kind,employee_id)
+                        VALUES (%s,%s,%s,'AGO project assignment',%s,'project',%s)
+                    """, (actor.tenant_id,'employee:'+employee_id,actor.subject,
+                          'Project '+intake_id+' — '+title+'. Accountable manager: '
+                          +leader['name']+'. Proposed stages: '+member['stages']
+                          +'. Plan approval and actual acknowledgement pending; '
+                          'no task execution or QA pass claimed.',employee_id))
                 reused = False
 
             row = self.db.execute("""
