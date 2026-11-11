@@ -288,8 +288,12 @@
           "returns": "Any"
         },
         "send": {
-          "arguments": "self, actor, channel, body, reply_to, operation_key",
+          "arguments": "self, actor, channel, body, reply_to, operation_key, *, mentions=(), intent: str='message'",
           "returns": "Any"
+        },
+        "link_chat_task": {
+          "arguments": "self, actor, message_id: int, employee_id: str, task_id: str",
+          "returns": "dict"
         },
         "activity": {
           "arguments": "self, tenant_id, reader_id: str | None=None",
