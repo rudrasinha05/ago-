@@ -428,7 +428,7 @@ def test_untagged_founder_order_ceo_can_delegate_to_verified_direct_report(case)
             assert worker in prompt
             assert 'not an approved or executed task' not in prompt
             return ('Received. I will ask our engineer for a scoped, reviewed '
-                    'implementation plan.\\nDELEGATE_ID: '+worker)
+                    'implementation plan.\nDELEGATE_ID: '+worker)
 
     result=respond_company_chat(actor=actor,store=store,message_id=message['id'],
                                 employee_id=ceo,provider=CeoModel())
@@ -481,7 +481,7 @@ def test_ceo_cannot_delegate_founder_tagged_or_unrelated_employee(case):
     class Hallucination:
         def generate(self,prompt):
             assert worker in prompt
-            return 'I need verification.\\nDELEGATE_ID: '+outsider
+            return 'I need verification.\nDELEGATE_ID: '+outsider
     reply=respond_company_chat(actor=actor,store=store,message_id=order['id'],
                                employee_id=ceo,provider=Hallucination())
     assert reply['status']=='responded'
