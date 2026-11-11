@@ -28,6 +28,20 @@ def test_session_tokens_round_trip_and_expiry():
         SessionTokens("b" * 48).verify(token, now=101)
 
 
+def test_renewed_session_preserves_original_sign_in_and_has_absolute_age_cap():
+    tokens = SessionTokens("a" * 48, ttl_seconds=900)
+    principal = Principal("user-1", "tenant-a", ("reader",))
+    original = tokens.issue(principal, now=100)
+    active = tokens.verify(original, now=200)
+    assert active.session_started_at == 100
+    renewal = tokens.issue(active, now=100 + 3600)
+    renewed = tokens.verify(renewal, now=100 + 3601)
+    assert renewed.session_started_at == 100
+    assert tokens.issue(renewed, now=100 + 8 * 3600 - 1)
+    with pytest.raises(AuthenticationError, match="Fresh interactive sign-in"):
+        tokens.issue(renewed, now=100 + 8 * 3600)
+
+
 def test_session_tokens_reject_bad_configuration():
     with pytest.raises(ValueError):
         SessionTokens("short")
