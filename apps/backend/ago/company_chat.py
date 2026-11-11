@@ -345,7 +345,7 @@ class CompanyChat:
                 'next_before': rows[limit-1]['id'] if len(rows)>limit else None}
 
     def send(self, actor, channel, body, reply_to, operation_key,
-             *, mentions=(), intent='message'):
+             *, mentions=(), intent: str = 'message'):
         self.channel(actor.tenant_id, channel)
         if not self._channel_permission(actor.tenant_id,actor.subject,channel):
             raise PermissionError('Channel access denied')
