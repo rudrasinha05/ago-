@@ -310,6 +310,7 @@
       "layer": "persistence",
       "imports": [
         "backend_contracts",
+        "global_chat_orders",
         "governance",
         "organization_store"
       ]
@@ -551,6 +552,11 @@
       "imports": [
         "backend_contracts"
       ]
+    },
+    "global_chat_orders": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": []
     },
     "governance": {
       "context": "governance",
