@@ -158,6 +158,20 @@ class GlobalChatOrders:
             UPDATE ago_chat_orders SET receipt_message_id=%s
             WHERE tenant_id=%s AND message_id=%s
         """,(row["id"],tenant_id,message_id))
+        # The CEO already receives the system receipt above. Each additional
+        # tagged employee gets exactly one durable numbered routing event.
+        # A route event is NOT a task start or model acknowledgement.
+        for emp_id in recipients:
+            if emp_id==ceo_id:
+                continue
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                  (tenant_id,channel,author_name,body,kind,employee_id)
+                VALUES (%s,%s,'AGO Global Chat routing',%s,'status',%s)
+            """,(tenant_id,'employee:'+emp_id,
+                 'Global Chat message #'+str(message_id)+' assigned to '
+                 +employees[emp_id]['name']+'; acknowledgment pending. '
+                 'CEO accountable; no work execution claimed.',emp_id))
         return self.details(tenant_id,message_id)
 
     @staticmethod
@@ -359,6 +373,14 @@ class GlobalChatOrders:
                     updated_at=now()
                 WHERE tenant_id=%s AND id=%s
             """,(message['id'],actor.tenant_id,row['id']))
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                  (tenant_id,channel,author_name,body,kind,employee_id)
+                VALUES (%s,%s,'AGO AI response event',%s,'status',%s)
+            """,(actor.tenant_id,'employee:'+employee_id,
+                 'Local AI reply #'+str(message['id'])+' recorded for Global Chat '
+                 'message #'+str(message_id)+'. Task execution and QA not claimed.',
+                 employee_id))
             return {'status':'responded','message_id':message_id,
                     'employee_id':employee_id,'ack_message_id':message['id'],
                     'source':'local_ollama_model','task_executed':False,
