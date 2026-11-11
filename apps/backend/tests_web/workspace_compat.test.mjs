@@ -90,6 +90,50 @@ test("HTTP 401 drops bearer and expires session without token reuse", async () =
   assert.equal(expired, 1);
 });
 
+test("active sessions renew without a password; stale 401 cannot sign out a new bearer", async () => {
+  let completeOld, expired = 0, refreshCalls = 0;
+  const client = new SessionClient({
+    fetchImpl: async (path, options) => {
+      if (path === "/v1/sessions") return ok({access_token: "old", expires_in: 60});
+      if (path === "/v1/sessions/renew") {
+        refreshCalls++;
+        assert.equal(options.headers.Authorization, "Bearer old");
+        assert.equal(options.credentials, "omit");
+        return ok({access_token: "new", expires_in: 900});
+      }
+      if (path === "/v1/stale") return new Promise(resolve => { completeOld = resolve; });
+      return ok({authorization: options.headers.Authorization});
+    },
+    onExpire: () => { expired++; },
+  });
+  await client.login({tenant: TENANT, email: "founder@example.test", password: "example"});
+  const oldRequest = client.request("/v1/stale");
+  assert.equal(await client.renewIfNeeded(), true);
+  assert.equal(refreshCalls, 1);
+  assert.equal(await client.renewIfNeeded(), false);
+  completeOld(fail(401, "Old bearer was revoked"));
+  await assert.rejects(oldRequest, e => e instanceof ApiError && e.status === 401);
+  assert.equal(client.authenticated, true);
+  assert.equal(expired, 0);
+  assert.equal((await client.request("/v1/console/me")).authorization, "Bearer new");
+  client.clear();
+});
+
+test("revoked session renewal fails closed and never replays a login", async () => {
+  let loginCount = 0, expireCount = 0;
+  const client = new SessionClient({
+    fetchImpl: async path => path === "/v1/sessions"
+      ? (loginCount++, ok({access_token: "revoked", expires_in: 60}))
+      : fail(401, "Revoked session"),
+    onExpire: () => { expireCount++; },
+  });
+  await client.login({tenant: TENANT, email: "founder@example.test", password: "example"});
+  await assert.rejects(client.renewIfNeeded(), e => e instanceof ApiError && e.status === 401);
+  assert.equal(loginCount, 1);
+  assert.equal(expireCount, 1);
+  assert.equal(client.authenticated, false);
+});
+
 test("403 is isolated per resource; other panels remain usable", async () => {
   const client = new SessionClient({
     fetchImpl: async path => path.endsWith("/brain/goals")
