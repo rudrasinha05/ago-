@@ -204,13 +204,23 @@ def test_runner_finishes_a_real_project_without_a_browser(company):
     assert calls['post'] == 0
 
     lines, pauses = [], []
-    report = runner.run_session(
+    interrupted = runner.run_session(
         request, project_id=c.id, apply=True, confirmation=runner.CONFIRM,
-        relogin=lambda: calls.__setitem__('logins', calls['logins']+1),
         report=lines.append, pause=pauses.append)
-    assert report['status'] == 'project_done' and report['steps_done'] == 20
-    assert report['automatic_replay'] is False and report['service_started_at_boot'] is False
-    assert calls['logins'] == 1 and pauses == []
+    assert interrupted['status'] == 'session_expired'
+    assert interrupted['steps_done'] == 3
+    assert interrupted['automatic_replay'] is False
+    assert calls['post'] == 4 and calls['logins'] == 0
+    # Founder must launch a new authenticated runner after 401. The backend
+    # resumes from saved task state, not by replaying the last command.
+    fresh_request, fresh_calls = _through(c)
+    resumed = runner.run_session(
+        fresh_request, project_id=c.id, apply=True, confirmation=runner.CONFIRM,
+        report=lines.append, pause=pauses.append)
+    assert resumed['status'] == 'project_done' and resumed['steps_done'] == 17
+    assert resumed['automatic_replay'] is False
+    assert resumed['service_started_at_boot'] is False
+    assert fresh_calls['logins'] == 0 and pauses == []
     assert [line['step'] for line in lines[:4]] == ['request', 'approve', 'run', 'qa']
     assert c.client.get(c.url, headers=c.founder).json()['qa_passed_stages'] == 5
     assert len(c.seen) == 5
