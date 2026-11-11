@@ -109,10 +109,10 @@ def run_session(request, *, apply=False, confirmation=None, hours=4,
             pause(min(interval,max(0,stop_at-clock())))
             continue
         if not pending:
-            return summary("queue_acknowledged_not_executed",
-                           pending_ai_replies=0,
-                           blocked_without_ceo=sum(
-                               o.get("state")=="blocked_no_ceo" for o in orders))
+            missing=sum(o.get("state")=="blocked_no_ceo" for o in orders)
+            return summary("founder_needed" if missing else
+                           "queue_acknowledged_not_executed",
+                           pending_ai_replies=0,blocked_without_ceo=missing)
         # A successful queue read does not prove the prior POST completed.
         # Preserve the lost-answer counter until a verified response arrives.
         message_id, employee_id = pending[0]
