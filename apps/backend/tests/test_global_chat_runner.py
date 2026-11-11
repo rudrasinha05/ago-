@@ -6,7 +6,7 @@ and CEO-to-specialist handoffs are covered in test_global_chat_accountability.
 from importlib.util import module_from_spec,spec_from_file_location
 from pathlib import Path
 import sys
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from uuid import uuid4
 
 import pytest
@@ -149,3 +149,44 @@ def test_runner_escalates_missing_ceo_instead_of_saying_orders_finished():
     assert result["status"]=="founder_needed"
     assert result["blocked_without_ceo"]==1
     assert result["replies_recorded"]==0
+
+
+@pytest.mark.parametrize("code", [400, 403, 409, 429, 500])
+@pytest.mark.parametrize("failing_method", ["GET", "POST"])
+def test_explicit_http_failure_is_terminal(code, failing_method):
+    calls = []
+    def request(method, path, body=None):
+        calls.append((method, path))
+        if path == "/v1/console/me":
+            return {"roles": ["founder"]}
+        if method == failing_method:
+            raise HTTPError(path, code, "denied", {}, None)
+        return [msg(10)]
+    with pytest.raises(HTTPError) as failure:
+        runner.run_session(request, apply=True, confirmation=runner.CONFIRM,
+                           clock=lambda: 0, pause=lambda _: None)
+    assert failure.value.code == code
+    assert len([m for m, p in calls if m == failing_method and p != "/v1/console/me"]) == 1
+
+
+@pytest.mark.parametrize("state", ["already_processing", "already_replied"])
+def test_stale_queue_cannot_bypass_request_budget(state):
+    calls = []
+    def request(method, path, body=None):
+        if path == "/v1/console/me":
+            return {"roles": ["founder"]}
+        if method == "GET":
+            return [msg(10)]
+        calls.append(path)
+        assert len(calls) <= 4, "Runner ignored its request budget"
+        return {"status": state}
+    result = runner.run_session(request, apply=True, confirmation=runner.CONFIRM,
+                                max_replies=4, clock=lambda: 0, pause=lambda _: None)
+    assert result["status"] == "limit_reached"
+    assert result["requests"] == 4
+    assert result["replies_recorded"] == 0
+
+
+def test_queue_priority_does_not_depend_on_inbox_display_order():
+    assert list(runner.next_pending([msg(10), msg(30), msg(20)])) == [
+        (10, CEO), (20, CEO), (30, CEO)]

@@ -37,7 +37,8 @@ def next_pending(orders):
     if not isinstance(orders, list):
         raise ValueError("Expected an audited Founder order list")
     blocked = []
-    for order in reversed(orders):
+    for order in sorted(orders, key=lambda item: item.get("message_id", 0)
+                        if isinstance(item, dict) else 0):
         if not isinstance(order, dict):
             raise ValueError("Invalid order receipt")
         if order.get("state") == "blocked_no_ceo":
@@ -96,12 +97,14 @@ def run_session(request, *, apply=False, confirmation=None, hours=4,
         return {"status":status,"replies_recorded":done,"requests":requests,
                 "automatic_replay":False,"started_at_boot":False,**fields}
 
-    while clock() < stop_at and done < max_replies:
+    while clock() < stop_at and requests < max_replies:
         try:
             orders = request("GET",url)
             pending = list(next_pending(orders))
         except SessionExpired:
             return summary("session_expired")
+        except HTTPError:
+            raise  # Explicit refusal/server failure is not an uncertain transport answer.
         except (TimeoutError, URLError, OSError):
             lost += 1
             if lost >= MAX_LOST_ANSWERS:
@@ -123,6 +126,8 @@ def run_session(request, *, apply=False, confirmation=None, hours=4,
                 {"employee_id":employee_id})
         except SessionExpired:
             return summary("session_expired")
+        except HTTPError:
+            raise  # Never replay rejected requests, including 403 and 429.
         except (TimeoutError, URLError, OSError):
             # The HTTP answer may have been lost AFTER a successful model run.
             # Never infer success or repeat blindly: next iteration re-reads
@@ -160,7 +165,7 @@ def run_session(request, *, apply=False, confirmation=None, hours=4,
         else:
             raise PermissionError("Unknown AI response state")
         pause(min(interval,max(0,stop_at-clock())))
-    return summary("limit_reached",cause="count" if done >= max_replies else "time",
+    return summary("limit_reached",cause="count" if requests >= max_replies else "time",
                    last_response=last_result)
 
 
@@ -213,7 +218,8 @@ def main(argv=None):
                 with urlopen(req,timeout=75 if method=="POST" else 15) as response:
                     return json.load(response)
             except HTTPError as exc:
-                if exc.code==401: raise SessionExpired() from None
+                if exc.code==401:
+                    raise SessionExpired() from None
                 raise
 
         result=run_session(request,apply=args.apply,confirmation=args.confirm,
@@ -236,10 +242,11 @@ def main(argv=None):
         return 2
     finally:
         # No credentials or bearer are printed or written to a file.
-        try: password=""
-        except NameError: pass
-        try: session["token"]=""
-        except NameError: pass
+        password=""
+        try:
+            session["token"]=""
+        except NameError:
+            pass
     print(json.dumps(result,sort_keys=True))
     return 0 if result["status"] in ("read_only_preview",
                                      "queue_acknowledged_not_executed",

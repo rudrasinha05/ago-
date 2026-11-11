@@ -15,6 +15,21 @@ from test_enterprise_http_21_27 import department
 BASE = '/v1/organization/company'
 
 
+def test_old_pending_order_is_not_hidden_by_recent_acknowledged_history(case):
+    client, headers, info = case
+    founder = headers['founder']
+    make_staff(client, founder)
+    old = send(client, founder, 'Old pending request needs a real response')
+    recent = send(client, founder, 'Recent request already has an acknowledgement')
+    # Queue ordering fixture only; the model/ACK authorization has separate tests.
+    info['db'].execute('UPDATE ago_chat_work_items SET ack_message_id=%s '
+                       'WHERE tenant_id=%s AND message_id=%s',
+                       (recent['id'], info['tenant'], recent['id']))
+    inbox = client.get(BASE+'/chat/orders?limit=1', headers=founder)
+    assert inbox.status_code == 200
+    assert inbox.json()[0]['message_id'] == old['id']
+
+
 def make_staff(client, founder):
     dep = department(client, founder)
     ceo = post(client, '/v1/organization/employees', founder, {
