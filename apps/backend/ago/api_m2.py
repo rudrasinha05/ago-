@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import datetime, timedelta, timezone
 from dataclasses import asdict
 from typing import Annotated, Literal
 from uuid import UUID
@@ -206,7 +207,36 @@ def login(
         )
     except AuthenticationError as exc:
         raise HTTPException(401, "Invalid credentials") from exc
-    return {"access_token": tokens.issue(principal), "token_type": "bearer"}
+    return {"access_token": tokens.issue(principal), "token_type": "bearer",
+            "expires_in": tokens.ttl_seconds}
+
+
+@router.post("/sessions/renew")
+def renew_session(
+    actor: Principal = Depends(authenticated),
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
+    repositories: RepositoryScope = Depends(repository_scope),
+):
+    """Rotate a still-valid session; revoked, expired and inactive tokens cannot renew.
+
+    Authentication is checked afresh against PostgreSQL on every renewal.
+    The old bearer is revoked atomically with issuing the new short-lived one.
+    No stored password, refresh cookie, elevated roles or extended bearer TTL.
+    """
+    if credentials is None:
+        raise HTTPException(401, "Bearer token required")
+    tokens = session_tokens()
+    try:
+        new_token = tokens.issue(actor)
+    except AuthenticationError as exc:
+        raise HTTPException(401, "Fresh interactive sign-in required",
+                            headers={"WWW-Authenticate": "Bearer"}) from exc
+    repositories.resolve(SecurityControlsPort).revoke_session(
+        credentials.credentials, actor.tenant_id,
+        datetime.now(timezone.utc) + timedelta(days=1),
+    )
+    return {"access_token": new_token, "token_type": "bearer",
+            "expires_in": tokens.ttl_seconds}
 
 
 class FactorBegin(StrictInput):
@@ -344,7 +374,9 @@ def sso_session(request: Request, response: Response, db=Depends(db_connection),
     response.delete_cookie('ago_sso_result', path='/v1/security/sso')
     response.delete_cookie('ago_sso_browser', path='/v1/security/sso')
     response.headers['Cache-Control'] = 'no-store'
-    return {'access_token': session_tokens().issue(actor), 'token_type': 'bearer'}
+    tokens = session_tokens()
+    return {'access_token': tokens.issue(actor), 'token_type': 'bearer',
+            'expires_in': tokens.ttl_seconds}
 
 
 @router.post("/organization/departments")

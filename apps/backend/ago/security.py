@@ -12,8 +12,11 @@ import hmac
 import json
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+
+
+MAX_INTERACTIVE_SESSION_AGE_SECONDS = 8 * 60 * 60
 
 
 class AuthenticationError(ValueError):
@@ -62,6 +65,7 @@ class Principal:
     tenant_id: str
     roles: tuple[str, ...]
     session_version: int = 0
+    session_started_at: int | None = field(default=None, compare=False)
 
 
 class SessionTokens:
@@ -80,9 +84,13 @@ class SessionTokens:
         if not principal.subject or not principal.tenant_id or not principal.roles:
             raise ValueError("Principal must have subject, tenant and roles")
         issued = int(time.time()) if now is None else now
+        started = issued if principal.session_started_at is None else principal.session_started_at
+        if (type(started) is not int or started > issued
+                or issued - started >= MAX_INTERACTIVE_SESSION_AGE_SECONDS):
+            raise AuthenticationError("Fresh interactive sign-in required")
         payload = {
             "iss": self.issuer, "sub": principal.subject, "tenant": principal.tenant_id,
-            "roles": list(principal.roles), "iat": issued,
+            "roles": list(principal.roles), "iat": issued, "auth_at": started,
             "exp": issued + self.ttl_seconds, "nonce": secrets.token_hex(12),
             "version": principal.session_version,
         }
@@ -106,6 +114,9 @@ class SessionTokens:
                 or type(data.get("exp")) is not int
                 or not data["iat"] <= current < data["exp"]
                 or data["exp"] - data["iat"] > self.ttl_seconds
+                or type(data.get("auth_at", data["iat"])) is not int
+                or not data.get("auth_at", data["iat"]) <= data["iat"]
+                or data["iat"] - data.get("auth_at", data["iat"]) >= MAX_INTERACTIVE_SESSION_AGE_SECONDS
                 or not isinstance(data.get("sub"), str) or not data["sub"]
                 or not isinstance(data.get("tenant"), str) or not data["tenant"]
                 or not isinstance(data.get("roles"), list) or not data["roles"]
@@ -113,7 +124,8 @@ class SessionTokens:
                 or type(data.get('version', 0)) is not int or data.get('version', 0) < 0
             ):
                 raise AuthenticationError("Invalid or expired token")
-            return Principal(data["sub"], data["tenant"], tuple(data["roles"]), data.get('version', 0))
+            return Principal(data["sub"], data["tenant"], tuple(data["roles"]),
+                             data.get('version', 0), data.get("auth_at", data["iat"]))
         except (ValueError, TypeError, KeyError, UnicodeError, OverflowError, binascii.Error) as exc:
             raise AuthenticationError("Invalid token") from exc
 

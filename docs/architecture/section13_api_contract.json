@@ -293,6 +293,7 @@
     "POST /v1/security/tickets": "c5833db0922da21459feb46dac4b2569c7470100c44fb6852a554b3b6f8cf778",
     "POST /v1/security/tickets/redeem": "91eddd80ca5c2037cb59afd7fc6f045442ca089b72fb24a0f51ba842ddcb7205",
     "POST /v1/sessions": "acc4302d28e09504c96c3f0fd0aade4cdafc3ed59077d301d446e12e6012be68",
+    "POST /v1/sessions/renew": "b3f772854dc770087e85165fe3282d98e847a95aa933a57025f45780be4ac935",
     "POST /v1/tasks": "58fad23e3bbdee9ec02081cf50af84ede15421113336222513b915617b995615",
     "POST /v1/tasks/{task_id}/approval": "3d22b376d09c27f0b71b07addf607931bc21af76da686498589c4da6e2a045d4",
     "POST /v1/tasks/{task_id}/finish": "1d1c7e782afedf0b7c68e673cfb97979036c45d1786e8ca4986839c48c0dc250",

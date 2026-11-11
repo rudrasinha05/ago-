@@ -97,13 +97,68 @@ export class SessionClient {
   #token = "";
   #generation = 0;
   #pending = new Set();
+  #expiresAt = 0;
+  #renewTimer = null;
+  #renewal = null;
   constructor({ fetchImpl = globalThis.fetch?.bind(globalThis), onExpire = () => {} } = {}) {
     if (typeof fetchImpl !== "function") throw new Error("Fetch required");
     this.fetchImpl = fetchImpl;
     this.onExpire = onExpire;
   }
   get authenticated() { return Boolean(this.#token); }
-  clear() { this.#token = ""; this.#generation++; for (const controller of this.#pending) controller.abort(); this.#pending.clear(); }
+  clear() {
+    this.#token = ""; this.#expiresAt = 0; this.#generation++; this.#renewal = null;
+    if (this.#renewTimer !== null) clearTimeout(this.#renewTimer);
+    this.#renewTimer = null;
+    for (const controller of this.#pending) controller.abort();
+    this.#pending.clear();
+  }
+  #acceptSession(session) {
+    const ttl = Number(session?.expires_in ?? 900);
+    if (typeof session?.access_token !== "string" || !session.access_token
+      || !Number.isInteger(ttl) || ttl < 1 || ttl > 86400)
+      throw new Error("Invalid session response");
+    this.#token = session.access_token;
+    this.#expiresAt = Date.now() + ttl * 1000;
+    this.#scheduleRenewal();
+  }
+  #scheduleRenewal() {
+    if (this.#renewTimer !== null) clearTimeout(this.#renewTimer);
+    this.#renewTimer = null;
+    if (!this.#token) return;
+    const remainingBeforeRenew = this.#expiresAt - Date.now() - 120000;
+    const delay = remainingBeforeRenew > 0
+      ? Math.min(60000, remainingBeforeRenew) : 30000;
+    const timer = setTimeout(async () => {
+      if (this.#renewTimer !== timer) return;
+      this.#renewTimer = null;
+      if (!this.#token) return;
+      // A backgrounded browser is not an unattended worker. Require a live
+      // tab to renew; returning after expiry still requires fresh sign-in.
+      if (typeof document === "undefined" || document.visibilityState !== "hidden") {
+        try { await this.renewIfNeeded(); } catch { /* Next tick may retry transient failures. */ }
+      }
+      if (this.#token && this.#renewTimer === null) this.#scheduleRenewal();
+    }, Math.max(1000, delay));
+    timer.unref?.(); // Keep Node test processes free of idle background timers.
+    this.#renewTimer = timer;
+  }
+  async renewIfNeeded() {
+    if (this.#renewal) return this.#renewal;
+    if (!this.#token || Date.now() < this.#expiresAt - 120000) return false;
+    const generation = this.#generation, priorToken = this.#token;
+    const promise = (async () => {
+      // No password reuse. The server checks revocation, account activity,
+      // tenant and session version before rotating the current bearer.
+      const response = await this.request("/v1/sessions/renew", {method: "POST"});
+      if (generation !== this.#generation || this.#token !== priorToken) return false;
+      this.#acceptSession(response);
+      return true;
+    })();
+    this.#renewal = promise;
+    try { return await promise; }
+    finally { if (this.#renewal === promise) this.#renewal = null; }
+  }
   async logout() {
     const token = this.#token;
     this.clear();
@@ -126,9 +181,7 @@ export class SessionClient {
     const session = await this.request("/v1/sessions", {
       method: "POST", body: { tenant_id: tenant, email, password, ...(factorCode ? {factor_code:factorCode} : {}) },
     });
-    if (typeof session?.access_token !== "string" || !session.access_token)
-      throw new Error("Invalid session response");
-    this.#token = session.access_token;
+    this.#acceptSession(session);
   }
   async startSSO(tenant) {
     uuid(tenant);
@@ -152,14 +205,14 @@ export class SessionClient {
     if (response.status === 204 || !response.ok) return false;
     const session = await response.json();
     if (generation !== this.#generation || typeof session.access_token !== 'string' || !session.access_token) return false;
-    this.#token = session.access_token;
+    this.#acceptSession(session);
     return true;
   }
   async request(path, { method = "GET", body, timeoutMs = 15000 } = {}) {
     if (typeof path !== "string" || !path.startsWith("/v1/")
       || path.includes("//") || path.includes("\\") || path.includes("#"))
       throw new Error("API requests must use a same-origin /v1 route");
-    const generation = this.#generation;
+    const generation = this.#generation, requestToken = this.#token;
     const controller = new AbortController();
     this.#pending.add(controller);
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -175,7 +228,9 @@ export class SessionClient {
       const payload = await response.json().catch(() => ({}));
       if (generation !== this.#generation) throw new ApiError(0, "Session changed");
       if (!response.ok) {
-        if (response.status === 401 && path !== "/v1/sessions") {
+        if (response.status === 401 && path !== "/v1/sessions"
+          && requestToken === this.#token
+          && (path === "/v1/sessions/renew" || !this.#renewal)) {
           this.clear();
           this.onExpire();
         }
