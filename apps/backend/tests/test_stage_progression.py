@@ -114,7 +114,8 @@ class Company:
             assert task_id in done['approved_task_ids'], done
         return task_id
 
-    def run(self, name, *, fail=None, board_stop=False, expected=200):
+    def run(self, name, *, fail=None, board_stop=False, board_seat='Risk & Compliance',
+            board_reason='No data retention rule', expected=200):
         task_id = self.approve(name)
         assignee = str(self.stage(name)['assignee_id'])
 
@@ -125,10 +126,10 @@ class Company:
             result = {'kind': 'local_company_governed_handoff', 'handoffs': [
                 {'role': 'employee', 'employee_id': assignee, 'draft': name+' deliverable'}]}
             if board_stop:
-                result.update(board_blocked=True, blocked_by_board_seat='Risk & Compliance',
+                result.update(board_blocked=True, blocked_by_board_seat=board_seat,
                               board_block_reason='deny', board_recommendations=[
-                    {'seat': 'Risk & Compliance', 'recommendation': 'deny',
-                     'denial_reason': 'No data retention rule'}])
+                    {'seat': board_seat, 'recommendation': 'deny',
+                     'denial_reason': board_reason}])
             return result
 
         self.monkeypatch.setattr(api_agents, 'optional_model_handlers',
@@ -286,19 +287,24 @@ def test_failed_stage_is_recovered_by_the_ai_manager_within_a_limit(company):
     # A failed stage never opens the next one.
     assert c.stage('implementation')['plan_step_id'] is None
 
-    # 2. Board stop -> revision task carrying the Board's feedback.
-    #    The denial first stays on the stage (the Founder can read it and may
-    #    still allow the project); the next explicit continue revises it.
+    # 2. Board DENY -> immediate proposed revision with the Board's exact
+    #    feedback. No extra Founder click to route an actionable rejection.
     second, stopped = c.run('architecture', board_stop=True)
-    shown = stopped['continuation']
-    assert (shown['action'], shown['state'], shown['needs_founder']) == (
-        'none', 'board_stopped', False)
-    assert 'Risk & Compliance' in shown['reason']
-    assert str(c.stage('architecture')['task_id']) == second
-    revision = post(c.client, c.url+'/continue', c.founder)
+    revision = stopped['continuation']
     assert (revision['action'], revision['recovery_kind']) == ('recovered_stage', 'board_revision')
     assert revision['failed_task_id'] == second and revision['ai_recovery_attempt'] == 2
     assert 'Risk & Compliance: No data retention rule' in revision['reason']
+    assert str(c.stage('architecture')['task_id']) == revision['task_id'] != second
+    assert c.stage('architecture')['status'] == 'proposed'
+    assert revision['task_approved'] is False and revision['run_started'] is False
+    assert revision['followup']['owner_id'] == str(c.stage('architecture')['assignee_id'])
+    assert revision['followup']['status'] == 'assigned'
+    assert revision['followup']['source_task_id'] == second
+    assert revision['followup']['work_task_id'] == revision['task_id']
+    assert 'No data retention rule' in revision['followup']['feedback']
+    # Reobserving the original refusal cannot create another task or spend.
+    assert post(c.client, c.url+'/continue', c.founder)['action'] == 'none'
+    assert len(c.recoveries('architecture')) == 2
 
     rows = c.recoveries('architecture')
     assert [str(r['failed_task_id']) for r in rows] == [first, second]
@@ -337,6 +343,68 @@ def test_failed_stage_is_recovered_by_the_ai_manager_within_a_limit(company):
     c.run('architecture')
     assert c.qa('architecture')['continuation']['stage'] == 'implementation'
     assert c.stage('implementation')['status'] == 'proposed'
+
+
+
+def test_quality_board_deny_routes_exact_tests_missing_feedback_to_implementer(company):
+    """Live Founder case: Quality & Release DENY is a corrective work request,
+    not a permission to skip tests or mark the stage QA-passed.
+
+    Real PostgreSQL/task/Board evidence; the worker and QA responses are injected
+    test doubles, NOT actual Ollama or executable generated-code tests.
+    """
+    c = company
+    for stage in ('discovery', 'architecture'):
+        c.run(stage)
+        assert c.qa(stage)['verdict'] == 'pass'
+    reason = 'The implementation stage is incomplete as the tests are not executed.'
+    denied_id, blocked = c.run(
+        'implementation', board_stop=True, board_seat='Quality & Release',
+        board_reason=reason)
+    continuation = blocked['continuation']
+    new_id = continuation['task_id']
+    assert continuation['action'] == 'recovered_stage'
+    assert continuation['recovery_kind'] == 'board_revision'
+    assert continuation['needs_founder'] is False
+    assert continuation['task_approved'] is False
+    assert continuation['run_started'] is False
+    assert continuation['failed_task_id'] == denied_id
+    assert str(c.stage('implementation')['task_id']) == new_id
+    assert c.stage('implementation')['status'] == 'proposed'
+    assert c.stage('quality')['plan_step_id'] is None
+    assert c.client.get(c.url, headers=c.founder).json()['qa_passed_stages'] == 2
+
+    followup = continuation['followup']
+    assert followup['code'] == 'board_revision'
+    assert followup['source_task_id'] == denied_id
+    assert followup['work_task_id'] == new_id
+    assert followup['owner_id'] == str(c.stage('implementation')['assignee_id'])
+    assert followup['status'] == 'assigned' and followup['executed'] is False
+    assert 'Quality & Release: ' + reason in followup['feedback']
+    assert 'Quality & Release: ' + reason in CompanyOllamaChainQueries(
+        c.db).revision_notes(tenant_id=c.tenant, task_id=new_id)
+    old = c.db.execute(
+        "SELECT t.status,r.result FROM ago_governed_tasks t "
+        "JOIN ago_agent_runs r ON r.tenant_id=t.tenant_id AND r.task_id=t.id "
+        "WHERE t.tenant_id=%s AND t.id=%s", (c.tenant, denied_id)).fetchone()
+    assert old['status'] == 'failed'
+    assert old['result']['board_blocked'] is True
+    assert old['result']['blocked_by_board_seat'] == 'Quality & Release'
+    assert c.db.execute(
+        "SELECT count(*) AS n FROM ago_agent_runs WHERE tenant_id=%s AND task_id=%s",
+        (c.tenant, new_id)).fetchone()['n'] == 0
+    # Manager cannot silently approve/run or reopen the next stage.
+    assert post(c.client, c.url+'/continue', c.founder)['action'] == 'none'
+    assert len(c.recoveries('implementation')) == 1
+
+    corrected_id, corrected_run = c.run('implementation')
+    assert corrected_id == new_id
+    assert corrected_run['delivery_status'] == 'completed'
+    assert c.stage('quality')['plan_step_id'] is None
+    assert c.client.get(c.url, headers=c.founder).json()['qa_passed_stages'] == 2
+    # Only an independently recorded PASS opens quality.
+    assert c.qa('implementation')['verdict'] == 'pass'
+    assert c.stage('quality')['plan_step_id'] is not None
 
 
 def test_ai_manager_retries_a_timeout_but_never_a_credit_failure(company):

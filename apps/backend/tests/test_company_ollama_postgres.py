@@ -298,20 +298,32 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     """, (info["tenant"], task_id, "AGO verified local inference for %")).fetchone()
     assert before["total"] == expected_count
 
-    recorded.record_verified_handoff(
-        **evidence_args, role="ceo", employee_id=ceo, blocked=False,
-    )
-    with pytest.raises(PermissionError, match="Conflicting completed"):
-        recorded.record_verified_handoff(
-            **evidence_args, role="ceo", employee_id=ceo, blocked=True,
-        )
     if deny_risk:
-        # Durable veto prevents a late quality/PM/worker callback from
-        # fabricating downstream progress after risk execution stopped.
-        with pytest.raises(PermissionError, match="Prior real AI role"):
+        # The Board denial now immediately creates a NEW proposed corrective
+        # task, preserving the old run as evidence. Once the plan step points
+        # at new work, even a duplicate old CEO callback must fail closed: a
+        # superseded task cannot manufacture a fresh Brain/workforce event.
+        assert response['continuation']['action'] == 'recovered_stage'
+        assert response['continuation']['recovery_kind'] == 'board_revision'
+        assert response['continuation']['failed_task_id'] == task_id
+        for role, identity, blocked in (
+            ("ceo", ceo, False), ("ceo", ceo, True),
+            ("quality", quality, False),
+        ):
+            with pytest.raises(PermissionError, match="Verified worker event"):
+                recorded.record_verified_handoff(
+                    **evidence_args, role=role,
+                    employee_id=identity, blocked=blocked,
+                )
+    else:
+        # A completed non-denied task still permits an idempotent duplicate
+        # matching its historical callback while rejecting conflicts.
+        recorded.record_verified_handoff(
+            **evidence_args, role="ceo", employee_id=ceo, blocked=False,
+        )
+        with pytest.raises(PermissionError, match="Conflicting completed"):
             recorded.record_verified_handoff(
-                **evidence_args, role="quality",
-                employee_id=quality, blocked=False,
+                **evidence_args, role="ceo", employee_id=ceo, blocked=True,
             )
     duplicate_count = info["db"].execute("""
         SELECT count(*) AS n FROM ago_company_chat
@@ -361,7 +373,15 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     assert report["kind"]==("blocker" if deny_risk else "module_complete")
     details=client.get(BASE+"/projects/"+project["id"],headers=founder)
     assert details.status_code==200,details.text
-    chain=details.json()["stages"][0]["founder_agent_result"]
+    stage = details.json()["stages"][0]
+    chain = stage["founder_agent_result"]
+    if deny_risk:
+        # The stage now points to a NEW proposed correction: the current
+        # proposal has no AI run yet. Immutable old Board evidence remains
+        # in the recorded run and is never misattributed to new work.
+        assert chain is None
+        assert stage["task_id"] == response["continuation"]["task_id"]
+        chain = saved["result"]
     assert chain["roles_completed"]==expected_count
     assert chain["handoffs"][0]["employee_id"]==ceo
     assert chain["board_review_mode"]==(
