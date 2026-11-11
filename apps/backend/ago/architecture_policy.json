@@ -124,6 +124,7 @@
       "imports": [
         "api_contracts",
         "api_m2",
+        "model_handlers",
         "repository_ports"
       ]
     },
