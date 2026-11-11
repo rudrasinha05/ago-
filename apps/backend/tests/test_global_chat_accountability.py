@@ -168,6 +168,27 @@ def test_attached_task_must_be_existing_governed_work_for_actual_assignee(case):
     assert assigned['status']=='task_linked'
 
 
+
+def test_founder_sees_durable_ceo_order_inbox_and_reviewer_cannot(case):
+    client,headers,info=case
+    founder,reviewer=headers['founder'],headers['reviewer']
+    ceo,worker=make_staff(client,founder)
+    one=send(client,founder,'Founder order: verify admission role permissions',
+             mentions=[worker],intent='order')
+    two=send(client,founder,'CEO must respond to this question too.')
+    inbox=client.get(BASE+'/chat/orders',headers=founder)
+    assert inbox.status_code==200, inbox.text
+    rows=inbox.json()
+    assert [r['message_id'] for r in rows[:2]]==[two['id'],one['id']]
+    assert rows[0]['accountable_ceo_id']==ceo
+    assert rows[0]['awaiting_ack_count']==1
+    assert rows[1]['awaiting_ack_count']==2
+    assert {x['assignee_id'] for x in rows[1]['work_items']}=={ceo,worker}
+    assert all(x['linked_task_id'] is None for x in rows[1]['work_items'])
+    assert client.get(BASE+'/chat/orders',headers=reviewer).status_code==403
+    assert client.get(BASE+'/chat/orders?limit=101',headers=founder).status_code==422
+
+
 def test_signed_human_addressee_ack_only_self_not_fake_ai(case):
     client,headers,info=case
     founder,reviewer=headers['founder'],headers['reviewer']
