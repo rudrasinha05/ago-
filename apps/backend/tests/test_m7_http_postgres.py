@@ -65,6 +65,34 @@ def post(client, path, headers, data=None, expected=200):
     return response.json()
 
 
+def test_session_renewal_rotates_token_and_honors_revocation(case):
+    client, headers, info = case
+    current = headers["founder"]
+    original = current["Authorization"]
+    renewed = client.post("/v1/sessions/renew", headers=current)
+    assert renewed.status_code == 200, renewed.text
+    new_token = renewed.json()["access_token"]
+    assert new_token and new_token != original.removeprefix("Bearer ")
+    assert renewed.json()["expires_in"] == api_m2.session_tokens().ttl_seconds
+    rotated = {"Authorization": "Bearer " + new_token}
+    assert client.get("/v1/console/me", headers=current).status_code == 401
+    assert client.post("/v1/sessions/renew", headers=current).status_code == 401
+    assert client.get("/v1/console/me", headers=rotated).status_code == 200
+    assert client.post("/v1/console/logout", headers=rotated).status_code == 200
+    assert client.post("/v1/sessions/renew", headers=rotated).status_code == 401
+    assert client.post("/v1/sessions/renew").status_code == 401
+
+
+def test_disabled_user_cannot_renew_session(case):
+    client, headers, info = case
+    founder_id = info["founder_id"]
+    info["db"].execute(
+        "UPDATE ago_users SET active=false WHERE tenant_id=%s AND id=%s",
+        (info["tenant"], founder_id),
+    )
+    assert client.post("/v1/sessions/renew", headers=headers["founder"]).status_code == 401
+
+
 def profile(*, backlog_limit=5, qa_target_pct=85, budget_alert_pct=80):
     return {
         "qa_target_pct": qa_target_pct,
