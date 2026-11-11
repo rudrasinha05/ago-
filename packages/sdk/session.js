@@ -228,7 +228,9 @@ export class SessionClient {
       const payload = await response.json().catch(() => ({}));
       if (generation !== this.#generation) throw new ApiError(0, "Session changed");
       if (!response.ok) {
-        if (response.status === 401 && path !== "/v1/sessions" && requestToken === this.#token) {
+        if (response.status === 401 && path !== "/v1/sessions"
+          && requestToken === this.#token
+          && (path === "/v1/sessions/renew" || !this.#renewal)) {
           this.clear();
           this.onExpire();
         }
