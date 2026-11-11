@@ -193,12 +193,14 @@ class GlobalChatOrders:
             WHERE o.tenant_id=%s AND o.founder_order
             ORDER BY o.message_id DESC LIMIT %s
         """,(tenant_id,limit)).fetchall()
-        return [self.details(tenant_id,row['message_id']) | {
-            "author_name":row['author_name'], "body":row['body'],
-            "awaiting_ack_count":sum(
-                w['ack_message_id'] is None
-                for w in self.details(tenant_id,row['message_id'])['work_items']),
-        } for row in records]
+        items=[]
+        for row in records:
+            item=self.details(tenant_id,row['message_id'])
+            item.update(author_name=row['author_name'], body=row['body'])
+            item['awaiting_ack_count']=sum(
+                w['ack_message_id'] is None for w in item['work_items'])
+            items.append(item)
+        return items
 
     def record_human_acknowledgement(self, *, tenant_id, actor_id,
                                      parent_id, response_id):
