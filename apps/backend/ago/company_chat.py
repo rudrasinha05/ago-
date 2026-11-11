@@ -160,6 +160,31 @@ class GlobalChatOrders:
         """,(row["id"],tenant_id,message_id))
         return self.details(tenant_id,message_id)
 
+    @staticmethod
+    def _with_task_evidence(worker: dict) -> dict:
+        """Live task status is read from governed records, not chat claims."""
+        row=dict(worker)
+        task=row.get('task_status')
+        qa=row.get('qa_verdict')
+        if row.get('linked_task_id') is None:
+            row['evidence_state'] = (
+                'acknowledged' if row.get('ack_message_id') else 'awaiting_ack')
+        elif task=='running':
+            row['evidence_state']='working'
+        elif task=='failed':
+            row['evidence_state']='failed'
+        elif task=='completed' and qa=='pass':
+            row['evidence_state']='qa_passed'
+        elif task=='completed' and qa=='fail':
+            row['evidence_state']='qa_failed'
+        elif task=='completed':
+            row['evidence_state']='qa_pending'
+        else:
+            row['evidence_state']='task_linked'
+        row['has_execution_evidence']=task in ('running','completed','failed')
+        row['release_verified']=False
+        return row
+
     def details(self, tenant_id, message_id):
         order = self.db.execute("""
             SELECT message_id,founder_order,accountable_ceo_id,intent,mention_ids,
@@ -169,16 +194,27 @@ class GlobalChatOrders:
         if order is None:
             return None
         workers = self.db.execute("""
-            SELECT w.id,w.assignee_id,e.name AS assignee_name,w.accountable_ceo_id,
-                   w.status,w.linked_task_id,w.ack_message_id,w.updated_at
+            SELECT w.id,w.assignee_id,e.name AS assignee_name,e.kind AS assignee_kind,
+                   w.accountable_ceo_id,w.status,w.linked_task_id,
+                   w.ack_message_id,w.updated_at,t.status AS task_status,
+                   q.verdict AS qa_verdict
             FROM ago_chat_work_items w
             JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+            LEFT JOIN ago_governed_tasks t ON t.tenant_id=w.tenant_id
+                 AND t.id=w.linked_task_id
+            LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id
+                 AND q.task_id=t.id
             WHERE w.tenant_id=%s AND w.message_id=%s ORDER BY e.name,w.id
         """,(tenant_id,message_id)).fetchall()
-        return {**dict(order),"work_items":[dict(x) for x in workers],
+        return {**dict(order),
+                "work_items":[self._with_task_evidence(x) for x in workers],
                 "verified_acknowledgements":sum(
                     w["ack_message_id"] is not None for w in workers),
-                "system_receipt_only":True}
+                "real_ai_replies":sum(
+                    w["ack_message_id"] is not None and w["assignee_kind"]=='ai'
+                    for w in workers),
+                "system_receipt_only":not any(
+                    w["ack_message_id"] is not None for w in workers)}
 
     def inbox(self, tenant_id, *, limit=50):
         """Founder-only durable CEO order queue; no synthetic completion."""
@@ -470,16 +506,23 @@ class CompanyChat:
             """, (tenant,ids)).fetchall()
             work_rows = self.db.execute("""
                 SELECT w.message_id,w.id,w.assignee_id,e.name AS assignee_name,
-                       w.status,w.linked_task_id,w.ack_message_id
+                       e.kind AS assignee_kind,w.status,w.linked_task_id,
+                       w.ack_message_id,t.status AS task_status,
+                       q.verdict AS qa_verdict
                 FROM ago_chat_work_items w
                 JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+                LEFT JOIN ago_governed_tasks t ON t.tenant_id=w.tenant_id
+                     AND t.id=w.linked_task_id
+                LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id
+                     AND q.task_id=t.id
                 WHERE w.tenant_id=%s AND w.message_id=ANY(%s::bigint[])
                 ORDER BY e.name,w.id
             """, (tenant,ids)).fetchall()
             orders = {r['message_id']: {**dict(r), 'work_items': [],
                        'system_receipt_only': True} for r in order_rows}
             for work in work_rows:
-                orders[work['message_id']]['work_items'].append(dict(work))
+                orders[work['message_id']]['work_items'].append(
+                    GlobalChatOrders._with_task_evidence(work))
             for item in items:
                 if item['id'] in orders:
                     order = orders[item['id']]
@@ -487,6 +530,12 @@ class CompanyChat:
                         w['ack_message_id'] is not None for w in order['work_items'])
                     order['waiting_for_agent_ack'] = sum(
                         w['ack_message_id'] is None for w in order['work_items'])
+                    order['real_ai_replies'] = sum(
+                        w['ack_message_id'] is not None
+                        and w['assignee_kind']=='ai'
+                        for w in order['work_items'])
+                    order['system_receipt_only'] = (
+                        order['verified_acknowledgements']==0)
                     item['order'] = order
         return {'items': items,
                 'next_before': rows[limit-1]['id'] if len(rows)>limit else None}
