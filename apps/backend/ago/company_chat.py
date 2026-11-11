@@ -157,12 +157,24 @@ class CompanyChat:
                 self._record_status_reply(actor.tenant_id, channel, row['id'])
             result = dict(row)
             if channel == 'global':
-                routing = GlobalChatOrders(self.db).route(
+                global_orders = GlobalChatOrders(self.db)
+                routing = global_orders.route(
                     tenant_id=actor.tenant_id, author_id=actor.subject,
                     message_id=row['id'], body=body, mentions=mentions,
                     intent=intent, founder='founder' in actor.roles)
                 if routing is not None:
                     result['order'] = routing
+                if reply_to is not None:
+                    # A human addressee may reply to the original order or its
+                    # receipt. Only signed matching human identity is an ACK.
+                    original = self.db.execute("""
+                        SELECT message_id FROM ago_chat_orders
+                        WHERE tenant_id=%s AND receipt_message_id=%s
+                    """,(actor.tenant_id,reply_to)).fetchone()
+                    global_orders.record_human_acknowledgement(
+                        tenant_id=actor.tenant_id,actor_id=actor.subject,
+                        parent_id=original['message_id'] if original else reply_to,
+                        response_id=row['id'])
             return result
 
     def link_chat_task(self, actor, message_id: int, employee_id: str,
