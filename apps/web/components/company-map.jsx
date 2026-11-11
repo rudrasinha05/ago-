@@ -458,7 +458,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     return <article key={m.id} id={'chat-'+m.id} data-reply-to={m.reply_to||undefined}
       className={'chat-message '+m.kind+(depth?' chat-thread-reply':'')} style={{'--thread-depth':Math.min(depth,5)}}>
       <header><strong>{m.author_name}</strong><time dateTime={m.created_at}>{time(m.created_at)}</time></header>
-      <small>{m.kind==='status'?'Task status · ':''}{m.channel==='global'?'Global':layout.nodes.find(n=>n.key===m.channel)?.name||'Company'}</small>
+      <small>{m.kind==='status'?'Recorded work event · ':''}{m.channel==='global'?'Global':layout.nodes.find(n=>n.key===m.channel)?.name||'Company'}</small>
       {m.reply_to&&<div className="chat-reply-context">↳ Reply to {m.reply_author||'message #'+m.reply_to}{!depth&&<span> · {m.reply_body?.slice(0,140)||'Older message'}</span>}</div>}
       <p>{m.body}</p>
       {m.order&&<div className="chat-order-evidence" aria-label={'Order accountability for message '+m.id}>
