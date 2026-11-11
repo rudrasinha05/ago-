@@ -201,3 +201,80 @@ def test_mobile_menu_navigates_without_full_reload(browser, tenant, app_url):
         expect(page.locator("#login-form")).to_have_count(0)
     finally:
         context.close()
+
+
+def test_global_chat_founder_order_ceo_and_tagged_agent_persist_without_fake_work(
+        page,tenant,app_url):
+    """Real Chromium acceptance: reply receipt and tags are durable, not simulated."""
+    founder_mail,password,_=tenant["founder"]
+    login=page.request.post(app_url+"/v1/sessions",data={
+        "tenant_id":tenant["id"],"email":founder_mail,"password":password,
+    })
+    assert login.status==200, login.text()
+    token=login.json()["access_token"]
+    def send_api(path,payload):
+        result=page.request.post(app_url+path,
+            headers={"Authorization":"Bearer "+token},data=payload)
+        assert result.status==200,(path,result.status,result.text())
+        return result.json()
+
+    department=send_api("/v1/organization/departments",{
+        "name":"Chat Acceptance "+tenant["id"][:7],
+    })["id"]
+    ceo=send_api("/v1/organization/employees",{
+        "department_id":department,"name":"CEO Chat Acceptance",
+        "kind":"ai",
+    })["id"]
+    engineer=send_api("/v1/organization/employees",{
+        "department_id":department,"name":"Engineer Chat Acceptance",
+        "kind":"ai","manager_id":ceo,
+    })["id"]
+    send_api("/v1/organization/company/board/appoint",{
+        "seat":"Strategy & Vision","employee_id":ceo,
+    })
+
+    sign_in(page,app_url,tenant)
+    page.get_by_role("navigation",name="Company control center sections").get_by_role(
+        "link",name="Organization & Chat",exact=True,
+    ).click()
+    expect(page.locator("#company-message")).to_be_visible()
+    page.locator("#chat-order-intent").select_option("order")
+    page.locator("#chat-tag-agent").select_option(engineer)
+    expect(page.locator(".chat-mention-tag")).to_contain_text(
+        "@Engineer Chat Acceptance")
+    request="Founder browser acceptance: verify this feature with actual evidence"
+    page.locator("#company-message").fill(request)
+    page.locator("form.company-compose").get_by_role(
+        "button",name="Send",exact=True,
+    ).click()
+    original=page.locator(".chat-message").filter(has_text=request).first
+    expect(original).to_be_visible(timeout=15000)
+    expect(original.locator(".chat-order-evidence")).to_contain_text(
+        "CEO assigned",timeout=15000)
+    expect(original.locator(".chat-order-evidence")).to_contain_text(
+        "Engineer Chat Acceptance")
+    expect(original.locator(".chat-order-evidence")).to_contain_text(
+        "System receipt only")
+    expect(page.locator(".chat-ceo-inbox summary")).to_contain_text(
+        "pending orders",timeout=15000)
+    # Frontend must never claim a local AI response when the model is disabled
+    # or unavailable; the PostgreSQL order/target still exists.
+    with psycopg.connect(os.environ["AGO_TEST_POSTGRES_DSN"],
+                         row_factory=dict_row) as db:
+        order=db.execute("""
+            SELECT o.message_id,o.accountable_ceo_id,
+                   c.body FROM ago_chat_orders o
+            JOIN ago_company_chat c ON c.tenant_id=o.tenant_id
+              AND c.id=o.message_id
+            WHERE o.tenant_id=%s AND c.body=%s
+        """,(tenant["id"],request)).fetchone()
+        assert order and str(order["accountable_ceo_id"])==ceo
+        assigned=db.execute("""
+            SELECT assignee_id,ack_message_id,linked_task_id
+            FROM ago_chat_work_items
+            WHERE tenant_id=%s AND message_id=%s
+        """,(tenant["id"],order["message_id"])).fetchall()
+        assert {str(x["assignee_id"]) for x in assigned}=={ceo,engineer}
+        assert all(x["ack_message_id"] is None
+                   and x["linked_task_id"] is None for x in assigned)
+
