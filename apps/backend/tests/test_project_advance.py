@@ -274,8 +274,11 @@ def test_runner_never_repeats_blindly_when_answers_are_lost_or_wrong():
             session([refusal, {**base, 'done': True}])
     expired, posts, _ = session([runner.SessionExpired()])
     assert expired['status'] == 'session_expired' and len(posts) == 1
-    twice, _, _ = session([runner.SessionExpired(), runner.SessionExpired()], relogin=lambda: None)
-    assert twice['status'] == 'session_expired'
+    # A 401 may be explicit revocation, not just expiry. Never silently
+    # reauthenticate and continue work from a cached password.
+    revoked, posts, _ = session([
+        runner.SessionExpired(), {**base, 'done': True, 'step': 'done'}])
+    assert revoked['status'] == 'session_expired' and len(posts) == 1
     unclear, posts, _ = session([{**base, 'step': 'qa'}]*3)
     assert (unclear['status'], unclear['step'], len(posts)) == ('founder_needed', 'qa', 3)
     timed, posts, _ = session([{**base, 'step': 'running'}]*400, hours=1)
