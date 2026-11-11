@@ -226,7 +226,11 @@ def renew_session(
     if credentials is None:
         raise HTTPException(401, "Bearer token required")
     tokens = session_tokens()
-    new_token = tokens.issue(actor)
+    try:
+        new_token = tokens.issue(actor)
+    except AuthenticationError as exc:
+        raise HTTPException(401, "Fresh interactive sign-in required",
+                            headers={"WWW-Authenticate": "Bearer"}) from exc
     repositories.resolve(SecurityControlsPort).revoke_session(
         credentials.credentials, actor.tenant_id,
         datetime.now(timezone.utc) + timedelta(days=1),
