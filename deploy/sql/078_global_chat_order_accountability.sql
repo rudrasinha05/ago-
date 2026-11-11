@@ -1,16 +1,19 @@
 -- 078: Founder-visible Global Chat order accountability. An intake receipt is NOT AI acknowledgement.
 -- The worker's actual response/execution must be verified separately.
+ALTER TABLE ago_company_chat ADD CONSTRAINT ago_company_chat_tenant_message_unique UNIQUE (tenant_id,id);
 CREATE TABLE ago_chat_orders (
  tenant_id uuid NOT NULL REFERENCES ago_tenants(id) ON DELETE CASCADE,
- message_id bigint NOT NULL REFERENCES ago_company_chat(id),
+ message_id bigint NOT NULL,
  founder_order boolean NOT NULL,
  accountable_ceo_id uuid,
  intent text NOT NULL CHECK (intent IN ('message','order')),
  mention_ids jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(mention_ids)='array'),
- receipt_message_id bigint REFERENCES ago_company_chat(id),
+ receipt_message_id bigint,
  state text NOT NULL CHECK (state IN ('awaiting_ack','blocked_no_ceo')),
  created_at timestamptz NOT NULL DEFAULT now(),
  PRIMARY KEY (tenant_id,message_id),
+ FOREIGN KEY (tenant_id,message_id) REFERENCES ago_company_chat(tenant_id,id),
+ FOREIGN KEY (tenant_id,receipt_message_id) REFERENCES ago_company_chat(tenant_id,id),
  FOREIGN KEY (tenant_id,accountable_ceo_id) REFERENCES ago_employees(tenant_id,id)
 );
 CREATE INDEX ago_chat_orders_ceo ON ago_chat_orders(tenant_id,accountable_ceo_id,message_id DESC);
@@ -24,11 +27,12 @@ CREATE TABLE ago_chat_work_items (
  status text NOT NULL DEFAULT 'awaiting_ack'
   CHECK (status IN ('awaiting_ack','acknowledged','task_linked','working','blocked','completed')),
  linked_task_id uuid,
- ack_message_id bigint REFERENCES ago_company_chat(id),
+ ack_message_id bigint,
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE (tenant_id,message_id,assignee_id),
  FOREIGN KEY (tenant_id,message_id) REFERENCES ago_chat_orders(tenant_id,message_id),
+ FOREIGN KEY (tenant_id,ack_message_id) REFERENCES ago_company_chat(tenant_id,id),
  FOREIGN KEY (tenant_id,assignee_id) REFERENCES ago_employees(tenant_id,id),
  FOREIGN KEY (tenant_id,accountable_ceo_id) REFERENCES ago_employees(tenant_id,id),
  FOREIGN KEY (tenant_id,linked_task_id) REFERENCES ago_governed_tasks(tenant_id,id),
