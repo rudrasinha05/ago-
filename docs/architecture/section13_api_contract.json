@@ -87,6 +87,7 @@
     "GET /v1/operations/handoffs/{handoff_id}/history": "1ff524cd9c43e300f6183b2736a27c730c3f88a31b95284d168b4cf1b78e7406",
     "GET /v1/organization/company/activity": "e06e4a430bbe6e03a4f19e14d0d6da9c5d5b43b1ad90b9ba684d173f25454ebb",
     "GET /v1/organization/company/approvals": "d2d1addab6d686585a16257bbeb678c04128ecf9b03ed41ad50553216ace0503",
+    "GET /v1/organization/company/chat/orders": "6af7ca46d00f03fbb75517c68c12a0419439d417befb010de204680d741d4dcb",
     "GET /v1/organization/company/chat": "f2d416de46886b3aa2b22e23717a79e5ecaae8195f1167bd8fefdeb2972f62e7",
     "GET /v1/organization/company/documents/{document_id}": "121547f9b524bcf12d711f214ea0674e74ae8557acfaefb5a85d8f8042718d3a",
     "GET /v1/organization/company/documents/{document_id}/audit": "17345aeb6bb02c2f9e080535cd9fe167a5d71f571f8a1659a65391e5d2d81c5e",
