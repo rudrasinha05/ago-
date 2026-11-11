@@ -165,6 +165,15 @@ class CompanyChat:
                     result['order'] = routing
             return result
 
+    def link_chat_task(self, actor, message_id: int, employee_id: str,
+                       task_id: str) -> dict:
+        if not self._channel_permission(actor.tenant_id, actor.subject, 'global'):
+            raise PermissionError('Global Chat access denied')
+        return GlobalChatOrders(self.db).attach(
+            tenant_id=actor.tenant_id,actor_id=actor.subject,
+            actor_is_founder='founder' in actor.roles,
+            message_id=message_id,employee_id=employee_id,task_id=task_id)
+
     @staticmethod
     def _asks_work_status(body: str) -> bool:
         question=body.strip().lower()
