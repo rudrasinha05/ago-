@@ -151,6 +151,24 @@ class Company:
             (self.tenant, self.stage(name)['plan_step_id'])).fetchall()
 
 
+def test_followup_owner_roster_excludes_closed_department(case):
+    """Direct error routing must not assign work to an inactive department."""
+    client, headers, info = case
+    founder, reviewer = headers['founder'], headers['reviewer']
+    department_id = str(uuid4())
+    _change(client, founder, reviewer, 'created', department_id,
+            name='Department closed for routing regression')
+    worker = post(client, '/v1/organization/employees', founder, {
+        'department_id': department_id, 'name': 'Former Work Owner', 'kind': 'ai'})['id']
+    queries = StageProgressionQueries(info['db'])
+    before = queries.select_followup_owners_11((info['tenant'],)).fetchall()
+    assert worker in {str(employee['id']) for employee in before}
+
+    _change(client, founder, reviewer, 'closed', department_id)
+    after = queries.select_followup_owners_11((info['tenant'],)).fetchall()
+    assert worker not in {str(employee['id']) for employee in after}
+
+
 def test_recovery_ceo_selector_rejects_terminated_board_appointment(case):
     """A former CEO must never authorize automatic recovery through a stale seat."""
     client, headers, info = case
