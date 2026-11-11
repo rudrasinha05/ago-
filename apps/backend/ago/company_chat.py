@@ -304,7 +304,7 @@ class GlobalChatOrders:
         with self.db.transaction():
             row=self.db.execute("""
                 SELECT w.id,w.ack_message_id,w.response_claim_token,
-                       w.response_claimed_at,e.name
+                       w.response_claimed_at,w.accountable_ceo_id,e.name
                 FROM ago_chat_work_items w
                 JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
                 WHERE w.tenant_id=%s AND w.message_id=%s AND w.assignee_id=%s
@@ -318,6 +318,13 @@ class GlobalChatOrders:
             """,(row['response_claimed_at'],)).fetchone()
             if not fresh['valid']:
                 raise PermissionError("Expired AI response claim; no message written")
+            # An employee can be terminated or CEO replaced during the model
+            # call. Recheck current company authority before recording its voice.
+            eligible=self._employees(actor.tenant_id)
+            ceo=self._ceo(actor.tenant_id,eligible)
+            if (employee_id not in eligible or ceo is None
+                    or str(ceo['id'])!=str(row['accountable_ceo_id'])):
+                raise PermissionError("AI employee/CEO authority changed during inference")
             # Crucial: no invented human identity/approval. Real inference is
             # labelled as unverified AI text, with source linked by reply_to.
             message=self.db.execute("""
