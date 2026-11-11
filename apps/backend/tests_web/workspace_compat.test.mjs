@@ -119,6 +119,31 @@ test("active sessions renew without a password; stale 401 cannot sign out a new 
   client.clear();
 });
 
+test("overlapping old 401 during renewal does not erase the new session", async () => {
+  let finishOld, finishRenew, expired = 0;
+  const client = new SessionClient({
+    fetchImpl: async (path, options) => {
+      if (path === "/v1/sessions") return ok({access_token: "old", expires_in: 60});
+      if (path === "/v1/sessions/renew")
+        return new Promise(resolve => { finishRenew = resolve; });
+      if (path === "/v1/old") return new Promise(resolve => { finishOld = resolve; });
+      return ok({authorization: options.headers.Authorization});
+    },
+    onExpire: () => { expired++; },
+  });
+  await client.login({tenant: TENANT, email: "founder@example.test", password: "example"});
+  const obsolete = client.request("/v1/old");
+  const renewal = client.renewIfNeeded();
+  finishOld(fail(401, "Old request raced with token rotation"));
+  await assert.rejects(obsolete, e => e instanceof ApiError && e.status === 401);
+  assert.equal(client.authenticated, true);
+  assert.equal(expired, 0);
+  finishRenew(ok({access_token: "fresh", expires_in: 900}));
+  assert.equal(await renewal, true);
+  assert.equal((await client.request("/v1/console/me")).authorization, "Bearer fresh");
+  client.clear();
+});
+
 test("revoked session renewal fails closed and never replays a login", async () => {
   let loginCount = 0, expireCount = 0;
   const client = new SessionClient({
