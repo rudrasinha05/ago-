@@ -127,3 +127,15 @@ def test_pending_priority_is_oldest_ceo_first_and_skips_human():
                                       "assignee_kind":"human","ack_message_id":None})
     assert list(runner.next_pending(orders))==[
         (10,CEO),(10,WORKER),(20,CEO),(20,WORKER)]
+
+
+def test_runner_escalates_missing_ceo_instead_of_saying_orders_finished():
+    def transport(method,path,body=None):
+        if path=="/v1/console/me":return {"roles":["founder"]}
+        if method=="GET":return [msg(20,state="blocked_no_ceo",targets=())]
+        raise AssertionError("No AI model may run without appointed CEO")
+    result=runner.run_session(transport,apply=True,confirmation=runner.CONFIRM,
+                              clock=lambda:1,pause=lambda _:None)
+    assert result["status"]=="founder_needed"
+    assert result["blocked_without_ceo"]==1
+    assert result["replies_recorded"]==0
