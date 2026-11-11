@@ -486,7 +486,7 @@ def test_ceo_cannot_delegate_founder_tagged_or_unrelated_employee(case):
                                employee_id=ceo,provider=Hallucination())
     assert reply['status']=='responded'
     assert reply['delegated_employee_id'] is None
-    assert {x['assignee_id'] for x in store.chat_order_inbox(actor)[0]['work_items']}=={ceo}
+    assert {str(x['assignee_id']) for x in store.chat_order_inbox(actor)[0]['work_items']}=={ceo}
 
     tagged=send(client,founder,'Only the tagged engineer should handle this',
                 intent='order',mentions=[worker])
@@ -498,7 +498,7 @@ def test_ceo_cannot_delegate_founder_tagged_or_unrelated_employee(case):
                                   employee_id=ceo,provider=AlreadyTaggedModel())
     assert response['status']=='responded'
     assert response['delegated_employee_id'] is None
-    assert {x['assignee_id'] for x in store.chat_order_inbox(actor)[0]['work_items']}=={ceo,worker}
+    assert {str(x['assignee_id']) for x in store.chat_order_inbox(actor)[0]['work_items']}=={ceo,worker}
 
     third=send(client,founder,'This is an informational message without an order')
     class PlainModel:
