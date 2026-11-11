@@ -173,7 +173,9 @@ def _manager(step: dict, decision: dict) -> dict:
     return _outcome(
         step, progressed=acted, needs_founder=bool(decision.get("needs_founder")),
         message=(
-            str(decision.get("decided_by_name")) + " (AI project manager) "
+            (str(decision.get("recovery_decided_by_name")) + " (AI CEO) "
+             if decision.get("recovery_decided_by_level") == "ceo"
+             else str(decision.get("decided_by_name")) + " (AI project manager) ")
             + ("opened the " + str(decision.get("stage")) + " stage and assigned its task."
                if decision.get("action") == "opened_stage"
                else "created a new " + str(decision.get("stage")) + " task: "

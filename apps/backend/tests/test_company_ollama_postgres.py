@@ -223,7 +223,10 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         else (["ceo","cto","finance","risk","quality","pm","employee"]
               if full_board else ["ceo","cto","pm","employee"])
     )
-    assert result["roles_completed"]==expected_count and len(calls)==expected_count
+    # A reasonless Risk DENY costs one more real call: the seat is asked once
+    # for its concrete problem before the run stops.
+    attempts=expected_count+(1 if deny_risk else 0)
+    assert result["roles_completed"]==expected_count and len(calls)==attempts
     # Exactly the calls attempted count against the virtual budget; a Risk
     # veto must not pretend the remaining three employees spent model credits.
     usage=info["db"].execute("""
@@ -231,9 +234,9 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         WHERE tenant_id=%s AND operation_key LIKE %s
         ORDER BY operation_key
     """,(info["tenant"],f"local-chain:{task_id}:role:%")).fetchall()
-    assert len(usage)==expected_count
+    assert len(usage)==attempts
     assert all(Decimal(u["amount"]) == Decimal("1") for u in usage)
-    assert len({u["operation_key"] for u in usage})==expected_count
+    assert len({u["operation_key"] for u in usage})==attempts
     visible=info["db"].execute("""
         SELECT employee_id,body FROM ago_company_chat
         WHERE tenant_id=%s AND task_id=%s AND kind='status'
@@ -316,7 +319,7 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
           AND body LIKE %s
     """, (info["tenant"], task_id, "AGO verified local inference for %")).fetchone()
     assert duplicate_count["n"] == expected_count
-    assert float(CreditBudget(info["db"]).balance(tenant_id=info["tenant"])["consumed"])==expected_count
+    assert float(CreditBudget(info["db"]).balance(tenant_id=info["tenant"])["consumed"])==attempts
     assert result["roles_expected"]==(7 if full_board else 4)
     assert result["handoff_complete"] is not deny_risk
     assert result["board_review_cleared"] is (full_board and not deny_risk)
@@ -365,4 +368,4 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
         "full_five_seat" if full_board else "legacy_two_seat"
     )
     post(client,"/v1/agents/tasks/"+task_id+"/run",founder,expected=403)
-    assert len(calls)==expected_count  # duplicate runs are forbidden
+    assert len(calls)==attempts  # duplicate runs are forbidden

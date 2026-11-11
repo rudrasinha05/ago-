@@ -646,6 +646,8 @@ class StageProgressionQueriesPort(Protocol):
 
     def select_qa_candidates_09(self, parameters: Any=None) -> Cursor: ...
 
+    def select_ai_ceo_21(self, parameters: Any = None) -> Cursor: ...
+
 
 @runtime_checkable
 class AiQaReviewQueriesPort(Protocol):

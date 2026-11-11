@@ -131,7 +131,7 @@ def test_board_deny_never_invokes_source_generation():
 
         def generate(self, prompt):
             self.calls.append(prompt)
-            if "ROLE: RISK\n" in prompt:
+            if "ROLE: RISK" in prompt:  # the first vote and the asked-again vote
                 return "BOARD_RECOMMENDATION: DENY\nRISKS: check scope"
             return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: review"
 
@@ -140,7 +140,10 @@ def test_board_deny_never_invokes_source_generation():
         task=fake_task(), participants=participants(),
         provider=model, engineering_candidates=True,
     )
-    assert len(model.calls) == 4
+    # Four role drafts plus one question: a DENY without a concrete reason is
+    # asked once for its problem. It stays a DENY, so no source is generated.
+    assert len(model.calls) == 5
+    assert result["board_resolutions"][0]["outcome"] == "denied_without_reason"
     assert result["board_blocked"] is True
     assert result["engineering_candidate"] is None
     assert result["engineering_candidate_status"] == "not_requested"

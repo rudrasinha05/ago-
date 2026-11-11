@@ -2109,6 +2109,10 @@
         "select_qa_candidates_09": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
+        },
+        "select_ai_ceo_21": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
         }
       }
     }

@@ -221,3 +221,12 @@ class StageProgressionQueries:
                ORDER BY project_tester DESC,lower(e.name),e.id""",
             parameters,
         )
+
+    def select_ai_ceo_21(self, parameters: Any = None) -> Cursor:
+        """(tenant_id): the appointed AI CEO (Strategy & Vision seat), if any."""
+        return self.connection.execute(
+            """SELECT e.id,e.name FROM ago_company_board_appointments b
+               JOIN ago_employees e ON e.tenant_id=b.tenant_id AND e.id=b.employee_id
+               WHERE b.tenant_id=%s AND b.seat='Strategy & Vision' AND e.kind='ai'""",
+            parameters,
+        )

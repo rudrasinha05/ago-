@@ -38,8 +38,12 @@ log = logging.getLogger(__name__)
 
 STAGES = ("discovery", "architecture", "implementation", "quality", "release")
 QA_ROLE = re.compile(r"\b(qa|quality|test(er|ing)?)\b", re.IGNORECASE)
-# The AI manager retries a stage at most this many times; then the Founder decides.
+# The project's AI manager retries a stage at most this many times. Then the
+# decision goes UP the AI hierarchy to the AI CEO, who may order as many again.
+# Only after that does it reach the Founder (Founder rule: higher AI officials
+# handle a failed stage; the Founder is the last resort, not the first).
 MAX_AI_RECOVERIES = 2
+MAX_CEO_RECOVERIES = 2
 # Run failures a retry can fix. Credit, unstaffed and unknown outcomes are not here.
 # worker_timeout is an abandoned run with an UNKNOWN outcome: never retried here.
 RETRYABLE_FAILURES = frozenset({
@@ -459,30 +463,42 @@ class StageProgression:
                 "stage_in_progress", False,
                 "The " + stage + " task is " + str(status)
                 + ("" if current["qa_verdict"] else "; no QA verdict yet") + ".")
-        if int(current["ai_recoveries"] or 0) >= MAX_AI_RECOVERIES:
-            return self._wait(
-                "recovery_limit_reached", True,
-                "The AI manager already retried the " + stage + " stage "
-                + str(MAX_AI_RECOVERIES) + " times. The Founder decides what happens next.")
+        done = int(current["ai_recoveries"] or 0)
         active = {str(e['id']) for e in self.repositories.resolve(OrganizationStore).eligible_ai_staff(
             tenant_id=tenant_id)}
         if str(current['approved_assignee_id']) not in active:
             return self._wait('stage_specialist_unavailable', True,
                               'The responsible worker is unavailable; leadership must review a replacement.')
         manager_id = str(project["accountable_manager_id"])
+        decider_id, decider_name, level = manager_id, project["manager_name"], "project_manager"
+        limit = MAX_AI_RECOVERIES
+        if done >= MAX_AI_RECOVERIES:
+            ceo = queries.select_ai_ceo_21((tenant_id,)).fetchone()
+            if ceo is None or done >= MAX_AI_RECOVERIES + MAX_CEO_RECOVERIES:
+                return self._wait(
+                    "recovery_limit_reached", True,
+                    "The AI project manager retried the " + stage + " stage "
+                    + str(MAX_AI_RECOVERIES) + " times"
+                    + ("" if ceo is None else " and the AI CEO " + str(MAX_CEO_RECOVERIES)
+                       + " more times")
+                    + ". The Founder decides what happens next.")
+            decider_id, decider_name, level = str(ceo["id"]), ceo["name"], "ceo"
+            limit = MAX_AI_RECOVERIES + MAX_CEO_RECOVERIES
         recovery = self.repositories.resolve(PlanExecution).recover_failed_stage(
             tenant_id=tenant_id, founder_id=founder_id, project_id=str(project["id"]),
             stage=stage, failed_task_id=str(current["task_id"]), reason=reason[:500],
-            decided_by_employee_id=manager_id,
+            decided_by_employee_id=decider_id,
         )
-        attempt = int(current["ai_recoveries"] or 0) + 1
+        attempt = done + 1
         queries.insert_project_notice_07((
-            tenant_id, founder_id, project["manager_name"] + " (AI project manager)",
+            tenant_id, founder_id,
+            decider_name + (" (AI CEO, after the project manager's attempts)"
+                            if level == "ceo" else " (AI project manager)"),
             {"qa_rework": "The independent tester failed the " + stage + " stage.",
              "board_revision": "The Board stopped the " + stage + " stage.",
              "retry": "The " + stage + " task failed (" + str(current["failure_code"]) + ")."}[kind]
             + " I created a new task for it (automatic attempt " + str(attempt) + " of "
-            + str(MAX_AI_RECOVERIES) + "). The old task stays as evidence; the new one "
+            + str(limit) + "). The old task stays as evidence; the new one "
             "still needs approval before any work runs.",
             None,
         ))
@@ -492,5 +508,8 @@ class StageProgression:
             "failed_task_id": str(current["task_id"]),
             "task_id": recovery["recovery_task_id"],
             "recovery_id": recovery["recovery_id"],
-            "ai_recovery_attempt": attempt, "ai_recovery_limit": MAX_AI_RECOVERIES,
+            "ai_recovery_attempt": attempt, "ai_recovery_limit": limit,
+            "recovery_decided_by_level": level,
+            "recovery_decided_by_employee_id": decider_id,
+            "recovery_decided_by_name": decider_name,
         }

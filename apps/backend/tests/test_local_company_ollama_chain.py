@@ -226,7 +226,10 @@ def test_ceo_deny_stops_handoff_before_cto_pm_and_worker():
         tenant_id=db.tenant, actor_id=db.founder, task=db.task())
     result=run_four_role_chain(task=db.task(), participants=assignments,
                                provider=model)
-    assert model.calls==1
+    # A DENY without a reason gets exactly one question for the concrete
+    # problem; the same reasonless DENY again stops the handoff as before.
+    assert model.calls==2
+    assert result["board_resolutions"][0]["outcome"]=="denied_without_reason"
     assert result["board_blocked"] is True
     assert result["blocked_by_board_seat"]=="Strategy & Vision"
     assert result["roles_completed"]==1
@@ -362,8 +365,9 @@ def test_full_board_deny_or_missing_verdict_stops_downstream(
             return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: Internal recommendation"
     model=Blocker()
     result=run_four_role_chain(task=db.task(),participants=people,provider=model)
-    # A missing vote gets exactly one follow-up vote question before stopping.
-    assert len(model.calls)==expected_calls+(1 if reason=="unverified" else 0)
+    # A missing vote gets exactly one follow-up vote question before stopping,
+    # and a DENY without a reason exactly one question for the concrete problem.
+    assert len(model.calls)==expected_calls+1
     assert result["roles_completed"]==expected_calls
     assert result["handoff_complete"] is False
     assert result["board_blocked"] is True
