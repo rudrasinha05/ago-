@@ -409,3 +409,102 @@ def test_tagged_specialist_receives_only_verified_saved_ceo_model_context(case):
     assert order['verified_acknowledgements']==2
     assert all(x['evidence_state']=='acknowledged' for x in order['work_items'])
     assert all(not x['has_execution_evidence'] for x in order['work_items'])
+
+
+def test_untagged_founder_order_ceo_can_delegate_to_verified_direct_report(case):
+    client, headers, info=case
+    founder=headers['founder']
+    ceo,worker=make_staff(client,founder)
+    message=send(client,founder,'Build approved AdmissionFlow notification module',
+                 intent='order')
+    assert {x['assignee_id'] for x in message['order']['work_items']}=={ceo}
+    actor=Principal(subject=info['founder_id'],tenant_id=info['tenant'],
+                    roles=('founder',))
+    store=CompanyChat(info['db'])
+
+    class CeoModel:
+        def generate(self,prompt):
+            assert 'DELEGATE_ID' in prompt
+            assert worker in prompt
+            assert 'not an approved or executed task' not in prompt
+            return ('Received. I will ask our engineer for a scoped, reviewed '
+                    'implementation plan.\\nDELEGATE_ID: '+worker)
+
+    result=respond_company_chat(actor=actor,store=store,message_id=message['id'],
+                                employee_id=ceo,provider=CeoModel())
+    assert result['status']=='responded'
+    assert result['delegated_employee_id']==worker
+    inbox=client.get(BASE+'/chat/orders',headers=founder).json()
+    assigned=next(x for x in inbox if x['message_id']==message['id'])
+    assert {x['assignee_id'] for x in assigned['work_items']}=={ceo,worker}
+    ceo_item=next(x for x in assigned['work_items'] if x['assignee_id']==ceo)
+    worker_item=next(x for x in assigned['work_items'] if x['assignee_id']==worker)
+    assert ceo_item['evidence_state']=='acknowledged'
+    assert worker_item['evidence_state']=='awaiting_ack'
+    assert worker_item['linked_task_id'] is None
+    assert worker_item['qa_verdict'] is None
+    assert worker_item['release_verified'] is False
+    assert assigned['awaiting_ack_count']==1
+    saved=info['db'].execute("""
+        SELECT body FROM ago_company_chat WHERE tenant_id=%s AND id=%s
+    """,(info['tenant'],result['ack_message_id'])).fetchone()['body']
+    assert 'DELEGATE_ID' not in saved
+
+    class WorkerModel:
+        def generate(self,prompt):
+            assert 'Previously recorded AI team replies' in prompt
+            assert 'scoped, reviewed implementation plan' in prompt
+            return 'Acknowledged. I will prepare a governed proposal; not executed.'
+    specialist=respond_company_chat(actor=actor,store=store,message_id=message['id'],
+                                    employee_id=worker,provider=WorkerModel())
+    assert specialist['status']=='responded'
+    assert specialist['delegated_employee_id'] is None
+    updated=store.chat_order_inbox(actor)[0]
+    assert updated['verified_acknowledgements']==2
+    assert updated['awaiting_ack_count']==0
+    assert info['db'].execute("""
+        SELECT count(*) AS n FROM ago_governed_tasks WHERE tenant_id=%s
+    """,(info['tenant'],)).fetchone()['n']==0
+
+
+def test_ceo_cannot_delegate_founder_tagged_or_unrelated_employee(case):
+    client,headers,info=case
+    founder=headers['founder']
+    ceo,worker=make_staff(client,founder)
+    actor=Principal(subject=info['founder_id'],tenant_id=info['tenant'],
+                    roles=('founder',))
+    store=CompanyChat(info['db'])
+    # An untagged order offers ONLY current direct reports, never a
+    # model-hallucinated company UUID or unknown tenant employee.
+    order=send(client,founder,'CEO assign a related verified specialist',intent='order')
+    outsider=str(uuid4())
+    class Hallucination:
+        def generate(self,prompt):
+            assert worker in prompt
+            return 'I need verification.\\nDELEGATE_ID: '+outsider
+    reply=respond_company_chat(actor=actor,store=store,message_id=order['id'],
+                               employee_id=ceo,provider=Hallucination())
+    assert reply['status']=='responded'
+    assert reply['delegated_employee_id'] is None
+    assert {x['assignee_id'] for x in store.chat_order_inbox(actor)[0]['work_items']}=={ceo}
+
+    tagged=send(client,founder,'Only the tagged engineer should handle this',
+                intent='order',mentions=[worker])
+    class AlreadyTaggedModel:
+        def generate(self,prompt):
+            assert 'CEO ROUTING ADVICE ONLY' not in prompt
+            return 'I acknowledge your tagged specialist; route is already recorded.'
+    response=respond_company_chat(actor=actor,store=store,message_id=tagged['id'],
+                                  employee_id=ceo,provider=AlreadyTaggedModel())
+    assert response['status']=='responded'
+    assert response['delegated_employee_id'] is None
+    assert {x['assignee_id'] for x in store.chat_order_inbox(actor)[0]['work_items']}=={ceo,worker}
+
+    third=send(client,founder,'This is an informational message without an order')
+    class PlainModel:
+        def generate(self,prompt):
+            assert 'CEO ROUTING ADVICE ONLY' not in prompt
+            return 'Received. Current project evidence is not supplied.'
+    response=respond_company_chat(actor=actor,store=store,message_id=third['id'],
+                                  employee_id=ceo,provider=PlainModel())
+    assert response['delegated_employee_id'] is None
