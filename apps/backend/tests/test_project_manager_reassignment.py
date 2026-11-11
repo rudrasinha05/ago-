@@ -7,6 +7,53 @@ from test_enterprise_http_21_27 import department, employee
 BASE = '/v1/organization/company'
 
 
+def test_intake_assigns_independent_pm_without_engineering_flags(case, monkeypatch):
+    client, headers, info = case
+    founder = headers['founder']
+    monkeypatch.delenv('AGO_LOCAL_FULL_BOARD_REVIEW', raising=False)
+    monkeypatch.delenv('AGO_LOCAL_ENGINEERING_CANDIDATES', raising=False)
+    dept = department(client, founder)
+    ceo = post(client, '/v1/organization/employees', founder, {
+        'department_id': dept, 'name': 'CEO', 'kind': 'ai'})['id']
+    post(client, BASE+'/board/appoint', founder,
+         {'seat': 'Strategy & Vision', 'employee_id': ceo})
+    pm = post(client, '/v1/organization/employees', founder, {
+        'department_id': dept, 'name': 'Delivery manager', 'kind': 'ai',
+        'manager_id': ceo})['id']
+    response = client.put(BASE+'/employees/'+pm+'/role', headers=founder, json={
+        'role_title': 'AI Project Manager',
+        'core_responsibilities': 'Own delivery, maintenance and verified revenue',
+        'extra_responsibilities': 'Coordinate independent testing'})
+    assert response.status_code == 200, response.text
+    developer = post(client, '/v1/organization/employees', founder, {
+        'department_id': dept, 'name': 'Software Developer', 'kind': 'ai',
+        'manager_id': pm})['id']
+    payload = {'brief': 'Build and maintain a local scheduling application',
+               'operation_key': str(uuid4())}
+    project = post(client, BASE+'/projects/start', founder, payload)
+    assert project['accountable_manager_id'] == pm
+    assert project['automatic_execution'] is False
+    assert project['approval_required'] is True
+    assert post(client, BASE+'/projects/start', founder, payload)['id'] == project['id']
+    notices = info['db'].execute(
+        "SELECT body,employee_id FROM ago_company_chat WHERE tenant_id=%s "
+        "AND author_name='AGO project assignment'", (info['tenant'],)).fetchall()
+    assert len(notices) == 1
+    assert str(notices[0]['employee_id']) == developer
+    assert project['id'] in notices[0]['body'] and 'implementation' in notices[0]['body']
+    assert 'acknowledgement pending' in notices[0]['body']
+    assert client.get(BASE+'/chat?channel=employee:'+developer,
+                      headers=headers['reviewer']).status_code == 403
+    # Board oversight must stay independent from delivery ownership.
+    post(client, BASE+'/board/appoint', founder,
+         {'seat': 'Quality & Release', 'employee_id': pm})
+    second = post(client, BASE+'/projects/start', founder,
+                  {**payload, 'operation_key': str(uuid4())})
+    assert second['accountable_manager_id'] != pm
+    assert info['db'].execute('SELECT 1 FROM ago_agent_runs WHERE tenant_id=%s',
+                              (info['tenant'],)).fetchone() is None
+
+
 def test_founder_reassigns_existing_project_without_changing_work(case):
     client, headers, info = case
     founder = headers['founder']

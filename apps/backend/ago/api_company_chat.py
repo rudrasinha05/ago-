@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, repository_scope, translate_error
+from ago.model_handlers import respond_company_chat
 from ago.repository_ports import (
     AiQaReviewPort, CompanyChatPort, PlanExecutionPort, StageProgressionPort,
 )
@@ -17,6 +18,8 @@ class ChatInput(StrictInput):
     body: str = Field(min_length=1, max_length=20000)
     reply_to: int | None = Field(default=None, gt=0)
     operation_key: UUID
+    mentions: list[UUID] = Field(default_factory=list, max_length=10)
+    intent: Literal['message','order'] = 'message'
 
 
 @router.get('/chat')
@@ -39,8 +42,63 @@ def send(data: ChatInput, actor=Depends(authenticated), repositories=Depends(rep
     allowed(repositories, actor, 'messages:write')
     try:
         return repositories.resolve(CompanyChatPort).send(
-            actor, data.channel, data.body, data.reply_to, str(data.operation_key))
-    except ValueError as exc:
+            actor, data.channel, data.body, data.reply_to, str(data.operation_key),
+            mentions=[str(item) for item in data.mentions], intent=data.intent)
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+
+@router.get('/chat/orders')
+def chat_orders(limit: int = Query(default=50, ge=1, le=100),
+                actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    """Founder can audit every pending CEO/agent order regardless of pagination."""
+    allowed(repositories, actor, 'organization:read')
+    allowed(repositories, actor, 'messages:read')
+    try:
+        return repositories.resolve(CompanyChatPort).chat_order_inbox(actor, limit)
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+
+class LocalChatReplyInput(StrictInput):
+    employee_id: UUID
+
+
+@router.post('/chat/orders/{message_id}/respond')
+def respond_chat_order(message_id: int, data: LocalChatReplyInput,
+                       actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    """Invoke actual local Ollama AI response; never execute an order as a tool."""
+    allowed(repositories, actor, 'organization:read')
+    allowed(repositories, actor, 'messages:read')
+    allowed(repositories, actor, 'messages:write')
+    if message_id <= 0:
+        raise HTTPException(status_code=422,detail="Positive message ID required")
+    try:
+        return respond_company_chat(
+            actor=actor,store=repositories.resolve(CompanyChatPort),
+            message_id=message_id,employee_id=str(data.employee_id))
+    except (ValueError,PermissionError) as exc:
+        translate_error(exc)
+
+
+class LinkChatTaskInput(StrictInput):
+    employee_id: UUID
+    task_id: UUID
+
+
+@router.post('/chat/orders/{message_id}/link-task')
+def link_chat_task(message_id: int, data: LinkChatTaskInput,
+                   actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    """Link only an existing governed task, never execute or approve it."""
+    allowed(repositories, actor, 'organization:read')
+    allowed(repositories, actor, 'task:read')
+    allowed(repositories, actor, 'messages:write')
+    if message_id <= 0:
+        raise HTTPException(status_code=422, detail='Positive chat message ID required')
+    try:
+        return repositories.resolve(CompanyChatPort).link_chat_task(
+            actor, message_id, str(data.employee_id), str(data.task_id))
+    except (ValueError, PermissionError) as exc:
         translate_error(exc)
 
 

@@ -52,11 +52,22 @@ def test_chat_pagination_replies_and_exact_retries(case):
     assert post(client, BASE+'/chat', f, payload)['id'] == first['id']
     post(client, BASE+'/chat', f, {**payload, 'body': 'Changed request'}, expected=400)
     second = post(client, BASE+'/chat', f, message(reply_to=first['id']))
-    result = client.get(BASE+'/chat?limit=1', headers=f).json()
-    assert result['items'][0]['id'] == second['id']
-    assert result['items'][0]['reply_body'] == payload['body']
-    older = client.get(BASE+'/chat?limit=1&before='+str(result['next_before']), headers=f).json()
-    assert older['items'][0]['id'] == first['id']
+    result = client.get(BASE+'/chat?limit=8', headers=f).json()
+    by_id = {item['id']: item for item in result['items']}
+    assert second['id'] in by_id and first['id'] in by_id
+    assert by_id[second['id']]['reply_body'] == payload['body']
+    # Founder messages always receive an explicitly SYSTEM-labelled durable
+    # receipt. No CEO exists in this fixture, so the receipt honestly blocks.
+    assert by_id[first['id']]['order']['state'] == 'blocked_no_ceo'
+    assert by_id[second['id']]['order']['state'] == 'blocked_no_ceo'
+    replies = [item for item in result['items']
+               if item['author_name'] == 'AGO system · order intake']
+    assert len(replies) == 2
+    assert {item['reply_to'] for item in replies} == {first['id'],second['id']}
+    # Pagination is still stable even with new system status entries.
+    last = client.get(BASE+'/chat?limit=1', headers=f).json()
+    older = client.get(BASE+'/chat?limit=1&before='+str(last['next_before']), headers=f).json()
+    assert older['items'][0]['id'] == second['id']
     post(client, BASE+'/chat', f, message(reply_to=999999999), expected=400)
     post(client, BASE+'/chat', f, message(channel='employee:'+str(uuid4())), expected=400)
     post(client, BASE+'/chat', f, message(body='   '), expected=400)
