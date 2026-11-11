@@ -340,7 +340,7 @@ def respond_company_chat(*, actor, store, message_id: int, employee_id: str,
         if claim.get("eligible_delegates"):
             # Local model's suggestion is untrusted. Only a listed employee
             # UUID can become an assignment; no free-form tool invocation.
-            marker=re.search(r"(?m)^DELEGATE_ID:\\s*(NONE|[0-9a-fA-F-]{36})\\s*$",answer)
+            marker=re.search(r"(?m)^DELEGATE_ID:\s*(NONE|[0-9a-fA-F-]{36})\s*$",answer)
             if marker:
                 candidate=marker.group(1).lower()
                 allowed_ids={w["id"] for w in claim["eligible_delegates"]}
