@@ -304,7 +304,7 @@
           "returns": "dict"
         },
         "commit_ai_chat_reply": {
-          "arguments": "self, actor, message_id: int, employee_id: str, claim_token: str, answer: str",
+          "arguments": "self, actor, message_id: int, employee_id: str, claim_token: str, answer: str, delegate_employee_id=None",
           "returns": "dict"
         },
         "abort_ai_chat_reply": {
