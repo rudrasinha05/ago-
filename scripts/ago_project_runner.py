@@ -50,7 +50,7 @@ def checked(reply) -> dict:
 
 def run_session(request, *, project_id: str, apply: bool = False, confirmation=None,
                 hours: int = 2, max_steps: int = 60, interval: int = 20,
-                relogin=None, report=None, clock=None, pause=None) -> dict:
+                report=None, clock=None, pause=None) -> dict:
     """One bounded Founder-authorized session for one project."""
     if str(UUID(project_id)) != project_id:
         raise ValueError("Canonical project UUID required")
@@ -79,7 +79,7 @@ def run_session(request, *, project_id: str, apply: bool = False, confirmation=N
     report = report or (lambda line: None)
     path = "/v1/agents/projects/" + project_id + "/advance"
     end = clock() + hours * 3600
-    steps, requests, lost, unclear, renewed = 0, 0, 0, 0, False
+    steps, requests, lost, unclear = 0, 0, 0, 0
 
     def result(status, **extra):
         return {"status": status, "steps_done": steps, "requests": requests,
@@ -90,12 +90,10 @@ def run_session(request, *, project_id: str, apply: bool = False, confirmation=N
         try:
             answer = request("POST", path, {})
         except SessionExpired:
-            # One renewal per expiry; a second refusal in a row stops the session.
-            if relogin is None or renewed:
-                return result("session_expired")
-            relogin()
-            renewed = True
-            continue
+            # HTTP 401 cannot distinguish expiry from explicit revocation.
+            # Never silently log in again with a cached Founder password:
+            # the Founder must authorize a fresh session himself.
+            return result("session_expired")
         except (HTTPError, PermissionError):
             raise  # the server refused or failed: stop, never treat it as a lost answer
         except (TimeoutError, URLError, OSError):
@@ -107,7 +105,7 @@ def run_session(request, *, project_id: str, apply: bool = False, confirmation=N
             pause(min(interval, max(0, end - clock())))
             continue
         reply = checked(answer)
-        lost, renewed = 0, False
+        lost = 0
         report({"step": reply["step"], "stage": reply.get("stage"),
                 "progressed": reply["progressed"], "message": reply["message"]})
         if reply["done"]:
@@ -147,9 +145,8 @@ def main(argv=None):
         email = input("Founder email: ").strip()
         secret = {"password": getpass.getpass("Founder password (hidden): ")}
         session = {"token": founder_login(base, tenant, email, secret["password"])}
-
-        def relogin():
-            session["token"] = founder_login(base, tenant, email, secret["password"])
+        # No automatic re-authentication if the session is revoked or expires.
+        secret["password"] = ""
 
         def request(method, path, body=None):
             data = json.dumps(body).encode("utf-8") if method == "POST" else None
@@ -168,7 +165,6 @@ def main(argv=None):
         report = run_session(
             request, project_id=args.project_id, apply=args.apply, confirmation=args.confirm,
             hours=args.hours, max_steps=args.max_steps, interval=args.interval_seconds,
-            relogin=relogin if args.apply else None,
             report=lambda line: print(json.dumps(line, sort_keys=True), flush=True))
     except KeyboardInterrupt:
         print(json.dumps({"status": "stopped_by_founder", "automatic_replay": False}))
