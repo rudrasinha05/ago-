@@ -69,7 +69,7 @@ class GlobalChatOrders:
                          fragment[len(row["name"])] in " .,!?;:\n"))
             ]
             if not choices:
-                continue  # ordinary @text is not evidence of an assignee
+                raise ValueError("Unknown @employee mention; select a company employee")
             longest = max(len(name) for _, name in choices)
             candidates = [ident for ident, name in choices if len(name) == longest]
             if len(candidates) != 1:
