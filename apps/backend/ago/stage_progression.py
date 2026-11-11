@@ -217,8 +217,9 @@ class StageProgression:
         """Do the ONE pending AI-manager decision for this project, if any.
 
         Idempotent: calling it again when nothing is pending changes nothing.
-        revise_board_stop=False leaves a Board-stopped task linked to its stage,
-        so the Founder first sees who denied and why and can still allow it.
+        Board stops retain their immutable original vote and feedback even when
+        an automatic proposed revision is linked to the stage. No approval,
+        execution or release is granted by a continuation.
         """
         for value in (tenant_id, founder_id, project_id):
             UUID(value)
@@ -280,7 +281,7 @@ class StageProgression:
                     or result.get('state') == 'board_stopped':
                 recovered = result.get('action') == 'recovered_stage'
                 code = result.get('recovery_kind') or result['state']
-                owner_kind = ('worker' if code == 'qa_rework' else
+                owner_kind = ('worker' if code in ('qa_rework', 'board_revision') else
                               'worker' if code == 'retry' else
                               'founder' if code in ('failure_needs_founder', 'recovery_limit_reached')
                               else 'ceo' if 'staff' in code or 'specialist' in code else 'manager')
@@ -309,11 +310,13 @@ class StageProgression:
                     (tenant_id, task_id, founder_id, founder_id)).fetchone()
                 if row is None:
                     return None
-                # A Board denial is shown to the Founder before it is revised:
-                # the revision happens on the next explicit continue.
+                # The denied Board vote stays as immutable evidence. Immediately
+                # delegate a PROPOSED corrective task to the stage specialist,
+                # with the exact Board reasons. Approval, run and QA remain
+                # separate governed steps; no Founder click is needed to route.
                 return self.continue_project(
                     tenant_id=tenant_id, founder_id=str(row["founder_id"]),
-                    project_id=str(row["project_id"]), revise_board_stop=False)
+                    project_id=str(row["project_id"]))
         except Exception as exc:  # noqa: BLE001 - reported, never hidden
             log.warning("AGO stage continuation did not complete: %s", type(exc).__name__)
             result = {
