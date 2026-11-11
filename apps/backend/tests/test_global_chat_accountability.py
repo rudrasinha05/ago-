@@ -89,6 +89,13 @@ def test_explicit_tags_are_deduplicated_and_ceo_owns_every_order(case):
         WHERE tenant_id=%s AND message_id=%s
     """,(info['tenant'],msg['id'])).fetchone()['n']
     assert count==2
+    routed=info['db'].execute("""
+        SELECT COUNT(*) AS n FROM ago_company_chat WHERE tenant_id=%s
+          AND employee_id=%s AND kind='status'
+          AND body LIKE %s
+    """,(info['tenant'],worker,
+         'Global Chat message #'+str(msg['id'])+' assigned%')).fetchone()
+    assert routed['n']==1  # Exactly one durable worker routing notification.
     post(client,BASE+'/chat',founder,{**payload,'intent':'message'},expected=400)
     post(client,BASE+'/chat',founder,
          {**payload,'mentions':[ceo],'operation_key':str(uuid4()),
@@ -249,6 +256,12 @@ def test_real_local_model_reply_is_evidence_backed_and_idempotent(case):
     assert result['ai_acknowledged'] is True
     assert result['task_executed'] is False
     assert fake.calls==1
+    event=info['db'].execute("""
+        SELECT COUNT(*) AS n FROM ago_company_chat
+        WHERE tenant_id=%s AND kind='status' AND employee_id=%s
+          AND body LIKE %s
+    """,(info['tenant'],ceo,'Local AI reply #'+str(result['ack_message_id'])+' recorded%')).fetchone()
+    assert event['n']==1
     duplicate=respond_company_chat(actor=actor,store=store,message_id=msg['id'],
                                    employee_id=ceo,provider=fake)
     assert duplicate['status']=='already_replied'
