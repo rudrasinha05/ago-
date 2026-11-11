@@ -227,6 +227,11 @@ class StageProgressionQueries:
         return self.connection.execute(
             """SELECT e.id,e.name FROM ago_company_board_appointments b
                JOIN ago_employees e ON e.tenant_id=b.tenant_id AND e.id=b.employee_id
-               WHERE b.tenant_id=%s AND b.seat='Strategy & Vision' AND e.kind='ai'""",
+               WHERE b.tenant_id=%s AND b.seat='Strategy & Vision' AND e.kind='ai'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM ago_personnel_events pe
+                   WHERE pe.tenant_id=e.tenant_id AND pe.employee_id=e.id
+                     AND pe.change_kind='terminated'
+                 )""",
             parameters,
         )
