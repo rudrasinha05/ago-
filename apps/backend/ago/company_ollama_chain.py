@@ -165,6 +165,24 @@ def run_four_role_chain(
         "The approved scope is settled: do not ask again for business case, market or "
         "budget evidence. DENY only for a concrete blocker in your seat's area for THIS "
         "stage.\n") if later_stage else ""
+    # The five-seat Board runs BEFORE the implementation worker has produced
+    # source files. At this point there cannot yet be executed candidate tests.
+    # Never confuse permission to START an implementation with proof that its
+    # completed deliverable passed QA. The latter remains a separate gate.
+    quality_pre_execution_rule = (
+        "PRE-EXECUTION QUALITY REVIEW: You are reviewing the plan BEFORE the "
+        "implementation worker writes source or runs tests. This vote authorizes "
+        "only the proposed implementation workflow, NEVER completed code, QA PASS "
+        "or release. Require a credible plan to generate source plus discoverable "
+        "unit tests, run them in the isolated local Docker test gate, retain a "
+        "real execution receipt and obtain independent QA. A statement that "
+        "tests have not executed YET is expected at this phase and is NOT by "
+        "itself a reason to DENY the plan. DENY if test execution, safe isolation "
+        "or independent QA is absent from the planned workflow, or a concrete "
+        "unresolved safety blocker prevents even starting work. Never claim "
+        "that tests passed without the later execution receipt.\n"
+        if project_stage == "implementation" else ""
+    )
     # Two-seat legacy drafting remains available. The founder's explicitly
     # opted-in complete Board has 5 distinct AI directors + a PM + a worker.
     full_board = len(participants) == len(FULL_BOARD_STAGES)
@@ -279,6 +297,7 @@ def run_four_role_chain(
                       +") from your seat: "+goal)
                 if later_stage and role in BOARD_ROLE_SEATS else goal)+"\n"
             +(board_stage_rule if role in BOARD_ROLE_SEATS else "")
+            +(quality_pre_execution_rule if role == "quality" else "")
             +("BOARD_ADVISORY: Your FIRST line must be exactly one of these two lines, "
               "with nothing else on it:\nBOARD_RECOMMENDATION: APPROVE\n"
               "BOARD_RECOMMENDATION: DENY\nWrite that line only once. "
