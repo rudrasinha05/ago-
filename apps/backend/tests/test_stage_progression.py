@@ -21,8 +21,10 @@ from ago.company_chat import CompanyChat
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.credit_domain import CreditBudgetMissing
+from ago.stage_progression_queries import StageProgressionQueries
 from test_local_company_ollama_chain import ApprovedProjectDb, FakeModel
 from test_enterprise_http_21_27 import department
+from test_enterprise_hr_21 import _change
 from test_m7_http_postgres import case as case, post
 
 BASE = '/v1/organization/company'
@@ -147,6 +149,29 @@ class Company:
             FROM ago_plan_step_task_recoveries v
             WHERE v.tenant_id=%s AND v.plan_step_id=%s ORDER BY v.id""",
             (self.tenant, self.stage(name)['plan_step_id'])).fetchall()
+
+
+def test_recovery_ceo_selector_rejects_terminated_board_appointment(case):
+    """A former CEO must never authorize automatic recovery through a stale seat."""
+    client, headers, info = case
+    founder, reviewer = headers['founder'], headers['reviewer']
+    dept = department(client, founder)
+    ceo = post(client, '/v1/organization/employees', founder, {
+        'department_id': dept, 'name': 'Former AI CEO', 'kind': 'ai'})['id']
+    assigned = client.put(BASE+'/employees/'+ceo+'/role', headers=founder, json={
+        'role_title': 'Chief Executive Officer',
+        'core_responsibilities': 'Approve governed project decisions',
+        'extra_responsibilities': 'Never bypass human reviews'})
+    assert assigned.status_code == 200, assigned.text
+    post(client, BASE+'/board/appoint', founder, {
+        'seat': 'Strategy & Vision', 'employee_id': ceo})
+    candidates = StageProgressionQueries(info['db'])
+    appointed = candidates.select_ai_ceo_21((info['tenant'],)).fetchone()
+    assert str(appointed['id']) == ceo
+
+    # HR termination preserves historical Board appointments, not authority.
+    _change(client, founder, reviewer, 'terminated', ceo)
+    assert candidates.select_ai_ceo_21((info['tenant'],)).fetchone() is None
 
 
 @pytest.fixture
