@@ -691,7 +691,7 @@ class CompanyChat:
 
     def commit_ai_chat_reply(self, actor, message_id: int, employee_id: str,
                              claim_token: str, answer: str,
-                             delegate_employee_id=None) -> dict:
+                             delegate_employee_id: str | None = None) -> dict:
         return GlobalChatOrders(self.db).commit_ai_reply(
             actor,message_id,employee_id,claim_token,answer,
             delegate_employee_id=delegate_employee_id)
