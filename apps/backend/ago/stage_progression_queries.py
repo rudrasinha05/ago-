@@ -86,10 +86,6 @@ class StageProgressionQueries:
                WHERE e.tenant_id=%s AND NOT EXISTS (
                  SELECT 1 FROM ago_personnel_events p WHERE p.tenant_id=e.tenant_id
                    AND p.employee_id=e.id AND p.change_kind='terminated')
-                 AND NOT EXISTS (
-                 SELECT 1 FROM ago_department_lifecycle_events dl
-                 WHERE dl.tenant_id=e.tenant_id AND dl.department_id=e.department_id
-                   AND dl.action='closed')
                ORDER BY e.id""", parameters)
 
     def insert_followup_12(self, parameters: Any = None) -> Cursor:
@@ -236,11 +232,6 @@ class StageProgressionQueries:
                    SELECT 1 FROM ago_personnel_events pe
                    WHERE pe.tenant_id=e.tenant_id AND pe.employee_id=e.id
                      AND pe.change_kind='terminated'
-                 )
-                 AND NOT EXISTS (
-                   SELECT 1 FROM ago_department_lifecycle_events dl
-                   WHERE dl.tenant_id=e.tenant_id AND dl.department_id=e.department_id
-                     AND dl.action='closed'
                  )""",
             parameters,
         )
