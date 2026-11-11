@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, repository_scope, translate_error
+from ago.model_handlers import respond_company_chat
 from ago.repository_ports import (
     AiQaReviewPort, CompanyChatPort, PlanExecutionPort, StageProgressionPort,
 )
@@ -56,6 +57,27 @@ def chat_orders(limit: int = Query(default=50, ge=1, le=100),
     try:
         return repositories.resolve(CompanyChatPort).chat_order_inbox(actor, limit)
     except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+
+class LocalChatReplyInput(StrictInput):
+    employee_id: UUID
+
+
+@router.post('/chat/orders/{message_id}/respond')
+def respond_chat_order(message_id: int, data: LocalChatReplyInput,
+                       actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    """Invoke actual local Ollama AI response; never execute an order as a tool."""
+    allowed(repositories, actor, 'organization:read')
+    allowed(repositories, actor, 'messages:read')
+    allowed(repositories, actor, 'messages:write')
+    if message_id <= 0:
+        raise HTTPException(status_code=422,detail="Positive message ID required")
+    try:
+        return respond_company_chat(
+            actor=actor,store=repositories.resolve(CompanyChatPort),
+            message_id=message_id,employee_id=str(data.employee_id))
+    except (ValueError,PermissionError) as exc:
         translate_error(exc)
 
 
