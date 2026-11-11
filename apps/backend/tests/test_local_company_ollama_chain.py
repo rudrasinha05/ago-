@@ -376,8 +376,8 @@ def test_implementation_quality_board_reviews_plan_before_code_tests_not_false_p
     assert result["roles_completed"] == 7
     quality_prompt = model.prompts[4]
     assert "PRE-EXECUTION QUALITY REVIEW" in quality_prompt
-    assert "tests have not executed YET" in quality_prompt
-    assert "isolated local Docker test gate" in quality_prompt
+    assert "Tests cannot run yet" in quality_prompt
+    assert "offline Docker test receipt" in quality_prompt
     assert "never claim" in quality_prompt.lower()
     assert "PRE-EXECUTION QUALITY REVIEW" not in model.prompts[3]
     assert all(len(p) <= 4000 for p in model.prompts)
