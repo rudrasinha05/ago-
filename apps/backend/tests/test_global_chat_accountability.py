@@ -109,6 +109,9 @@ def test_unknown_employee_and_nonfounder_order_are_rejected_atomically(case):
     post(client,BASE+'/chat',founder,{
         'channel':'global','body':'Do internal work','mentions':[str(uuid4())],
         'operation_key':str(uuid4())},expected=400)
+    post(client,BASE+'/chat',founder,{
+        'channel':'global','body':'@NotAnEmployee please fix production',
+        'operation_key':str(uuid4())},expected=400)
     assert info['db'].execute("""
         SELECT count(*) AS n FROM ago_company_chat
         WHERE tenant_id=%s AND author_id=%s
