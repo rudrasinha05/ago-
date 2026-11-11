@@ -289,6 +289,8 @@ def respond_company_chat(*, actor, store, message_id: int, employee_id: str,
     fabricated AI acknowledgement. The DB claim is fenced across the model call.
     The frontend can trigger this independently AFTER the fast message send.
     """
+    if "founder" not in actor.roles:
+        raise PermissionError("Founder authority required for local AI chat response")
     if provider is None:
         if (os.getenv("AGO_LLM_PROVIDER") != "ollama_local"
                 or os.getenv("AGO_ENABLE_LOCAL_MODELS") != "true"
