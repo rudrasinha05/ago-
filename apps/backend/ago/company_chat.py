@@ -323,7 +323,7 @@ class CompanyChat:
         if channel == 'global' and ids:
             order_rows = self.db.execute("""
                 SELECT message_id,intent,founder_order,accountable_ceo_id,
-                       state,receipt_message_id FROM ago_chat_orders
+                       mention_ids,state,receipt_message_id FROM ago_chat_orders
                 WHERE tenant_id=%s AND message_id=ANY(%s::bigint[])
             """, (tenant,ids)).fetchall()
             work_rows = self.db.execute("""
@@ -340,7 +340,12 @@ class CompanyChat:
                 orders[work['message_id']]['work_items'].append(dict(work))
             for item in items:
                 if item['id'] in orders:
-                    item['order'] = orders[item['id']]
+                    order = orders[item['id']]
+                    order['verified_acknowledgements'] = sum(
+                        w['ack_message_id'] is not None for w in order['work_items'])
+                    order['waiting_for_agent_ack'] = sum(
+                        w['ack_message_id'] is None for w in order['work_items'])
+                    item['order'] = order
         return {'items': items,
                 'next_before': rows[limit-1]['id'] if len(rows)>limit else None}
 
