@@ -6,6 +6,9 @@ existing governed task evidence can progress the order ledger.
 from uuid import uuid4
 
 from ago.security_controls import SecurityControls
+from ago.security import Principal
+from ago.company_chat import CompanyChat
+from ago.model_handlers import respond_company_chat
 from test_m7_http_postgres import case as case, post
 from test_enterprise_http_21_27 import department
 
@@ -219,3 +222,138 @@ def test_signed_human_addressee_ack_only_self_not_fake_ai(case):
     """,(info['tenant'],msg['id'],ceo)).fetchone()
     assert ceo_rec['status']=='awaiting_ack'
     assert ceo_rec['ack_message_id'] is None
+
+
+def test_real_local_model_reply_is_evidence_backed_and_idempotent(case):
+    client,headers,info=case
+    founder=headers['founder']
+    ceo,worker=make_staff(client,founder)
+    msg=send(client,founder,'Please describe the next approved UI task',
+             intent='order',mentions=[worker])
+    actor=Principal(subject=info['founder_id'],tenant_id=info['tenant'],roles=('founder',))
+    store=CompanyChat(info['db'])
+
+    class LocalTestModel:
+        calls=0
+        def generate(self,prompt):
+            self.calls+=1
+            assert 'Company Executive' in prompt
+            assert 'next approved UI task' in prompt
+            return 'Received. I will review the approved UI scope and report blockers.'
+
+    fake=LocalTestModel()
+    result=respond_company_chat(actor=actor,store=store,message_id=msg['id'],
+                                employee_id=ceo,provider=fake)
+    assert result['status']=='responded'
+    assert result['source']=='local_ollama_model'
+    assert result['ai_acknowledged'] is True
+    assert result['task_executed'] is False
+    assert fake.calls==1
+    duplicate=respond_company_chat(actor=actor,store=store,message_id=msg['id'],
+                                   employee_id=ceo,provider=fake)
+    assert duplicate['status']=='already_replied'
+    assert fake.calls==1
+    reply=info['db'].execute("""
+        SELECT author_id,author_name,body,reply_to,employee_id
+        FROM ago_company_chat WHERE tenant_id=%s AND id=%s
+    """,(info['tenant'],result['ack_message_id'])).fetchone()
+    assert reply['author_id'] is None
+    assert reply['author_name']=='AGO local AI · Company Executive'
+    assert reply['reply_to']==msg['id']
+    assert str(reply['employee_id'])==ceo
+    assert 'not task execution/QA evidence' in reply['body']
+    inbox=client.get(BASE+'/chat/orders',headers=founder).json()
+    order=next(x for x in inbox if x['message_id']==msg['id'])
+    assert order['real_ai_replies']==1
+    assert order['verified_acknowledgements']==1
+    assert order['awaiting_ack_count']==1
+    assert order['system_receipt_only'] is False
+    assert len([x for x in order['work_items'] if x['status']=='acknowledged'])==1
+    assert all(not x['release_verified'] for x in order['work_items'])
+
+
+def test_failed_local_model_never_forges_ack_and_can_retry(case):
+    client,headers,info=case
+    founder=headers['founder']
+    ceo,_=make_staff(client,founder)
+    msg=send(client,founder,'CEO please verify whether the engineer is available')
+    actor=Principal(subject=info['founder_id'],tenant_id=info['tenant'],roles=('founder',))
+    store=CompanyChat(info['db'])
+
+    class BrokenModel:
+        def generate(self,prompt):
+            raise TimeoutError('Local model did not respond')
+
+    first=respond_company_chat(actor=actor,store=store,message_id=msg['id'],
+                               employee_id=ceo,provider=BrokenModel())
+    assert first['status']=='model_unavailable'
+    assert first['ai_acknowledged'] is False
+    assert first['reason'].startswith('Local model call failed')
+    assert store.chat_order_inbox(actor)[0]['verified_acknowledgements']==0
+    attempts=info['db'].execute("""
+        SELECT response_attempts,response_claim_token,ack_message_id
+        FROM ago_chat_work_items WHERE tenant_id=%s AND message_id=%s
+          AND assignee_id=%s
+    """,(info['tenant'],msg['id'],ceo)).fetchone()
+    assert attempts['response_attempts']==1
+    assert attempts['response_claim_token'] is None
+    assert attempts['ack_message_id'] is None
+
+    class RecoveredModel:
+        def generate(self,prompt):
+            return 'Acknowledged. I need verified task data before reporting progress.'
+
+    restored=respond_company_chat(actor=actor,store=store,message_id=msg['id'],
+                                  employee_id=ceo,provider=RecoveredModel())
+    assert restored['status']=='responded'
+    assert store.chat_order_inbox(actor)[0]['verified_acknowledgements']==1
+
+
+def test_ai_reply_rejects_reviewer_and_unassigned_worker(case,monkeypatch):
+    client,headers,info=case
+    founder=headers['founder']
+    ceo,worker=make_staff(client,founder)
+    msg=send(client,founder,'CEO-only status update, no specialist tag')
+    actor=Principal(subject=info['founder_id'],tenant_id=info['tenant'],roles=('founder',))
+    reviewer=Principal(subject=info['reviewer_id'],tenant_id=info['tenant'],roles=('reviewer',))
+    store=CompanyChat(info['db'])
+    class FakeModel:
+        def generate(self,prompt):
+            return 'Received; pending approval.'
+
+    from pytest import raises
+    with raises(PermissionError):
+        respond_company_chat(actor=reviewer,store=store,message_id=msg['id'],
+                             employee_id=ceo,provider=FakeModel())
+    with raises(ValueError):
+        respond_company_chat(actor=actor,store=store,message_id=msg['id'],
+                             employee_id=worker,provider=FakeModel())
+    monkeypatch.setenv('AGO_LLM_PROVIDER','ollama_local')
+    monkeypatch.setenv('AGO_ENABLE_LOCAL_MODELS','false')
+    disabled=post(client,BASE+'/chat/orders/'+str(msg['id'])+'/respond',founder,
+                  {'employee_id':ceo})
+    assert disabled['status']=='local_model_disabled'
+    assert disabled['ai_acknowledged'] is False
+    assert client.post(BASE+'/chat/orders/'+str(msg['id'])+'/respond',
+                      json={'employee_id':ceo}).status_code==401
+
+
+def test_real_governed_task_status_and_qa_are_not_conflated_with_ack(case):
+    client,headers,info=case
+    founder=headers['founder']
+    ceo,worker=make_staff(client,founder)
+    msg=send(client,founder,'@Implementation Engineer build approved internal module')
+    task=post(client,'/v1/tasks',founder,
+              {'action':'internal:brief','assignee_id':worker})
+    post(client,BASE+'/chat/orders/'+str(msg['id'])+'/link-task',founder,
+         {'employee_id':worker,'task_id':task['id']})
+    item=next(x for x in client.get(BASE+'/chat/orders',headers=founder).json()[0]
+              ['work_items'] if x['assignee_id']==worker)
+    assert item['status']=='task_linked'
+    assert item['evidence_state']=='task_linked'
+    assert item['task_status']=='proposed'
+    assert item['qa_verdict'] is None
+    assert item['has_execution_evidence'] is False
+    assert item['ack_message_id'] is None
+    assert item['release_verified'] is False
+
