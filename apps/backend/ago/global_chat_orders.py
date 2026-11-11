@@ -5,6 +5,7 @@ release happens in this module. A system receipt is NOT an AI acknowledgement.
 """
 from __future__ import annotations
 
+import json
 import re
 from uuid import UUID, uuid4
 
@@ -106,7 +107,7 @@ class GlobalChatOrders:
                intent,mention_ids,state)
             VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s)
         """,(tenant_id,message_id,founder,ceo_id,intent,
-             __import__("json").dumps(addresses),state))
+             json.dumps(addresses),state))
         recipients = sorted(set(addresses + ([ceo_id] if ceo_id else [])))
         if ceo_id:
             for emp_id in recipients:
@@ -158,9 +159,31 @@ class GlobalChatOrders:
             WHERE w.tenant_id=%s AND w.message_id=%s ORDER BY e.name,w.id
         """,(tenant_id,message_id)).fetchall()
         return {**dict(order),"work_items":[dict(x) for x in workers],
-                "real_ai_acknowledgements":sum(
+                "verified_acknowledgements":sum(
                     w["ack_message_id"] is not None for w in workers),
                 "system_receipt_only":True}
+
+    def record_human_acknowledgement(self, *, tenant_id, actor_id,
+                                     parent_id, response_id):
+        """Only the actual signed human addressee's reply counts as acknowledgement.
+
+        No virtual AI employee is considered to have replied through a human
+        login. A system receipt has author_id=NULL and can never enter here.
+        """
+        if parent_id is None:
+            return False
+        verified = self.db.execute("""
+            UPDATE ago_chat_work_items w
+            SET status=CASE WHEN w.linked_task_id IS NULL THEN 'acknowledged'
+                            ELSE 'task_linked' END,
+                ack_message_id=%s,updated_at=now()
+            FROM ago_employees e
+            WHERE w.tenant_id=%s AND w.message_id=%s AND w.assignee_id=%s
+              AND e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+              AND e.kind='human' AND w.ack_message_id IS NULL
+            RETURNING w.id
+        """,(response_id,tenant_id,parent_id,actor_id)).fetchone()
+        return verified is not None
 
     def attach(self, *, tenant_id, actor_id, actor_is_founder, message_id,
                employee_id, task_id):
