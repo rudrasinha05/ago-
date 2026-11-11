@@ -28,8 +28,22 @@ class GlobalChatOrders:
 
     def _employees(self, tenant_id):
         rows = self.db.execute("""
-            SELECT id,name,kind,manager_id FROM ago_employees
-            WHERE tenant_id=%s ORDER BY id
+            SELECT e.id,e.name,e.kind,e.manager_id FROM ago_employees e
+            WHERE e.tenant_id=%s
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_personnel_events p
+                WHERE p.tenant_id=e.tenant_id AND p.employee_id=e.id
+                  AND p.change_kind='terminated'
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_department_lifecycle_events d
+                WHERE d.tenant_id=e.tenant_id AND d.department_id=e.department_id
+                  AND d.action='closed'
+              )
+              AND (e.kind='ai' OR EXISTS (
+                SELECT 1 FROM ago_users u
+                WHERE u.tenant_id=e.tenant_id AND u.id=e.id AND u.active))
+            ORDER BY e.id
         """, (tenant_id,)).fetchall()
         return {str(r["id"]): dict(r) for r in rows}
 
