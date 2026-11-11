@@ -180,6 +180,26 @@ class GlobalChatOrders:
                     w["ack_message_id"] is not None for w in workers),
                 "system_receipt_only":True}
 
+    def inbox(self, tenant_id, *, limit=50):
+        """Founder-only durable CEO order queue; no synthetic completion."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid order inbox limit")
+        records = self.db.execute("""
+            SELECT o.message_id,o.intent,o.founder_order,o.accountable_ceo_id,
+                   o.mention_ids,o.receipt_message_id,o.state,o.created_at,
+                   c.author_name,c.body
+            FROM ago_chat_orders o
+            JOIN ago_company_chat c ON c.tenant_id=o.tenant_id AND c.id=o.message_id
+            WHERE o.tenant_id=%s AND o.founder_order
+            ORDER BY o.message_id DESC LIMIT %s
+        """,(tenant_id,limit)).fetchall()
+        return [self.details(tenant_id,row['message_id']) | {
+            "author_name":row['author_name'], "body":row['body'],
+            "awaiting_ack_count":sum(
+                w['ack_message_id'] is None
+                for w in self.details(tenant_id,row['message_id'])['work_items']),
+        } for row in records]
+
     def record_human_acknowledgement(self, *, tenant_id, actor_id,
                                      parent_id, response_id):
         """Only the actual signed human addressee's reply counts as acknowledgement.
@@ -413,6 +433,12 @@ class CompanyChat:
                         parent_id=original['message_id'] if original else reply_to,
                         response_id=row['id'])
             return result
+
+    def chat_order_inbox(self, actor, limit: int=50) -> list[dict]:
+        if 'founder' not in actor.roles or not self._channel_permission(
+                actor.tenant_id, actor.subject, 'global'):
+            raise PermissionError("Founder authority required for CEO accountability inbox")
+        return GlobalChatOrders(self.db).inbox(actor.tenant_id, limit=limit)
 
     def link_chat_task(self, actor, message_id: int, employee_id: str,
                        task_id: str) -> dict:
