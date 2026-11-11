@@ -299,6 +299,18 @@
           "arguments": "self, actor, limit: int=50",
           "returns": "list[dict]"
         },
+        "claim_ai_chat_reply": {
+          "arguments": "self, actor, message_id: int, employee_id: str",
+          "returns": "dict"
+        },
+        "commit_ai_chat_reply": {
+          "arguments": "self, actor, message_id: int, employee_id: str, claim_token: str, answer: str",
+          "returns": "dict"
+        },
+        "abort_ai_chat_reply": {
+          "arguments": "self, actor, message_id: int, employee_id: str, claim_token: str",
+          "returns": "None"
+        },
         "activity": {
           "arguments": "self, tenant_id, reader_id: str | None=None",
           "returns": "Any"
