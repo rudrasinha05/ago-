@@ -55,8 +55,10 @@ def test_runner_receives_ceo_reply_then_delegated_worker_no_browser():
     orders=[msg(10,targets=(CEO,))]
     seen=[]
     def transport(method,path,body=None):
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if method=="GET":return orders
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if method=="GET":
+            return orders
         assert path.startswith("/v1/organization/company/chat/orders/10/respond")
         who=body["employee_id"]
         seen.append(who)
@@ -82,8 +84,10 @@ def test_runner_stops_on_revoked_token_without_cached_password_relogin():
     calls=[]
     def request(method,path,body=None):
         calls.append((method,path))
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if method=="GET":return [msg(10)]
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if method=="GET":
+            return [msg(10)]
         raise runner.SessionExpired()
     result=runner.run_session(request,apply=True,confirmation=runner.CONFIRM,
                               clock=lambda:0,pause=lambda _:None)
@@ -95,8 +99,10 @@ def test_runner_stops_on_revoked_token_without_cached_password_relogin():
 def test_runner_never_claims_success_after_uncertain_http_answer():
     calls=[]
     def request(method,path,body=None):
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if method=="GET":return [msg(10)]
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if method=="GET":
+            return [msg(10)]
         calls.append(path)
         raise URLError("Lost POST answer; outcome may be recorded")
     result=runner.run_session(request,apply=True,confirmation=runner.CONFIRM,
@@ -112,8 +118,10 @@ def test_runner_never_claims_success_after_uncertain_http_answer():
 ])
 def test_worker_honors_model_gate_and_retry_budget(result,expected):
     def request(method,path,body=None):
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if method=="GET":return [msg(10)]
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if method=="GET":
+            return [msg(10)]
         return result
     outcome=runner.run_session(request,apply=True,confirmation=runner.CONFIRM,
                                clock=lambda:1,pause=lambda _:None)
@@ -131,8 +139,10 @@ def test_pending_priority_is_oldest_ceo_first_and_skips_human():
 
 def test_runner_escalates_missing_ceo_instead_of_saying_orders_finished():
     def transport(method,path,body=None):
-        if path=="/v1/console/me":return {"roles":["founder"]}
-        if method=="GET":return [msg(20,state="blocked_no_ceo",targets=())]
+        if path=="/v1/console/me":
+            return {"roles":["founder"]}
+        if method=="GET":
+            return [msg(20,state="blocked_no_ceo",targets=())]
         raise AssertionError("No AI model may run without appointed CEO")
     result=runner.run_session(transport,apply=True,confirmation=runner.CONFIRM,
                               clock=lambda:1,pause=lambda _:None)
