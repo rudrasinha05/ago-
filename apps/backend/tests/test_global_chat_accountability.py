@@ -117,8 +117,9 @@ def test_unknown_employee_and_nonfounder_order_are_rejected_atomically(case):
         WHERE tenant_id=%s AND author_id=%s
     """,(info['tenant'],info['founder_id'])).fetchone()['n']==before
     with info['db'].transaction():
-        SecurityControls(info['db']).grant(info['tenant'],'reviewer','messages:write')
-        SecurityControls(info['db']).grant(info['tenant'],'reviewer','messages:read')
+        for permission in ('organization:read','task:read','messages:write',
+                           'messages:read'):
+            SecurityControls(info['db']).grant(info['tenant'],'reviewer',permission)
     post(client,BASE+'/chat',reviewer,{
         'channel':'global','body':'I am the CEO now', 'intent':'order',
         'operation_key':str(uuid4())},expected=403)
@@ -197,8 +198,9 @@ def test_signed_human_addressee_ack_only_self_not_fake_ai(case):
     founder,reviewer=headers['founder'],headers['reviewer']
     ceo,_=make_staff(client,founder)
     with info['db'].transaction():
-        SecurityControls(info['db']).grant(info['tenant'],'reviewer','messages:write')
-        SecurityControls(info['db']).grant(info['tenant'],'reviewer','messages:read')
+        for permission in ('organization:read','task:read','messages:write',
+                           'messages:read'):
+            SecurityControls(info['db']).grant(info['tenant'],'reviewer',permission)
     reviewer_id=info['reviewer_id']
     msg=send(client,founder,'Please acknowledge the review request',
              mentions=[reviewer_id])
