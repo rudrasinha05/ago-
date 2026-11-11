@@ -315,13 +315,29 @@ class GlobalChatOrders:
                   AND other.assignee_id<>%s
                 ORDER BY c.id DESC LIMIT 3
             """,(actor.tenant_id,message_id,employee_id)).fetchall()
+            # An untagged Founder ORDER can be routed onward by the appointed
+            # CEO model, but ONLY to an eligible immediate AI report. This is a
+            # pending message/work assignment, not a governed task execution.
+            details=self.db.execute("""
+                SELECT o.intent,o.mention_ids
+                FROM ago_chat_orders o WHERE o.tenant_id=%s AND o.message_id=%s
+            """,(actor.tenant_id,message_id)).fetchone()
+            delegates=[]
+            if (details and details['intent']=='order'
+                    and not details['mention_ids'] and employee_id==str(ceo['id'])):
+                delegates=[{'id':ident,'name':info['name'][:80]}
+                           for ident,info in sorted(current.items())
+                           if (ident!=employee_id and info['kind']=='ai'
+                               and str(info['manager_id'])==employee_id)][:8]
             return {'status':'claimed','message_id':message_id,
                     'employee_id':employee_id,'employee_name':worker['name'],
                     'claim_token':token,'request_body':worker['request_body'][:1200],
                     'team_replies':[{'agent':p['name'][:80],
-                                     'message':p['body'][:250]} for p in reversed(prior)]}
+                                     'message':p['body'][:250]} for p in reversed(prior)],
+                    'eligible_delegates':delegates}
 
-    def commit_ai_reply(self, actor, message_id, employee_id, token, text):
+    def commit_ai_reply(self, actor, message_id, employee_id, token, text,
+                        delegate_employee_id=None):
         """Append actual local-model text and its ACK atomically."""
         if 'founder' not in actor.roles:
             raise PermissionError("Founder authority required")
@@ -354,6 +370,30 @@ class GlobalChatOrders:
             if (employee_id not in eligible or ceo is None
                     or str(ceo['id'])!=str(row['accountable_ceo_id'])):
                 raise PermissionError("AI employee/CEO authority changed during inference")
+            delegated=None
+            if delegate_employee_id is not None:
+                delegate_employee_id=self._uuid(delegate_employee_id)
+                order=self.db.execute("""
+                    SELECT intent,mention_ids FROM ago_chat_orders
+                    WHERE tenant_id=%s AND message_id=%s
+                """,(actor.tenant_id,message_id)).fetchone()
+                target=eligible.get(delegate_employee_id)
+                # Exact hierarchy, same company, no override of Founder tags.
+                if (employee_id!=str(ceo['id']) or not order
+                        or order['intent']!='order' or order['mention_ids']
+                        or not target or target['kind']!='ai'
+                        or str(target['manager_id'])!=employee_id):
+                    raise PermissionError("AI delegation violates CEO hierarchy or Founder scope")
+                # The existing Founder order remains the source of truth;
+                # an AI cannot assign itself a task or bypass task approval.
+                self.db.execute("""
+                    INSERT INTO ago_chat_work_items
+                        (id,tenant_id,message_id,assignee_id,accountable_ceo_id)
+                    VALUES (%s,%s,%s,%s,%s)
+                    ON CONFLICT (tenant_id,message_id,assignee_id) DO NOTHING
+                """,(str(uuid4()),actor.tenant_id,message_id,
+                     delegate_employee_id,employee_id))
+                delegated=delegate_employee_id
             # Crucial: no invented human identity/approval. Real inference is
             # labelled as unverified AI text, with source linked by reply_to.
             message=self.db.execute("""
@@ -384,7 +424,7 @@ class GlobalChatOrders:
             return {'status':'responded','message_id':message_id,
                     'employee_id':employee_id,'ack_message_id':message['id'],
                     'source':'local_ollama_model','task_executed':False,
-                    'qa_verified':False}
+                    'qa_verified':False,'delegated_employee_id':delegated}
 
     def abort_ai_reply(self, actor, message_id, employee_id, token):
         """Release a failed lease without forging a reply; keep attempt count."""
@@ -650,9 +690,11 @@ class CompanyChat:
         return GlobalChatOrders(self.db).claim_ai_reply(actor,message_id,employee_id)
 
     def commit_ai_chat_reply(self, actor, message_id: int, employee_id: str,
-                             claim_token: str, answer: str) -> dict:
+                             claim_token: str, answer: str,
+                             delegate_employee_id=None) -> dict:
         return GlobalChatOrders(self.db).commit_ai_reply(
-            actor,message_id,employee_id,claim_token,answer)
+            actor,message_id,employee_id,claim_token,answer,
+            delegate_employee_id=delegate_employee_id)
 
     def abort_ai_chat_reply(self, actor, message_id: int, employee_id: str,
                             claim_token: str) -> None:
