@@ -165,6 +165,15 @@ def run_four_role_chain(
         "The approved scope is settled: do not ask again for business case, market or "
         "budget evidence. DENY only for a concrete blocker in your seat's area for THIS "
         "stage.\n") if later_stage else ""
+    # In implementation the Board reviews the plan BEFORE source code exists.
+    # Real Docker test receipts and independent QA are separate later gates.
+    quality_pre_execution_rule = (
+        "PRE-EXECUTION QUALITY: Vote only on the plan to start coding, NOT "
+        "code QA or release. Tests cannot run yet; that alone is NOT DENY. "
+        "DENY a missing planned offline Docker test receipt, independent QA, "
+        "or real safety defect. Never claim tests passed.\n"
+        if project_stage == "implementation" else ""
+    )
     # Two-seat legacy drafting remains available. The founder's explicitly
     # opted-in complete Board has 5 distinct AI directors + a PM + a worker.
     full_board = len(participants) == len(FULL_BOARD_STAGES)
@@ -278,7 +287,8 @@ def run_four_role_chain(
                 else ("Review the "+project_stage+" stage ("+stage_deliverable[:120]
                       +") from your seat: "+goal)
                 if later_stage and role in BOARD_ROLE_SEATS else goal)+"\n"
-            +(board_stage_rule if role in BOARD_ROLE_SEATS else "")
+            +(quality_pre_execution_rule if role == "quality" and quality_pre_execution_rule
+              else board_stage_rule if role in BOARD_ROLE_SEATS else "")
             +("BOARD_ADVISORY: Your FIRST line must be exactly one of these two lines, "
               "with nothing else on it:\nBOARD_RECOMMENDATION: APPROVE\n"
               "BOARD_RECOMMENDATION: DENY\nWrite that line only once. "
