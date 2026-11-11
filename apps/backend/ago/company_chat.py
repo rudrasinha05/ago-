@@ -288,9 +288,24 @@ class GlobalChatOrders:
                     response_attempts=response_attempts+1,updated_at=now()
                 WHERE tenant_id=%s AND id=%s
             """,(token,actor.tenant_id,worker['id']))
+            # Real previously committed model replies are the sole source for
+            # team context. This is not an AI order or execution permission.
+            prior=self.db.execute("""
+                SELECT e.name,c.body
+                FROM ago_chat_work_items other
+                JOIN ago_company_chat c ON c.tenant_id=other.tenant_id
+                  AND c.id=other.ack_message_id
+                JOIN ago_employees e ON e.tenant_id=other.tenant_id
+                  AND e.id=other.assignee_id AND e.kind='ai'
+                WHERE other.tenant_id=%s AND other.message_id=%s
+                  AND other.assignee_id<>%s
+                ORDER BY c.id DESC LIMIT 3
+            """,(actor.tenant_id,message_id,employee_id)).fetchall()
             return {'status':'claimed','message_id':message_id,
                     'employee_id':employee_id,'employee_name':worker['name'],
-                    'claim_token':token,'request_body':worker['request_body'][:1500]}
+                    'claim_token':token,'request_body':worker['request_body'][:1200],
+                    'team_replies':[{'agent':p['name'][:80],
+                                     'message':p['body'][:250]} for p in reversed(prior)]}
 
     def commit_ai_reply(self, actor, message_id, employee_id, token, text):
         """Append actual local-model text and its ACK atomically."""
