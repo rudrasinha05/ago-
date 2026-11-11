@@ -373,7 +373,15 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
     assert report["kind"]==("blocker" if deny_risk else "module_complete")
     details=client.get(BASE+"/projects/"+project["id"],headers=founder)
     assert details.status_code==200,details.text
-    chain=details.json()["stages"][0]["founder_agent_result"]
+    stage = details.json()["stages"][0]
+    chain = stage["founder_agent_result"]
+    if deny_risk:
+        # The stage now points to a NEW proposed correction: the current
+        # proposal has no AI run yet. Immutable old Board evidence remains
+        # in the recorded run and is never misattributed to new work.
+        assert chain is None
+        assert stage["task_id"] == response["continuation"]["task_id"]
+        chain = saved["result"]
     assert chain["roles_completed"]==expected_count
     assert chain["handoffs"][0]["employee_id"]==ceo
     assert chain["board_review_mode"]==(
