@@ -7,6 +7,7 @@ from dataclasses import asdict
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.organization_store import OrganizationStore
 from ago.governance import ApprovalRepository
+from ago.global_chat_orders import GlobalChatOrders
 
 
 class CompanyChat:
@@ -88,16 +89,46 @@ class CompanyChat:
           ORDER BY c.id DESC LIMIT %s''',
           (tenant, channel, channel, channel, tenant, channel, before, before,
            founder,channel,reader_id,reader_id,limit+1)).fetchall()
-        return {'items': list(reversed(rows[:limit])),
+        items = [dict(row) for row in reversed(rows[:limit])]
+        # Durable order ownership is attached to the same saved timeline
+        # with bounded queries. No unverified agent reply is synthesized.
+        ids = [item['id'] for item in items]
+        if channel == 'global' and ids:
+            order_rows = self.db.execute("""
+                SELECT message_id,intent,founder_order,accountable_ceo_id,
+                       state,receipt_message_id FROM ago_chat_orders
+                WHERE tenant_id=%s AND message_id=ANY(%s::bigint[])
+            """, (tenant,ids)).fetchall()
+            work_rows = self.db.execute("""
+                SELECT w.message_id,w.id,w.assignee_id,e.name AS assignee_name,
+                       w.status,w.linked_task_id,w.ack_message_id
+                FROM ago_chat_work_items w
+                JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+                WHERE w.tenant_id=%s AND w.message_id=ANY(%s::bigint[])
+                ORDER BY e.name,w.id
+            """, (tenant,ids)).fetchall()
+            orders = {r['message_id']: {**dict(r), 'work_items': [],
+                       'system_receipt_only': True} for r in order_rows}
+            for work in work_rows:
+                orders[work['message_id']]['work_items'].append(dict(work))
+            for item in items:
+                if item['id'] in orders:
+                    item['order'] = orders[item['id']]
+        return {'items': items,
                 'next_before': rows[limit-1]['id'] if len(rows)>limit else None}
 
-    def send(self, actor, channel, body, reply_to, operation_key):
+    def send(self, actor, channel, body, reply_to, operation_key,
+             *, mentions=(), intent='message'):
         self.channel(actor.tenant_id, channel)
         if not self._channel_permission(actor.tenant_id,actor.subject,channel):
             raise PermissionError('Channel access denied')
         body = body.strip()
         if not body:
             raise ValueError('Write a message first')
+        if channel != 'global' and (mentions or intent != 'message'):
+            raise ValueError('Global mentions/orders belong in global chat')
+        if len(mentions) > 10:
+            raise ValueError('Too many tagged employees')
         with self.db.transaction():
             if reply_to is not None:
                 parent = self.db.execute("""
@@ -124,7 +155,15 @@ class CompanyChat:
                 # A reply from verified task rows is useful without an LLM.
                 # Label it as automated status, never pretend an AI replied.
                 self._record_status_reply(actor.tenant_id, channel, row['id'])
-            return row
+            result = dict(row)
+            if channel == 'global':
+                routing = GlobalChatOrders(self.db).route(
+                    tenant_id=actor.tenant_id, author_id=actor.subject,
+                    message_id=row['id'], body=body, mentions=mentions,
+                    intent=intent, founder='founder' in actor.roles)
+                if routing is not None:
+                    result['order'] = routing
+            return result
 
     @staticmethod
     def _asks_work_status(body: str) -> bool:
