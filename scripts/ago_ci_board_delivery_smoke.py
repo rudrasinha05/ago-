@@ -130,7 +130,10 @@ def test_veto_stops_code_generation() -> dict:
     assert result["blocked_by_board_seat"] == "Risk & Compliance"
     assert result["engineering_candidate"] is None
     assert result["handoff_complete"] is False
-    assert len(provider.calls) == 4
+    # Four role drafts plus one question: a DENY without a concrete reason is
+    # asked once for its problem; it stays a DENY, so no code is generated.
+    assert len(provider.calls) == 5
+    assert not any("ROLE: EMPLOYEE\n" in call for call in provider.calls)
     return {"board_veto_prevented_engineering": True, "github_committed": False}
 
 
