@@ -11,6 +11,11 @@ import json
 import re
 
 
+# Explicit addressing is bounded; unknown tags never silently grant authority.
+MAX_ADDRESSEES = 10
+BRACED_TAG = re.compile(r"@\{([^{}]{1,80})\}")
+
+
 class GlobalChatOrders:
     def __init__(self, storage):
         # This is a helper within CompanyChat's existing reviewed persistence
