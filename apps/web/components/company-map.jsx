@@ -416,7 +416,16 @@ export function CompanyMap({api,me,data,onRefresh}) {
         method:'POST',body:{employee_id:employeeId}
       });
       if(!alive.current)return;
-      if(result.status==='responded'||result.status==='already_replied')setAiStatus('Actual AI reply recorded in Global Chat.');
+      if(result.status==='responded'||result.status==='already_replied'){
+        setAiStatus('Actual AI reply recorded in Global Chat; task execution and QA still pending.');
+        // CEO can safely propose one direct-report assignment for an untagged
+        // Founder order. Only a server-verified assignee ID is queued here.
+        if(result.status==='responded'&&result.delegated_employee_id){
+          const specialist=result.delegated_employee_id;
+          aiReplyQueue.current=aiReplyQueue.current.then(
+            ()=>respondOne(messageId,specialist)).catch(()=>{});
+        }
+      }
       else if(result.status==='local_model_disabled')setAiStatus('Local Ollama replies are disabled. The order remains pending.');
       else if(result.status==='model_unavailable')setAiStatus('Local Ollama did not answer. No AI acknowledgment was recorded.');
       else if(result.status==='already_processing')setAiStatus('Agent response already processing. Check the saved timeline.');
@@ -726,10 +735,10 @@ export function CompanyMap({api,me,data,onRefresh}) {
               <option value="message">Question / message (CEO must respond)</option>
               <option value="order">Founder order (CEO accountable)</option>
             </select>
-            <label htmlFor="chat-tag-agent">Tag an employee for acknowledgment / work</label>
-            <select id="chat-tag-agent" value="" onChange={e=>{if(e.target.value)setTaggedAgents(old=>[...new Set([...old,e.target.value])]);}}>
-              <option value="">@ Choose an AI employee (optional)</option>
-              {employees.filter(e=>e.kind==='ai'&&!taggedAgents.includes(e.id)).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+            <label htmlFor="chat-tag-agent">Tag an employee for acknowledgment / work (up to 10)</label>
+            <select id="chat-tag-agent" value="" onChange={e=>{if(e.target.value)setTaggedAgents(old=>[...new Set([...old,e.target.value])].slice(0,10));}}>
+              <option value="">@ Choose an employee (optional)</option>
+              {employees.filter(e=>!taggedAgents.includes(e.id)).map(e=><option key={e.id} value={e.id}>{e.name}{e.kind==='ai'?' · AI':''}</option>)}
             </select>
             {taggedAgents.map(id=><span key={id} className="chat-mention-tag">
               @{employees.find(e=>e.id===id)?.name||'Employee'}
