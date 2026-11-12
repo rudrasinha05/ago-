@@ -453,3 +453,37 @@ def test_tampered_acceptance_check_after_review_still_fails_closed(tmp_path):
     with pytest.raises(PermissionError, match="changed after review"):
         stage_candidate(reviewed, tmp_path / "never-written")
     assert not (tmp_path / "never-written").exists()
+
+
+def test_every_generated_test_module_requires_a_discoverable_case():
+    """One valid file must not hide a second file with zero discovered tests."""
+    from ago.company_engineering import assert_discoverable_unittest
+
+    proposed = candidate()
+    proposed["files"].append({
+        "path": "tests/test_hidden.py",
+        "content": "from src.adder import add\n\ndef test_hidden():\n    assert add(1, 2) == 3\n",
+    })
+    reviewed = reviewed_candidate(json.dumps(proposed))
+    with pytest.raises(ValueError, match="discoverable unittest.TestCase"):
+        assert_discoverable_unittest(reviewed)
+    assert reviewed["tests_executed"] is False
+    assert reviewed["qa_approved"] is False
+
+
+def test_every_generated_test_module_can_contain_a_discoverable_case():
+    """Two independently discoverable test files remain a valid unexecuted draft."""
+    from ago.company_engineering import assert_discoverable_unittest
+
+    proposed = candidate()
+    proposed["files"].append({
+        "path": "tests/test_another.py",
+        "content": (
+            "import unittest\nfrom src.adder import add\n"
+            "class OtherTests(unittest.TestCase):\n"
+            "    def test_other(self):\n        self.assertEqual(add(-2, 2), 0)\n"
+        ),
+    })
+    reviewed = reviewed_candidate(json.dumps(proposed))
+    assert assert_discoverable_unittest(reviewed) is reviewed
+    assert reviewed["tests_executed"] is False
