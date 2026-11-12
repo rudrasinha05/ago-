@@ -134,38 +134,72 @@ def reviewed_candidate(raw: str) -> dict:
 
 
 def assert_discoverable_unittest(value: dict) -> dict:
-    """Check generated tests match our offline unittest runner, without executing code.
+    """Fail closed unless EVERY generated test file is unittest-discoverable.
 
-    This is only a static preflight, NOT evidence that test assertions pass.
-    A fixture using bare pytest functions cannot be run by our isolated
-    standard-library-only Docker command.
+    This static preflight neither imports candidate modules nor runs their tests.
+    The separately authorized offline Docker gate remains the only test evidence.
     """
-    tests = [item["content"] for item in value["files"]
-             if item["path"].startswith("tests/test_")]
-    for source in tests:
-        tree = ast.parse(source)
-        imported = any(
-            isinstance(node, ast.Import) and any(alias.name == "unittest"
-                and (alias.asname is None or alias.asname == "unittest")
-                for alias in node.names)
+    source_modules = {
+        item["path"][:-3].replace("/", ".")
+        for item in value["files"]
+        if item["path"].startswith("src/") and item["path"].endswith(".py")
+    }
+    tests = [
+        item for item in value["files"]
+        if item["path"].startswith("tests/test_")
+    ]
+    if not tests:
+        raise ValueError("AI code must include discoverable unittest.TestCase test_* methods")
+    for item in tests:
+        # unittest.discover('tests', pattern='test_*.py') does not descend into
+        # generated nested directories without package initialization files.
+        if item["path"].count("/") != 1:
+            raise ValueError("AI unittest path must be a flat tests/test_*.py file")
+        tree = ast.parse(item["content"], filename=item["path"])
+        imports_unittest = any(
+            isinstance(node, ast.Import)
+            and any(alias.name == "unittest" and alias.asname in (None, "unittest")
+                    for alias in node.names)
             for node in tree.body
         )
-        if not imported:
-            continue
-        for cls in (node for node in tree.body if isinstance(node, ast.ClassDef)):
-            is_case = any(
-                isinstance(base, ast.Attribute) and base.attr == "TestCase"
-                and isinstance(base.value, ast.Name) and base.value.id == "unittest"
+        has_test_case = any(
+            isinstance(cls, ast.ClassDef)
+            and any(
+                isinstance(base, ast.Attribute)
+                and base.attr == "TestCase"
+                and isinstance(base.value, ast.Name)
+                and base.value.id == "unittest"
                 for base in cls.bases
             )
-            if is_case and any(
-                isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and any(
+                isinstance(method, ast.FunctionDef)
                 and method.name.startswith("test_")
-                and not isinstance(method, ast.AsyncFunctionDef)
                 for method in cls.body
-            ):
-                return value
-    raise ValueError("AI code must include discoverable unittest.TestCase test_* methods")
+            )
+            for cls in tree.body
+        )
+        if not imports_unittest or not has_test_case:
+            raise ValueError(
+                "AI code must include discoverable unittest.TestCase test_* methods "
+                "in every test file"
+            )
+        # Test files that only assert True are discoverable but need not
+        # exercise the proposed implementation. Require a static import link,
+        # without pretending to prove semantic coverage or passing tests.
+        links_source = any(
+            (
+                isinstance(node, ast.ImportFrom)
+                and node.level == 0
+                and node.module in source_modules
+            ) or (
+                isinstance(node, ast.Import)
+                and any(alias.name in source_modules for alias in node.names)
+            )
+            for node in ast.walk(tree)
+        )
+        if not links_source:
+            raise ValueError("AI acceptance tests must import a generated src module")
+    return value
 
 
 def verify_persisted_candidate(value: dict) -> dict:
