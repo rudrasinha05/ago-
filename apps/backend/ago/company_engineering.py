@@ -117,13 +117,21 @@ def reviewed_candidate(raw: str) -> dict:
             "bytes": len(content.encode("utf-8")),
             "python_syntax_checked": path.endswith(".py"),
         })
-    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    # The persisted candidate stores trimmed checks. Hash that exact canonical
+    # representation, not the untrusted pre-normalization model response;
+    # otherwise harmless whitespace makes verify_persisted_candidate reject a
+    # valid candidate before staging or QA can begin.
+    normalized_checks = [check.strip() for check in checks]
+    canonical = json.dumps(
+        {"files": files, "acceptance_checks": normalized_checks},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    )
     return {
         "kind": "ago_unexecuted_engineering_candidate",
         "candidate_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
         "files": files,
         "file_evidence": evidence,
-        "acceptance_checks": [c.strip() for c in checks],
+        "acceptance_checks": normalized_checks,
         "source_parse_passed": True,
         "tests_executed": False,
         "github_committed": False,
