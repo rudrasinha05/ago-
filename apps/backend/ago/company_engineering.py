@@ -150,6 +150,10 @@ def assert_discoverable_unittest(value: dict) -> dict:
     """
     tests = [item["content"] for item in value["files"]
              if item["path"].startswith("tests/test_")]
+    # The offline runner discovers the whole tests/ tree. Checking only the
+    # first working file can conceal another generated test file that contains
+    # bare pytest functions or no discoverable tests at all. Review EACH file
+    # separately; a model may not pad its test count with undiscovered files.
     for source in tests:
         tree = ast.parse(source)
         imported = any(
@@ -158,22 +162,23 @@ def assert_discoverable_unittest(value: dict) -> dict:
                 for alias in node.names)
             for node in tree.body
         )
-        if not imported:
-            continue
-        for cls in (node for node in tree.body if isinstance(node, ast.ClassDef)):
-            is_case = any(
+        has_case = imported and any(
+            isinstance(cls, ast.ClassDef)
+            and any(
                 isinstance(base, ast.Attribute) and base.attr == "TestCase"
                 and isinstance(base.value, ast.Name) and base.value.id == "unittest"
                 for base in cls.bases
             )
-            if is_case and any(
-                isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and any(
+                isinstance(method, ast.FunctionDef)
                 and method.name.startswith("test_")
-                and not isinstance(method, ast.AsyncFunctionDef)
                 for method in cls.body
-            ):
-                return value
-    raise ValueError("AI code must include discoverable unittest.TestCase test_* methods")
+            )
+            for cls in tree.body
+        )
+        if not has_case:
+            raise ValueError("AI code must include discoverable unittest.TestCase test_* methods")
+    return value
 
 
 def verify_persisted_candidate(value: dict) -> dict:
