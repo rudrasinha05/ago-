@@ -32,7 +32,14 @@ class FixedBoardProvider:
     def generate(self, prompt: str) -> str:
         self.calls.append(prompt)
         if "ROLE: EMPLOYEE\n" in prompt:
-            return json.dumps(candidate_source(broken=self.broken_code))
+            # Exercise the exact review -> persisted digest -> real offline
+            # Docker boundary with a valid schema answer whose acceptance
+            # checks need harmless normalization. Synthetic fixture only.
+            candidate = candidate_source(broken=self.broken_code)
+            candidate["acceptance_checks"] = [
+                "  " + check + "  " for check in candidate["acceptance_checks"]
+            ]
+            return json.dumps(candidate)
         if "ROLE: RISK\n" in prompt and self.deny_risk:
             return "BOARD_RECOMMENDATION: DENY\nRISKS: Static fixture veto"
         if "BOARD_ADVISORY:" in prompt:

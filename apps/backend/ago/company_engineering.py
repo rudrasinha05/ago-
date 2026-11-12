@@ -117,13 +117,21 @@ def reviewed_candidate(raw: str) -> dict:
             "bytes": len(content.encode("utf-8")),
             "python_syntax_checked": path.endswith(".py"),
         })
-    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    # The persisted candidate stores trimmed checks. Hash that exact canonical
+    # representation, not the untrusted pre-normalization model response;
+    # otherwise harmless whitespace makes verify_persisted_candidate reject a
+    # valid candidate before staging or QA can begin.
+    normalized_checks = [check.strip() for check in checks]
+    canonical = json.dumps(
+        {"files": files, "acceptance_checks": normalized_checks},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    )
     return {
         "kind": "ago_unexecuted_engineering_candidate",
         "candidate_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
         "files": files,
         "file_evidence": evidence,
-        "acceptance_checks": [c.strip() for c in checks],
+        "acceptance_checks": normalized_checks,
         "source_parse_passed": True,
         "tests_executed": False,
         "github_committed": False,
@@ -142,6 +150,10 @@ def assert_discoverable_unittest(value: dict) -> dict:
     """
     tests = [item["content"] for item in value["files"]
              if item["path"].startswith("tests/test_")]
+    # The offline runner discovers the whole tests/ tree. Checking only the
+    # first working file can conceal another generated test file that contains
+    # bare pytest functions or no discoverable tests at all. Review EACH file
+    # separately; a model may not pad its test count with undiscovered files.
     for source in tests:
         tree = ast.parse(source)
         imported = any(
@@ -150,22 +162,23 @@ def assert_discoverable_unittest(value: dict) -> dict:
                 for alias in node.names)
             for node in tree.body
         )
-        if not imported:
-            continue
-        for cls in (node for node in tree.body if isinstance(node, ast.ClassDef)):
-            is_case = any(
+        has_case = imported and any(
+            isinstance(cls, ast.ClassDef)
+            and any(
                 isinstance(base, ast.Attribute) and base.attr == "TestCase"
                 and isinstance(base.value, ast.Name) and base.value.id == "unittest"
                 for base in cls.bases
             )
-            if is_case and any(
-                isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and any(
+                isinstance(method, ast.FunctionDef)
                 and method.name.startswith("test_")
-                and not isinstance(method, ast.AsyncFunctionDef)
                 for method in cls.body
-            ):
-                return value
-    raise ValueError("AI code must include discoverable unittest.TestCase test_* methods")
+            )
+            for cls in tree.body
+        )
+        if not has_case:
+            raise ValueError("AI code must include discoverable unittest.TestCase test_* methods")
+    return value
 
 
 def verify_persisted_candidate(value: dict) -> dict:

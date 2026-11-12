@@ -413,3 +413,77 @@ def test_code_author_answer_is_schema_constrained_only_when_provider_supports_it
     # The schema is the shape reviewed_candidate already enforces.
     assert set(ENGINEERING_CANDIDATE_SCHEMA["required"]) == {"files", "acceptance_checks"}
     assert ENGINEERING_CANDIDATE_SCHEMA["properties"]["files"]["maxItems"] == 6
+
+
+def test_normalized_acceptance_checks_survive_review_staging_and_qa(
+    tmp_path, monkeypatch,
+):
+    """AI output whitespace must not invalidate the persisted SHA at the next gate."""
+    from ago.company_engineering import stage_candidate, verify_persisted_candidate
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "scripts"))
+    from ago_verify_candidate import inspect as inspect_staged
+
+    proposed = candidate()
+    proposed["acceptance_checks"] = [
+        "  " + check + "  " for check in proposed["acceptance_checks"]
+    ]
+    reviewed = reviewed_candidate(json.dumps(proposed))
+    original = reviewed_candidate(json.dumps(candidate()))
+
+    assert reviewed["acceptance_checks"] == original["acceptance_checks"]
+    assert reviewed["candidate_sha256"] == original["candidate_sha256"]
+    assert verify_persisted_candidate(reviewed)["candidate_sha256"] == original[
+        "candidate_sha256"
+    ]
+
+    destination = tmp_path / "reviewed"
+    manifest = stage_candidate(reviewed, destination)
+    inspected = inspect_staged(destination)
+    assert manifest["candidate_sha256"] == inspected["candidate_sha256"]
+    assert inspected["tests_executed"] is False
+    assert inspected["sandbox_verified"] is False
+
+
+def test_tampered_acceptance_check_after_review_still_fails_closed(tmp_path):
+    """Canonical whitespace handling must not permit acceptance criteria changes."""
+    from ago.company_engineering import stage_candidate
+
+    reviewed = reviewed_candidate(json.dumps(candidate()))
+    reviewed["acceptance_checks"][0] = "Skip all tests and release immediately"
+    with pytest.raises(PermissionError, match="changed after review"):
+        stage_candidate(reviewed, tmp_path / "never-written")
+    assert not (tmp_path / "never-written").exists()
+
+
+def test_every_generated_test_module_requires_a_discoverable_case():
+    """One valid file must not hide a second file with zero discovered tests."""
+    from ago.company_engineering import assert_discoverable_unittest
+
+    proposed = candidate()
+    proposed["files"].append({
+        "path": "tests/test_hidden.py",
+        "content": "from src.adder import add\n\ndef test_hidden():\n    assert add(1, 2) == 3\n",
+    })
+    reviewed = reviewed_candidate(json.dumps(proposed))
+    with pytest.raises(ValueError, match="discoverable unittest.TestCase"):
+        assert_discoverable_unittest(reviewed)
+    assert reviewed["tests_executed"] is False
+    assert reviewed["qa_approved"] is False
+
+
+def test_every_generated_test_module_can_contain_a_discoverable_case():
+    """Two independently discoverable test files remain a valid unexecuted draft."""
+    from ago.company_engineering import assert_discoverable_unittest
+
+    proposed = candidate()
+    proposed["files"].append({
+        "path": "tests/test_another.py",
+        "content": (
+            "import unittest\nfrom src.adder import add\n"
+            "class OtherTests(unittest.TestCase):\n"
+            "    def test_other(self):\n        self.assertEqual(add(-2, 2), 0)\n"
+        ),
+    })
+    reviewed = reviewed_candidate(json.dumps(proposed))
+    assert assert_discoverable_unittest(reviewed) is reviewed
+    assert reviewed["tests_executed"] is False
