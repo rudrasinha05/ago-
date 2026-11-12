@@ -191,6 +191,57 @@ def test_generated_engineering_rejects_tests_not_discovered_by_offline_runner(te
         )
 
 
+
+@pytest.mark.parametrize("extra_path, extra_content, expected_error", [
+    (
+        "tests/test_empty.py",
+        "import unittest\nfrom src.adder import add\n",
+        "discoverable unittest.TestCase",
+    ),
+    (
+        "tests/test_unlinked.py",
+        "import unittest\nclass Unlinked(unittest.TestCase):\n"
+        "    def test_nothing(self):\n        self.assertTrue(True)\n",
+        "import a generated src module",
+    ),
+    (
+        "tests/test_nested/test_other.py",
+        "import unittest\nfrom src.adder import add\n"
+        "class Nested(unittest.TestCase):\n"
+        "    def test_add(self):\n        self.assertEqual(add(1, 1), 2)\n",
+        "flat tests/test_",
+    ),
+])
+def test_engineering_preflight_checks_every_test_file(extra_path, extra_content, expected_error):
+    from ago.company_engineering import assert_discoverable_unittest
+
+    proposal = candidate()
+    # The first test file is valid. A second file must not hide behind it.
+    proposal["files"].append({"path": extra_path, "content": extra_content})
+    checked = reviewed_candidate(json.dumps(proposal))
+    with pytest.raises(ValueError, match=expected_error):
+        assert_discoverable_unittest(checked)
+
+
+def test_engineering_preflight_accepts_multiple_independently_discoverable_files():
+    from ago.company_engineering import assert_discoverable_unittest
+
+    proposal = candidate()
+    proposal["files"].append({
+        "path": "tests/test_adder_second.py",
+        "content": (
+            "import unittest\nfrom src.adder import add\n"
+            "class MoreAdderTests(unittest.TestCase):\n"
+            "    def test_negative(self):\n        self.assertEqual(add(-1, 1), 0)\n"
+        ),
+    })
+    reviewed = reviewed_candidate(json.dumps(proposal))
+    result = assert_discoverable_unittest(reviewed)
+    assert result["candidate_sha256"] == reviewed["candidate_sha256"]
+    assert result["tests_executed"] is False
+
+
+
 def test_generated_engineering_unittest_preflight_remains_not_a_qa_verdict():
     from ago.company_engineering import assert_discoverable_unittest
 
