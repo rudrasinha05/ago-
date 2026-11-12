@@ -413,3 +413,40 @@ def test_code_author_answer_is_schema_constrained_only_when_provider_supports_it
     # The schema is the shape reviewed_candidate already enforces.
     assert set(ENGINEERING_CANDIDATE_SCHEMA["required"]) == {"files", "acceptance_checks"}
     assert ENGINEERING_CANDIDATE_SCHEMA["properties"]["files"]["maxItems"] == 6
+
+
+def test_normalized_acceptance_checks_survive_review_staging_and_qa(tmp_path):
+    """AI output whitespace must not invalidate the persisted SHA at the next gate."""
+    from ago.company_engineering import stage_candidate, verify_persisted_candidate
+    from ago_verify_candidate import inspect as inspect_staged
+
+    proposed = candidate()
+    proposed["acceptance_checks"] = [
+        "  " + check + "  " for check in proposed["acceptance_checks"]
+    ]
+    reviewed = reviewed_candidate(json.dumps(proposed))
+    original = reviewed_candidate(json.dumps(candidate()))
+
+    assert reviewed["acceptance_checks"] == original["acceptance_checks"]
+    assert reviewed["candidate_sha256"] == original["candidate_sha256"]
+    assert verify_persisted_candidate(reviewed)["candidate_sha256"] == original[
+        "candidate_sha256"
+    ]
+
+    destination = tmp_path / "reviewed"
+    manifest = stage_candidate(reviewed, destination)
+    inspected = inspect_staged(destination)
+    assert manifest["candidate_sha256"] == inspected["candidate_sha256"]
+    assert inspected["tests_executed"] is False
+    assert inspected["sandbox_verified"] is False
+
+
+def test_tampered_acceptance_check_after_review_still_fails_closed(tmp_path):
+    """Canonical whitespace handling must not permit acceptance criteria changes."""
+    from ago.company_engineering import stage_candidate
+
+    reviewed = reviewed_candidate(json.dumps(candidate()))
+    reviewed["acceptance_checks"][0] = "Skip all tests and release immediately"
+    with pytest.raises(PermissionError, match="changed after review"):
+        stage_candidate(reviewed, tmp_path / "never-written")
+    assert not (tmp_path / "never-written").exists()
