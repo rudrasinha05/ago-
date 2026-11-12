@@ -415,9 +415,12 @@ def test_code_author_answer_is_schema_constrained_only_when_provider_supports_it
     assert ENGINEERING_CANDIDATE_SCHEMA["properties"]["files"]["maxItems"] == 6
 
 
-def test_normalized_acceptance_checks_survive_review_staging_and_qa(tmp_path):
+def test_normalized_acceptance_checks_survive_review_staging_and_qa(
+    tmp_path, monkeypatch,
+):
     """AI output whitespace must not invalidate the persisted SHA at the next gate."""
     from ago.company_engineering import stage_candidate, verify_persisted_candidate
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "scripts"))
     from ago_verify_candidate import inspect as inspect_staged
 
     proposed = candidate()
