@@ -53,6 +53,9 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [portfolioMap,setPortfolioMap]=useState([]);
   const [centerDraft,setCenterDraft]=useState('');
   const [draft,setDraft]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState(''),[sending,setSending]=useState(false);
+  const [taggedAgents,setTaggedAgents]=useState([]),[orderIntent,setOrderIntent]=useState('message');
+  const [orderInbox,setOrderInbox]=useState(null),[aiStatus,setAiStatus]=useState(''),[responding,setResponding]=useState({});
+  const aiReplyQueue=useRef(Promise.resolve()),aiReplyPending=useRef(new Set());
   const [zoom,setZoomState]=useState(.72),[pan,setPanState]=useState({x:0,y:0}),[staffing,setStaffing]=useState(false),[department,setDepartment]=useState('');
   const [mapMode,setMapMode]=useState('leadership'),[mapView,setMapView]=useState('circular');
   const [fullscreen,setFullscreen]=useState(false),[inspectorOpen,setInspectorOpen]=useState(true);
@@ -175,6 +178,20 @@ export function CompanyMap({api,me,data,onRefresh}) {
     fetchMessages(true);const timer=setInterval(fetchMessages,5000);
     return()=>{live=false;clearInterval(timer);};
   },[api,channel,canChat]);
+  // Founder-only durable inbox; stored in PostgreSQL, not browser-only badge state.
+  useEffect(()=>{
+    if(!founderView||!canChat)return;
+    let active=true;
+    async function loadOrders(){
+      try{
+        const result=await api.request(BASE+'/chat/orders?limit=50');
+        if(active)setOrderInbox(Array.isArray(result)?result:null);
+      }catch{if(active)setOrderInbox(null);}
+    }
+    loadOrders();const timer=setInterval(loadOrders,8000);
+    return()=>{active=false;clearInterval(timer);};
+  },[api,founderView,canChat]);
+
   const refreshEvents=useCallback(async()=>{
     if(!canEvents){setEventData(null);return;}
     try{
@@ -388,23 +405,82 @@ export function CompanyMap({api,me,data,onRefresh}) {
     if(version!==sequence.current)return;
     setMessages(old=>[...new Map([...result.items,...old].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id));setBefore(result.next_before);
   }catch(e){setError(e.message);}finally{setLoading(false);}}
+  async function respondOne(messageId,employeeId){
+    if(!founderView||!Number.isInteger(messageId)||!employeeId)return;
+    const key=messageId+':'+employeeId;
+    if(aiReplyPending.current.has(key))return;
+    aiReplyPending.current.add(key);
+    if(alive.current)setResponding(old=>({...old,[key]:true}));
+    try{
+      const result=await api.request(BASE+'/chat/orders/'+messageId+'/respond',{
+        method:'POST',body:{employee_id:employeeId}
+      });
+      if(!alive.current)return;
+      if(result.status==='responded'||result.status==='already_replied'){
+        setAiStatus('Actual AI reply recorded in Global Chat; task execution and QA still pending.');
+        // CEO can safely propose one direct-report assignment for an untagged
+        // Founder order. Only a server-verified assignee ID is queued here.
+        if(result.status==='responded'&&result.delegated_employee_id){
+          const specialist=result.delegated_employee_id;
+          aiReplyQueue.current=aiReplyQueue.current.then(
+            ()=>respondOne(messageId,specialist)).catch(()=>{});
+        }
+      }
+      else if(result.status==='local_model_disabled')setAiStatus('Local Ollama replies are disabled. The order remains pending.');
+      else if(result.status==='model_unavailable')setAiStatus('Local Ollama did not answer. No AI acknowledgment was recorded.');
+      else if(result.status==='already_processing')setAiStatus('Agent response already processing. Check the saved timeline.');
+      else if(result.status==='retry_limit')setAiStatus('Agent response retry limit reached; send a new follow-up for review.');
+    }catch(e){if(alive.current)setAiStatus('AI reply failed: '+(e?.message||'check server status'));}
+    finally{
+      aiReplyPending.current.delete(key);
+      if(alive.current)setResponding(old=>{const next={...old};delete next[key];return next;});
+    }
+  }
+  function queueAiReplies(order){
+    if(!founderView||!order?.message_id||order.state!=='awaiting_ack')return;
+    const ids=(order.work_items||[]).filter(w=>w.assignee_kind==='ai'&&!w.ack_message_id)
+      .sort((a,b)=>Number(b.assignee_id===order.accountable_ceo_id)-Number(a.assignee_id===order.accountable_ceo_id))
+      .map(w=>w.assignee_id);
+    // One local model call at a time on the Founder's laptop: avoid GPU
+    // contention. Sending itself is instant; these requests are separate.
+    for(const id of ids){
+      aiReplyQueue.current=aiReplyQueue.current.then(()=>respondOne(order.message_id,id)).catch(()=>{});
+    }
+  }
   async function send(event,central=false){event.preventDefault();const text=central?centerDraft:draft;if(!text.trim()||sending)return;
-    const body={channel:central?'global':channel,body:text,reply_to:central?null:reply?.id||null};const signature=JSON.stringify(body);
+    const global=central||channel==='global';
+    const body={channel:global?'global':channel,body:text,reply_to:central?null:reply?.id||null,
+      ...(global&&founderView?{intent:central?'message':orderIntent,mentions:central?[]:taggedAgents}: {})};
+    const signature=JSON.stringify(body);
     if(retry.current?.signature!==signature)retry.current={signature,key:crypto.randomUUID()};
     const version=sequence.current;setSending(true);setError('');
     try{const result=await api.request(BASE+'/chat',{method:'POST',body:{...body,operation_key:retry.current.key}});
       if(!alive.current)return;
       if(central){setCenterDraft('');choose('global');}
-      if(version===sequence.current&&(!central||channel==='global')){setMessages(old=>[...new Map([...old,result].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id));if(!central){setDraft('');setReply(null);}requestAnimationFrame(()=>feed.current?.scrollTo({top:feed.current.scrollHeight,behavior:'smooth'}));}retry.current=null;
+      if(version===sequence.current&&(!central||channel==='global')){setMessages(old=>[...new Map([...old,result].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id));if(!central){setDraft('');setReply(null);}requestAnimationFrame(()=>feed.current?.scrollTo({top:feed.current.scrollHeight,behavior:'smooth'}));}
+      if(!central){setTaggedAgents([]);setOrderIntent('message');}
+      retry.current=null;
+      if(result.order)queueAiReplies(result.order);
     }catch(e){setError(e.message);}finally{setSending(false);}}
   function renderMessage(m,depth=0){
     const children=threads.children.get(m.id)||[];
     return <article key={m.id} id={'chat-'+m.id} data-reply-to={m.reply_to||undefined}
       className={'chat-message '+m.kind+(depth?' chat-thread-reply':'')} style={{'--thread-depth':Math.min(depth,5)}}>
       <header><strong>{m.author_name}</strong><time dateTime={m.created_at}>{time(m.created_at)}</time></header>
-      <small>{m.kind==='status'?'Task status · ':''}{m.channel==='global'?'Global':layout.nodes.find(n=>n.key===m.channel)?.name||'Company'}</small>
+      <small>{m.kind==='status'?'Recorded work event · ':''}{m.channel==='global'?'Global':layout.nodes.find(n=>n.key===m.channel)?.name||'Company'}</small>
       {m.reply_to&&<div className="chat-reply-context">↳ Reply to {m.reply_author||'message #'+m.reply_to}{!depth&&<span> · {m.reply_body?.slice(0,140)||'Older message'}</span>}</div>}
       <p>{m.body}</p>
+      {m.order&&<div className="chat-order-evidence" aria-label={'Order accountability for message '+m.id}>
+        <small><strong>{m.order.intent==='order'?'Founder order':'Company message'}</strong> · CEO {m.order.accountable_ceo_id?'assigned':'not appointed'} · {m.order.state==='blocked_no_ceo'?'Blocked: appoint AI CEO':(m.order.verified_acknowledgements||0)+' acknowledged'}</small>
+        {(m.order.work_items||[]).map(w=><div key={w.id}>
+          <small>{w.assignee_name} · {w.evidence_state||w.status}{w.task_status?' · task '+w.task_status:''}{w.qa_verdict?' · QA '+w.qa_verdict:''}</small>
+          {founderView&&w.assignee_kind==='ai'&&!w.ack_message_id&&
+            <button type="button" disabled={!!responding[m.id+':'+w.assignee_id]} onClick={()=>{aiReplyQueue.current=aiReplyQueue.current.then(()=>respondOne(m.id,w.assignee_id)).catch(()=>{});}}>
+              {responding[m.id+':'+w.assignee_id]?'Local AI responding…':'Request real AI reply'}
+            </button>}
+        </div>)}
+        <small>{m.order.system_receipt_only?'System receipt only; no agent reply yet.':'Recorded agent reply exists. Task completion and QA remain separate.'}</small>
+      </div>}
       <div className="chat-message-actions"><button type="button" onClick={()=>{setReply(m);document.getElementById('company-message')?.focus();}}>Reply</button>
        {children.length>0&&<small>{children.length} {children.length===1?'reply':'replies'}</small>}</div>
       {children.length>0&&<div className="chat-thread-children">{children.map(child=>renderMessage(child,depth+1))}</div>}
@@ -641,8 +717,36 @@ export function CompanyMap({api,me,data,onRefresh}) {
            <h4>Latest work events</h4>{(eventData?.recent||[]).filter(e=>e.employee_id===selected).slice(0,5).map(e=><div key={e.id}><small>#{e.id} · {time(e.created_at)}</small><p>{e.body}</p></div>)}
            <p><Link href="/tools/">GitHub projects, reviewed operations and delivery evidence →</Link></p>
         </section>}
+        {founderView&&channel==='global'&&<details className="chat-ceo-inbox"><summary>CEO accountability inbox · {orderInbox===null?'unavailable':orderInbox.filter(x=>x.awaiting_ack_count>0||x.state==='blocked_no_ceo').length+' pending orders'}</summary>
+          {orderInbox===null?<p>CEO order inbox could not be verified.</p>:
+            orderInbox.length===0?<p>No founder orders recorded yet.</p>:
+            <ul>{orderInbox.slice(0,20).map(o=><li key={o.message_id}>
+              <strong>#{o.message_id} · {o.intent}</strong> · {o.state} · {o.awaiting_ack_count} awaiting acknowledgment
+              <p>{o.body?.slice(0,150)}</p>
+            </li>)}</ul>}
+        </details>}
+        {aiStatus&&<p role="status" className="chat-ai-runtime-status">{aiStatus}</p>}
         <div className="company-feed" ref={feed}>{before&&<button onClick={older} disabled={loading}>Load earlier messages</button>}{loading&&<p>Loading timeline…</p>}{!loading&&!messages.length&&<p className="chat-empty">Start the conversation. Task updates will appear here as work changes.</p>}{threads.roots.map(m=>renderMessage(m))}</div>
-        <form className="company-compose" onSubmit={send}>{reply&&<div className="replying-banner"><span>↳ Replying to <strong>{reply.author_name}</strong>: {reply.body.slice(0,65)}</span> <button type="button" onClick={()=>setReply(null)}>Cancel reply</button></div>}<label htmlFor="company-message">Message {title}</label><textarea id="company-message" placeholder="Write your idea, question or project brief…" value={draft} maxLength={20000} rows={3} onChange={e=>setDraft(e.target.value)} required/><div><small>Unlimited conversation history · 20,000 characters/message</small><button className="btn primary" disabled={sending||!draft.trim()}>{sending?'Saving…':'Send'}</button></div><small>Sending saves a message. AI replies and task execution require a connected runtime.</small></form>
+        <form className="company-compose" onSubmit={send}>{reply&&<div className="replying-banner"><span>↳ Replying to <strong>{reply.author_name}</strong>: {reply.body.slice(0,65)}</span> <button type="button" onClick={()=>setReply(null)}>Cancel reply</button></div>}<label htmlFor="company-message">Message {title}</label><textarea id="company-message" placeholder="Write your idea, question or project brief…" value={draft} maxLength={20000} rows={3} onChange={e=>setDraft(e.target.value)} required/>
+          {founderView&&channel==='global'&&<fieldset className="chat-mentions">
+            <legend>Founder message routing</legend>
+            <label htmlFor="chat-order-intent">Message type</label>
+            <select id="chat-order-intent" value={orderIntent} onChange={e=>setOrderIntent(e.target.value)}>
+              <option value="message">Question / message (CEO must respond)</option>
+              <option value="order">Founder order (CEO accountable)</option>
+            </select>
+            <label htmlFor="chat-tag-agent">Tag an employee for acknowledgment / work (up to 10)</label>
+            <select id="chat-tag-agent" value="" onChange={e=>{if(e.target.value)setTaggedAgents(old=>[...new Set([...old,e.target.value])].slice(0,10));}}>
+              <option value="">@ Choose an employee (optional)</option>
+              {employees.filter(e=>!taggedAgents.includes(e.id)).map(e=><option key={e.id} value={e.id}>{e.name}{e.kind==='ai'?' · AI':''}</option>)}
+            </select>
+            {taggedAgents.map(id=><span key={id} className="chat-mention-tag">
+              @{employees.find(e=>e.id===id)?.name||'Employee'}
+              <button type="button" aria-label={'Remove tag '+(employees.find(e=>e.id===id)?.name||id)}
+                      onClick={()=>setTaggedAgents(old=>old.filter(x=>x!==id))}>×</button>
+            </span>)}
+          </fieldset>}
+          <div><small>Unlimited conversation history · 20,000 characters/message</small><button className="btn primary" disabled={sending||!draft.trim()}>{sending?'Saving…':'Send'}</button></div><small>Sending saves a message. AI replies and task execution require a connected runtime.</small></form>
       </section>
     </div>
     <UpwardReports api={api} me={me} employees={employees} onRecorded={refreshEvents}/>

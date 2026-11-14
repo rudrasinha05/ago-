@@ -2,11 +2,514 @@
 from __future__ import annotations
 
 from ago.governance import founder_solo_eligible
-from uuid import UUID
+from uuid import UUID, uuid4
 from dataclasses import asdict
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.organization_store import OrganizationStore
 from ago.governance import ApprovalRepository
+import json
+import re
+
+
+# Explicit addressing is bounded; unknown tags never silently grant authority.
+MAX_ADDRESSEES = 10
+BRACED_TAG = re.compile(r"@\{([^{}]{1,80})\}")
+
+
+class GlobalChatOrders:
+    def __init__(self, storage):
+        # This is a helper within CompanyChat's existing reviewed persistence
+        # component; never register a second repository/port for it.
+        self.db = storage
+
+    @staticmethod
+    def _uuid(value):
+        try:
+            return str(UUID(str(value)))
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise ValueError("Unknown or malformed employee mention") from exc
+
+    def _employees(self, tenant_id):
+        rows = self.db.execute("""
+            SELECT e.id,e.name,e.kind,e.manager_id FROM ago_employees e
+            WHERE e.tenant_id=%s
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_personnel_events p
+                WHERE p.tenant_id=e.tenant_id AND p.employee_id=e.id
+                  AND p.change_kind='terminated'
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM ago_department_lifecycle_events d
+                WHERE d.tenant_id=e.tenant_id AND d.department_id=e.department_id
+                  AND d.action='closed'
+              )
+              AND (e.kind='ai' OR EXISTS (
+                SELECT 1 FROM ago_users u
+                WHERE u.tenant_id=e.tenant_id AND u.id=e.id AND u.active))
+            ORDER BY e.id
+        """, (tenant_id,)).fetchall()
+        return {str(r["id"]): dict(r) for r in rows}
+
+    def resolve_mentions(self, tenant_id, body, supplied=()):
+        """Stable UUID mentions or unique @display names, NEVER loose substring IDs."""
+        employees = self._employees(tenant_id)
+        values = [self._uuid(x) for x in supplied]
+        for inner in BRACED_TAG.findall(body):
+            values.append(self._uuid(inner))
+        if "@{" in body and len(BRACED_TAG.findall(body)) != body.count("@{"):
+            raise ValueError("Malformed structured employee mention")
+        # Human-friendly @Full Employee Name; ambiguity is a hard error. These
+        # are not a privilege grant; target identity must belong to this tenant.
+        for match in re.finditer(r"(?<![\w@])@([\w][\w .-]{0,150})", body):
+            fragment = match.group(1)
+            choices = [
+                (ident, row["name"]) for ident, row in employees.items()
+                if (fragment.casefold().startswith(row["name"].casefold())
+                    and (len(fragment) == len(row["name"]) or
+                         fragment[len(row["name"])] in " .,!?;:\n"))
+            ]
+            if not choices:
+                raise ValueError("Unknown @employee mention; select a company employee")
+            longest = max(len(name) for _, name in choices)
+            candidates = [ident for ident, name in choices if len(name) == longest]
+            if len(candidates) != 1:
+                raise ValueError("Ambiguous @employee name; select a unique UUID")
+            values.append(candidates[0])
+        distinct = sorted(set(values))
+        if len(distinct) > MAX_ADDRESSEES:
+            raise ValueError("At most ten employees may be mentioned per message")
+        if any(ident not in employees for ident in distinct):
+            raise ValueError("Mentioned employee is not in this company")
+        return distinct, employees
+
+    def _ceo(self, tenant_id, employees):
+        row = self.db.execute("""
+            SELECT e.id,e.name FROM ago_company_board_appointments b
+            JOIN ago_employees e ON e.tenant_id=b.tenant_id AND e.id=b.employee_id
+            WHERE b.tenant_id=%s AND b.seat='Strategy & Vision' AND e.kind='ai'
+        """,(tenant_id,)).fetchone()
+        return (dict(row) if row and str(row["id"]) in employees else None)
+
+    def route(self, *, tenant_id, author_id, message_id, body, mentions=(),
+              intent="message", founder=False):
+        """Idempotently register every Founder global message and explicit tags.
+
+        Called from CompanyChat.send in the SAME database transaction. A
+        pending work item does NOT mean an AI agent saw or accepted the order.
+        """
+        if intent not in ("message","order"):
+            raise ValueError("Unknown chat intent")
+        if intent == "order" and not founder:
+            raise PermissionError("Only the founder may issue company-wide orders")
+        addresses, employees = self.resolve_mentions(tenant_id,body,mentions)
+        if not founder and not addresses:
+            return None
+        previous = self.db.execute("""
+            SELECT intent,mention_ids,founder_order,accountable_ceo_id,
+                   state,receipt_message_id FROM ago_chat_orders
+            WHERE tenant_id=%s AND message_id=%s
+        """,(tenant_id,message_id)).fetchone()
+        if previous:
+            if (previous["intent"] != intent or
+                    sorted(previous["mention_ids"]) != addresses or
+                    previous["founder_order"] != founder):
+                raise ValueError("Retry key cannot change an existing order route")
+            return self.details(tenant_id,message_id)
+        ceo = self._ceo(tenant_id,employees)
+        ceo_id = str(ceo["id"]) if ceo else None
+        state = "awaiting_ack" if ceo_id else "blocked_no_ceo"
+        self.db.execute("""
+            INSERT INTO ago_chat_orders
+              (tenant_id,message_id,founder_order,accountable_ceo_id,
+               intent,mention_ids,state)
+            VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s)
+        """,(tenant_id,message_id,founder,ceo_id,intent,
+             json.dumps(addresses),state))
+        recipients = sorted(set(addresses + ([ceo_id] if ceo_id else [])))
+        if ceo_id:
+            for emp_id in recipients:
+                self.db.execute("""
+                    INSERT INTO ago_chat_work_items
+                      (id,tenant_id,message_id,assignee_id,accountable_ceo_id)
+                    VALUES (%s,%s,%s,%s,%s)
+                """,(str(uuid4()),tenant_id,message_id,emp_id,ceo_id))
+        if ceo_id:
+            target_names = ", ".join(employees[i]["name"] for i in recipients
+                                     if i != ceo_id)
+            suffix = (f" Assigned specialists: {target_names}." if target_names
+                      else " CEO is the default responsible recipient.")
+            receipt = (f"AGO system receipt for message #{message_id}: recorded "
+                       f"as {intent}. Appointed AI CEO {ceo['name']} is accountable."
+                       + suffix +
+                       " Acknowledgements and governed actions are PENDING; "
+                       "no AI reply, task execution or approval has been claimed.")
+        else:
+            receipt = (f"AGO system receipt for message #{message_id}: recorded "
+                       "but BLOCKED. No appointed AI CEO is available to own "
+                       "the work. Founder must appoint an eligible AI CEO. "
+                       "No employee acknowledgement or execution is claimed.")
+        row = self.db.execute("""
+            INSERT INTO ago_company_chat
+             (tenant_id,channel,author_name,body,reply_to,kind,employee_id)
+            VALUES (%s,'global','AGO system · order intake',%s,%s,'status',%s)
+            RETURNING id
+        """,(tenant_id,receipt,message_id,ceo_id)).fetchone()
+        self.db.execute("""
+            UPDATE ago_chat_orders SET receipt_message_id=%s
+            WHERE tenant_id=%s AND message_id=%s
+        """,(row["id"],tenant_id,message_id))
+        # The CEO already receives the system receipt above. Each additional
+        # tagged employee gets exactly one durable numbered routing event.
+        # A route event is NOT a task start or model acknowledgement.
+        for emp_id in recipients:
+            if emp_id==ceo_id:
+                continue
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                  (tenant_id,channel,author_name,body,kind,employee_id)
+                VALUES (%s,%s,'AGO Global Chat routing',%s,'status',%s)
+            """,(tenant_id,'employee:'+emp_id,
+                 'Global Chat message #'+str(message_id)+' assigned to '
+                 +employees[emp_id]['name']+'; acknowledgment pending. '
+                 'CEO accountable; no work execution claimed.',emp_id))
+        return self.details(tenant_id,message_id)
+
+    @staticmethod
+    def _with_task_evidence(worker: dict) -> dict:
+        """Live task status is read from governed records, not chat claims."""
+        row=dict(worker)
+        task=row.get('task_status')
+        qa=row.get('qa_verdict')
+        if row.get('linked_task_id') is None:
+            row['evidence_state'] = (
+                'acknowledged' if row.get('ack_message_id') else 'awaiting_ack')
+        elif task=='running':
+            row['evidence_state']='working'
+        elif task=='failed':
+            row['evidence_state']='failed'
+        elif task=='completed' and qa=='pass':
+            row['evidence_state']='qa_passed'
+        elif task=='completed' and qa=='fail':
+            row['evidence_state']='qa_failed'
+        elif task=='completed':
+            row['evidence_state']='qa_pending'
+        else:
+            row['evidence_state']='task_linked'
+        row['has_execution_evidence']=task in ('running','completed','failed')
+        row['release_verified']=False
+        return row
+
+    def details(self, tenant_id, message_id):
+        order = self.db.execute("""
+            SELECT message_id,founder_order,accountable_ceo_id,intent,mention_ids,
+                   receipt_message_id,state,created_at FROM ago_chat_orders
+            WHERE tenant_id=%s AND message_id=%s
+        """,(tenant_id,message_id)).fetchone()
+        if order is None:
+            return None
+        workers = self.db.execute("""
+            SELECT w.id,w.assignee_id,e.name AS assignee_name,e.kind AS assignee_kind,
+                   w.accountable_ceo_id,w.status,w.linked_task_id,
+                   w.ack_message_id,w.updated_at,t.status AS task_status,
+                   q.verdict AS qa_verdict
+            FROM ago_chat_work_items w
+            JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+            LEFT JOIN ago_governed_tasks t ON t.tenant_id=w.tenant_id
+                 AND t.id=w.linked_task_id
+            LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id
+                 AND q.task_id=t.id
+            WHERE w.tenant_id=%s AND w.message_id=%s ORDER BY e.name,w.id
+        """,(tenant_id,message_id)).fetchall()
+        return {**dict(order),
+                "work_items":[self._with_task_evidence(x) for x in workers],
+                "verified_acknowledgements":sum(
+                    w["ack_message_id"] is not None for w in workers),
+                "real_ai_replies":sum(
+                    w["ack_message_id"] is not None and w["assignee_kind"]=='ai'
+                    for w in workers),
+                "system_receipt_only":not any(
+                    w["ack_message_id"] is not None for w in workers)}
+
+    def inbox(self, tenant_id, *, limit=50):
+        """Founder-only durable CEO order queue; no synthetic completion."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid order inbox limit")
+        records = self.db.execute("""
+            SELECT o.message_id,o.intent,o.founder_order,o.accountable_ceo_id,
+                   o.mention_ids,o.receipt_message_id,o.state,o.created_at,
+                   c.author_name,c.body
+            FROM ago_chat_orders o
+            JOIN ago_company_chat c ON c.tenant_id=o.tenant_id AND c.id=o.message_id
+            WHERE o.tenant_id=%s AND o.founder_order
+            ORDER BY
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ago_chat_work_items w
+                WHERE w.tenant_id=o.tenant_id AND w.message_id=o.message_id
+                  AND w.ack_message_id IS NULL
+              ) OR o.state='blocked_no_ceo' THEN 0 ELSE 1 END,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ago_chat_work_items w
+                WHERE w.tenant_id=o.tenant_id AND w.message_id=o.message_id
+                  AND w.ack_message_id IS NULL
+              ) OR o.state='blocked_no_ceo' THEN o.message_id END ASC,
+              o.message_id DESC LIMIT %s
+        """,(tenant_id,limit)).fetchall()
+        items=[]
+        # Keep the UI's newest-first display contract after selecting the
+        # oldest pending work. Completed history cannot crowd out that work.
+        for row in sorted(records, key=lambda item: item['message_id'], reverse=True):
+            item=self.details(tenant_id,row['message_id'])
+            item.update(author_name=row['author_name'], body=row['body'])
+            item['awaiting_ack_count']=sum(
+                w['ack_message_id'] is None for w in item['work_items'])
+            items.append(item)
+        return items
+
+    def claim_ai_reply(self, actor, message_id, employee_id):
+        """Reserve one *real* model answer without holding a DB lock during inference.
+
+        Only an authenticated Founder may cause an AI to speak in this phase.
+        Claim tokens fence retries, and claims expire after the provider's hard
+        60-second call limit. A claim does NOT acknowledge the order.
+        """
+        if 'founder' not in actor.roles:
+            raise PermissionError("Founder authority required for AI chat inference")
+        employee_id=self._uuid(employee_id)
+        with self.db.transaction():
+            worker=self.db.execute("""
+                SELECT w.id,w.ack_message_id,w.response_claim_token,
+                       w.response_claimed_at,w.response_attempts,
+                       w.accountable_ceo_id,e.name,e.kind,c.body AS request_body
+                FROM ago_chat_work_items w
+                JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+                JOIN ago_company_chat c ON c.tenant_id=w.tenant_id AND c.id=w.message_id
+                WHERE w.tenant_id=%s AND w.message_id=%s AND w.assignee_id=%s
+                FOR UPDATE OF w
+            """,(actor.tenant_id,message_id,employee_id)).fetchone()
+            if worker is None or worker['kind']!='ai':
+                raise ValueError("An assigned AI employee is required")
+            current=self._employees(actor.tenant_id)
+            if employee_id not in current:
+                raise PermissionError("This AI employee is no longer eligible")
+            ceo=self._ceo(actor.tenant_id,current)
+            if ceo is None or str(ceo['id'])!=str(worker['accountable_ceo_id']):
+                raise PermissionError("Current appointed CEO must own the routed message")
+            if worker['ack_message_id'] is not None:
+                return {'status':'already_replied','message_id':message_id,
+                        'ack_message_id':worker['ack_message_id']}
+            # One model call at a time per worker/message. A stalled attempt
+            # may be retried only after the 90-second fenced lease.
+            active=self.db.execute("""
+                SELECT %s::timestamptz > now()-interval '90 seconds' AS active
+            """,(worker['response_claimed_at'],)).fetchone()
+            if worker['response_claim_token'] and active['active']:
+                return {'status':'already_processing','message_id':message_id}
+            # Three retries per order; founder can send a new follow-up instead
+            # of an infinite/costly hidden model retry loop.
+            if int(worker['response_attempts'])>=3:
+                return {'status':'retry_limit','message_id':message_id}
+            token=str(uuid4())
+            self.db.execute("""
+                UPDATE ago_chat_work_items
+                SET response_claim_token=%s,response_claimed_at=now(),
+                    response_attempts=response_attempts+1,updated_at=now()
+                WHERE tenant_id=%s AND id=%s
+            """,(token,actor.tenant_id,worker['id']))
+            # Real previously committed model replies are the sole source for
+            # team context. This is not an AI order or execution permission.
+            prior=self.db.execute("""
+                SELECT e.name,c.body
+                FROM ago_chat_work_items other
+                JOIN ago_company_chat c ON c.tenant_id=other.tenant_id
+                  AND c.id=other.ack_message_id
+                JOIN ago_employees e ON e.tenant_id=other.tenant_id
+                  AND e.id=other.assignee_id AND e.kind='ai'
+                WHERE other.tenant_id=%s AND other.message_id=%s
+                  AND other.assignee_id<>%s
+                ORDER BY c.id DESC LIMIT 3
+            """,(actor.tenant_id,message_id,employee_id)).fetchall()
+            # An untagged Founder ORDER can be routed onward by the appointed
+            # CEO model, but ONLY to an eligible immediate AI report. This is a
+            # pending message/work assignment, not a governed task execution.
+            details=self.db.execute("""
+                SELECT o.intent,o.mention_ids
+                FROM ago_chat_orders o WHERE o.tenant_id=%s AND o.message_id=%s
+            """,(actor.tenant_id,message_id)).fetchone()
+            delegates=[]
+            if (details and details['intent']=='order'
+                    and not details['mention_ids'] and employee_id==str(ceo['id'])):
+                delegates=[{'id':ident,'name':info['name'][:80]}
+                           for ident,info in sorted(current.items())
+                           if (ident!=employee_id and info['kind']=='ai'
+                               and str(info['manager_id'])==employee_id)][:8]
+            return {'status':'claimed','message_id':message_id,
+                    'employee_id':employee_id,'employee_name':worker['name'],
+                    'claim_token':token,'request_body':worker['request_body'][:1200],
+                    'team_replies':[{'agent':p['name'][:80],
+                                     'message':p['body'][:250]} for p in reversed(prior)],
+                    'eligible_delegates':delegates}
+
+    def commit_ai_reply(self, actor, message_id, employee_id, token, text,
+                        delegate_employee_id=None):
+        """Append actual local-model text and its ACK atomically."""
+        if 'founder' not in actor.roles:
+            raise PermissionError("Founder authority required")
+        employee_id=self._uuid(employee_id)
+        self._uuid(token)
+        text=text.strip()
+        if not 1 <= len(text) <= 5000:
+            raise ValueError("Model answer is empty or too long")
+        with self.db.transaction():
+            row=self.db.execute("""
+                SELECT w.id,w.ack_message_id,w.response_claim_token,
+                       w.response_claimed_at,w.accountable_ceo_id,e.name
+                FROM ago_chat_work_items w
+                JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+                WHERE w.tenant_id=%s AND w.message_id=%s AND w.assignee_id=%s
+                FOR UPDATE OF w
+            """,(actor.tenant_id,message_id,employee_id)).fetchone()
+            if row is None or str(row['response_claim_token']) != token or (
+                    row['ack_message_id'] is not None):
+                raise PermissionError("AI response claim was replaced or already settled")
+            fresh=self.db.execute("""
+                SELECT %s::timestamptz > now()-interval '90 seconds' AS valid
+            """,(row['response_claimed_at'],)).fetchone()
+            if not fresh['valid']:
+                raise PermissionError("Expired AI response claim; no message written")
+            # An employee can be terminated or CEO replaced during the model
+            # call. Recheck current company authority before recording its voice.
+            eligible=self._employees(actor.tenant_id)
+            ceo=self._ceo(actor.tenant_id,eligible)
+            if (employee_id not in eligible or ceo is None
+                    or str(ceo['id'])!=str(row['accountable_ceo_id'])):
+                raise PermissionError("AI employee/CEO authority changed during inference")
+            delegated=None
+            if delegate_employee_id is not None:
+                delegate_employee_id=self._uuid(delegate_employee_id)
+                order=self.db.execute("""
+                    SELECT intent,mention_ids FROM ago_chat_orders
+                    WHERE tenant_id=%s AND message_id=%s
+                """,(actor.tenant_id,message_id)).fetchone()
+                target=eligible.get(delegate_employee_id)
+                # Exact hierarchy, same company, no override of Founder tags.
+                if (employee_id!=str(ceo['id']) or not order
+                        or order['intent']!='order' or order['mention_ids']
+                        or not target or target['kind']!='ai'
+                        or str(target['manager_id'])!=employee_id):
+                    raise PermissionError("AI delegation violates CEO hierarchy or Founder scope")
+                # The existing Founder order remains the source of truth;
+                # an AI cannot assign itself a task or bypass task approval.
+                self.db.execute("""
+                    INSERT INTO ago_chat_work_items
+                        (id,tenant_id,message_id,assignee_id,accountable_ceo_id)
+                    VALUES (%s,%s,%s,%s,%s)
+                    ON CONFLICT (tenant_id,message_id,assignee_id) DO NOTHING
+                """,(str(uuid4()),actor.tenant_id,message_id,
+                     delegate_employee_id,employee_id))
+                delegated=delegate_employee_id
+            # Crucial: no invented human identity/approval. Real inference is
+            # labelled as unverified AI text, with source linked by reply_to.
+            message=self.db.execute("""
+                INSERT INTO ago_company_chat
+                    (tenant_id,channel,author_name,body,reply_to,kind,employee_id)
+                VALUES (%s,'global',%s,%s,%s,'message',%s)
+                RETURNING id
+            """,(actor.tenant_id,'AGO local AI · '+row['name'],
+                 'Local model reply (not task execution/QA evidence):\n'+text,
+                 message_id,employee_id)).fetchone()
+            self.db.execute("""
+                UPDATE ago_chat_work_items
+                SET ack_message_id=%s,response_claim_token=NULL,
+                    response_claimed_at=NULL,
+                    status=CASE WHEN linked_task_id IS NULL THEN 'acknowledged'
+                                ELSE 'task_linked' END,
+                    updated_at=now()
+                WHERE tenant_id=%s AND id=%s
+            """,(message['id'],actor.tenant_id,row['id']))
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                  (tenant_id,channel,author_name,body,kind,employee_id)
+                VALUES (%s,%s,'AGO AI response event',%s,'status',%s)
+            """,(actor.tenant_id,'employee:'+employee_id,
+                 'Local AI reply #'+str(message['id'])+' recorded for Global Chat '
+                 'message #'+str(message_id)+'. Task execution and QA not claimed.',
+                 employee_id))
+            return {'status':'responded','message_id':message_id,
+                    'employee_id':employee_id,'ack_message_id':message['id'],
+                    'source':'local_ollama_model','task_executed':False,
+                    'qa_verified':False,'delegated_employee_id':delegated}
+
+    def abort_ai_reply(self, actor, message_id, employee_id, token):
+        """Release a failed lease without forging a reply; keep attempt count."""
+        with self.db.transaction():
+            self.db.execute("""
+                UPDATE ago_chat_work_items
+                SET response_claim_token=NULL,updated_at=now()
+                WHERE tenant_id=%s AND message_id=%s AND assignee_id=%s
+                  AND response_claim_token=%s AND ack_message_id IS NULL
+            """,(actor.tenant_id,message_id,self._uuid(employee_id),self._uuid(token)))
+
+
+    def record_human_acknowledgement(self, *, tenant_id, actor_id,
+                                     parent_id, response_id):
+        """Only the actual signed human addressee's reply counts as acknowledgement.
+
+        No virtual AI employee is considered to have replied through a human
+        login. A system receipt has author_id=NULL and can never enter here.
+        """
+        if parent_id is None:
+            return False
+        verified = self.db.execute("""
+            UPDATE ago_chat_work_items w
+            SET status=CASE WHEN w.linked_task_id IS NULL THEN 'acknowledged'
+                            ELSE 'task_linked' END,
+                ack_message_id=%s,updated_at=now()
+            FROM ago_employees e
+            WHERE w.tenant_id=%s AND w.message_id=%s AND w.assignee_id=%s
+              AND e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+              AND e.kind='human' AND w.ack_message_id IS NULL
+            RETURNING w.id
+        """,(response_id,tenant_id,parent_id,actor_id)).fetchone()
+        return verified is not None
+
+    def attach(self, *, tenant_id, actor_id, actor_is_founder, message_id,
+               employee_id, task_id):
+        """Link only a REAL existing, same-tenant task to the chat order.
+
+        No automatic approval, execution, counterfeit CEO acknowledgement,
+        or cross-project task fabrication. Exact employee matches task owner.
+        """
+        employee_id = self._uuid(employee_id)
+        task_id = self._uuid(task_id)
+        with self.db.transaction():
+            work = self.db.execute("""
+                SELECT id,status,linked_task_id FROM ago_chat_work_items
+                WHERE tenant_id=%s AND message_id=%s AND assignee_id=%s
+                FOR UPDATE
+            """,(tenant_id,message_id,employee_id)).fetchone()
+            if work is None:
+                raise ValueError("No routed work item for this order and employee")
+            if not actor_is_founder and actor_id != employee_id:
+                raise PermissionError("Only founder or the actual assignee can link evidence")
+            task = self.db.execute("""
+                SELECT id,status,assignee_id,action FROM ago_governed_tasks
+                WHERE tenant_id=%s AND id=%s
+            """,(tenant_id,task_id)).fetchone()
+            if task is None or str(task["assignee_id"]) != employee_id:
+                raise PermissionError("Task must exist and belong to the tagged employee")
+            if work["linked_task_id"]:
+                if str(work["linked_task_id"]) != task_id:
+                    raise PermissionError("Work item is already linked to a different task")
+            else:
+                self.db.execute("""
+                    UPDATE ago_chat_work_items
+                    SET linked_task_id=%s,status='task_linked',updated_at=now()
+                    WHERE id=%s AND tenant_id=%s
+                """,(task_id,work["id"],tenant_id))
+            return {"message_id":message_id,"employee_id":employee_id,
+                    "task_id":task_id,"task_status":task["status"],
+                    "verified_task_link":True,"ai_acknowledged":False,
+                    "task_executed_by_chat":False}
 
 
 class CompanyChat:
@@ -88,16 +591,64 @@ class CompanyChat:
           ORDER BY c.id DESC LIMIT %s''',
           (tenant, channel, channel, channel, tenant, channel, before, before,
            founder,channel,reader_id,reader_id,limit+1)).fetchall()
-        return {'items': list(reversed(rows[:limit])),
+        items = [dict(row) for row in reversed(rows[:limit])]
+        # Durable order ownership is attached to the same saved timeline
+        # with bounded queries. No unverified agent reply is synthesized.
+        ids = [item['id'] for item in items]
+        if channel == 'global' and ids:
+            order_rows = self.db.execute("""
+                SELECT message_id,intent,founder_order,accountable_ceo_id,
+                       mention_ids,state,receipt_message_id FROM ago_chat_orders
+                WHERE tenant_id=%s AND message_id=ANY(%s::bigint[])
+            """, (tenant,ids)).fetchall()
+            work_rows = self.db.execute("""
+                SELECT w.message_id,w.id,w.assignee_id,e.name AS assignee_name,
+                       e.kind AS assignee_kind,w.status,w.linked_task_id,
+                       w.ack_message_id,t.status AS task_status,
+                       q.verdict AS qa_verdict
+                FROM ago_chat_work_items w
+                JOIN ago_employees e ON e.tenant_id=w.tenant_id AND e.id=w.assignee_id
+                LEFT JOIN ago_governed_tasks t ON t.tenant_id=w.tenant_id
+                     AND t.id=w.linked_task_id
+                LEFT JOIN ago_task_reviews q ON q.tenant_id=t.tenant_id
+                     AND q.task_id=t.id
+                WHERE w.tenant_id=%s AND w.message_id=ANY(%s::bigint[])
+                ORDER BY e.name,w.id
+            """, (tenant,ids)).fetchall()
+            orders = {r['message_id']: {**dict(r), 'work_items': [],
+                       'system_receipt_only': True} for r in order_rows}
+            for work in work_rows:
+                orders[work['message_id']]['work_items'].append(
+                    GlobalChatOrders._with_task_evidence(work))
+            for item in items:
+                if item['id'] in orders:
+                    order = orders[item['id']]
+                    order['verified_acknowledgements'] = sum(
+                        w['ack_message_id'] is not None for w in order['work_items'])
+                    order['waiting_for_agent_ack'] = sum(
+                        w['ack_message_id'] is None for w in order['work_items'])
+                    order['real_ai_replies'] = sum(
+                        w['ack_message_id'] is not None
+                        and w['assignee_kind']=='ai'
+                        for w in order['work_items'])
+                    order['system_receipt_only'] = (
+                        order['verified_acknowledgements']==0)
+                    item['order'] = order
+        return {'items': items,
                 'next_before': rows[limit-1]['id'] if len(rows)>limit else None}
 
-    def send(self, actor, channel, body, reply_to, operation_key):
+    def send(self, actor, channel, body, reply_to, operation_key,
+             *, mentions=(), intent: str = 'message'):
         self.channel(actor.tenant_id, channel)
         if not self._channel_permission(actor.tenant_id,actor.subject,channel):
             raise PermissionError('Channel access denied')
         body = body.strip()
         if not body:
             raise ValueError('Write a message first')
+        if channel != 'global' and (mentions or intent != 'message'):
+            raise ValueError('Global mentions/orders belong in global chat')
+        if len(mentions) > 10:
+            raise ValueError('Too many tagged employees')
         with self.db.transaction():
             if reply_to is not None:
                 parent = self.db.execute("""
@@ -124,7 +675,59 @@ class CompanyChat:
                 # A reply from verified task rows is useful without an LLM.
                 # Label it as automated status, never pretend an AI replied.
                 self._record_status_reply(actor.tenant_id, channel, row['id'])
-            return row
+            result = dict(row)
+            if channel == 'global':
+                global_orders = GlobalChatOrders(self.db)
+                routing = global_orders.route(
+                    tenant_id=actor.tenant_id, author_id=actor.subject,
+                    message_id=row['id'], body=body, mentions=mentions,
+                    intent=intent, founder='founder' in actor.roles)
+                if routing is not None:
+                    result['order'] = routing
+                if reply_to is not None:
+                    # A human addressee may reply to the original order or its
+                    # receipt. Only signed matching human identity is an ACK.
+                    original = self.db.execute("""
+                        SELECT message_id FROM ago_chat_orders
+                        WHERE tenant_id=%s AND receipt_message_id=%s
+                    """,(actor.tenant_id,reply_to)).fetchone()
+                    global_orders.record_human_acknowledgement(
+                        tenant_id=actor.tenant_id,actor_id=actor.subject,
+                        parent_id=original['message_id'] if original else reply_to,
+                        response_id=row['id'])
+            return result
+
+    def claim_ai_chat_reply(self, actor, message_id: int, employee_id: str) -> dict:
+        if not self._channel_permission(actor.tenant_id,actor.subject,'global'):
+            raise PermissionError('Global Chat access denied')
+        return GlobalChatOrders(self.db).claim_ai_reply(actor,message_id,employee_id)
+
+    def commit_ai_chat_reply(self, actor, message_id: int, employee_id: str,
+                             claim_token: str, answer: str,
+                             delegate_employee_id: str | None = None) -> dict:
+        return GlobalChatOrders(self.db).commit_ai_reply(
+            actor,message_id,employee_id,claim_token,answer,
+            delegate_employee_id=delegate_employee_id)
+
+    def abort_ai_chat_reply(self, actor, message_id: int, employee_id: str,
+                            claim_token: str) -> None:
+        GlobalChatOrders(self.db).abort_ai_reply(
+            actor,message_id,employee_id,claim_token)
+
+    def chat_order_inbox(self, actor, limit: int=50) -> list[dict]:
+        if 'founder' not in actor.roles or not self._channel_permission(
+                actor.tenant_id, actor.subject, 'global'):
+            raise PermissionError("Founder authority required for CEO accountability inbox")
+        return GlobalChatOrders(self.db).inbox(actor.tenant_id, limit=limit)
+
+    def link_chat_task(self, actor, message_id: int, employee_id: str,
+                       task_id: str) -> dict:
+        if not self._channel_permission(actor.tenant_id, actor.subject, 'global'):
+            raise PermissionError('Global Chat access denied')
+        return GlobalChatOrders(self.db).attach(
+            tenant_id=actor.tenant_id,actor_id=actor.subject,
+            actor_is_founder='founder' in actor.roles,
+            message_id=message_id,employee_id=employee_id,task_id=task_id)
 
     @staticmethod
     def _asks_work_status(body: str) -> bool:
@@ -919,6 +1522,8 @@ class CompanyChat:
                     SELECT id,name,kind,role_title,department_id,manager_id FROM ago_employees
                     WHERE tenant_id=%s ORDER BY name,id
                 """, (actor.tenant_id,)).fetchall()
+                eligible = GlobalChatOrders(self.db)._employees(actor.tenant_id)
+                employees = [e for e in employees if str(e['id']) in eligible]
                 # CEO owns operations after founder approves the complete plan.
                 available_ai = [e for e in employees if e['kind']=='ai']
                 discovery = next((e for e in available_ai
@@ -956,16 +1561,10 @@ class CompanyChat:
                 # The five reviewed Board members provide executive oversight;
                 # the seven-identity local AI workflow additionally needs an
                 # independent AI PROJECT manager. Never count CEO twice.
-                # This flag is explicit localhost-only engineering mode; normal
-                # CEO-owned project intake retains the existing contract.
-                import os
-                engineering_pm_mode = (
-                    os.getenv('AGO_LOCAL_FULL_BOARD_REVIEW','').lower() == 'true'
-                    and os.getenv('AGO_LOCAL_ENGINEERING_CANDIDATES','').lower() == 'true'
-                    and os.getenv('AGO_ENVIRONMENT','development').lower()
-                       in ('development','test','testing')
-                )
-                if engineering_pm_mode:
+                # PM ownership is a company responsibility, not an engineering
+                # feature flag. Preserve the existing executive fallback when
+                # no eligible, independent PM reports to the appointed CEO.
+                if available_ai:
                     ceo_seat=self.db.execute("""
                         SELECT b.employee_id
                         FROM ago_company_board_appointments b
@@ -974,14 +1573,18 @@ class CompanyChat:
                         WHERE b.tenant_id=%s AND b.seat='Strategy & Vision'
                     """,(actor.tenant_id,)).fetchone()
                     ceo_id=(str(ceo_seat['employee_id']) if ceo_seat else None)
-                    if ceo_id:
+                    if ceo_id in eligible:
+                        board_ids = {str(b['employee_id']) for b in self.db.execute(
+                            'SELECT employee_id FROM ago_company_board_appointments '
+                            'WHERE tenant_id=%s', (actor.tenant_id,)).fetchall()}
                         pm_candidates=[
                             e for e in available_ai
                             if (e['role_title'] or '').strip().lower()
                                in ('project manager','ai project manager',
                                    'ai project manager (pm)',
                                    'technical project manager')
-                            and str(e['id'])!=ceo_id
+                            and str(e['id']) not in board_ids
+                            and (discovery is None or str(e['id']) != str(discovery['id']))
                             and str(e['manager_id'] or '')==ceo_id
                         ]
                         if pm_candidates:
@@ -1039,6 +1642,8 @@ class CompanyChat:
                         assignee = discovery
                     else:
                         def eligible_for_stage(e):
+                            if str(e['id']) == str(leader['id']):
+                                return False
                             identity=(e['name']+' '+(e['role_title'] or '')).lower()
                             if not any(keyword in identity for keyword in keywords):
                                 return False
@@ -1071,6 +1676,27 @@ class CompanyChat:
                             'Leadership accountable for delivery; founder project saved: ' || %s,
                             'project',%s)
                 """, (actor.tenant_id,actor.subject,title,leader['id']))
+                # Durable team handoff, emitted only on first intake. These
+                # are proposed assignments, not model ACKs or execution grants.
+                team = self.db.execute("""
+                    SELECT suggested_assignee_id,
+                           string_agg(stage, ', ' ORDER BY position) AS stages
+                    FROM ago_founder_intake_stages
+                    WHERE tenant_id=%s AND intake_id=%s
+                      AND suggested_assignee_id IS NOT NULL
+                    GROUP BY suggested_assignee_id
+                """, (actor.tenant_id,intake_id)).fetchall()
+                for member in team:
+                    employee_id = str(member['suggested_assignee_id'])
+                    self.db.execute("""
+                        INSERT INTO ago_company_chat
+                        (tenant_id,channel,author_id,author_name,body,kind,employee_id)
+                        VALUES (%s,%s,%s,'AGO project assignment',%s,'project',%s)
+                    """, (actor.tenant_id,'employee:'+employee_id,actor.subject,
+                          'Project '+intake_id+' — '+title+'. Accountable manager: '
+                          +leader['name']+'. Proposed stages: '+member['stages']
+                          +'. Plan approval and actual acknowledgement pending; '
+                          'no task execution or QA pass claimed.',employee_id))
                 reused = False
 
             row = self.db.execute("""

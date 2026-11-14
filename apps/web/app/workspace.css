@@ -657,3 +657,24 @@
 .board-denial-allow{display:grid;gap:6px}.board-denial-allow label{display:grid;gap:4px}
 .founder-delivery-journey .board-denial-confirm{display:flex;flex-direction:row;gap:8px;align-items:center}
 .founder-delivery-journey .board-denial-confirm input{width:18px;height:18px;min-height:0;margin:0}
+
+
+/* Global Chat P0: source-backed CEO order receipts and accessible @mentions. */
+.chat-ceo-inbox{margin:12px 14px;padding:10px 12px;border:1px solid #52768a;border-radius:12px;background:#10283a;max-height:250px;overflow:auto}
+.chat-ceo-inbox summary{cursor:pointer;font-weight:650;font-size:13px;color:#d9f3ff;min-height:26px}
+.chat-ceo-inbox ul{list-style:none;margin:10px 0 0;padding:0}
+.chat-ceo-inbox li{padding:9px 0;border-top:1px solid #34576d;font-size:12px;color:#cfdfeb}
+.chat-ceo-inbox p{margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}
+.chat-ai-runtime-status{margin:8px 14px;border:1px solid #507b8c;border-radius:8px;padding:10px;font-size:12px;color:#d2f4fc}
+.chat-order-evidence{border:1px solid #54778e;background:#102536;border-radius:9px;padding:10px;margin:8px 0;display:grid;gap:6px}
+.chat-order-evidence>div{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px solid #324e63;padding-top:5px}
+.chat-order-evidence button{border:1px solid #438a9f;border-radius:7px;padding:6px 9px;min-height:34px;color:#ccf8ff}
+.chat-order-evidence button:disabled{opacity:.55;cursor:not-allowed}
+.chat-mentions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;border:1px solid #466983;border-radius:10px;padding:10px;margin:8px 0;min-width:0}
+.chat-mentions legend{font-size:12px;color:#c5eafd;padding:0 4px}
+.chat-mentions label{flex-basis:100%;font-size:11px}
+.chat-mentions select{width:100%;max-width:100%}
+.chat-mention-tag{display:inline-flex;align-items:center;gap:7px;max-width:100%;overflow-wrap:anywhere;padding:6px 9px;border:1px solid #467c96;border-radius:16px;background:#15384b;color:#d3f1ff;font-size:12px}
+.chat-mention-tag button{border:0;background:transparent;color:inherit;min-width:25px;min-height:25px;cursor:pointer}
+.chat-mentions :focus-visible,.chat-order-evidence button:focus-visible,.chat-ceo-inbox summary:focus-visible{outline:3px solid #a0e0ff;outline-offset:2px}
+@media(max-width:640px){.chat-ceo-inbox{margin:8px}.chat-order-evidence>div{align-items:flex-start}.chat-mentions select{width:100%}}
