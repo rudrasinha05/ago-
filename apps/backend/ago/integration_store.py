@@ -1051,6 +1051,21 @@ class IntegrationStore:
                 raise PermissionError(
                     "GitHub owner credential and explicit connector enablement required"
                 )
+            if operation["operation"] == "create_pull_request":
+                # All callers, including direct HTTP, need an AGO-origin
+                # source receipt from this exact project and reviewed SHA.
+                source_commit = self.db.execute(
+                    """SELECT 1 FROM ago_github_dispatch d
+                       JOIN ago_integration_settings s ON s.tenant_id=d.tenant_id
+                        AND s.proposal_id=d.proposal_id AND s.id=d.operation_id
+                       WHERE d.tenant_id=%s AND d.status='succeeded'
+                        AND s.kind='github_operation' AND s.payload->>'project_id'=%s
+                        AND s.payload->>'operation'='commit_files'
+                        AND d.result->>'sha'=%s LIMIT 1""",
+                    (actor.tenant_id, project["id"], operation["payload"]["expected_sha"]),
+                ).fetchone()
+                if not source_commit:
+                    raise PermissionError("An AGO-created commit receipt for this project and SHA is required")
             self.db.execute(
                 "INSERT INTO ago_github_dispatch(tenant_id,operation_id,proposal_id,status) VALUES(%s,%s,%s,'started')",
                 (actor.tenant_id, operation_id, row["proposal_id"]),

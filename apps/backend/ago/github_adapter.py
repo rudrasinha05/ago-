@@ -177,7 +177,23 @@ def execute(project: dict, operation: dict, marker: str) -> dict:
                 "draft": True,
             },
         )
-        return {"number": result["number"], "url": result["html_url"], "head_sha": head}
+        # GitHub resolves the head by branch name at creation time. The
+        # branch may have moved after CI was checked. Never record an inferred
+        # SHA or a successful draft for a mismatched provider response.
+        number = result.get("number")
+        url = "https://github.com/" + OWNER + "/" + repo + "/pull/" + str(number)
+        pr_head, pr_base = result.get("head"), result.get("base")
+        if (type(number) is not int or number <= 0 or result.get("html_url") != url
+                or result.get("draft") is not True or result.get("state") != "open"
+                or not isinstance(pr_head, dict) or not isinstance(pr_base, dict)
+                or pr_head.get("sha") != head or pr_head.get("ref") != "develop"
+                or pr_base.get("ref") != "main"
+                or not isinstance(pr_head.get("repo"), dict)
+                or not isinstance(pr_base.get("repo"), dict)
+                or pr_head["repo"].get("id") != current["id"]
+                or pr_base["repo"].get("id") != current["id"]):
+            raise ValueError("GitHub did not confirm the exact reviewed draft PR; reconcile")
+        return {"number": number, "url": url, "head_sha": pr_head["sha"]}
     raise ValueError("Unsupported GitHub operation")
 
 

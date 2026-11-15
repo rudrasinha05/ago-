@@ -110,7 +110,12 @@ def test_exact_private_owner_provider_requests(monkeypatch, operation, payload):
             ]}
         if path.endswith("/status"):
             return {"statuses": []}
-        return {"number": 1, "html_url": "https://github.com/" + gh.OWNER + "/project/pull/1"}
+        return {
+            "number": 1, "html_url": "https://github.com/" + gh.OWNER + "/project/pull/1",
+            "draft": True, "state": "open",
+            "head": {"ref": "develop", "sha": "a" * 40, "repo": {"id": 42}},
+            "base": {"ref": "main", "repo": {"id": 42}},
+        }
 
     monkeypatch.setattr(gh, "request", request)
     spec = {"operation": operation, "payload": payload}
@@ -369,3 +374,47 @@ def test_ago_github_source_secret_preflight_stops_before_provider_calls(
     with pytest.raises(ValueError, match="Safe unique bounded"):
         gh.validate_operation(proposal)
     assert provider_calls == []
+
+
+@pytest.mark.parametrize("mismatch", ["head_sha", "draft", "base", "head_repo", "url"])
+def test_draft_pr_receipt_fails_closed_on_provider_mismatch(monkeypatch, mismatch):
+    sha = "a" * 40
+    project = {"repository": "project", "repository_id": 42, "private": True}
+    repo = "/repos/" + gh.OWNER + "/project"
+    calls = []
+
+    def request(method, path, payload=None):
+        calls.append((method, path))
+        if method == "POST" and path == repo + "/pulls":
+            result = {
+                "number": 1, "html_url": "https://github.com/" + gh.OWNER + "/project/pull/1",
+                "draft": True, "state": "open",
+                "head": {"ref": "develop", "sha": sha, "repo": {"id": 42}},
+                "base": {"ref": "main", "repo": {"id": 42}},
+            }
+            if mismatch == "head_sha":
+                result["head"]["sha"] = "b" * 40
+            elif mismatch == "draft":
+                result["draft"] = False
+            elif mismatch == "base":
+                result["base"]["ref"] = "develop"
+            elif mismatch == "head_repo":
+                result["head"]["repo"]["id"] = 43
+            else:
+                result["html_url"] += "2"
+            return result
+        if method == "GET" and path == repo:
+            return {"id": 42, "private": True, "owner": {"login": gh.OWNER}}
+        if method == "GET" and path == repo + "/git/ref/heads/develop":
+            return {"object": {"sha": sha}}
+        raise AssertionError((method, path, payload))
+
+    monkeypatch.setattr(gh, "request", request)
+    monkeypatch.setattr(gh, "inspect_required_ci", lambda *a, **k: {"ci_verified": True})
+    with pytest.raises(ValueError, match="exact reviewed draft PR"):
+        gh.execute(project, {
+            "operation": "create_pull_request",
+            "payload": {"expected_sha": sha, "title": "Review", "body": "QA",
+                        "required_checks": ["Backend QA"]},
+        }, "ago-operation:example")
+    assert calls.count(("POST", repo + "/pulls")) == 1

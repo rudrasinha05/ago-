@@ -719,6 +719,79 @@ def test_github_project_approval_exact_dispatch_idempotency_and_tenant_binding(c
     assert calls.count("uncertain") == 1
 
 
+def test_github_draft_pr_requires_this_projects_successful_exact_commit(case, monkeypatch):
+    from ago import github_adapter
+
+    c, h, info = case
+    f, r = h["founder"], h["reviewer"]
+    dept = department(c, f)
+    pm, dev = employee(c, f, dept), employee(c, f, dept)
+    monkeypatch.setenv("AGO_GITHUB_TENANT_ID", info["tenant"])
+    monkeypatch.setenv("AGO_GITHUB_ENABLED", "true")
+    monkeypatch.setenv("AGO_GITHUB_TOKEN", "test-only-never-sent")
+    head = "c" * 40
+    calls = []
+
+    def send(project, spec, marker):
+        name = spec["operation"]
+        calls.append((project["id"], name, marker))
+        if name == "link_repository":
+            return {**spec["payload"]}
+        if name == "commit_files":
+            if spec["payload"]["message"] == "Uncertain write":
+                raise OSError("Provider connection lost")
+            return {"sha": "d" * 40 if spec["payload"]["message"] == "Different SHA" else head}
+        if name == "create_pull_request":
+            return {"number": 1, "head_sha": head, "url": "https://github.com/example/pull/1"}
+        raise AssertionError(name)
+
+    monkeypatch.setattr(github_adapter, "execute", send)
+
+    def approved_path(project_id, operation, payload):
+        op = {"id": str(uuid4()), "project_id": project_id, "operation": operation,
+              "payload": payload}
+        item, _ = propose(c, f, "integration", "github_operation", op)
+        apply(c, f, r, "integration", item)
+        return "/v1/platform/github/operations/" + op["id"] + "/execute"
+
+    def bind(repository, repository_id):
+        goal = post(c, "/v1/brain/goals", f,
+                    {"title": repository, "description": "Reviewed project"})
+        project = {"id": str(uuid4()), "goal_id": goal["id"], "repository": repository,
+                   "pm_id": pm, "developer_ids": [dev], "qa_id": info["reviewer_id"],
+                   "roadmap_ref": "approved:roadmap-v1", "enabled": True}
+        item, _ = propose(c, f, "integration", "github_project", project)
+        apply(c, f, r, "integration", item)
+        link = approved_path(project["id"], "link_repository",
+                             {"repository_id": repository_id, "private": True})
+        assert post(c, link, f)["status"] == "succeeded"
+        return project["id"]
+
+    def commit(project_id, message, expected=200):
+        path = approved_path(project_id, "commit_files",
+                             {"expected_sha": "a" * 40, "message": message,
+                              "files": [{"path": "README.md", "content": "Test"}]})
+        return post(c, path, f, expected=expected)
+
+    project = bind("private-delivery", 42)
+    other = bind("other-delivery", 43)
+    path = approved_path(project, "create_pull_request",
+                         {"expected_sha": head, "title": "Draft", "body": "Reviewed",
+                          "required_checks": ["Backend QA"]})
+    assert c.post(path, headers=f, json={}).status_code == 403
+    assert commit(other, "Other project")["result"]["sha"] == head
+    assert commit(project, "Different SHA")["result"]["sha"] != head
+    commit(project, "Uncertain write", expected=400)
+    denied = c.post(path, headers=f, json={})
+    assert denied.status_code == 403
+    assert "AGO-created commit receipt" in denied.text
+    assert not [call for call in calls if call[1] == "create_pull_request"]
+    assert commit(project, "Reviewed code")["result"]["sha"] == head
+    assert post(c, path, f)["result"]["head_sha"] == head
+    assert post(c, path, f)["status"] == "succeeded"
+    assert len([call for call in calls if call[1] == "create_pull_request"]) == 1
+
+
 def test_plugin_runtime_checks_manifest_client_scope_and_revocation(case):
     from ago.reviewed_changes import digest
 
