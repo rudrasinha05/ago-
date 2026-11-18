@@ -29,7 +29,9 @@ from uuid import UUID, uuid4, uuid5
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
-from ago.company_engineering import receipt_text, run_candidate_tests, test_runner_available
+from ago.company_engineering import (
+    project_test_evidence_text, receipt_text, run_candidate_tests, test_runner_available,
+)
 from ago.organization_store import OrganizationStore
 from ago.plan_execution import PlanExecution
 from ago.stage_progression_queries import StageProgressionQueries
@@ -160,6 +162,23 @@ class StageProgression:
             raise ValueError('Unknown project stage')
         return self.repositories.resolve(StageProgressionQueries).resolve_stage_blockers_25(
             (tenant_id, project_id, stage, before)).rowcount
+
+    def project_test_evidence(self, *, tenant_id: str, project_id: str) -> str:
+        """AGO's own record that this project's code tests ran and passed ('' if none).
+
+        Quality and release build on it: the QA plan cites these executed tests
+        and the QA reviewer sees them, instead of asking for test reports that
+        a text-only stage cannot produce.
+        """
+        for value in (tenant_id, project_id):
+            UUID(value)
+        row = self.repositories.resolve(StageProgressionQueries).select_project_test_evidence_26(
+            (tenant_id, project_id)).fetchone()
+        result = row["result"] if row and isinstance(row["result"], dict) else {}
+        candidate = result.get("engineering_candidate")
+        if not isinstance(candidate, dict) or candidate.get("candidate_sha256") != row["candidate_sha256"]:
+            return ""
+        return project_test_evidence_text(candidate, cases=row["unittest_cases"] or 0)
 
     def scheduled_work(self, *, tenant_id: str, project_id: str, task_id: str) -> dict | None:
         for value in (tenant_id, project_id, task_id):

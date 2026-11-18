@@ -387,6 +387,45 @@ def test_implementation_quality_board_reviews_plan_before_code_tests_not_false_p
 
 
 
+def test_quality_stage_prompts_carry_agos_executed_test_evidence():
+    """Live 2026-11-18: the quality Board and QA kept asking for test reports the
+    text-only quality stage cannot attach. AGO's recorded test run is shown to
+    every role, and is never a DENY reason, within the prompt bound."""
+    db = ApprovedProjectDb()
+    task = db.task()
+    evidence = ("AGO TEST EVIDENCE (recorded by AGO, not written by a model): ... 3 unittest "
+                "case(s) EXECUTED, ALL PASSED. Test cases: test_apply, test_review.")
+    task.project_context.update({
+        "stage": "quality", "deliverable": "QA plan and test report",
+        "prior_work": [{"stage": "implementation", "draft": "Admission code"}],
+        "test_evidence": evidence,
+        "recovery_feedback": "QA: no test cases or test report", "failed_work": "old",
+    })
+    participants = [
+        {"role": role, "employee_id": employee_id, "employee_name": role}
+        for role, employee_id in (
+            ("ceo", db.ceo), ("cto", db.cto), ("finance", db.finance),
+            ("risk", db.risk), ("quality", db.quality), ("pm", db.pm),
+            ("employee", db.implementer),
+        )
+    ]
+
+    class Model:
+        prompts = []
+
+        def generate(self, prompt):
+            self.prompts.append(prompt)
+            if "BOARD_ADVISORY:" in prompt:
+                return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: ok"
+            return "DECISION: QA plan cites the executed tests"
+    model = Model()
+    run_four_role_chain(task=task, participants=participants, provider=model)
+    assert len(model.prompts) == 7
+    for prompt in model.prompts:
+        assert "test_apply, test_review" in prompt and "NEVER a DENY reason" in prompt
+        assert len(prompt) <= 4000
+
+
 @pytest.mark.parametrize("stopping_role,reason,expected_calls",[
     ("ceo","deny",1),("risk","deny",4),("finance","unverified",3),
 ])

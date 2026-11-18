@@ -467,3 +467,25 @@ def receipt_text(receipt: dict) -> str:
     return ("AGO ISOLATED TEST RECEIPT: tests FAILED ("
             + str(receipt.get("failure_category") or "failure") + ", " + str(cases)
             + " case(s) found). " + str(receipt.get("failure_summary") or ""))[:900]
+
+
+def project_test_evidence_text(candidate: dict, *, cases: int) -> str:
+    """What a later stage (quality, release) may rely on: AGO's executed tests.
+
+    Built only from a PASSED receipt and the stored candidate it tested, never
+    from model text. It names the test cases and the checks they cover so the
+    QA plan and its reviewer can cite real, executed tests.
+    """
+    files = [f for f in (candidate.get("files") or []) if isinstance(f, dict)]
+    paths = [str(f.get("path")) for f in files]
+    names = []
+    for f in files:
+        if str(f.get("path", "")).startswith("tests/"):
+            names += re.findall(r"def (test_[A-Za-z0-9_]+)", str(f.get("content") or ""))
+    checks = [str(c) for c in candidate.get("acceptance_checks") or []][:6]
+    return ("AGO TEST EVIDENCE (recorded by AGO, not written by a model): the "
+            "implementation code was tested by AGO in an offline, read-only Docker "
+            "container: " + str(int(cases)) + " unittest case(s) EXECUTED, ALL PASSED. "
+            "Files: " + ", ".join(paths)[:300] + ". Test cases: "
+            + (", ".join(names)[:400] or "see tests/") + ". Acceptance checks covered: "
+            + "; ".join(checks)[:400] + ".")[:1200]

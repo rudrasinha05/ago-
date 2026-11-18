@@ -105,6 +105,10 @@ class AgentRuntime:
                 "deliverable": context_row["deliverable"],
                 "recovery_feedback": context_row.get("recovery_feedback") or "",
                 "failed_work": stage_deliverable(context_row.get("failed_work")),
+                # Quality and release cite AGO's executed implementation tests.
+                "test_evidence": (self.repositories.resolve(StageProgression).project_test_evidence(
+                    tenant_id=actor.tenant_id, project_id=str(context_row["id"]))
+                    if context_row["stage"] in ("quality", "release") else ""),
                 # What the earlier stages delivered and independent QA passed:
                 # a later stage builds on that, not on the bare brief.
                 "prior_work": [

@@ -163,6 +163,14 @@ def test_ago_runs_the_tests_before_qa_and_the_project_finishes(company):
     assert receipt['status'] == 'passed' and receipt['unittest_cases'] == 1
     implementation_qa = next(p for p in c.qa_prompts if 'AGO ISOLATED TEST RECEIPT:' in p)
     assert 'were EXECUTED by AGO' in implementation_qa and 'ALL PASSED' in implementation_qa
+    # Live 2026-11-18: quality QA failed six times for "no test cases or test
+    # report". Quality and release now see AGO's record of the executed tests.
+    quality_qa = next(p for p in c.qa_prompts if 'Stage: quality' in p)
+    assert 'AGO TEST EVIDENCE' in quality_qa and 'test_add' in quality_qa
+    assert '1 unittest case(s) EXECUTED, ALL PASSED' in quality_qa
+    contexts = {ctx.get('stage'): ctx for ctx in c.seen}
+    assert 'test_add' in contexts['quality']['test_evidence']
+    assert contexts['release']['test_evidence'] and not contexts['architecture'].get('test_evidence')
     assert post(c.client, c.advance, c.founder)['done'] is True
 
 

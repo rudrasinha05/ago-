@@ -2033,6 +2033,10 @@
           "arguments": "self, *, tenant_id: str, project_id: str, stage: str, before: datetime",
           "returns": "int"
         },
+        "project_test_evidence": {
+          "arguments": "self, *, tenant_id: str, project_id: str",
+          "returns": "str"
+        },
         "scheduled_work": {
           "arguments": "self, *, tenant_id: str, project_id: str, task_id: str",
           "returns": "dict | None"
@@ -2163,6 +2167,10 @@
           "returns": "Cursor"
         },
         "resolve_stage_blockers_25": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_project_test_evidence_26": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         }

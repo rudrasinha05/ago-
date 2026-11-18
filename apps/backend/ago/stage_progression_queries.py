@@ -287,3 +287,18 @@ class StageProgressionQueries:
                       OR (status='scheduled' AND eligible_at<=clock_timestamp()))""",
             parameters,
         )
+
+    def select_project_test_evidence_26(self, parameters: Any = None) -> Cursor:
+        """(tenant_id, project_id): the newest PASSED isolated test receipt of work
+        that also passed independent QA, with the run result it tested."""
+        return self.connection.execute(
+            """SELECT c.unittest_cases,c.candidate_sha256,r.result
+               FROM ago_stage_candidate_tests c
+               JOIN ago_agent_runs r ON r.tenant_id=c.tenant_id AND r.id=c.run_id
+                 AND r.task_id=c.task_id AND r.status='completed'
+               WHERE c.tenant_id=%s AND c.project_id=%s AND c.status='passed'
+                 AND EXISTS (SELECT 1 FROM ago_task_reviews q WHERE q.tenant_id=c.tenant_id
+                             AND q.task_id=c.task_id AND q.verdict='pass')
+               ORDER BY c.finished_at DESC LIMIT 1""",
+            parameters,
+        )
