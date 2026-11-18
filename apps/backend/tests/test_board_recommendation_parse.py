@@ -286,3 +286,18 @@ def test_before_coding_no_seat_may_block_because_tests_or_docs_do_not_exist_yet(
     assert stopped["engineering_candidate"] is None
     assert not any(r["outcome"] == "approved_pre_execution_rule"
                    for r in stopped["board_resolutions"])
+
+
+def test_a_rework_run_is_not_blocked_by_the_failure_it_exists_to_fix():
+    """Live 2026-11-18 17:22: after the AI CEO's changed-approach rework, the
+    seats denied "the project failed the initial code review due to a circular
+    import error" - the very problem the rework fixes, re-tested by AGO."""
+    from ago.company_ollama_chain import pre_execution_only
+    seen = ("The project failed the initial code review due to a circular import "
+            "error in the `src/admission_flow.py` file.")
+    assert pre_execution_only(seen, rework=True) is True
+    assert pre_execution_only(seen, rework=False) is False
+    assert pre_execution_only("The previous attempt failed and the plan now sends "
+                              "student personal data to an external service.",
+                              rework=True) is False
+    assert pre_execution_only("Budget exceeds the approved allowance.", rework=True) is False

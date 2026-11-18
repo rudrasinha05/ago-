@@ -2108,10 +2108,23 @@ class CompanyChat:
             # longer serve does the CEO pick another existing employee.
             preferred = (str(row['suggested_assignee_id'])
                          if row['suggested_assignee_id'] is not None else None)
+            # A staffing request may already be waiting for this stage (live
+            # 2026-11-18: it stopped AdmissionFlow at quality). The AI CEO decides
+            # it: an eligible requested worker is confirmed through that very
+            # request; an ineligible one leaves the CEO to pick another.
+            pending = None
             if row['proposed']:
-                # Never silently override a pending manual staffing request.
-                raise PermissionError(
-                    'A staffing request for the '+stage+' stage is already waiting for a decision')
+                pending = self.db.execute("""
+                    SELECT d.id,d.assignee_id,d.approval_id
+                    FROM ago_project_stage_delegation_proposals d
+                    JOIN ago_approval_requests a ON a.tenant_id=d.tenant_id
+                      AND a.id=d.approval_id
+                    WHERE d.tenant_id=%s AND d.intake_id=%s AND d.stage=%s
+                      AND a.status='pending' AND d.requester_id=%s
+                    ORDER BY d.created_at DESC LIMIT 1
+                """, (tenant_id, project_id, stage, founder_id)).fetchone()
+                if pending is not None and preferred is None:
+                    preferred = str(pending['assignee_id'])
             board = self.db.execute("""
                 SELECT b.seat,b.employee_id,e.name,e.kind
                 FROM ago_company_board_appointments b
@@ -2158,21 +2171,25 @@ class CompanyChat:
                     + ' / '.join(words)+') who is not a Board member, the project manager '
                     'or the other side of implementation/QA. Add or retitle one.')
             worker_id = str(chosen['id'])
-            proposal_id = str(uuid4())
             approvals = self.repositories.resolve(ApprovalRepository)
-            approval = approvals.propose(
-                tenant_id=tenant_id, requester_id=founder_id,
-                action='company:stage-delegation:'+proposal_id)
-            self.db.execute("""
-                INSERT INTO ago_project_stage_delegation_proposals
-                  (id,tenant_id,intake_id,stage,assignee_id,requester_id,approval_id)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-            """, (proposal_id, tenant_id, project_id, stage, worker_id, founder_id,
-                  approval.request_id))
+            if pending is not None and str(pending['assignee_id']) == worker_id:
+                # Decide the waiting request itself; never a duplicate one.
+                proposal_id, approval_id = str(pending['id']), str(pending['approval_id'])
+            else:
+                proposal_id = str(uuid4())
+                approval_id = approvals.propose(
+                    tenant_id=tenant_id, requester_id=founder_id,
+                    action='company:stage-delegation:'+proposal_id).request_id
+                self.db.execute("""
+                    INSERT INTO ago_project_stage_delegation_proposals
+                      (id,tenant_id,intake_id,stage,assignee_id,requester_id,approval_id)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                """, (proposal_id, tenant_id, project_id, stage, worker_id, founder_id,
+                      approval_id))
             approvals.approve_ceo_project_stage(
                 tenant_id=tenant_id, founder_id=founder_id, ceo_id=str(ceo['employee_id']),
                 project_id=project_id, proposal_id=proposal_id,
-                approval_id=approval.request_id,
+                approval_id=approval_id,
                 reason='CEO filled the unstaffed '+stage+' stage of project '+project_id
                        +' with an existing AI employee; authorized Founder session '+founder_id)
             self.db.execute("""
@@ -2186,7 +2203,10 @@ class CompanyChat:
                   (tenant_id,channel,author_id,author_name,body,kind,employee_id)
                 VALUES (%s,'global',%s,%s,%s,'project',%s)
             """, (tenant_id, founder_id, str(ceo['name'])+' (AI CEO)',
-                  ('The approved scope suggested '+str(chosen['name'])+' for the '+stage
+                  ('A staffing request for the '+stage+' stage named '+str(chosen['name'])
+                   +'; I approved it' if pending is not None
+                   and str(pending['assignee_id']) == worker_id
+                   else 'The approved scope suggested '+str(chosen['name'])+' for the '+stage
                    +' stage; I confirmed them' if worker_id == preferred
                    else 'The '+stage+' stage had no confirmed staffing. I assigned '
                    +str(chosen['name']))

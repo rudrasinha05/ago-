@@ -461,19 +461,24 @@ def test_without_an_ai_manager_or_staffing_the_founder_is_told_why(case, monkeyp
                       "WHERE tenant_id=%s", (tenant,)).fetchone()['n'] == 0
 
 
-def test_unstaffed_next_stage_waits_for_staffing_instead_of_guessing(company):
+def test_unconfirmed_next_stage_is_confirmed_by_the_ai_ceo_not_guessed(company):
+    """The next stage's specialist was suggested in the approved scope but never
+    confirmed. Founder 2026-11-18: no Founder stop mid-project - the AI CEO
+    confirms exactly that suggested specialist (never a different person)."""
     c = company
-    # Discovery is approved through the ordinary flow, but with only its own
-    # stage activated: the CEO reconcile below is what activates all five.
     c.run('discovery')
     c.db.execute("ALTER TABLE ago_project_stage_delegation_activations DISABLE TRIGGER USER")
     c.db.execute("DELETE FROM ago_project_stage_delegation_activations WHERE tenant_id=%s "
                  "AND intake_id=%s AND stage='architecture'", (c.tenant, c.id))
     c.db.execute("ALTER TABLE ago_project_stage_delegation_activations ENABLE TRIGGER USER")
-    held = c.qa('discovery')['continuation']
-    assert (held['action'], held['state'], held['needs_founder']) == (
-        'none', 'stage_not_staffed', True)
-    assert c.stage('architecture')['plan_step_id'] is None
+    suggested = c.db.execute("""SELECT suggested_assignee_id FROM ago_founder_intake_stages
+        WHERE tenant_id=%s AND intake_id=%s AND stage='architecture'""",
+        (c.tenant, c.id)).fetchone()['suggested_assignee_id']
+    opened = c.qa('discovery')['continuation']
+    assert (opened['action'], opened['stage'], opened['needs_founder']) == (
+        'opened_stage', 'architecture', False)
+    assert opened['assignee_id'] == str(suggested)
+    assert c.stage('architecture')['plan_step_id'] is not None
 
 
 def test_stage_specialist_under_another_line_manager_still_answers_to_the_pm(
@@ -546,13 +551,23 @@ def test_ai_ceo_fills_a_stage_the_project_scope_left_unstaffed(case, monkeypatch
     for name in ('discovery', 'architecture'):
         c.run(name)
         assert c.qa(name)['continuation']['action'] == 'opened_stage'
+    # A Founder staffing request for quality is still waiting (live 2026-11-18:
+    # it made the CEO stop the project). The CEO now decides THAT request.
+    from types import SimpleNamespace
+    founder = SimpleNamespace(tenant_id=tenant, subject=c.info['founder_id'],
+                              roles={'founder'})
+    waiting = chat.propose_stage_delegation(founder, c.id, 'quality', c.people['Second Tester'])
     c.run('implementation')
     opened = c.qa('implementation')['continuation']
-    # The AI CEO filled quality with an existing tester; the AI manager opened it.
+    # The AI CEO decided the waiting request; the AI manager opened the stage.
     assert (opened['action'], opened['stage'], opened['staffed_by_ceo']) == (
         'opened_stage', 'quality', 'CEO')
     testers = {c.people['QA Specialist'], c.people['Second Tester']}
-    assert opened['assignee_id'] in testers
+    assert opened['assignee_id'] == c.people['Second Tester']
+    assert db.execute("""SELECT count(*) AS n FROM ago_project_stage_delegation_proposals
+        WHERE tenant_id=%s AND intake_id=%s AND stage='quality'""",
+        (tenant, c.id)).fetchone()['n'] == 1          # no duplicate request
+    waiting_id = str(waiting.get('proposal_id') or waiting.get('id'))
     record = db.execute("""
         SELECT a.assignee_id,r.reviewer_id,r.status,d.requester_id
         FROM ago_project_stage_delegation_activations a
@@ -563,6 +578,9 @@ def test_ai_ceo_fills_a_stage_the_project_scope_left_unstaffed(case, monkeypatch
         (tenant, c.id)).fetchone()
     assert str(record['assignee_id']) == opened['assignee_id']
     assert (str(record['reviewer_id']), record['status']) == (c.people['CEO'], 'approved')
+    assert waiting_id in {str(r['id']) for r in db.execute(
+        "SELECT id FROM ago_project_stage_delegation_proposals WHERE tenant_id=%s",
+        (tenant,)).fetchall()}
     assert str(record['requester_id']) == c.info['founder_id']
     assert c.stage('quality')['status'] == 'proposed'          # nothing ran
     with pytest.raises(PermissionError, match='already has staffing'):

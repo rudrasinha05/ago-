@@ -63,16 +63,25 @@ _REAL_BLOCKER = re.compile(
     r"pii|legal|licen[cs]e|unsafe|network|external|cost|budget|spend\w*|scope)\b", re.I)
 
 
-def pre_execution_only(concern: str) -> bool:
-    """A Board concern that is ONLY "tests/docs don't exist or haven't run yet".
+_PREVIOUS_FAILURE = re.compile(
+    r"\b(fail\w*|error\w*|import\w*|circular|exception|bug\w*|crash\w*|broken|"
+    r"traceback|previous attempt|code review|did not pass|not pass\w*)\b", re.I)
 
-    Before the implementation run nothing can satisfy it; AGO writes them in the
-    run and executes the tests before QA. Anything naming a real blocker
-    (security, privacy, cost, scope, ...) is never treated this way.
+
+def pre_execution_only(concern: str, *, rework: bool = False) -> bool:
+    """A Board concern nobody can satisfy BEFORE the implementation run.
+
+    Always: "tests/docs don't exist or haven't run yet" - this run writes them
+    and AGO executes the tests before QA. In a rework run also: "the previous
+    attempt failed / had this error" - fixing exactly that is this run's job,
+    and AGO re-tests it before QA. Anything naming a real blocker (security,
+    privacy, cost, scope, ...) is never treated this way.
     """
     text = str(concern or "")
-    return (bool(_PRE_EXECUTION_SUBJECT.search(text)) and bool(_PRE_EXECUTION_STATE.search(text))
-            and not _REAL_BLOCKER.search(text))
+    if _REAL_BLOCKER.search(text):
+        return False
+    missing = bool(_PRE_EXECUTION_SUBJECT.search(text)) and bool(_PRE_EXECUTION_STATE.search(text))
+    return missing or (rework and bool(_PREVIOUS_FAILURE.search(text)))
 
 
 def board_recommendation(text: str) -> str:
@@ -194,7 +203,8 @@ def run_four_role_chain(
     quality_pre_execution_rule = (
         "PRE-EXECUTION QUALITY: Vote on the plan to start coding. Code, tests and "
         "docs are written IN THIS RUN; AGO runs the tests in offline Docker before "
-        "QA. Missing tests/docs now is NEVER a DENY reason. Never claim tests passed.\n"
+        "QA. Missing tests/docs now"+(", or the earlier failure this run fixes,"
+        if feedback else "")+" is NEVER a DENY reason. Never claim tests passed.\n"
         if project_stage == "implementation" else ""
     )
     # Two-seat legacy drafting remains available. The founder's explicitly
@@ -412,7 +422,7 @@ def run_four_role_chain(
             board_seat=BOARD_ROLE_SEATS[role]
             manager = next((p for p in participants if p["role"] == "pm"), None)
             if (vote == "deny" and project_stage == "implementation"
-                    and pre_execution_only(denial_reason(bounded))):
+                    and pre_execution_only(denial_reason(bounded), rework=bool(feedback))):
                 # Before coding, "there are no tests/docs yet" cannot be
                 # resolved by anyone: this run writes them and AGO executes the
                 # tests before QA. Recorded, never hidden; not a PM resolution.
@@ -465,7 +475,7 @@ def run_four_role_chain(
                     elif second == "deny":
                         concern = denial_reason(reply)
                 if vote == "deny" and concern and project_stage == "implementation" \
-                        and pre_execution_only(concern):
+                        and pre_execution_only(concern, rework=bool(feedback)):
                     # Before coding, "there are no tests/docs yet" cannot be
                     # resolved by anyone: this run writes them and AGO executes
                     # the tests before QA. Recorded, never hidden.
