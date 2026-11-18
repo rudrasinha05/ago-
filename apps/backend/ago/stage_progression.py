@@ -146,7 +146,8 @@ class StageProgression:
         return int(self.repositories.resolve(StageProgressionQueries).select_qa_attempts_17(
             (tenant_id, 'ai-qa:' + task_id + ':%')).fetchone()['n'])
 
-    def resolve_stage_blockers(self, *, tenant_id: str, project_id: str, stage: str) -> int:
+    def resolve_stage_blockers(self, *, tenant_id: str, project_id: str, stage: str,
+                               before: datetime) -> int:
         """After a step of this stage succeeded, its old blockers are history.
 
         Closes 'blocked' follow-ups and waits whose time has come, so the Founder
@@ -158,7 +159,7 @@ class StageProgression:
         if stage not in STAGES:
             raise ValueError('Unknown project stage')
         return self.repositories.resolve(StageProgressionQueries).resolve_stage_blockers_25(
-            (tenant_id, project_id, stage)).rowcount
+            (tenant_id, project_id, stage, before)).rowcount
 
     def scheduled_work(self, *, tenant_id: str, project_id: str, task_id: str) -> dict | None:
         for value in (tenant_id, project_id, task_id):

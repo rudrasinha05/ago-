@@ -41,9 +41,12 @@ def test_qa_feedback_reaches_same_worker_and_resolves_only_after_qa(company):
     assert len(notice) == 1 and '@Research Analyst' in notice[0]['body']
 
 
-def test_unknown_failure_is_assigned_to_founder_without_replay_or_notice_spam(company):
+def test_a_credit_failure_is_assigned_to_founder_without_replay_or_notice_spam(company):
+    # 2026-11-18: an unexpected crash is now an AI retry (handler_error); only a
+    # credit problem still needs the Founder, because only he adds budget.
+    from ago.credit_domain import CreditBudgetMissing
     c = company
-    c.failures = [ValueError('private error must not appear')]
+    c.failures = [CreditBudgetMissing('private error must not appear')]
     for _ in range(3):
         post(c.client, c.advance, c.founder)
     for _ in range(3):
@@ -54,6 +57,18 @@ def test_unknown_failure_is_assigned_to_founder_without_replay_or_notice_spam(co
     assert rows[0]['status'] == 'blocked'
     assert 'private error' not in str(rows)
     assert len(c.seen) == 1 and c.recoveries('discovery') == []
+
+
+def test_an_unexpected_crash_is_retried_by_the_ai_without_leaking_its_text(company):
+    c = company
+    c.failures = [ValueError('private error must not appear')]
+    for _ in range(3):
+        post(c.client, c.advance, c.founder)
+    retried = post(c.client, c.advance, c.founder)
+    assert retried['needs_founder'] is False and retried['progressed'] is True, retried
+    [row] = c.recoveries('discovery')
+    assert row['reason'] == 'Retry after run failure: handler_error'
+    assert 'private error' not in str(followups(c)) + str(retried)
 
 
 def test_calendar_wait_is_durable_deduplicated_and_does_not_run(company, monkeypatch):
@@ -90,24 +105,27 @@ def test_calendar_without_slot_routes_to_manager(company, monkeypatch):
     assert '14 days' in held['followup']['feedback'] and c.seen == []
 
 
-def test_qa_attempt_limit_survives_new_requests_and_requires_explicit_tester(company):
+def test_three_unclear_qa_answers_become_a_fail_and_a_rework_not_a_founder_stop(company):
+    # 2026-11-18: the third unclear answer is recorded as FAIL (never PASS), so
+    # the team reworks the stage with fresh QA attempts instead of stopping.
     c = company
     for _ in range(3):
         post(c.client, c.advance, c.founder)
+    old = str(c.stage('discovery')['task_id'])
     c.qa_answer = 'No clear verdict.'
-    for _ in range(3):
-        post(c.client, c.advance, c.founder)
-    for _ in range(2):
-        held = post(c.client, c.advance, c.founder)
-        assert held['needs_founder'] and held['followup']['code'] == 'qa_attempt_limit'
+    replies = [post(c.client, c.advance, c.founder) for _ in range(3)]
+    assert not any(r['needs_founder'] for r in replies), replies
     assert len(c.qa_prompts) == 3
-    post(c.client, c.url+'/stages/discovery/ai-qa', c.founder,
-         {'operation_key': str(uuid4())}, expected=403)
-    assert len(c.qa_prompts) == 3
+    review = c.db.execute('SELECT verdict,evidence FROM ago_task_reviews WHERE task_id=%s',
+                          (old,)).fetchone()
+    assert review['verdict'] == 'fail' and 'AGO RULE: QA gave no clear verdict' in review['evidence']
+    assert str(c.stage('discovery')['task_id']) != old          # the rework task
     c.qa_answer = 'QA_VERDICT: PASS'
-    resumed = post(c.client, c.url+'/stages/discovery/ai-qa', c.founder, {
-        'operation_key': str(uuid4()), 'qa_employee_id': c.people['QA Specialist']})
-    assert resumed['verdict'] == 'pass' and len(c.qa_prompts) == 4
+    for _ in range(6):
+        reply = post(c.client, c.advance, c.founder)
+        if reply.get('qa_verdict') == 'pass':
+            break
+    assert reply['qa_verdict'] == 'pass' and not reply['needs_founder']
     assert all(f['status'] == 'resolved' for f in followups(c))
 
 

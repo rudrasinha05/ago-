@@ -291,14 +291,6 @@
           "arguments": "self, actor, channel, body, reply_to, operation_key, *, mentions=(), intent: str='message'",
           "returns": "Any"
         },
-        "link_chat_task": {
-          "arguments": "self, actor, message_id: int, employee_id: str, task_id: str",
-          "returns": "dict"
-        },
-        "chat_order_inbox": {
-          "arguments": "self, actor, limit: int=50",
-          "returns": "list[dict]"
-        },
         "claim_ai_chat_reply": {
           "arguments": "self, actor, message_id: int, employee_id: str",
           "returns": "dict"
@@ -310,6 +302,14 @@
         "abort_ai_chat_reply": {
           "arguments": "self, actor, message_id: int, employee_id: str, claim_token: str",
           "returns": "None"
+        },
+        "chat_order_inbox": {
+          "arguments": "self, actor, limit: int=50",
+          "returns": "list[dict]"
+        },
+        "link_chat_task": {
+          "arguments": "self, actor, message_id: int, employee_id: str, task_id: str",
+          "returns": "dict"
         },
         "activity": {
           "arguments": "self, tenant_id, reader_id: str | None=None",
@@ -381,6 +381,10 @@
         },
         "ceo_fill_stage": {
           "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, stage: str",
+          "returns": "dict"
+        },
+        "ceo_hire_independent_tester": {
+          "arguments": "self, *, tenant_id: str, project_id: str",
           "returns": "dict"
         },
         "propose_stage_delegation": {
@@ -2026,7 +2030,7 @@
           "returns": "int"
         },
         "resolve_stage_blockers": {
-          "arguments": "self, *, tenant_id: str, project_id: str, stage: str",
+          "arguments": "self, *, tenant_id: str, project_id: str, stage: str, before: datetime",
           "returns": "int"
         },
         "scheduled_work": {

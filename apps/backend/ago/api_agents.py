@@ -194,10 +194,13 @@ def advance_once(db, actor: Principal, repositories: RepositoryScope, project_id
         if not acquired:
             return _outcome({'step': 'running'}, progressed=False, needs_founder=False,
                             message='Another request is advancing this project; waiting for its result.')
+        started = datetime.now(timezone.utc)
         reply = _advance_once(db, actor, repositories, project_id)
         if reply['progressed'] and reply.get('stage') in STAGES:
+            # Close only blockers older than this step; a failure this step
+            # recorded (e.g. a credit problem) stays visible.
             router.resolve_stage_blockers(tenant_id=actor.tenant_id, project_id=project_id,
-                                          stage=reply['stage'])
+                                          stage=reply['stage'], before=started)
         unclear = reply['step'] == 'qa' and not reply['progressed'] and not reply.get('scheduled')
         if (reply['needs_founder'] or reply.get('schedule_at') or unclear) and not (
                 reply.get('followup') or (reply.get('decision') or {}).get('followup')):

@@ -278,10 +278,11 @@ class StageProgressionQueries:
         )
 
     def resolve_stage_blockers_25(self, parameters: Any = None) -> Cursor:
-        """(tenant_id, project_id, stage): close blockers and expired waits once work moves on."""
+        """(tenant_id, project_id, stage, before): close blockers and expired waits that
+        existed before a step of the stage succeeded (never ones that step created)."""
         return self.connection.execute(
             """UPDATE ago_project_followups SET status='resolved',resolved_at=clock_timestamp()
-               WHERE tenant_id=%s AND project_id=%s AND stage=%s
+               WHERE tenant_id=%s AND project_id=%s AND stage=%s AND created_at<%s
                  AND (status='blocked'
                       OR (status='scheduled' AND eligible_at<=clock_timestamp()))""",
             parameters,
