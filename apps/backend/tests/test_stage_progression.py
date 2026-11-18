@@ -323,21 +323,33 @@ def test_failed_stage_is_recovered_by_the_ai_manager_within_a_limit(company):
         AND body LIKE '%%automatic attempt%%' ORDER BY id""", (tenant,)).fetchall()
     assert [n['author_name'] for n in notices] == [
         'CEO (AI project manager)']*2 + ["CEO (AI CEO, after the project manager's attempts)"]*2
-    fifth, _ = c.run('architecture', fail=TimeoutError('model timed out'), expected=502)
-    assert str(c.stage('architecture')['task_id']) == fifth
-    assert len(c.recoveries('architecture')) == 4
+    # 4. Founder 2026-11-18: no Founder decision mid-project. The AI CEO then
+    #    tries twice more with a CHANGED approach, and only then puts the stage
+    #    on hold with a report.
+    for attempt in (5, 6):
+        c.run('architecture', fail=TimeoutError('model timed out'), expected=502)
+        assert len(c.recoveries('architecture')) == attempt
+        assert c.recoveries('architecture')[-1]['reason'].startswith(
+            'AI CEO CHANGED APPROACH')
+    notices = db.execute("""SELECT author_name FROM ago_company_chat WHERE tenant_id=%s
+        AND body LIKE '%%automatic attempt%%' ORDER BY id""", (tenant,)).fetchall()
+    assert [n['author_name'] for n in notices][-2:] == ['CEO (AI CEO, changed approach)']*2
+    last, _ = c.run('architecture', fail=TimeoutError('model timed out'), expected=502)
+    assert str(c.stage('architecture')['task_id']) == last
+    assert len(c.recoveries('architecture')) == 6
     limit = post(c.client, c.url+'/continue', c.founder)
     assert (limit['action'], limit['state'], limit['needs_founder']) == (
         'none', 'recovery_limit_reached', True)
-    assert 'and the AI CEO 2 more times' in limit['reason']
+    assert limit['reason'].startswith('CEO REPORT: the AI CEO put the architecture stage on hold')
+    assert 'after 6 automatic attempts' in limit['reason']
     manual = post(c.client, c.url+'/stages/architecture/recovery', c.founder,
-                  {'failed_task_id': fifth, 'reason': 'Founder retries after the limit'})
+                  {'failed_task_id': last, 'reason': 'Founder retries after the hold'})
     assert manual['decided_by_employee_id'] is None
     assert c.recoveries('architecture')[-1]['decided_by_employee_id'] is None
     # The Founder's own decision is a fresh mandate: the AI manager may retry again.
     c.run('architecture', fail=TimeoutError('model timed out'), expected=502)
     again = c.recoveries('architecture')
-    assert len(again) == 6 and str(again[-1]['decided_by_employee_id']) == c.people['CEO']
+    assert len(again) == 8 and str(again[-1]['decided_by_employee_id']) == c.people['CEO']
 
     # The Founder's retry then passes, and the project moves on by itself.
     c.run('architecture')

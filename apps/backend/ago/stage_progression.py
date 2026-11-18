@@ -45,6 +45,16 @@ QA_ROLE = re.compile(r"\b(qa|quality|test(er|ing)?)\b", re.IGNORECASE)
 # handle a failed stage; the Founder is the last resort, not the first).
 MAX_AI_RECOVERIES = 2
 MAX_CEO_RECOVERIES = 2
+# Founder 2026-11-18: no Founder decision in the middle of a project. After its
+# two ordinary retries the AI CEO gets two more that CHANGE the approach (start
+# over smaller, fix exactly the recorded failure). Only after that does the CEO
+# put the stage on hold and report to the Founder - a report, not a question.
+MAX_CEO_STRATEGY_RECOVERIES = 2
+CEO_STRATEGY = (
+    "AI CEO CHANGED APPROACH: do not patch the previous attempt. Start over with the "
+    "smallest version that meets the stage goal, keep it simple, and fix exactly this "
+    "recorded problem first. "
+)
 # Run failures a retry can fix. Credit, unstaffed and unknown outcomes are not here.
 # worker_timeout is an abandoned run with an UNKNOWN outcome: never retried here.
 RETRYABLE_FAILURES = frozenset({
@@ -581,16 +591,28 @@ class StageProgression:
         limit = MAX_AI_RECOVERIES
         if done >= MAX_AI_RECOVERIES:
             ceo = queries.select_ai_ceo_21((tenant_id,)).fetchone()
-            if ceo is None or done >= MAX_AI_RECOVERIES + MAX_CEO_RECOVERIES:
+            total = MAX_AI_RECOVERIES + MAX_CEO_RECOVERIES + MAX_CEO_STRATEGY_RECOVERIES
+            if ceo is None:
                 return self._wait(
                     "recovery_limit_reached", True,
                     "The AI project manager retried the " + stage + " stage "
-                    + str(MAX_AI_RECOVERIES) + " times"
-                    + ("" if ceo is None else " and the AI CEO " + str(MAX_CEO_RECOVERIES)
-                       + " more times")
-                    + ". The Founder decides what happens next.")
+                    + str(MAX_AI_RECOVERIES) + " times and AGO has no AI CEO to take over."
+                    " The Founder decides what happens next.")
+            if done >= total:
+                return self._wait(
+                    "recovery_limit_reached", True,
+                    "CEO REPORT: the AI CEO put the " + stage + " stage on hold after "
+                    + str(total) + " automatic attempts (the AI project manager "
+                    + str(MAX_AI_RECOVERIES) + " times and the AI CEO "
+                    + str(MAX_CEO_RECOVERIES + MAX_CEO_STRATEGY_RECOVERIES)
+                    + " more times, the last " + str(MAX_CEO_STRATEGY_RECOVERIES)
+                    + " with a changed approach). Last recorded problem: " + reason[:300]
+                    + " Nothing else waits on you; rework the stage when you choose to.")
             decider_id, decider_name, level = str(ceo["id"]), ceo["name"], "ceo"
-            limit = MAX_AI_RECOVERIES + MAX_CEO_RECOVERIES
+            limit = total
+            if done >= MAX_AI_RECOVERIES + MAX_CEO_RECOVERIES:
+                level = "ceo_changed_approach"
+                reason = CEO_STRATEGY + reason
         recovery = self.repositories.resolve(PlanExecution).recover_failed_stage(
             tenant_id=tenant_id, founder_id=founder_id, project_id=str(project["id"]),
             stage=stage, failed_task_id=str(current["task_id"]), reason=reason[:500],
@@ -600,7 +622,9 @@ class StageProgression:
         queries.insert_project_notice_07((
             tenant_id, founder_id,
             decider_name + (" (AI CEO, after the project manager's attempts)"
-                            if level == "ceo" else " (AI project manager)"),
+                            if level == "ceo" else
+                            " (AI CEO, changed approach)" if level == "ceo_changed_approach"
+                            else " (AI project manager)"),
             {"qa_rework": "The independent tester failed the " + stage + " stage.",
              "board_revision": "The Board stopped the " + stage + " stage.",
              "retry": "The " + stage + " task failed (" + str(current["failure_code"]) + ")."}[kind]
