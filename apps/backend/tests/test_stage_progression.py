@@ -516,8 +516,19 @@ def test_ai_ceo_fills_a_stage_the_project_scope_left_unstaffed(case, monkeypatch
     assert [s['stage'] for s in suggested] == ['quality', 'release']
     chat = CompanyChat(db)
     ids = {'tenant_id': tenant, 'founder_id': c.info['founder_id'], 'project_id': c.id}
-    # A stage the Founder-approved scope already staffed is never touched by the CEO.
-    with pytest.raises(PermissionError, match='already has a suggested specialist'):
+    # A stage whose approved scope SUGGESTS a specialist who was never confirmed:
+    # the AI CEO confirms exactly that person (2026-11-18: this used to stop the
+    # project for the Founder), and never replaces confirmed staffing.
+    proposed = db.execute("""SELECT suggested_assignee_id FROM ago_founder_intake_stages
+        WHERE tenant_id=%s AND intake_id=%s AND stage='architecture'""",
+        (tenant, c.id)).fetchone()['suggested_assignee_id']
+    activated = db.execute("""SELECT 1 FROM ago_project_stage_delegation_activations
+        WHERE tenant_id=%s AND intake_id=%s AND stage='architecture'""",
+        (tenant, c.id)).fetchone()
+    if activated is None:
+        confirmed = chat.ceo_fill_stage(stage='architecture', **ids)
+        assert confirmed['assignee_id'] == str(proposed)
+    with pytest.raises(PermissionError, match='already has staffing'):
         chat.ceo_fill_stage(stage='architecture', **ids)
 
     for name in ('discovery', 'architecture'):

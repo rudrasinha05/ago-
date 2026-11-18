@@ -2102,13 +2102,12 @@ class CompanyChat:
                 raise PermissionError('Founder-owned active approved project required')
             if row['activated'] or row['plan_step_id'] is not None:
                 raise PermissionError('This stage already has staffing in the approved scope')
-            if row['suggested_assignee_id'] is not None:
-                # The scope already names a worker. The CEO may confirm exactly
-                # that one (ceo_reconcile); replacing it is the Founder's call.
-                raise PermissionError(
-                    'The '+stage+' stage already has a suggested specialist in the approved '
-                    'scope that is not confirmed yet; the Founder decides its staffing in '
-                    'Projects.')
+            # The approved scope may already name a specialist who was never
+            # confirmed. The AI CEO confirms exactly that one when still eligible
+            # (it is the Founder-approved choice); only if that person can no
+            # longer serve does the CEO pick another existing employee.
+            preferred = (str(row['suggested_assignee_id'])
+                         if row['suggested_assignee_id'] is not None else None)
             if row['proposed']:
                 # Never silently override a pending manual staffing request.
                 raise PermissionError(
@@ -2132,13 +2131,15 @@ class CompanyChat:
             staff = self.repositories.resolve(OrganizationStore).eligible_ai_staff(
                 tenant_id=tenant_id)
             # Least-loaded first, then by name: a deterministic, explainable pick.
-            staff.sort(key=lambda e: (busy.get(str(e['id']), 0), str(e['name']).casefold(),
-                                      str(e['id'])))
+            staff.sort(key=lambda e: (str(e['id']) != preferred, busy.get(str(e['id']), 0),
+                                      str(e['name']).casefold(), str(e['id'])))
             chosen = None
             for employee in staff:
                 employee_id = str(employee['id'])
                 identity = (str(employee['name'])+' '+str(employee['role_title'] or '')).casefold()
-                if employee_id in excluded or not any(word in identity for word in words):
+                if employee_id in excluded or (
+                        employee_id != preferred
+                        and not any(word in identity for word in words)):
                     continue
                 if stage == 'implementation' and any(
                         word in identity for word in self.STAGE_ROLE_WORDS['quality']):
@@ -2185,7 +2186,10 @@ class CompanyChat:
                   (tenant_id,channel,author_id,author_name,body,kind,employee_id)
                 VALUES (%s,'global',%s,%s,%s,'project',%s)
             """, (tenant_id, founder_id, str(ceo['name'])+' (AI CEO)',
-                  'The '+stage+' stage had no staffing. I assigned '+str(chosen['name'])
+                  ('The approved scope suggested '+str(chosen['name'])+' for the '+stage
+                   +' stage; I confirmed them' if worker_id == preferred
+                   else 'The '+stage+' stage had no confirmed staffing. I assigned '
+                   +str(chosen['name']))
                   +' ('+str(chosen['role_title'] or 'AI employee')+') to it. No task was '
                   'created or run by this decision.', worker_id))
         return {'stage': stage, 'assignee_id': worker_id, 'assignee_name': chosen['name'],
