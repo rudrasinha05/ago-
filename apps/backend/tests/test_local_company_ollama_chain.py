@@ -835,3 +835,19 @@ def test_local_engineering_uses_approved_implementation_developer_not_researcher
             role="ceo",employee_id=db.ceo,blocked=False,participants=forged,
         )
     assert db.events==[]
+
+
+def test_release_board_denials_about_the_later_pr_or_owner_decision_are_the_ago_rule():
+    """Release only PREPARES the GitHub package; the PR and the Founder's release
+    decision are later gates and GitHub may not be connected yet (ACC-147)."""
+    from ago.company_ollama_chain import pre_execution_only
+    for later in ("No GitHub pull request has been created yet",
+                  "The GitHub token is not configured, so the external repo is unavailable",
+                  "The owner's release decision is missing"):
+        assert pre_execution_only(later, stage="release"), later
+        assert not pre_execution_only(later, stage="quality"), later
+    for real in ("The GitHub package would leak a secret token",
+                 "No pull request yet and it exposes student personal data",
+                 "The release would exceed the budget and no PR exists"):
+        assert not pre_execution_only(real, stage="release"), real
+

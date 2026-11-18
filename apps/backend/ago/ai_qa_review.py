@@ -115,6 +115,11 @@ def qa_prompt(*, title: str, stage: str, acceptance: str, delivered: str) -> str
             "report. FAIL only if the deliverable does not give what the acceptance asks "
             "for (for example the QA plan or release steps).\n")
            if "AGO TEST EVIDENCE" in delivered else "")
+        + (("RELEASE RULE: this stage PREPARES the GitHub review package and RECOMMENDS a "
+            "release decision. The real PR and the owner's decision happen AFTER this "
+            "stage; never FAIL because no PR exists, GitHub is not connected or the owner "
+            "has not decided yet. FAIL only if the package or the recommendation is "
+            "missing or wrong.\n") if stage == "release" else "")
         + "Answer with: FINDINGS (short bullet list), then exactly one final line "
         "QA_VERDICT: PASS or QA_VERDICT: FAIL.\n"
         "Project title (quoted): " + title[:180] + "\n"
