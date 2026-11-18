@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -200,7 +200,8 @@ def advance_once(db, actor: Principal, repositories: RepositoryScope, project_id
                 reply.get('followup') or (reply.get('decision') or {}).get('followup')):
             stage = reply.get('stage') or next_step(detail['stages']).get('stage') or 'discovery'
             kind = reply['step']
-            owner = ('worker' if reply.get('schedule_at') else
+            owner = ('manager' if reply.get('failure_code') == 'test_runner_unavailable' else
+                     'worker' if reply.get('schedule_at') else
                      'ceo' if kind == 'unstaffed' else
                      'quality' if kind == 'qa' else
                      'founder' if kind in ('inactive', 'rejected', 'unknown') else 'manager')
@@ -209,8 +210,8 @@ def advance_once(db, actor: Principal, repositories: RepositoryScope, project_id
                 owner = 'founder'
             reply['followup'] = router.route_followup(
                 tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=project_id,
-                stage=stage, code=('calendar_wait' if reply.get('schedule_at') else
-                                  reply['failure_code'] if reply.get('failure_code')
+                stage=stage, code=(reply['failure_code'] if reply.get('failure_code')
+                                  else 'calendar_wait' if reply.get('schedule_at')
                                   else 'qa_unavailable' if kind == 'qa'
                                   else kind + '_blocked'),
                 feedback=reply['message'], source_task_id=reply.get('task_id'),
@@ -268,6 +269,10 @@ def _advance_once(db, actor: Principal, repositories: RepositoryScope, project_i
                 step, progressed=True, needs_founder=False,
                 message=str(who["approver_name"]) + " (" + str(who["approver_level"]).replace(
                     "_", " ") + ") approved the " + stage + " task and is responsible for it.")
+        if kind == "qa":
+            tested = _test_candidate(actor, repositories, project_id, step)
+            if tested is not None:
+                return tested
         if kind == "run":
             assigned = next(s for s in detail['stages'] if str(s.get('task_id')) == task_id)
             return _run(db, actor, repositories, {**step, 'assignee_id':
@@ -326,6 +331,35 @@ def _run(db, actor, repositories, step) -> dict:
         message=("The Board stopped the " + stage + " run; the AI manager will revise and "
                  "resubmit it." if blocked
                  else "The AI team finished the " + stage + " task; the result is recorded."))
+
+
+def _test_candidate(actor, repositories, project_id, step) -> dict | None:
+    """QA-002: before AI QA, AGO runs a code candidate's tests in isolation.
+
+    Returns None when there is nothing to test (text stage, or already tested).
+    """
+    router = repositories.resolve(StageProgressionPort)
+    stage, task_id = step["stage"], step["task_id"]
+    state = router.candidate_test(tenant_id=actor.tenant_id, founder_id=actor.subject,
+                                  project_id=project_id, task_id=task_id)
+    if not state["required"] or state["status"] not in (None, "started"):
+        return None
+    tested = router.test_stage_candidate(tenant_id=actor.tenant_id, founder_id=actor.subject,
+                                         project_id=project_id, task_id=task_id)
+    if tested["status"] == "runner_unavailable":
+        # A machine problem, not a defect of the work: wait and try again; it
+        # never counts as a failed attempt and never needs a Founder decision.
+        return _outcome(step, progressed=False, needs_founder=False,
+                        failure_code="test_runner_unavailable",
+                        schedule_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+                        message="AGO could not run the " + stage + " tests: "
+                                + tested["failure_summary"] + " It will try again in 5 minutes.")
+    if tested["status"] == "started":
+        return _outcome(step, progressed=False, needs_founder=False,
+                        message="The " + stage + " tests are already running.")
+    return _outcome(step, progressed=True, needs_founder=False,
+                    test_status=tested["status"], unittest_cases=tested.get("unittest_cases"),
+                    message=tested.get("text") or ("Isolated tests: " + tested["status"]))
 
 
 def _qa(actor, repositories, project_id, step) -> dict:

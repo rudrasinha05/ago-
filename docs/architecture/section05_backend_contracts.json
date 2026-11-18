@@ -2041,6 +2041,14 @@
           "arguments": "self, *, tenant_id: str, founder_id: str | None, task_id: str",
           "returns": "dict | None"
         },
+        "candidate_test": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str",
+          "returns": "dict"
+        },
+        "test_stage_candidate": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str, runner=None",
+          "returns": "dict"
+        },
         "pick_qa_reviewer": {
           "arguments": "self, *, tenant_id: str, project_id: str, excluded: set[str]",
           "returns": "dict"
@@ -2131,6 +2139,18 @@
           "returns": "Cursor"
         },
         "select_ai_ceo_21": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "select_stage_test_target_22": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "insert_candidate_test_23": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "finish_candidate_test_24": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         }

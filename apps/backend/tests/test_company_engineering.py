@@ -20,6 +20,8 @@ def candidate():
                          "class AdderTests(unittest.TestCase):\n"
                          "    def test_add(self):\n"
                          "        self.assertEqual(add(2, 3), 5)\n")},
+            {"path": "docs/adder.md",
+             "content": "# Adder\nadd(a, b) returns the sum of two numbers.\n"},
         ],
         "acceptance_checks": [
             "Run isolated Python unit test with explicit operator review",
@@ -32,10 +34,11 @@ def test_exact_reviewable_code_and_tests_parse_without_running():
     result = reviewed_candidate(json.dumps(candidate()))
     assert result["kind"] == "ago_unexecuted_engineering_candidate"
     assert [x["path"] for x in result["files"]] == [
-        "src/adder.py", "tests/test_adder.py"
+        "src/adder.py", "tests/test_adder.py", "docs/adder.md"
     ]
     assert len(result["candidate_sha256"]) == 64
-    assert all(x["python_syntax_checked"] for x in result["file_evidence"])
+    assert all(x["python_syntax_checked"] for x in result["file_evidence"]
+               if x["path"].endswith(".py"))
     assert all(len(x["sha256"]) == 64 for x in result["file_evidence"])
     assert result["source_parse_passed"] is True
     assert result["tests_executed"] is False
@@ -115,7 +118,7 @@ def test_full_board_then_employee_produces_persistable_review_package():
     assert len(model.calls) == 7
     assert "Produce ONLY one valid JSON object" in model.calls[-1]
     assert result["engineering_candidate_status"] == "syntax_reviewed"
-    assert len(result["engineering_candidate"]["files"]) == 2
+    assert len(result["engineering_candidate"]["files"]) == 3
     assert result["engineering_candidate"]["tests_executed"] is False
     assert result["board_review_cleared"] is True
     assert result["handoff_complete"] is True

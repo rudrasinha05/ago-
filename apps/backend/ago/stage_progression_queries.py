@@ -235,3 +235,44 @@ class StageProgressionQueries:
                  )""",
             parameters,
         )
+
+    def select_stage_test_target_22(self, parameters: Any = None) -> Cursor:
+        """(tenant_id, project_id, founder_id, task_id): the stage task, its
+        completed run and any isolated test receipt; locks the task."""
+        return self.connection.execute(
+            """SELECT s.stage,t.id AS task_id,t.status AS task_status,
+                      r.id AS run_id,r.status AS run_status,r.result AS run_result,
+                      c.id AS test_id,c.status AS test_status,c.unittest_cases,
+                      c.failure_category,c.failure_summary,c.created_at AS test_started_at
+               FROM ago_founder_intakes i
+               JOIN ago_founder_intake_stages s ON s.tenant_id=i.tenant_id AND s.intake_id=i.id
+               JOIN ago_plan_steps ps ON ps.tenant_id=s.tenant_id
+                AND ps.plan_id=s.plan_id AND ps.id=s.plan_step_id
+               JOIN ago_governed_tasks t ON t.tenant_id=ps.tenant_id AND t.id=ps.task_id
+               LEFT JOIN ago_agent_runs r ON r.tenant_id=t.tenant_id AND r.task_id=t.id
+               LEFT JOIN ago_stage_candidate_tests c ON c.tenant_id=t.tenant_id AND c.task_id=t.id
+               WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s AND t.id=%s
+               FOR UPDATE OF t""",
+            parameters,
+        )
+
+    def insert_candidate_test_23(self, parameters: Any = None) -> Cursor:
+        """(id, tenant_id, project_id, task_id, run_id, candidate_sha256, started_by)."""
+        return self.connection.execute(
+            """INSERT INTO ago_stage_candidate_tests
+               (id,tenant_id,project_id,task_id,run_id,candidate_sha256,status,started_by)
+               VALUES (%s,%s,%s,%s,%s,%s,'started',%s)
+               ON CONFLICT (tenant_id,task_id) DO NOTHING RETURNING id""",
+            parameters,
+        )
+
+    def finish_candidate_test_24(self, parameters: Any = None) -> Cursor:
+        """(status, cases, category, summary, exit_code, output_sha256, tenant_id, id)."""
+        return self.connection.execute(
+            """UPDATE ago_stage_candidate_tests
+               SET status=%s,unittest_cases=%s,failure_category=%s,failure_summary=%s,
+                   docker_exit_code=%s,output_sha256=%s,finished_at=clock_timestamp()
+               WHERE tenant_id=%s AND id=%s AND status='started'
+               RETURNING status,unittest_cases,failure_category,failure_summary""",
+            parameters,
+        )

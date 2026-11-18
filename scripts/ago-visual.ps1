@@ -164,6 +164,20 @@ try {
         $env:AGO_LOCAL_COMPANY_CHAIN = "true"
         $env:AGO_LOCAL_FULL_BOARD_REVIEW = "true"
         $env:AGO_LOCAL_ENGINEERING_CANDIDATES = "true"
+        # QA-002: AGO runs generated tests in an offline Docker container before
+        # AI QA. Only report readiness here; never start Docker or pull images.
+        $DockerReady = $false
+        try {
+            & docker image inspect python:3.11-slim *> $null
+            $DockerReady = ($LASTEXITCODE -eq 0)
+        } catch { $DockerReady = $false }
+        if ($DockerReady) {
+            Write-Host "Docker test runner READY: python:3.11-slim present (offline, read-only tests)."
+        } else {
+            Write-Host "Docker test runner NOT READY: start Docker Desktop and run once:" -ForegroundColor Yellow
+            Write-Host "  docker pull python:3.11-slim" -ForegroundColor Yellow
+            Write-Host "Until then AGO waits before AI QA of code; it does not fail the work." -ForegroundColor Yellow
+        }
         Write-Host "Local engineering ENABLED for this foreground AGO session only."
         Write-Host "Seven real appointed AI employees and approved project tasks are required."
         Write-Host "No autonomous GitHub write, deployment, or QA approval is enabled."

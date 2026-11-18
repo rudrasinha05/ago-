@@ -119,6 +119,7 @@ def test_governed_local_ollama_chain_needs_actual_founder_board_and_qa(
                          "class AnswerTests(unittest.TestCase):\n"
                          "    def test_answer(self):\n"
                          "        self.assertEqual(answer(),42)\n"},
+                        {"path":"docs/logic.md", "content":"# Logic\nanswer() returns 42.\n"},
                     ],
                     "acceptance_checks":["Run isolated pytest after founder source review"],
                 })

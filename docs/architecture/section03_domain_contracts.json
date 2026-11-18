@@ -794,6 +794,7 @@
       "ago_project_followups",
       "ago_project_stage_delegation_activations",
       "ago_project_stage_progressions",
+      "ago_stage_candidate_tests",
       "ago_strategy_plans",
       "ago_task_reviews"
     ]

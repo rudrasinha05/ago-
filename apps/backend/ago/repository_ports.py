@@ -590,6 +590,15 @@ class StageProgressionPort(Protocol):
 
     def scheduled_work(self, *, tenant_id: str, project_id: str, task_id: str) -> dict | None: ...
 
+    def candidate_test(
+        self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str,
+    ) -> dict: ...
+
+    def test_stage_candidate(
+        self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str,
+        runner: Any = None,
+    ) -> dict: ...
+
     def route_followup(
         self, *, tenant_id: str, founder_id: str, project_id: str, stage: str,
         code: str, feedback: str, source_task_id: str | None = None,
@@ -647,6 +656,12 @@ class StageProgressionQueriesPort(Protocol):
     def select_qa_candidates_09(self, parameters: Any=None) -> Cursor: ...
 
     def select_ai_ceo_21(self, parameters: Any = None) -> Cursor: ...
+
+    def select_stage_test_target_22(self, parameters: Any = None) -> Cursor: ...
+
+    def insert_candidate_test_23(self, parameters: Any = None) -> Cursor: ...
+
+    def finish_candidate_test_24(self, parameters: Any = None) -> Cursor: ...
 
 
 @runtime_checkable

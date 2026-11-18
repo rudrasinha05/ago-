@@ -203,7 +203,8 @@ def test_invalid_code_gets_one_correction_with_agos_own_reason_then_a_clear_fail
 
     good = ('{"files":[{"path":"src/app.py","content":"def add(a, b):\\n    return a + b\\n"},'
             '{"path":"tests/test_app.py","content":"import unittest\\nfrom src.app import add\\n'
-            'class T(unittest.TestCase):\\n    def test_add(self):\\n        self.assertEqual(add(1, 2), 3)\\n"}],'
+            'class T(unittest.TestCase):\\n    def test_add(self):\\n        self.assertEqual(add(1, 2), 3)\\n"},'
+            '{"path":"docs/app.md","content":"# App\\nadd(a, b) returns a + b.\\n"}],'
             '"acceptance_checks":["adds numbers"]}')
 
     class Coder:

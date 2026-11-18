@@ -1,15 +1,21 @@
-"""Pure, untrusted model-to-code review gate: no execution, file writes or network.
+"""Untrusted model-to-code review gate.
 
 A passed candidate proves ONLY that a small Python source/test pair parses.
-Human review, actual tests, independent QA, GitHub review and release remain
-distinct gates. Never treat this as a code execution sandbox.
+``run_candidate_tests`` is the one place that executes a candidate: its tests
+run inside an offline, read-only, unprivileged Docker container, never in the
+host Python. Independent QA, GitHub review and release remain distinct gates.
 """
 from __future__ import annotations
 
 import ast
 import hashlib
 import json
+import os
 import re
+import subprocess
+import tempfile
+from pathlib import Path
+from uuid import uuid4
 
 from ago.github_adapter import validate_operation
 
@@ -210,6 +216,20 @@ def assert_discoverable_unittest(value: dict) -> dict:
     return value
 
 
+def assert_documented(value: dict) -> dict:
+    """The implementation deliverable includes technical documentation.
+
+    QA's stage acceptance is "code, tests and technical documentation"; a
+    candidate without a docs/*.md file could never pass it.
+    """
+    docs = [f for f in value.get("files") or []
+            if isinstance(f, dict) and str(f.get("path", "")).startswith("docs/")
+            and len(str(f.get("content") or "").strip()) >= 20]
+    if not docs:
+        raise ValueError("A docs/*.md file explaining the module is required")
+    return value
+
+
 def verify_persisted_candidate(value: dict) -> dict:
     """Reject any post-inference tampering before the founder stages files."""
     if not isinstance(value, dict):
@@ -282,3 +302,156 @@ def draft_github_commit_operation(
     }
     validate_operation(operation)
     return operation
+
+
+# ---------------------------------------------------------------------------
+# Isolated test execution of a persisted candidate (QA-002 / QA-003).
+#
+# The implementation stage's tests used to be "prepared" but never run, so AI
+# QA and the Board failed every attempt with "tests are not executed". AGO now
+# runs them itself, the same way the CI Docker smoke and the Founder's local
+# script do: no network, read-only, non-root, bounded memory/CPU/processes,
+# and only the reviewed files are mounted.
+# ---------------------------------------------------------------------------
+TEST_IMAGE = "python:3.11-slim"
+TEST_TIMEOUT_SECONDS = 90
+_CASES_MARKER = "AGO_UNITTEST_CASES="
+_TEST_RUNNER = (
+    "import sys,unittest;"
+    "suite=unittest.defaultTestLoader.discover('tests',pattern='test_*.py');"
+    "n=suite.countTestCases();print('AGO_UNITTEST_CASES='+str(n),flush=True);"
+    "sys.exit(4) if n==0 else "
+    "sys.exit(0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1)"
+)
+_FAILURE_LABELS = (
+    ("AssertionError", "assertion_failure"),
+    ("ModuleNotFoundError", "missing_module"),
+    ("ImportError", "import_error"),
+    ("SyntaxError", "syntax_error"),
+    ("NameError", "name_error"),
+    ("AttributeError", "attribute_error"),
+    ("TypeError", "type_error"),
+    ("KeyError", "key_error"),
+    ("ValueError", "value_error"),
+)
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def isolated_test_command(root: Path, container_name: str) -> list[str]:
+    """The exact docker invocation; the image must already be present (no pull)."""
+    if not re.fullmatch(r"ago-test-[a-f0-9]{32}", container_name):
+        raise ValueError("Random isolated container name required")
+    return [
+        "docker", "run", "--rm", "--pull=never",
+        "--name", container_name, "--network", "none", "--read-only",
+        "--cap-drop=ALL", "--security-opt=no-new-privileges",
+        "--pids-limit=64", "--memory=256m", "--cpus=1",
+        "--user=65534:65534", "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+        "--mount", "type=bind,src=" + str(root.resolve()) + ",dst=/work,readonly",
+        "--workdir=/work", "--env=PYTHONPATH=/work",
+        "--env=PYTHONDONTWRITEBYTECODE=1",
+        TEST_IMAGE, "python", "-c", _TEST_RUNNER,
+    ]
+
+
+def failure_summary(output: str, limit: int = 700) -> str:
+    """The lines a developer needs to fix a failing test, bounded and inert.
+
+    Keeps unittest's FAIL/ERROR headers, the final exception lines and the
+    summary; drops everything else (and every control character). This is the
+    project's own generated code and tests, stored only in the tenant record.
+    """
+    keep = []
+    for line in _CONTROL.sub("", output).splitlines():
+        text = line.rstrip()
+        if not text:
+            continue
+        if (text.startswith(("FAIL:", "ERROR:", "Ran ", "FAILED", "OK"))
+                or re.match(r"^[A-Za-z_.]*(Error|Exception)\b", text)
+                or text.lstrip().startswith(("File \"/work/", "AssertionError"))):
+            keep.append(text.replace("/work/", "")[:200])
+    summary = "\n".join(dict.fromkeys(keep))
+    return summary[-limit:] if len(summary) > limit else summary
+
+
+def test_runner_available(*, runner=subprocess.run) -> bool:
+    """Docker answers and the test image is already on this computer (no pull)."""
+    try:
+        probe = runner(["docker", "image", "inspect", TEST_IMAGE], capture_output=True,
+                       text=True, timeout=20, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
+
+
+def run_candidate_tests(value: dict, *, runner=subprocess.run,
+                        timeout: int = TEST_TIMEOUT_SECONDS) -> dict:
+    """Run a persisted candidate's unittest suite in an isolated container.
+
+    Returns a receipt with ``status`` one of: ``passed``, ``failed``,
+    ``timeout`` or ``runner_unavailable`` (Docker or the image is missing - a
+    machine problem, not a defect of the code, and nothing was executed).
+    """
+    candidate = verify_persisted_candidate(value)
+    base = {
+        "kind": "ago_isolated_candidate_test_receipt_v1",
+        "candidate_sha256": candidate["candidate_sha256"],
+        "image": TEST_IMAGE, "network_disabled": True, "read_only_container": True,
+        "unittest_cases": 0, "tests_executed": False, "tests_passed": False,
+        "failure_category": "none", "failure_summary": "", "docker_exit_code": None,
+    }
+    if not test_runner_available(runner=runner):
+        return {**base, "status": "runner_unavailable",
+                "failure_summary": "Docker is not running or the " + TEST_IMAGE
+                                   + " image is not present on this computer."}
+    with tempfile.TemporaryDirectory(prefix="ago-test-") as temp:
+        root = Path(temp) / "work"
+        stage_candidate(candidate, root)
+        # The container user (nobody) must be able to read the mounted files.
+        for path in [Path(temp), *root.rglob("*"), root]:
+            try:
+                os.chmod(path, 0o755 if path.is_dir() else 0o644)
+            except OSError:
+                pass
+        container = "ago-test-" + uuid4().hex
+        try:
+            result = runner(isolated_test_command(root, container), capture_output=True,
+                            text=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired:
+            try:
+                runner(["docker", "rm", "-f", container], capture_output=True, text=True,
+                       timeout=15, check=False)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            return {**base, "status": "timeout", "failure_category": "timeout",
+                    "failure_summary": "The tests did not finish within "
+                                       + str(timeout) + " seconds (possible endless loop)."}
+        except (OSError, subprocess.SubprocessError):
+            return {**base, "status": "runner_unavailable",
+                    "failure_summary": "Docker could not start the test container."}
+    output = str(result.stdout or "") + "\n" + str(result.stderr or "")
+    seen = re.findall(r"(?:^|\n)" + _CASES_MARKER + r"(\d+)(?:\r?\n|$)", output)
+    cases = int(seen[0]) if len(seen) == 1 else 0
+    passed = result.returncode == 0 and cases >= 1
+    category = "none" if passed else "tests_not_discovered" if not cases else next(
+        (label for token, label in _FAILURE_LABELS if token in output), "unclassified_failure")
+    return {
+        **base,
+        "status": "passed" if passed else "failed",
+        "unittest_cases": cases, "tests_executed": cases >= 1, "tests_passed": passed,
+        "failure_category": category,
+        "failure_summary": "" if passed else (failure_summary(output) or category),
+        "docker_exit_code": result.returncode,
+        "output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
+    }
+
+
+def receipt_text(receipt: dict) -> str:
+    """One plain line for QA, the Board and the developer."""
+    cases = int(receipt.get("unittest_cases") or 0)
+    if receipt.get("status") == "passed":
+        return ("AGO ISOLATED TEST RECEIPT: " + str(cases) + " unittest case(s) were EXECUTED by "
+                "AGO in an offline, read-only Docker container and ALL PASSED.")
+    return ("AGO ISOLATED TEST RECEIPT: tests FAILED ("
+            + str(receipt.get("failure_category") or "failure") + ", " + str(cases)
+            + " case(s) found). " + str(receipt.get("failure_summary") or ""))[:900]

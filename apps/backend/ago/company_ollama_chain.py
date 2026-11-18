@@ -3,7 +3,7 @@
 import time
 
 from ago.company_engineering import (
-    ENGINEERING_CANDIDATE_SCHEMA, EngineeringCandidateInvalid,
+    ENGINEERING_CANDIDATE_SCHEMA, EngineeringCandidateInvalid, assert_documented,
     assert_discoverable_unittest, reviewed_candidate,
 )
 
@@ -259,7 +259,7 @@ def run_four_role_chain(
         prompt=(
             ("Produce ONLY one valid JSON object with EXACT fields files and "
              "acceptance_checks. files must contain 2 to 6 objects with EXACT "
-             "fields path and content; include a Python src/*.py file and a "
+             "fields path and content; include a Python src/*.py file, a docs/*.md file (3 to 6 short lines: what the module does and how to use it) and a "
              "tests/test_*.py file. acceptance_checks is a list of 1 to 5 "
              "plain-language checks. Small correct Python functions and standard "
              "library tests only. Tests MUST contain a unittest.TestCase "
@@ -326,7 +326,8 @@ def run_four_role_chain(
             # it can be considered reviewable. Invalid content fails the task
             # through AgentRuntime; it is never executed or sent to GitHub.
             try:
-                engineering_candidate=assert_discoverable_unittest(reviewed_candidate(output))
+                engineering_candidate=assert_documented(
+                    assert_discoverable_unittest(reviewed_candidate(output)))
             except ValueError as rejected:
                 # Self-correction: tell the SAME developer exactly which of AGO's
                 # fixed static checks failed (our own message, never model text)
@@ -337,7 +338,7 @@ def run_four_role_chain(
                     + str(rejected)[:200] + ".\n"
                     "Produce ONLY one valid JSON object with EXACT fields files and "
                     "acceptance_checks. files must contain 2 to 6 objects with EXACT "
-                    "fields path and content; include a Python src/*.py file and a "
+                    "fields path and content; include a Python src/*.py file, a docs/*.md file (3 to 6 short lines: what the module does and how to use it) and a "
                     "tests/test_*.py file. acceptance_checks is a list of 1 to 5 "
                     "plain-language checks. Tests MUST contain a unittest.TestCase "
                     "subclass with at least one def test_* method, using import unittest. "
@@ -350,12 +351,18 @@ def run_four_role_chain(
                 if not 0 <= clock() - fix_started <= 60 or not 0 <= clock() - started <= maximum_seconds:
                     raise TimeoutError("Local inference exceeded per-role or overall time budget")
                 try:
-                    engineering_candidate=assert_discoverable_unittest(reviewed_candidate(output))
+                    engineering_candidate=assert_documented(
+                        assert_discoverable_unittest(reviewed_candidate(output)))
                 except ValueError as again:
                     raise EngineeringCandidateInvalid(str(again)) from again
-            bounded=("Code proposal prepared for founder review: "
-                     +str(len(engineering_candidate["files"]))+
-                     " files, Python syntax checked; tests NOT executed.")
+            # Later stages and QA read this draft: name the files and the checks.
+            # The tests are run by AGO in an isolated container before QA; the
+            # receipt is recorded separately and never claimed here.
+            bounded=("Code proposal: "
+                     +", ".join(f["path"] for f in engineering_candidate["files"])[:300]
+                     +" (Python syntax checked). Acceptance checks: "
+                     +"; ".join(engineering_candidate["acceptance_checks"])[:450]
+                     +". AGO runs these tests in an isolated container before QA.")[:950]
         if full_board and role in BOARD_ROLE_SEATS and board_recommendation(bounded) == "unverified" \
                 and "BOARD_RECOMMENDATION" not in bounded.upper():
             # Small local models sometimes copy the previous draft's format and

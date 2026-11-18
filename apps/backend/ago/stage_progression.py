@@ -29,6 +29,7 @@ from uuid import UUID, uuid4, uuid5
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
+from ago.company_engineering import receipt_text, run_candidate_tests, test_runner_available
 from ago.organization_store import OrganizationStore
 from ago.plan_execution import PlanExecution
 from ago.stage_progression_queries import StageProgressionQueries
@@ -337,6 +338,109 @@ class StageProgression:
                     result['followup_recorded'] = False
                     log.warning('AGO continuation follow-up could not be persisted')
             return result
+
+    # -- isolated tests of a code candidate (QA-002 / QA-003) ---------------
+
+    # A 'started' receipt older than this is a crashed/abandoned attempt.
+    TEST_STALE_AFTER = timedelta(minutes=10)
+
+    def candidate_test(self, *, tenant_id: str, founder_id: str, project_id: str,
+                       task_id: str) -> dict:
+        """Whether this stage task carries a code candidate and its test receipt.
+
+        ``required`` is true only when the completed run produced an engineering
+        candidate. ``status`` is None (not tested yet), 'started', 'passed',
+        'failed', 'timeout' or 'interrupted'.
+        """
+        for value in (tenant_id, founder_id, project_id, task_id):
+            UUID(value)
+        row = self.repositories.resolve(StageProgressionQueries).select_stage_test_target_22(
+            (tenant_id, project_id, founder_id, task_id)).fetchone()
+        if row is None:
+            raise LookupError("Project stage task not found")
+        result = row["run_result"] if isinstance(row["run_result"], dict) else {}
+        required = (row["run_status"] == "completed"
+                    and isinstance(result.get("engineering_candidate"), dict))
+        state = {"required": required, "status": row["test_status"], "stage": row["stage"],
+                 "unittest_cases": row["unittest_cases"] or 0,
+                 "failure_category": row["failure_category"],
+                 "failure_summary": row["failure_summary"] or ""}
+        state["text"] = receipt_text(state) if row["test_status"] in (
+            "passed", "failed", "timeout", "interrupted") else ""
+        return state
+
+    def test_stage_candidate(self, *, tenant_id: str, founder_id: str, project_id: str,
+                             task_id: str, runner=None) -> dict:
+        """Run the stage candidate's tests once, in an isolated container.
+
+        The receipt row is written BEFORE the container starts and finalized
+        after it, so an interrupted attempt is visible and never replayed
+        silently. ``runner_unavailable`` (no Docker/image) records nothing:
+        nothing was executed and the step can simply be tried again later.
+        """
+        for value in (tenant_id, founder_id, project_id, task_id):
+            UUID(value)
+        queries = self.repositories.resolve(StageProgressionQueries)
+        with self.db.transaction():
+            row = queries.select_stage_test_target_22(
+                (tenant_id, project_id, founder_id, task_id)).fetchone()
+            if row is None:
+                raise LookupError("Project stage task not found")
+            result = row["run_result"] if isinstance(row["run_result"], dict) else {}
+            candidate = result.get("engineering_candidate")
+            if row["task_status"] != "completed" or row["run_status"] != "completed" \
+                    or not isinstance(candidate, dict):
+                raise ValueError("Only a completed run with a code candidate can be tested")
+            if row["test_status"] == "started":
+                started = row["test_started_at"]
+                if datetime.now(timezone.utc) - started < self.TEST_STALE_AFTER:
+                    return {"status": "started", "executed": False,
+                            "message": "A test of this candidate is already running."}
+                # Abandoned (server crash / laptop sleep): close it as evidence.
+                done = queries.finish_candidate_test_24((
+                    "interrupted", 0, "interrupted",
+                    "The previous test attempt never finished (AGO stopped while it ran).",
+                    None, None, tenant_id, str(row["test_id"]))).fetchone()
+                return {"status": "interrupted", "executed": False, **dict(done)}
+            if row["test_status"] is not None:
+                return {"status": row["test_status"], "executed": False,
+                        "message": "This candidate already has a test receipt."}
+        # Docker availability is checked before anything is recorded: a
+        # missing Docker/image is a machine problem, nothing was executed.
+        tools = {"runner": runner} if runner is not None else {}
+        if not test_runner_available(**tools):
+            return {"status": "runner_unavailable", "executed": False,
+                    "failure_summary": "Docker is not running or the python:3.11-slim image "
+                                       "is not present on this computer."}
+        test_id = str(uuid4())
+        with self.db.transaction():
+            inserted = queries.insert_candidate_test_23((
+                test_id, tenant_id, project_id, task_id, str(row["run_id"]),
+                str(candidate.get("candidate_sha256") or ""), founder_id)).fetchone()
+            if inserted is None:
+                return {"status": "started", "executed": False,
+                        "message": "Another request started this test."}
+        try:
+            receipt = run_candidate_tests(candidate, **tools)
+        except Exception:  # noqa: BLE001 - recorded as evidence, never hidden
+            receipt = {"status": "failed", "unittest_cases": 0,
+                       "failure_category": "runner_error",
+                       "failure_summary": "AGO could not stage or run this candidate.",
+                       "docker_exit_code": None, "output_sha256": None}
+        status = receipt["status"]
+        if status == "runner_unavailable":
+            # Docker vanished between the check and the run: nothing executed.
+            status, receipt = "interrupted", {**receipt, "failure_category": "runner_unavailable"}
+        with self.db.transaction():
+            done = queries.finish_candidate_test_24((
+                status, int(receipt.get("unittest_cases") or 0),
+                str(receipt.get("failure_category") or "none")[:60],
+                str(receipt.get("failure_summary") or "")[:1000],
+                receipt.get("docker_exit_code"), receipt.get("output_sha256"),
+                tenant_id, test_id)).fetchone()
+        final = {**receipt, "status": status}
+        return {"status": status, "executed": status in ("passed", "failed", "timeout"),
+                **dict(done or {}), "text": receipt_text(final)}
 
     def pick_qa_reviewer(self, *, tenant_id: str, project_id: str, excluded: set[str]) -> dict:
         """The independent AI tester for a stage review.
