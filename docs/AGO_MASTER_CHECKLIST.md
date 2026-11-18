@@ -931,10 +931,10 @@ section and a founder amendment indicates traceability, not a reason to merge.
 ### QA — Software, sandbox, correction and verified delivery
 - [x] QA-001 — Generated code must be staged separately without overwriting trusted existing source.
   - *DONE* — Candidate code staged separately; trusted source never overwritten
-- [~] QA-002 — Execute candidate code/tests in an isolated non-root, no-network, resource-bounded Docker container.
-  - *PARTIAL* — BLOCKER still open: no AGO-generated candidate has been executed. Runner exists (scripts/ago_verify_candidate.py: user 65534, network none, read-only, 256m, 1 cpu, 64 pids) and real Docker runs it in CI step "Run actual offline Docker candidate QA with trusted static fixtures" (run 42831565453, green on 990f164). Not yet run on the Founder laptop.
-- [~] QA-003 — Real tests must run; zero-test success or synthetic pass must not count as software acceptance.
-  - *PARTIAL* — Runner exits 4 on zero tests; CI Docker smoke runs a known-correct and a known-broken fixture and requires pass/fail to match (run 42831565453 on 990f164; test_failure_or_zero_tests_never_marks_candidate_passed). No real test run of an AGO-generated candidate yet, so no software acceptance.
+- [x] QA-002 — Execute candidate code/tests in an isolated non-root, no-network, resource-bounded Docker container.
+  - *DONE* — LIVE on the Founder's laptop 2026-11-18 17:10 IST (commit c206552, qwen2.5-coder:3b): AdmissionFlow implementation candidate executed by AGO's server step in python:3.11-slim with --network none, --read-only, user 65534, 256m, 1 cpu, 64 pids; receipt recorded (1 case, failed: import_error) and AI QA receipt 19337103-0e65-4d62-ac94-a1dd9df2a4a4. Tests: test_stage_candidate_tests.py (PostgreSQL), real-Docker runner checks incl. blocked network and timeout.
+- [x] QA-003 — Real tests must run; zero-test success or synthetic pass must not count as software acceptance.
+  - *DONE* — LIVE 2026-11-18 17:10 IST: a real failing AGO-generated test was executed and recorded as QA FAIL (never accepted). Zero tests, timeout and interrupted runs never pass: test_zero_tests_timeouts_and_missing_docker_never_count_as_passed, test_failing_tests_send_the_real_error_back_to_the_developer.
 - [~] QA-004 — Preserve source digests, exact test evidence, failure category and bounded private-output redaction.
   - *PARTIAL* — Source digests and failure categories stored; execution evidence absent
 - [~] QA-005 — Source-only repair after test FAIL cannot rewrite original tests or bypass approvals.

@@ -158,6 +158,18 @@ def assert_discoverable_unittest(value: dict) -> dict:
         for item in value["files"]
         if item["path"].startswith("src/") and item["path"].endswith(".py")
     }
+    # Live 2026-11-18: the developer copied the test's "from src.x import X"
+    # line into src/x.py itself -> circular import, every test failed in Docker.
+    for item in value["files"]:
+        if not (item["path"].startswith("src/") and item["path"].endswith(".py")):
+            continue
+        own = item["path"][:-3].replace("/", ".")
+        for node in ast.walk(ast.parse(item["content"], filename=item["path"])):
+            named = ([node.module or ""] if isinstance(node, ast.ImportFrom)
+                     else [a.name for a in node.names] if isinstance(node, ast.Import) else [])
+            if any(name in (own, own.split(".", 1)[-1]) for name in named):
+                raise ValueError(item["path"] + " imports itself; only the test file imports "
+                                 "from " + own + " - remove that line from the source file")
     tests = [
         item for item in value["files"]
         if item["path"].startswith("tests/test_")

@@ -215,3 +215,18 @@ def test_receipts_are_immutable_and_only_for_completed_runs(company):
     with pytest.raises(Exception, match='immutable'):
         with c.db.transaction():
             c.db.execute("DELETE FROM ago_stage_candidate_tests WHERE tenant_id=%s", (c.tenant,))
+
+
+def test_a_source_file_that_imports_itself_is_sent_back_before_docker():
+    """Live 2026-11-18: src/admission_flow.py line 3 was
+    `from src.admission_flow import AdmissionFlow` -> circular import in Docker.
+    The static check now names it, so the developer fixes it in the same run."""
+    from ago.company_engineering import assert_discoverable_unittest
+    for line in ("from src.calc import add\n", "import src.calc\n", "from calc import add\n"):
+        bad = json.dumps({"files": [
+            {"path": "src/calc.py", "content": line + SOURCE},
+            {"path": "tests/test_calc.py", "content": TEST},
+            {"path": "docs/calc.md", "content": DOCS}], "acceptance_checks": ["add"]})
+        with pytest.raises(ValueError, match="imports itself"):
+            assert_discoverable_unittest(reviewed_candidate(bad))
+    assert assert_discoverable_unittest(candidate())["candidate_sha256"]
