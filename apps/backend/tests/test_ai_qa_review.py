@@ -208,3 +208,15 @@ def test_a_qa_pass_cannot_be_reworked(case, monkeypatch):
                                           'operation_key': str(uuid4())})
     post(client, base+'/recovery', founder,
          {'failed_task_id': task_id, 'reason': 'Try again'}, expected=400)
+
+
+def test_quality_qa_is_told_agos_executed_tests_are_the_test_report():
+    """Live 2026-11-19: QA failed quality for 'does not include the execution of
+    the test cases recorded by AGO'. Execution is AGO's job and is recorded."""
+    from ago.ai_qa_review import qa_prompt
+    with_evidence = qa_prompt(title="t", stage="quality", acceptance="QA plan and test report",
+                              delivered="AGO TEST EVIDENCE (recorded by AGO): 3 cases ALL PASSED\nplan")
+    assert "EVIDENCE RULE" in with_evidence and "IS the test execution" in with_evidence
+    assert "EVIDENCE RULE" not in qa_prompt(title="t", stage="quality", acceptance="a",
+                                             delivered="a plan without AGO evidence")
+

@@ -483,9 +483,8 @@ def project_test_evidence_text(candidate: dict, *, cases: int) -> str:
         if str(f.get("path", "")).startswith("tests/"):
             names += re.findall(r"def (test_[A-Za-z0-9_]+)", str(f.get("content") or ""))
     checks = [str(c) for c in candidate.get("acceptance_checks") or []][:6]
-    return ("AGO TEST EVIDENCE (recorded by AGO, not written by a model): the "
-            "implementation code was tested by AGO in an offline, read-only Docker "
-            "container: " + str(int(cases)) + " unittest case(s) EXECUTED, ALL PASSED. "
-            "Files: " + ", ".join(paths)[:300] + ". Test cases: "
-            + (", ".join(names)[:400] or "see tests/") + ". Acceptance checks covered: "
-            + "; ".join(checks)[:400] + ".")[:1200]
+    # Most important facts first: prompts may keep only the first 200 characters.
+    return ("AGO TEST EVIDENCE: " + str(int(cases)) + " test(s) EXECUTED by AGO in offline "
+            "Docker, ALL PASSED: " + (", ".join(names)[:400] or "see tests/")
+            + ". Files: " + ", ".join(paths)[:300] + ". Acceptance checks: "
+            + "; ".join(checks)[:400] + ". (Recorded by AGO, not written by a model.)")[:1200]

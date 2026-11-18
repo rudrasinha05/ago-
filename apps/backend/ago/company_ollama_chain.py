@@ -53,10 +53,12 @@ BOARD_ROLE_SEATS = {
 
 
 _PRE_EXECUTION_SUBJECT = re.compile(
-    r"\b(tests?|testing|unit ?tests?|test cases?|documentation|docs?|technical doc\w*)\b", re.I)
+    r"\b(tests?|testing|unit ?tests?|test cases?|test (plan|reports?|results?)|"
+    r"(quality assurance|qa|release) (plan|checklist|report)s?|documentation|docs?|"
+    r"technical doc\w*)\b", re.I)
 _PRE_EXECUTION_STATE = re.compile(
     r"\b(not (yet )?(been )?(executed|run|available|provided|present|written|included|done|"
-    r"complete|ready)|missing|incomplete|unavailable|lack\w*|absent|no (tests?|docs?|"
+    r"complete|ready)|missing|incomplete|unavailable|lack\w*|absen(t|ce)|no (tests?|docs?|"
     r"documentation))\b", re.I)
 _REAL_BLOCKER = re.compile(
     r"\b(secret|credential|password|token|security|vulnerab\w*|privacy|personal data|"
@@ -66,6 +68,10 @@ _REAL_BLOCKER = re.compile(
 _PREVIOUS_FAILURE = re.compile(
     r"\b(fail\w*|error\w*|import\w*|circular|exception|bug\w*|crash\w*|broken|"
     r"traceback|previous attempt|code review|did not pass|not pass\w*)\b", re.I)
+
+
+# Stages whose Board votes BEFORE the run that produces the deliverable.
+PRE_EXECUTION_STAGES = frozenset({"implementation", "quality", "release"})
 
 
 def pre_execution_only(concern: str, *, rework: bool = False) -> bool:
@@ -196,10 +202,14 @@ def run_four_role_chain(
     # Recorded by AGO from a real Docker run; it replaces asking for test
     # reports that a text-only stage cannot produce. Kept apart from
     # stage_context so a shortened context never drops it.
-    test_evidence=str(project.get("test_evidence") or "")[:520]
-    evidence_context=(test_evidence+" The "+project_stage+" deliverable builds on this: "
-                      "cite these executed test cases as its test cases and test report. "
-                      "Missing test reports is NEVER a DENY reason.\n") if test_evidence else ""
+    # A Board revision or a rework adds its own notes: the evidence then gets a
+    # smaller share so every prompt stays inside the 4000-character bound
+    # (live 2026-11-19: 4307 characters failed the quality run as handler_error).
+    test_evidence=str(project.get("test_evidence") or "")[
+        :(200 if (revision_notes or feedback) else 520)]
+    evidence_context=(test_evidence+" Cite these executed tests as the test cases and "
+                      "report; missing test reports is NEVER a DENY reason.\n"
+                      ) if test_evidence else ""
     board_stage_rule=(
         "Judge only whether the "+project_stage+" stage may go ahead from your seat. "
         "The approved scope is settled: do not ask again for business case, market or "
@@ -212,7 +222,13 @@ def run_four_role_chain(
         "docs are written IN THIS RUN; AGO runs the tests in offline Docker before "
         "QA. Missing tests/docs now"+(", or the earlier failure this run fixes,"
         if feedback else "")+" is NEVER a DENY reason. Never claim tests passed.\n"
-        if project_stage == "implementation" else ""
+        if project_stage == "implementation" else
+        # Live 2026-11-18: the quality Board denied "no QA plan or test report"
+        # before the run that writes them; AGO already executed the tests.
+        ("PRE-EXECUTION: Vote on the plan for the "+project_stage+" deliverable. It "
+         "is written IN THIS RUN; a missing QA plan, test plan or test report now"
+         +(", or the earlier failure this run fixes," if feedback else "")
+         +" is NEVER a DENY reason.\n") if project_stage in PRE_EXECUTION_STAGES else ""
     )
     # Two-seat legacy drafting remains available. The founder's explicitly
     # opted-in complete Board has 5 distinct AI directors + a PM + a worker.
@@ -429,7 +445,7 @@ def run_four_role_chain(
             vote = board_recommendation(bounded)
             board_seat=BOARD_ROLE_SEATS[role]
             manager = next((p for p in participants if p["role"] == "pm"), None)
-            if (vote == "deny" and project_stage == "implementation"
+            if (vote == "deny" and project_stage in PRE_EXECUTION_STAGES
                     and pre_execution_only(denial_reason(bounded), rework=bool(feedback))):
                 # Before coding, "there are no tests/docs yet" cannot be
                 # resolved by anyone: this run writes them and AGO executes the
@@ -482,7 +498,7 @@ def run_four_role_chain(
                                    +_without_vote(bounded))[:950]
                     elif second == "deny":
                         concern = denial_reason(reply)
-                if vote == "deny" and concern and project_stage == "implementation" \
+                if vote == "deny" and concern and project_stage in PRE_EXECUTION_STAGES \
                         and pre_execution_only(concern, rework=bool(feedback)):
                     # Before coding, "there are no tests/docs yet" cannot be
                     # resolved by anyone: this run writes them and AGO executes

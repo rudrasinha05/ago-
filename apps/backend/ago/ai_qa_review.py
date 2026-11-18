@@ -109,7 +109,13 @@ def qa_prompt(*, title: str, stage: str, acceptance: str, delivered: str) -> str
         "except what an AGO ISOLATED TEST RECEIPT or AGO TEST EVIDENCE below states: "
         "AGO itself ran those tests, so they count as executed test cases and a test "
         "report.\n"
-        "Answer with: FINDINGS (short bullet list), then exactly one final line "
+        + (("EVIDENCE RULE: the tests in AGO TEST EVIDENCE were already EXECUTED by "
+            "AGO and PASSED; that IS the test execution and the test report. Never FAIL "
+            "because the deliverable does not run tests itself or has no separate test "
+            "report. FAIL only if the deliverable does not give what the acceptance asks "
+            "for (for example the QA plan or release steps).\n")
+           if "AGO TEST EVIDENCE" in delivered else "")
+        + "Answer with: FINDINGS (short bullet list), then exactly one final line "
         "QA_VERDICT: PASS or QA_VERDICT: FAIL.\n"
         "Project title (quoted): " + title[:180] + "\n"
         "Stage: " + stage + "\n"

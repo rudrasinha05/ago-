@@ -393,8 +393,8 @@ def test_quality_stage_prompts_carry_agos_executed_test_evidence():
     every role, and is never a DENY reason, within the prompt bound."""
     db = ApprovedProjectDb()
     task = db.task()
-    evidence = ("AGO TEST EVIDENCE (recorded by AGO, not written by a model): ... 3 unittest "
-                "case(s) EXECUTED, ALL PASSED. Test cases: test_apply, test_review.")
+    evidence = ("AGO TEST EVIDENCE: 3 test(s) EXECUTED by AGO in offline Docker, ALL PASSED: "
+                "test_apply, test_review, test_reject. Files: src/a.py. " + "x" * 900)
     task.project_context.update({
         "stage": "quality", "deliverable": "QA plan and test report",
         "prior_work": [{"stage": "implementation", "draft": "Admission code"}],
@@ -424,6 +424,31 @@ def test_quality_stage_prompts_carry_agos_executed_test_evidence():
     for prompt in model.prompts:
         assert "test_apply, test_review" in prompt and "NEVER a DENY reason" in prompt
         assert len(prompt) <= 4000
+    assert all("PRE-EXECUTION: Vote on the plan for the quality deliverable" in p
+               for p in model.prompts[:5])
+    # Live 2026-11-19: with Board revision notes the CEO prompt reached 4307
+    # characters and the run failed. Maximum-size inputs must still fit.
+    task.project_context.update({"brief": "B" * 3000, "deliverable": "D" * 400,
+                                 "prior_work": [{"stage": "implementation", "draft": "W" * 2000}],
+                                 "recovery_feedback": "F" * 900, "failed_work": "X" * 500})
+    model.prompts.clear()
+    run_four_role_chain(task=task, participants=participants, provider=model,
+                        revision_notes="R" * 800)
+    assert model.prompts and max(len(p) for p in model.prompts) <= 4000
+    assert all("test_apply" in p for p in model.prompts)
+
+
+def test_a_quality_board_denial_for_a_qa_plan_not_yet_written_is_the_ago_rule():
+    """Live 2026-11-19: Finance denied the quality run for 'the absence of a
+    detailed Quality Assurance Plan, test cases, and test reports' - the very
+    things that run writes, after AGO had executed the tests."""
+    from ago.company_ollama_chain import pre_execution_only
+    live = ("The project failed the quality stage due to the absence of a detailed "
+            "Quality Assurance Plan, test cases, and test reports.")
+    assert pre_execution_only(live)
+    assert pre_execution_only("The test plan is not provided yet")
+    assert not pre_execution_only("The QA plan is missing a privacy review of student data")
+    assert not pre_execution_only("Release plan is missing and the budget is exceeded")
 
 
 @pytest.mark.parametrize("stopping_role,reason,expected_calls",[
