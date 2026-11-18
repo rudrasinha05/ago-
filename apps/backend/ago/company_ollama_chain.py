@@ -1,5 +1,6 @@
 """Pure bounded AI governance and engineering artifact drafting; no database side effects."""
 
+import re
 import time
 
 from ago.company_engineering import (
@@ -49,6 +50,29 @@ BOARD_ROLE_SEATS = {
     "risk": "Risk & Compliance",
     "quality": "Quality & Release",
 }
+
+
+_PRE_EXECUTION_SUBJECT = re.compile(
+    r"\b(tests?|testing|unit ?tests?|test cases?|documentation|docs?|technical doc\w*)\b", re.I)
+_PRE_EXECUTION_STATE = re.compile(
+    r"\b(not (yet )?(been )?(executed|run|available|provided|present|written|included|done|"
+    r"complete|ready)|missing|incomplete|unavailable|lack\w*|absent|no (tests?|docs?|"
+    r"documentation))\b", re.I)
+_REAL_BLOCKER = re.compile(
+    r"\b(secret|credential|password|token|security|vulnerab\w*|privacy|personal data|"
+    r"pii|legal|licen[cs]e|unsafe|network|external|cost|budget|spend\w*|scope)\b", re.I)
+
+
+def pre_execution_only(concern: str) -> bool:
+    """A Board concern that is ONLY "tests/docs don't exist or haven't run yet".
+
+    Before the implementation run nothing can satisfy it; AGO writes them in the
+    run and executes the tests before QA. Anything naming a real blocker
+    (security, privacy, cost, scope, ...) is never treated this way.
+    """
+    text = str(concern or "")
+    return (bool(_PRE_EXECUTION_SUBJECT.search(text)) and bool(_PRE_EXECUTION_STATE.search(text))
+            and not _REAL_BLOCKER.search(text))
 
 
 def board_recommendation(text: str) -> str:
@@ -168,10 +192,9 @@ def run_four_role_chain(
     # In implementation the Board reviews the plan BEFORE source code exists.
     # Real Docker test receipts and independent QA are separate later gates.
     quality_pre_execution_rule = (
-        "PRE-EXECUTION QUALITY: Vote only on the plan to start coding, NOT "
-        "code QA or release. Tests cannot run yet; that alone is NOT DENY. "
-        "DENY a missing planned offline Docker test receipt, independent QA, "
-        "or real safety defect. Never claim tests passed.\n"
+        "PRE-EXECUTION QUALITY: Vote on the plan to start coding. Code, tests and "
+        "docs are written IN THIS RUN; AGO runs the tests in offline Docker before "
+        "QA. Missing tests/docs now is NEVER a DENY reason. Never claim tests passed.\n"
         if project_stage == "implementation" else ""
     )
     # Two-seat legacy drafting remains available. The founder's explicitly
@@ -287,7 +310,7 @@ def run_four_role_chain(
                 else ("Review the "+project_stage+" stage ("+stage_deliverable[:120]
                       +") from your seat: "+goal)
                 if later_stage and role in BOARD_ROLE_SEATS else goal)+"\n"
-            +(quality_pre_execution_rule if role == "quality" and quality_pre_execution_rule
+            +(quality_pre_execution_rule if quality_pre_execution_rule
               else board_stage_rule if role in BOARD_ROLE_SEATS else "")
             +("BOARD_ADVISORY: Your FIRST line must be exactly one of these two lines, "
               "with nothing else on it:\nBOARD_RECOMMENDATION: APPROVE\n"
@@ -388,9 +411,31 @@ def run_four_role_chain(
             vote = board_recommendation(bounded)
             board_seat=BOARD_ROLE_SEATS[role]
             manager = next((p for p in participants if p["role"] == "pm"), None)
+            if (vote == "deny" and project_stage == "implementation"
+                    and pre_execution_only(denial_reason(bounded))):
+                # Before coding, "there are no tests/docs yet" cannot be
+                # resolved by anyone: this run writes them and AGO executes the
+                # tests before QA. Recorded, never hidden; not a PM resolution.
+                concern = denial_reason(bounded)
+                vote = "approve"
+                bounded = ("BOARD_RECOMMENDATION: APPROVE\n"
+                           "AGO RULE (pre-execution): concern '"+concern[:200]+"' is about "
+                           "tests/documentation that this run writes and AGO executes "
+                           "before QA; it is not a blocker before coding.\n"
+                           +_without_vote(bounded))[:950]
+                board_resolutions.append({
+                    "seat": board_seat, "seat_employee_id": person["employee_id"],
+                    "concern": concern, "asked_for_reason": False,
+                    "resolved_by_employee_id": None, "resolved_by_name": "AGO rule",
+                    "resolution": "Tests and documentation are produced in this run "
+                                  "and executed by AGO before QA.",
+                    "outcome": "approved_pre_execution_rule", "remaining_concern": "",
+                })
+            pm_resolutions = sum(1 for r in board_resolutions
+                                 if r["outcome"] != "approved_pre_execution_rule")
             if (vote == "deny" and manager is not None
                     and board_seat not in overridden_seats
-                    and len(board_resolutions) < MAX_BOARD_RESOLUTIONS):
+                    and pm_resolutions < MAX_BOARD_RESOLUTIONS):
                 # deny -> resolve -> vote again, inside this run. The project
                 # manager answers the seat's concrete concern (fills a research
                 # or information gap from the approved material, or records a
@@ -419,7 +464,26 @@ def run_four_role_chain(
                                    +_without_vote(bounded))[:950]
                     elif second == "deny":
                         concern = denial_reason(reply)
-                if vote == "deny" and concern:
+                if vote == "deny" and concern and project_stage == "implementation" \
+                        and pre_execution_only(concern):
+                    # Before coding, "there are no tests/docs yet" cannot be
+                    # resolved by anyone: this run writes them and AGO executes
+                    # the tests before QA. Recorded, never hidden.
+                    vote = "approve"
+                    bounded = ("BOARD_RECOMMENDATION: APPROVE\n"
+                               "AGO RULE (pre-execution): concern '"+concern[:200]+"' is about "
+                               "tests/documentation that this run writes and AGO executes "
+                               "before QA; it is not a blocker before coding.\n"
+                               +_without_vote(bounded))[:950]
+                    board_resolutions.append({
+                        "seat": board_seat, "seat_employee_id": person["employee_id"],
+                        "concern": concern, "asked_for_reason": asked_for_reason,
+                        "resolved_by_employee_id": None, "resolved_by_name": "AGO rule",
+                        "resolution": "Tests and documentation are produced in this run "
+                                      "and executed by AGO before QA.",
+                        "outcome": "approved_pre_execution_rule", "remaining_concern": "",
+                    })
+                elif vote == "deny" and concern:
                     resolution = _without_vote(bounded_call(
                         "Generate one concrete INTERNAL artifact, never a claim of "
                         "execution. No tools, links, hiring, spending, code execution, "

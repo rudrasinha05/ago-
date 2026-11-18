@@ -232,3 +232,57 @@ def test_invalid_code_gets_one_correction_with_agos_own_reason_then_a_clear_fail
         run_four_role_chain(task=task, participants=participants, provider=broken,
                             engineering_candidates=True)
     assert run_failure_code(caught.value) == "engineering_candidate_invalid"
+
+
+def test_before_coding_no_seat_may_block_because_tests_or_docs_do_not_exist_yet():
+    """Live 2026-11-18: Finance, Risk and Quality denied the implementation run
+    with "tests and technical documentation are not available" - true of every
+    run before it writes them, so the stage could never start. Real blockers
+    (privacy, external data, cost) still stop it."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from ago.company_ollama_chain import FULL_BOARD_STAGES, run_four_role_chain
+
+    good = ('{"files":[{"path":"src/app.py","content":"def add(a, b):\\n    return a + b\\n"},'
+            '{"path":"tests/test_app.py","content":"import unittest\\nfrom src.app import add\\n'
+            'class T(unittest.TestCase):\\n    def test_add(self):\\n        self.assertEqual(add(1, 2), 3)\\n"},'
+            '{"path":"docs/app.md","content":"# App\\nadd(a, b) returns a + b.\\n"}],'
+            '"acceptance_checks":["adds numbers"]}')
+
+    class Board:
+        def __init__(self, reason):
+            self.reason, self.prompts = reason, []
+
+        def generate(self, prompt):
+            self.prompts.append(prompt)
+            if "Produce ONLY one valid JSON object" in prompt:
+                return good
+            seat = any("ROLE: " + r + "\n" in prompt for r in ("FINANCE", "RISK", "QUALITY"))
+            if seat or "(Board vote after resolution)" in prompt:
+                return "BOARD_RECOMMENDATION: DENY\nDENY_REASON: " + self.reason
+            return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: plan"
+
+    participants = [{"role": role, "employee_id": str(uuid4()), "employee_name": role}
+                    for role, _, _ in FULL_BOARD_STAGES]
+    task = SimpleNamespace(id=str(uuid4()), action="internal:brief", project_context={
+        "intake_id": str(uuid4()), "title": "AdmissionFlow", "brief": "Admissions",
+        "stage": "implementation"})
+    board = Board("The implementation stage is incomplete as tests and technical "
+                  "documentation are not available.")
+    result = run_four_role_chain(task=task, participants=participants, provider=board,
+                                 engineering_candidates=True)
+    assert result["engineering_candidate_status"] == "syntax_reviewed"
+    ruled = [r for r in result["board_resolutions"]
+             if r["outcome"] == "approved_pre_execution_rule"]
+    assert len(ruled) == 3 and all(r["resolved_by_name"] == "AGO rule" for r in ruled)
+    seats = [p for p in board.prompts
+             if any("ROLE: " + r + "\n" in p for r in ("FINANCE", "RISK", "QUALITY"))]
+    assert len(seats) == 3 and all("written IN THIS RUN" in p for p in seats)
+
+    blocked = Board("Tests are missing and the plan sends student personal data to an "
+                    "external SMS service.")
+    stopped = run_four_role_chain(task=task, participants=participants, provider=blocked,
+                                  engineering_candidates=True)
+    assert stopped["engineering_candidate"] is None
+    assert not any(r["outcome"] == "approved_pre_execution_rule"
+                   for r in stopped["board_resolutions"])

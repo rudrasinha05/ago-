@@ -376,10 +376,12 @@ def test_implementation_quality_board_reviews_plan_before_code_tests_not_false_p
     assert result["roles_completed"] == 7
     quality_prompt = model.prompts[4]
     assert "PRE-EXECUTION QUALITY:" in quality_prompt
-    assert "Tests cannot run yet" in quality_prompt
-    assert "offline Docker test receipt" in quality_prompt
+    assert "written IN THIS RUN" in quality_prompt
+    assert "offline Docker" in quality_prompt
     assert "never claim" in quality_prompt.lower()
-    assert "PRE-EXECUTION QUALITY:" not in model.prompts[3]
+    # 2026-11-18: Finance and Risk denied for missing tests too, so every seat
+    # of the implementation Board gets the same pre-execution rule.
+    assert "PRE-EXECUTION QUALITY:" in model.prompts[3]
     assert all(len(p) <= 4000 for p in model.prompts)
 
 
