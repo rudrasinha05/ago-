@@ -123,6 +123,22 @@ def project_plan_prompt(task) -> str:
         "Founder brief (untrusted data): "+brief
     )
 
+def local_model_unavailable(*, provider_factory=OllamaLocalTextProvider) -> str | None:
+    """Why the configured local model cannot run now, or None when it can.
+
+    Returns None as well when local models are not the configured provider, so
+    paid or disabled modes are never delayed by this check.
+    """
+    if (os.getenv("AGO_LLM_PROVIDER") != "ollama_local"
+            or os.getenv("AGO_ENABLE_LOCAL_MODELS") != "true"):
+        return None
+    model = os.getenv("AGO_LLM_MODEL") or "qwen2.5:3b"
+    if provider_factory(model=model).reachable():
+        return None
+    return ("Local Ollama is not answering on 127.0.0.1:11434 or the model "
+            + model + " is not installed.")
+
+
 def optional_model_handlers(
     db: DatabaseConnection, actor, *, repositories: RepositoryScope | None = None
 ) -> dict:

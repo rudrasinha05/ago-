@@ -99,18 +99,22 @@ def test_advance_recovers_what_the_ai_manager_may_and_stops_for_the_founder(comp
     assert again['needs_founder'] is True and len(c.seen) == 2
 
 
-def test_advance_never_reruns_a_task_and_reports_a_missing_tester(company):
+def test_advance_never_reruns_a_task_and_hires_a_missing_tester(company):
     c = company
     for _ in range(3):
         post(c.client, c.advance, c.founder)            # request, approve, run
-    # Both testers leave: QA cannot be independent, so the Founder is asked.
+    # Both testers leave. 2026-11-18: the AI CEO hires an independent tester
+    # instead of stopping the project for the Founder.
     for name in ('QA Specialist', 'Second Tester'):
         c.db.execute("UPDATE ago_employees SET role_title='Writer' WHERE tenant_id=%s AND id=%s",
                      (c.tenant, c.people[name]))
-    held = post(c.client, c.advance, c.founder)
-    assert (held['step'], held['needs_founder']) == ('qa', True)
-    assert 'No independent AI tester' in held['message']
-    assert len(c.seen) == 1 and c.qa_prompts == []
+    reviewed = post(c.client, c.advance, c.founder)
+    assert (reviewed['step'], reviewed['needs_founder']) == ('qa', False), reviewed
+    tester = c.db.execute("""SELECT e.name,e.role_title FROM ago_ai_qa_reviews q
+        JOIN ago_employees e ON e.tenant_id=q.tenant_id AND e.id=q.qa_employee_id
+        WHERE q.tenant_id=%s""", (c.tenant,)).fetchone()
+    assert (tester['name'], tester['role_title']) == ('QA Specialist (AI)', 'QA Specialist')
+    assert len(c.seen) == 1 and len(c.qa_prompts) == 1     # the work never re-ran
 
 
 @pytest.mark.parametrize('model_failure', [False, True])
@@ -226,7 +230,7 @@ def test_runner_finishes_a_real_project_without_a_browser(company):
     assert len(c.seen) == 5
 
 
-def test_runner_stops_for_the_founder_and_respects_its_limits(company):
+def test_runner_stops_for_the_founder_and_respects_its_limits(company, monkeypatch):
     c = company
     request, _ = _through(c)
     limited = runner.run_session(request, project_id=c.id, apply=True,
@@ -237,6 +241,12 @@ def test_runner_stops_for_the_founder_and_respects_its_limits(company):
     c.db.execute("UPDATE ago_employees SET role_title='Writer' WHERE tenant_id=%s "
                  "AND id IN (%s,%s)", (c.tenant, c.people['QA Specialist'],
                                        c.people['Second Tester']))
+    # ...and the AI CEO cannot hire a tester either: only then is the Founder needed.
+    from ago.company_chat import CompanyChat
+
+    def no_ceo(self, **_):
+        raise PermissionError('No independent AI tester is available and there is no AI CEO')
+    monkeypatch.setattr(CompanyChat, 'ceo_hire_independent_tester', no_ceo)
     held = runner.run_session(request, project_id=c.id, apply=True, confirmation=runner.CONFIRM)
     assert (held['status'], held['step'], held['steps_done']) == ('founder_needed', 'qa', 0)
     for bad in ({'hours': 0}, {'hours': 25}, {'max_steps': 0}, {'interval': 1}):
@@ -267,8 +277,15 @@ def test_runner_never_repeats_blindly_when_answers_are_lost_or_wrong():
             pause=pauses.append, clock=lambda: next(ticks), **options)
         return report, posts, pauses
 
-    lost, posts, pauses = session([URLError('down'), TimeoutError(), OSError()])
-    assert lost['status'] == 'server_not_answering' and len(posts) == 3 and len(pauses) == 2
+    # 2026-11-18: a restarting server or a sleeping laptop no longer stops the
+    # runner; it waits longer each time and carries on when the server is back.
+    back, posts, pauses = session([URLError('down'), TimeoutError(), OSError(),
+                                   HTTPError('http://127.0.0.1', 503, 'restart', None, None),
+                                   {**base, 'done': True, 'step': 'done'}])
+    assert back['status'] == 'project_done' and len(posts) == 5
+    assert pauses == [20, 40, 80, 160]
+    gone, posts, pauses = session([URLError('down')] * 400, hours=1)
+    assert gone['status'] == 'server_not_answering' and max(pauses) <= runner.MAX_WAIT_SECONDS
     # A lost answer is followed by a fresh state read, which may simply be "running".
     waited, posts, _ = session([TimeoutError(), {**base, 'step': 'running'},
                                 {**base, 'done': True, 'step': 'done'}])

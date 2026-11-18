@@ -276,3 +276,13 @@ class StageProgressionQueries:
                RETURNING status,unittest_cases,failure_category,failure_summary""",
             parameters,
         )
+
+    def resolve_stage_blockers_25(self, parameters: Any = None) -> Cursor:
+        """(tenant_id, project_id, stage): close blockers and expired waits once work moves on."""
+        return self.connection.execute(
+            """UPDATE ago_project_followups SET status='resolved',resolved_at=clock_timestamp()
+               WHERE tenant_id=%s AND project_id=%s AND stage=%s
+                 AND (status='blocked'
+                      OR (status='scheduled' AND eligible_at<=clock_timestamp()))""",
+            parameters,
+        )

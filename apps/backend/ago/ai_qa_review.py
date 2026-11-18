@@ -41,15 +41,25 @@ def local_qa_provider():
 
 
 def qa_verdict(text: str) -> str:
-    """Exactly one 'QA_VERDICT: PASS|FAIL' line, otherwise 'unverified'."""
-    values = [
-        line.split(":", 1)[1].strip().upper()
+    """One verdict, PASS or FAIL, otherwise 'unverified'.
+
+    A small model sometimes repeats the same verdict line; repeats that agree
+    are one verdict. Conflicting or missing verdicts stay 'unverified'.
+    """
+    values = {
+        line.split(":", 1)[1].strip().upper().rstrip(".")
         for line in text.splitlines()
         if line.strip().upper().startswith("QA_VERDICT:")
-    ]
-    if len(values) == 1 and values[0] in ("PASS", "FAIL"):
-        return values[0].lower()
+    }
+    if len(values) == 1 and values <= {"PASS", "FAIL"}:
+        return values.pop().lower()
     return "unverified"
+
+
+# The QA model gets three tries per task. If the third answer is still unclear
+# AGO records FAIL (never PASS) so the team reworks the stage instead of the
+# project stopping; the rework is a new task with fresh QA attempts.
+UNCLEAR_QA_LIMIT = 3
 
 
 def builder_ids(result) -> set[str]:
@@ -216,8 +226,9 @@ class AiQaReview:
                 stage=stage, qa_employee_id=qa_employee_id,
             )
         task_id = str(row["task_id"])
-        if auto_selected and self.repositories.resolve(StageProgression).qa_attempts(
-                tenant_id=tenant_id, task_id=task_id) >= 3:
+        attempts = self.repositories.resolve(StageProgression).qa_attempts(
+            tenant_id=tenant_id, task_id=task_id)
+        if auto_selected and attempts >= UNCLEAR_QA_LIMIT:
             raise PermissionError('Three QA attempts produced no accepted verdict; select an independent '
                                   'tester explicitly after reviewing the evidence')
         # QA-002/003: a code candidate is reviewed only with AGO's own isolated
@@ -256,6 +267,12 @@ class AiQaReview:
             response = (tests["text"] + "\n" + kept[:2400]
                         + "\nAGO RULE: the isolated tests did not pass, so this review is "
                           "recorded as FAIL.\nQA_VERDICT: FAIL")[:MAX_RESPONSE]
+            verdict = "fail"
+        if verdict == "unverified" and auto_selected and attempts + 1 >= UNCLEAR_QA_LIMIT:
+            response = (response[:2400] + "\nAGO RULE: QA gave no clear verdict "
+                        + str(UNCLEAR_QA_LIMIT) + " times for this work, so it is recorded as "
+                        "FAIL and the team reworks it with a clearer deliverable.\n"
+                        "QA_VERDICT: FAIL")[:MAX_RESPONSE]
             verdict = "fail"
         receipt_id = str(uuid4())
         with self.db.transaction():

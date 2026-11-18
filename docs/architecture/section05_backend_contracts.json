@@ -2025,6 +2025,10 @@
           "arguments": "self, *, tenant_id: str, task_id: str",
           "returns": "int"
         },
+        "resolve_stage_blockers": {
+          "arguments": "self, *, tenant_id: str, project_id: str, stage: str",
+          "returns": "int"
+        },
         "scheduled_work": {
           "arguments": "self, *, tenant_id: str, project_id: str, task_id: str",
           "returns": "dict | None"
@@ -2151,6 +2155,10 @@
           "returns": "Cursor"
         },
         "finish_candidate_test_24": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "resolve_stage_blockers_25": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         }

@@ -1,10 +1,11 @@
 "use client";
 import {useRef,useState} from 'react';
 import {CREDITS_PER_CHAIN_RUN} from './task-self-check-state';
-import {MAX_REVISIONS,QA_CREDITS,nextAdvanceStep,stepLabel} from './project-advance-state';
+import {MAX_LOST_ANSWERS,MAX_PROGRESS_STEPS,MAX_REVISIONS,QA_CREDITS,lostAnswerWaitMs,
+ nextAdvanceStep,stepLabel,transientError,waitMs} from './project-advance-state';
 
 const BASE='/v1/organization/company/projects/';
-const MAX_STEPS=12;
+const clock=ms=>new Date(Date.now()+ms).toLocaleTimeString();
 
 /** Founder: let AGO do the next governed step(s) of a project and show each one live. */
 export function ProjectAdvance({api,project,onChanged}){
@@ -32,23 +33,47 @@ export function ProjectAdvance({api,project,onChanged}){
   if(followup){
    add('Assigned to '+followup.owner_name+': '+followup.feedback+' Next: '+followup.next_action);
   }
-  if(r.scheduled||r.schedule_at){
-   add('The schedule is saved. A running authorized project session can resume it when due; otherwise resume this project later.','info');
-   return false;
+  return r;
+ }
+
+ // Sleeps in 1 s slices so "Stop" takes effect at once. Returns false if stopped.
+ async function pause(ms){
+  for(let left=ms;left>0;left-=1000){
+   if(stop.current)return false;
+   await new Promise(done=>setTimeout(done,Math.min(1000,left)));
   }
-  return r.progressed&&!r.needs_founder&&!r.done;
+  return !stop.current;
  }
 
  async function go(keepGoing){
   if(busy||!allow)return;
   setBusy(true);setError('');stop.current=false;
+  let steps=0,lost=0;
   try{
-   for(let i=0;i<(keepGoing?MAX_STEPS:1);i++){
-    const more=await perform(await detail());
+   for(let turn=0;turn<MAX_PROGRESS_STEPS*6;turn++){
+    let r;
+    try{r=await perform(await detail());lost=0;}
+    catch(e){
+     // A lost answer is not a refusal: the server may be restarting. Ask
+     // again later; the server reads its recorded state and never replays.
+     if(!keepGoing||!transientError(e)||++lost>MAX_LOST_ANSWERS)throw e;
+     const ms=lostAnswerWaitMs(lost);
+     add('AGO did not answer ('+(e.message||'no answer')+'). Asking again at '+clock(ms)+'.','info');
+     if(!await pause(ms)){add('Stopped by the Founder.','stop');break;}
+     continue;
+    }
     await onChanged?.();
-    if(!more)break;
-    if(stop.current){add('Stopped by the Founder after this step.','stop');break;}
-    if(keepGoing&&i===MAX_STEPS-1)add('Paused after '+MAX_STEPS+' steps. Press again to continue.','stop');
+    if(r.done||r.needs_founder||!keepGoing)break;
+    if(r.progressed){
+     if(++steps>=MAX_PROGRESS_STEPS){add('Paused after '+MAX_PROGRESS_STEPS+' steps. Press again to continue.','stop');break;}
+     if(stop.current){add('Stopped by the Founder after this step.','stop');break;}
+     continue;
+    }
+    // A wait (calendar, Docker, Ollama, a running task): keep this page open
+    // and AGO carries on by itself when it is due.
+    const ms=waitMs(r);
+    add('Waiting; AGO asks again at '+clock(ms)+'. Keep this page open or press Stop.','info');
+    if(!await pause(ms)){add('Stopped by the Founder.','stop');break;}
    }
    setPreview(nextAdvanceStep(await detail()));
   }catch(e){
@@ -61,7 +86,7 @@ export function ProjectAdvance({api,project,onChanged}){
   <p><strong>Let AGO move this project forward.</strong> AGO does the next allowed step itself: ask for approval,
    get the AI team’s approval, run the AI team after its self-check, and have an independent AI QA check the result.
    If the Board denies, AGO sends the Board’s reasons back to the team and resubmits a revised proposal (up to {MAX_REVISIONS} times).
-   Failed work and QA feedback go directly to the responsible agent. Calendar waits are saved; repeated failures or authority limits need a decision. This browser session stops when it needs to wait. A run uses {CREDITS_PER_CHAIN_RUN} internal credits and a QA check {QA_CREDITS}.</p>
+   Failed work and QA feedback go directly to the responsible agent; after six automatic attempts the AI CEO reports to you. With “Keep going”, waits (work calendar, Docker, Ollama, a server restart) do not stop it: keep this page open and AGO carries on when it is due. A run uses {CREDITS_PER_CHAIN_RUN} internal credits and a QA check {QA_CREDITS}.</p>
   {preview?<p role="status">Next step: {stepLabel(preview)}.</p>:
    <button type="button" disabled={busy} onClick={look} aria-label={'Show the next step for '+project.title}>Show next step</button>}
   <label className="project-advance-allow"><input type="checkbox" checked={allow} disabled={busy}
@@ -69,7 +94,7 @@ export function ProjectAdvance({api,project,onChanged}){
   <div className="delivery-actions">
    <button type="button" disabled={busy||!allow} onClick={()=>go(false)}>{busy?'Working…':'Do the next step'}</button>
    <button type="button" disabled={busy||!allow} onClick={()=>go(true)}>Keep going until I am needed</button>
-   {busy&&<button type="button" onClick={()=>{stop.current=true;}}>Stop after this step</button>}
+   {busy&&<button type="button" onClick={()=>{stop.current=true;}}>Stop</button>}
   </div>
   {error&&<p role="alert">{error}</p>}
   {log.length>0&&<ol className="project-advance-log" tabIndex={0} aria-label={'Steps AGO took for '+project.title} aria-live="polite">

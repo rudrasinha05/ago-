@@ -9,7 +9,9 @@ every existing check (revoked session, company rules, emergency stop, work
 calendar, credits) still applies to every single step.
 
 It stops by itself when the project is done, when the server says the Founder
-is needed, when its time or step limit is reached, or on Ctrl+C. It never
+is needed, when its time or step limit is reached, or on Ctrl+C. If the AGO
+server or Ollama is briefly down (restart, sleep), it waits and asks again
+instead of stopping; waits grow up to 5 minutes between attempts. It never
 starts at boot, never talks to anything but localhost, never stores the
 password or token on disk, and never replays a run: a step whose answer was
 lost is not repeated blindly - the next request reads the recorded state.
@@ -28,7 +30,8 @@ from local_approved_agent_batch import founder_login, local_url
 
 CONFIRM = "ADVANCE_PROJECT_UNTIL_FOUNDER_NEEDED"
 KIND = "ago_project_advance_v1"
-MAX_LOST_ANSWERS = 3      # consecutive requests without a readable answer
+MAX_WAIT_SECONDS = 300    # longest pause while the server is not answering
+TRANSIENT_HTTP = frozenset({502, 503, 504})   # server restarting / proxy gap
 MAX_UNCLEAR_QA = 3        # consecutive QA attempts without a recorded verdict
 
 
@@ -94,15 +97,22 @@ def run_session(request, *, project_id: str, apply: bool = False, confirmation=N
             # Never silently log in again with a cached Founder password:
             # the Founder must authorize a fresh session himself.
             return result("session_expired")
-        except (HTTPError, PermissionError):
-            raise  # the server refused or failed: stop, never treat it as a lost answer
+        except HTTPError as exc:
+            if exc.code not in TRANSIENT_HTTP:
+                raise  # the server refused or failed: stop, never treat it as lost
+            lost += 1
+            pause(min(interval * 2 ** min(lost - 1, 4), MAX_WAIT_SECONDS,
+                      max(0, end - clock())))
+            continue
+        except PermissionError:
+            raise
         except (TimeoutError, URLError, OSError):
             # The answer was lost, not necessarily the step. Nothing is repeated
             # blindly: the next request makes the server read its recorded state.
+            # The server may be restarting, so wait longer each time and keep going.
             lost += 1
-            if lost >= MAX_LOST_ANSWERS:
-                return result("server_not_answering")
-            pause(min(interval, max(0, end - clock())))
+            pause(min(interval * 2 ** min(lost - 1, 4), MAX_WAIT_SECONDS,
+                      max(0, end - clock())))
             continue
         reply = checked(answer)
         lost = 0
@@ -124,6 +134,8 @@ def run_session(request, *, project_id: str, apply: bool = False, confirmation=N
                               message="AI QA gave no usable verdict "
                                       + str(MAX_UNCLEAR_QA) + " times in a row.")
         pause(min(interval, max(0, end - clock())))
+    if lost:
+        return result("server_not_answering", lost_answers=lost)
     return result("limit_reached", limit="steps" if steps >= max_steps else "time")
 
 

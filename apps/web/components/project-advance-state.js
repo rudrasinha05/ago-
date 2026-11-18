@@ -13,12 +13,12 @@ const KINDS={
  running:'The {stage} task is running — wait for it to finish',
  rework:'AI QA failed the {stage} stage — the AI project manager creates a rework task',
  open_stage:'The AI project manager opens the {stage} stage and assigns its task',
- failed:'The {stage} task failed — Founder: recover the stage',
+ failed:'The {stage} task failed — the AI project manager starts a fresh attempt (only a credit problem needs the Founder)',
  revise:'Revise the {stage} proposal to fix the Board feedback and resubmit it',
  retry_code:'Retry the {stage} task: the AI developer\'s code failed AGO\'s code check',
  revise_limit:'The Board denied the {stage} proposal again after 2 revisions — Founder: read the Board feedback and decide',
  rejected:'The {stage} task approval was rejected — Founder decides what to do',
- unstaffed:'The {stage} stage has no AI worker — staff it first',
+ unstaffed:'The {stage} stage has no AI worker — the AI CEO assigns one (and hires one if nobody fits)',
  unknown:'The {stage} stage is in a state AGO cannot advance automatically',
  done:'Every stage passed AI QA',
 };
@@ -100,4 +100,31 @@ export function revisionReason(votes){
  const points=(Array.isArray(votes)?votes:[]).filter(v=>v&&v.recommendation!=='approve')
   .map(v=>v.seat+': '+(v.reason||(v.recommendation==='unverified'?'gave no clear vote':'denied without a stated reason')));
  return ('Revise to fix Board feedback: '+(points.join('; ')||'Board did not approve')).slice(0,500);
+}
+
+// "Keep going until I am needed" (2026-11-18): waits and short server gaps are
+// part of a project, not reasons to stop. The browser waits and asks again; the
+// server still decides every step from its recorded state and never replays.
+export const MAX_WAIT_MS=5*60*1000;
+export const MAX_PROGRESS_STEPS=80;
+export const MAX_LOST_ANSWERS=12;
+
+/** How long to wait before asking again after an answer that did not progress. */
+export function waitMs(reply,now=Date.now()){
+ if(!reply||reply.done||reply.needs_founder||reply.progressed)return 0;
+ const due=reply.followup?.eligible_at||reply.decision?.followup?.eligible_at||reply.schedule_at;
+ const at=typeof due==='string'?Date.parse(due):NaN;
+ if(Number.isFinite(at))return Math.min(MAX_WAIT_MS,Math.max(15000,at-now));
+ return 20000;
+}
+
+/** A lost answer (timeout, network gap, server restarting) — never a refusal. */
+export function transientError(error){
+ const status=error?.status;
+ return status===undefined||status===0||status===502||status===503||status===504;
+}
+
+/** Wait after the n-th lost answer in a row: 20 s, 40 s, … up to 5 minutes. */
+export function lostAnswerWaitMs(n){
+ return Math.min(MAX_WAIT_MS,20000*2**Math.max(0,Math.min(n-1,4)));
 }

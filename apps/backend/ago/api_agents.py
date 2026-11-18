@@ -12,13 +12,13 @@ from ago.agent_handlers import BUILTIN_HANDLERS
 from ago.company_engineering_preflight import inspect_engineering_task
 from ago.api_m2 import allowed, authenticated, db_connection, repository_scope, translate_error
 from ago.backend_contracts import RepositoryScope
-from ago.model_handlers import optional_model_handlers
+from ago.model_handlers import local_model_unavailable, optional_model_handlers
 from ago.repository_ports import (
     AgentRuntimePort, AiQaReviewPort, CalendarStorePort, CompanyChatPort,
     ConsoleServicePort, StageProgressionPort,
 )
 from ago.security import Principal
-from ago.stage_progression import next_step
+from ago.stage_progression import STAGES, next_step
 
 router = APIRouter(prefix="/v1/agents", tags=["M4 workforce"])
 
@@ -195,12 +195,16 @@ def advance_once(db, actor: Principal, repositories: RepositoryScope, project_id
             return _outcome({'step': 'running'}, progressed=False, needs_founder=False,
                             message='Another request is advancing this project; waiting for its result.')
         reply = _advance_once(db, actor, repositories, project_id)
+        if reply['progressed'] and reply.get('stage') in STAGES:
+            router.resolve_stage_blockers(tenant_id=actor.tenant_id, project_id=project_id,
+                                          stage=reply['stage'])
         unclear = reply['step'] == 'qa' and not reply['progressed'] and not reply.get('scheduled')
         if (reply['needs_founder'] or reply.get('schedule_at') or unclear) and not (
                 reply.get('followup') or (reply.get('decision') or {}).get('followup')):
             stage = reply.get('stage') or next_step(detail['stages']).get('stage') or 'discovery'
             kind = reply['step']
-            owner = ('manager' if reply.get('failure_code') == 'test_runner_unavailable' else
+            owner = ('manager' if reply.get('failure_code') in (
+                         'test_runner_unavailable', 'model_runner_unavailable') else
                      'worker' if reply.get('schedule_at') else
                      'ceo' if kind == 'unstaffed' else
                      'quality' if kind == 'qa' else
@@ -273,6 +277,16 @@ def _advance_once(db, actor: Principal, repositories: RepositoryScope, project_i
             tested = _test_candidate(actor, repositories, project_id, step)
             if tested is not None:
                 return tested
+        if kind in ("run", "qa"):
+            down = local_model_unavailable()
+            if down is not None:
+                # A machine problem, not a defect of the work: no run starts, no
+                # attempt is spent, nobody is called. Try again in 5 minutes.
+                return _outcome(step, progressed=False, needs_founder=False,
+                                failure_code="model_runner_unavailable",
+                                schedule_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+                                message="The " + stage + " work waits: " + down
+                                        + " AGO will try again in 5 minutes.")
         if kind == "run":
             assigned = next(s for s in detail['stages'] if str(s.get('task_id')) == task_id)
             return _run(db, actor, repositories, {**step, 'assignee_id':

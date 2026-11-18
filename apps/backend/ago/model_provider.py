@@ -99,6 +99,24 @@ class OllamaLocalTextProvider:
         # fallback, proxy exfiltration or SSRF via a malicious local endpoint.
         self.opener=opener or build_opener(ProxyHandler({}), _DenyRedirect()).open
 
+    TAGS_ENDPOINT = "http://127.0.0.1:11434/api/tags"
+
+    def reachable(self, *, timeout_seconds: int = 3) -> bool:
+        """True when the local Ollama answers and has this model installed.
+
+        Read-only GET of the installed model list: never pulls, loads or starts
+        a model. Used to wait for Ollama instead of spending a failed attempt.
+        """
+        try:
+            with self.opener(Request(self.TAGS_ENDPOINT, method="GET"),
+                             timeout=timeout_seconds) as response:
+                payload = json.loads(response.read(1_048_577))
+        except (OSError, ValueError):
+            return False
+        names = {str(m.get("name")) for m in payload.get("models") or []
+                 if isinstance(m, dict)}
+        return self.model in names or (self.model + ":latest") in names
+
     # Ollama can constrain the answer to a JSON schema ("format"). Small local
     # models otherwise wrap code in fences or break the JSON string escaping.
     supports_response_schema = True

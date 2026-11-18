@@ -437,6 +437,17 @@ def test_ai_manager_retries_a_timeout_but_never_a_credit_failure(company):
     assert 'credit_budget_missing' in held['reason']
 
 
+def test_an_unexpected_handler_error_is_retried_by_the_ai_manager(company):
+    """2026-11-18: a crash inside the stage worker used to stop the project for
+    the Founder. It is now an AI retry inside the same six-attempt limit."""
+    c = company
+    crashed, _ = c.run('discovery', fail=RuntimeError('unexpected'), expected=502)
+    [row] = c.recoveries('discovery')
+    assert str(row['failed_task_id']) == crashed
+    assert row['reason'] == 'Retry after run failure: handler_error'
+    assert c.stage('discovery')['status'] == 'proposed'
+
+
 def test_without_an_ai_manager_or_staffing_the_founder_is_told_why(case, monkeypatch):
     client, headers, info = case
     founder, db, tenant = headers['founder'], info['db'], info['tenant']
@@ -590,14 +601,28 @@ def test_ai_ceo_fills_a_stage_the_project_scope_left_unstaffed(case, monkeypatch
     c.run('quality')
     review = c.qa('quality')
     assert {review['qa_employee_id'], opened['assignee_id']} == testers
-    # Nobody with a release role exists: the Founder is told exactly what is missing.
-    held = review['continuation']
-    assert (held['action'], held['state'], held['needs_founder']) == (
-        'none', 'stage_not_staffed', True)
-    assert 'release stage' in held['reason'] and 'devops / release' in held['reason']
-    assert c.stage('release')['plan_step_id'] is None
+    # Nobody with a release role exists. Founder decision 2026-11-18: the AI CEO
+    # hires ONE release specialist into the project manager's team; the project
+    # does not stop for the Founder.
+    opened = review['continuation']
+    assert (opened['action'], opened['stage'], opened['staffed_by_ceo']) == (
+        'opened_stage', 'release', 'CEO'), opened
+    hired = db.execute("""SELECT e.id,e.name,e.role_title,e.manager_id,e.department_id
+        FROM ago_employees e WHERE e.tenant_id=%s AND e.id=%s""",
+        (tenant, opened['assignee_id'])).fetchone()
+    assert (hired['name'], hired['role_title']) == ('Release Engineer (AI)', 'Release Engineer')
+    manager = db.execute("""SELECT accountable_manager_id FROM ago_founder_project_lead
+        WHERE tenant_id=%s AND intake_id=%s""", (tenant, c.id)).fetchone()
+    assert str(hired['manager_id']) == str(manager['accountable_manager_id'])
     assert db.execute("SELECT count(*) AS n FROM ago_employees WHERE tenant_id=%s AND kind='ai'",
-                      (tenant,)).fetchone()['n'] == len(c.people)   # nobody was hired
+                      (tenant,)).fetchone()['n'] == len(c.people) + 1   # exactly one hire
+    assert c.stage('release')['status'] == 'proposed'          # nothing ran yet
+    notes = [r['body'] for r in db.execute("""SELECT body FROM ago_company_chat
+        WHERE tenant_id=%s AND kind='project' AND author_name LIKE '%%(AI CEO)'""",
+        (tenant,)).fetchall()]
+    assert any('hired a new AI employee, Release Engineer (AI)' in n for n in notes)
+    c.run('release')                                           # the hire can do the work
+    assert c.qa('release')['verdict'] == 'pass'
 
 
 def test_database_refuses_every_shortcut_around_stage_progression(company):

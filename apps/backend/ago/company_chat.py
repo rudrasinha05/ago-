@@ -2065,12 +2065,13 @@ class CompanyChat:
         """The AI CEO staffs ONE project stage that has no staffing at all (076).
 
         Founder rule: unassigned roles are assigned by the AI leadership to
-        their existing employees. This never hires, never replaces a suggested
-        or approved worker, and never creates or runs a task. It picks an
-        existing, active AI employee whose role fits the stage and who is not
-        the CEO, a Board member, the project manager or (for implementation /
-        quality) the other side's specialist. With nobody suitable it refuses
-        with the reason, so the Founder knows exactly which role is missing.
+        their existing employees. It never replaces a suggested or approved
+        worker and never creates or runs a task. It picks an existing, active
+        AI employee whose role fits the stage and who is not the CEO, a Board
+        member, the project manager or (for implementation / quality) the other
+        side's specialist. With nobody suitable the AI CEO hires ONE AI
+        specialist for the stage (Founder decision 2026-11-18) rather than
+        stopping the project.
         """
         from ago.governance import ApprovalRepository
         from uuid import uuid4
@@ -2165,11 +2166,13 @@ class CompanyChat:
                     continue
                 chosen = employee
                 break
-            if chosen is None:
-                raise PermissionError(
-                    'No existing AI employee fits the '+stage+' stage (role: '
-                    + ' / '.join(words)+') who is not a Board member, the project manager '
-                    'or the other side of implementation/QA. Add or retitle one.')
+            hired = chosen is None
+            if hired:
+                # Founder decision 2026-11-18: the AI CEO hires the missing
+                # specialist instead of stopping the project. One AI employee,
+                # in the project manager's team, titled for this stage only.
+                chosen = self._ceo_hire_stage_specialist(
+                    tenant_id=tenant_id, stage=stage, manager_id=manager_id)
             worker_id = str(chosen['id'])
             approvals = self.repositories.resolve(ApprovalRepository)
             if pending is not None and str(pending['assignee_id']) == worker_id:
@@ -2203,7 +2206,10 @@ class CompanyChat:
                   (tenant_id,channel,author_id,author_name,body,kind,employee_id)
                 VALUES (%s,'global',%s,%s,%s,'project',%s)
             """, (tenant_id, founder_id, str(ceo['name'])+' (AI CEO)',
-                  ('A staffing request for the '+stage+' stage named '+str(chosen['name'])
+                  ('Nobody in the company fitted the '+stage+' stage, so I hired a new AI '
+                   'employee, '+str(chosen['name'])+', into the project manager\'s team'
+                   if hired else
+                   'A staffing request for the '+stage+' stage named '+str(chosen['name'])
                    +'; I approved it' if pending is not None
                    and str(pending['assignee_id']) == worker_id
                    else 'The approved scope suggested '+str(chosen['name'])+' for the '+stage
@@ -2214,7 +2220,82 @@ class CompanyChat:
                   'created or run by this decision.', worker_id))
         return {'stage': stage, 'assignee_id': worker_id, 'assignee_name': chosen['name'],
                 'role_title': chosen['role_title'], 'ceo_id': str(ceo['employee_id']),
-                'ceo_name': ceo['name'], 'task_executed': False, 'personnel_hired': False}
+                'ceo_name': ceo['name'], 'task_executed': False, 'personnel_hired': hired}
+
+    STAGE_HIRE_TITLES = {
+        'discovery': 'Product Analyst',
+        'architecture': 'Solution Architect',
+        'implementation': 'Software Developer',
+        'quality': 'QA Specialist',
+        'release': 'Release Engineer',
+    }
+
+    def ceo_hire_independent_tester(self, *, tenant_id: str, project_id: str) -> dict:
+        """The AI CEO hires one QA specialist when no independent tester exists.
+
+        Called by the server's QA step only, never from a browser. Without an
+        appointed AI CEO it refuses, so the Founder is told who is missing.
+        """
+        for value in (tenant_id, project_id):
+            UUID(value)
+        with self.db.transaction():
+            ceo = self.db.execute("""
+                SELECT b.employee_id,e.name FROM ago_company_board_appointments b
+                JOIN ago_employees e ON e.tenant_id=b.tenant_id AND e.id=b.employee_id
+                WHERE b.tenant_id=%s AND b.seat='Strategy & Vision' AND e.kind='ai'
+            """, (tenant_id,)).fetchone()
+            lead = self.db.execute("""
+                SELECT l.accountable_manager_id,i.founder_id FROM ago_founder_project_lead l
+                JOIN ago_founder_intakes i ON i.tenant_id=l.tenant_id AND i.id=l.intake_id
+                WHERE l.tenant_id=%s AND l.intake_id=%s
+            """, (tenant_id, project_id)).fetchone()
+            if ceo is None or lead is None:
+                raise PermissionError(
+                    "No independent AI tester is available and there is no AI CEO to hire one")
+            hired = self._ceo_hire_stage_specialist(
+                tenant_id=tenant_id, stage='quality',
+                manager_id=str(lead['accountable_manager_id']))
+            self.db.execute("""
+                INSERT INTO ago_company_chat
+                  (tenant_id,channel,author_id,author_name,body,kind,employee_id)
+                VALUES (%s,'global',%s,%s,%s,'project',%s)
+            """, (tenant_id, str(lead['founder_id']), str(ceo['name'])+' (AI CEO)',
+                  'Every tester in the company helped build this work, so QA could not be '
+                  'independent. I hired a new AI employee, '+hired['name']+', to review it. '
+                  'No task was created or run by this decision.', hired['id']))
+        return hired
+
+    def _ceo_hire_stage_specialist(self, *, tenant_id: str, stage: str,
+                                   manager_id: str) -> dict:
+        """Hire one AI specialist for a stage nobody fits (inside the caller's transaction).
+
+        The new employee joins the project manager's department and reports to
+        the project manager. The title carries the stage's role word, so later
+        projects reuse this person instead of hiring again.
+        """
+        manager = self.db.execute(
+            'SELECT department_id FROM ago_employees WHERE tenant_id=%s AND id=%s',
+            (tenant_id, manager_id)).fetchone()
+        if manager is None:
+            raise PermissionError('The project manager is no longer an employee')
+        department_id = str(manager['department_id'])
+        title = self.STAGE_HIRE_TITLES[stage]
+        name, number = title + ' (AI)', 1
+        while self.db.execute(
+                'SELECT 1 FROM ago_employees WHERE tenant_id=%s AND department_id=%s'
+                ' AND lower(name)=lower(%s)', (tenant_id, department_id, name)).fetchone():
+            number += 1
+            name = title + ' ' + str(number) + ' (AI)'
+        employee = self.repositories.resolve(OrganizationStore).hire(
+            tenant_id=tenant_id, department_id=department_id, name=name, kind='ai',
+            manager_id=manager_id)
+        self.db.execute("""
+            UPDATE ago_employees SET role_title=%s,core_responsibilities=%s
+            WHERE tenant_id=%s AND id=%s
+        """, (title, 'Owns the '+stage+' stage of approved projects when the AI CEO '
+              'assigns it; hired by the AI CEO because no existing employee fitted.',
+              tenant_id, employee.id))
+        return {'id': employee.id, 'name': name, 'role_title': title}
 
     def _require_eligible_stage_owner(
         self, *, tenant_id: str, project_id: str, stage: str,

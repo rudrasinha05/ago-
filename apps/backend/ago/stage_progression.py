@@ -55,11 +55,15 @@ CEO_STRATEGY = (
     "smallest version that meets the stage goal, keep it simple, and fix exactly this "
     "recorded problem first. "
 )
-# Run failures a retry can fix. Credit, unstaffed and unknown outcomes are not here.
-# worker_timeout is an abandoned run with an UNKNOWN outcome: never retried here.
+# Run failures a fresh attempt can fix. A retry is a NEW task and run with its
+# own approval and credit check; the six-attempt limit and the CEO REPORT still
+# apply. Stage work is internal (local model + database only; GitHub delivery is
+# separate), so an unexpected handler error or an abandoned run (worker_timeout,
+# e.g. AGO was restarted mid-run) leaves nothing outside AGO to replay.
+# Credit failures stay with the Founder: only he adds budget.
 RETRYABLE_FAILURES = frozenset({
     "engineering_candidate_invalid", "model_timeout", "model_unreachable",
-    "model_incomplete",
+    "model_incomplete", "handler_error", "worker_timeout",
 })
 # Steps of ProjectAdvance that the AI manager decides (continue_project).
 MANAGER_STEPS = frozenset({"open_stage", "recover"})
@@ -141,6 +145,20 @@ class StageProgression:
         UUID(task_id)
         return int(self.repositories.resolve(StageProgressionQueries).select_qa_attempts_17(
             (tenant_id, 'ai-qa:' + task_id + ':%')).fetchone()['n'])
+
+    def resolve_stage_blockers(self, *, tenant_id: str, project_id: str, stage: str) -> int:
+        """After a step of this stage succeeded, its old blockers are history.
+
+        Closes 'blocked' follow-ups and waits whose time has come, so the Founder
+        and the AI team do not keep seeing a problem that is already solved.
+        Assigned corrective work stays open until QA passes the stage.
+        """
+        for value in (tenant_id, project_id):
+            UUID(value)
+        if stage not in STAGES:
+            raise ValueError('Unknown project stage')
+        return self.repositories.resolve(StageProgressionQueries).resolve_stage_blockers_25(
+            (tenant_id, project_id, stage)).rowcount
 
     def scheduled_work(self, *, tenant_id: str, project_id: str, task_id: str) -> dict | None:
         for value in (tenant_id, project_id, task_id):
@@ -456,7 +474,8 @@ class StageProgression:
         """The independent AI tester for a stage review.
 
         Prefers the project's approved quality-stage tester; never returns an
-        employee who helped build the work under review.
+        employee who helped build the work under review. With nobody left the AI
+        CEO hires one QA specialist (Founder decision 2026-11-18).
         """
         UUID(tenant_id)
         UUID(project_id)
@@ -465,9 +484,9 @@ class StageProgression:
         for row in rows:
             if str(row["id"]) not in excluded and QA_ROLE.search(row["role_title"] or ""):
                 return dict(row)
-        raise PermissionError(
-            "No independent AI tester is available: hire or retitle an AI employee as "
-            "QA Engineer who did not build this work")
+        # Nobody independent: the AI CEO hires one tester instead of stopping.
+        return self.repositories.resolve(CompanyChat).ceo_hire_independent_tester(
+            tenant_id=tenant_id, project_id=project_id)
 
     # -- decisions -----------------------------------------------------------
 
@@ -486,9 +505,8 @@ class StageProgression:
                     if current["approved_assignee_id"] else None)
         staffed_by = None
         if assignee is None:
-            # Founder rule: unassigned roles are filled by the AI leadership from
-            # existing employees. The AI CEO does that here; with nobody suitable
-            # the Founder gets the exact missing role instead of a silent stop.
+            # Founder rule: unassigned roles are filled by the AI leadership. The
+            # AI CEO picks an existing employee, or hires one when nobody fits.
             try:
                 filled = self.repositories.resolve(CompanyChat).ceo_fill_stage(
                     tenant_id=tenant_id, founder_id=founder_id,
@@ -496,6 +514,8 @@ class StageProgression:
             except PermissionError as exc:
                 return self._wait("stage_not_staffed", True, str(exc))
             assignee, staffed_by = filled["assignee_id"], filled["ceo_name"]
+            if filled.get("personnel_hired"):
+                staff = staff | {assignee}      # hired by the AI CEO just now
             current = {**current, "approved_assignee_id": assignee,
                        "approved_assignee_name": filled["assignee_name"]}
         if assignee not in staff:

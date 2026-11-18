@@ -230,3 +230,51 @@ def test_a_source_file_that_imports_itself_is_sent_back_before_docker():
         with pytest.raises(ValueError, match="imports itself"):
             assert_discoverable_unittest(reviewed_candidate(bad))
     assert assert_discoverable_unittest(candidate())["candidate_sha256"]
+
+
+def test_a_stopped_ollama_makes_the_run_wait_without_spending_an_attempt(company, monkeypatch):
+    """2026-11-18: with Ollama down every run failed as model_unreachable and used
+    up the six automatic attempts. Now the run waits; nothing fails."""
+    c = company
+    monkeypatch.setattr(api_agents, 'local_model_unavailable', lambda: 'Ollama is down.')
+    reply, _ = steps_until(c, 'discovery', 'run')
+    assert reply['progressed'] is False and reply['needs_founder'] is False
+    assert reply['followup']['code'] == 'model_runner_unavailable'
+    assert reply['followup']['status'] == 'scheduled'
+    assert c.seen == []                                   # no work ran
+    assert c.db.execute("SELECT count(*) AS n FROM ago_agent_runs WHERE tenant_id=%s",
+                        (c.tenant,)).fetchone()['n'] == 0
+
+
+def test_ollama_probe_reads_only_the_installed_model_list():
+    import io
+    from ago.model_provider import OllamaLocalTextProvider
+
+    def opener(listing):
+        def open_(request, timeout):
+            assert request.get_method() == 'GET' and request.full_url.endswith('/api/tags')
+            if listing is None:
+                raise OSError('connection refused')
+            return io.BytesIO(json.dumps({'models': listing}).encode())
+        return open_
+
+    def provider(listing):
+        return OllamaLocalTextProvider(model='qwen2.5-coder:3b', opener=opener(listing))
+    assert provider([{'name': 'qwen2.5-coder:3b'}]).reachable() is True
+    assert provider([{'name': 'qwen2.5:3b'}]).reachable() is False
+    assert provider(None).reachable() is False
+
+
+def test_a_solved_blocker_is_closed_when_the_stage_moves_on(company):
+    """Old 'blocked' notes stayed open after the work had moved on, so the Founder
+    kept seeing problems that were already solved."""
+    c = company
+    stale = stage_progression.StageProgression(c.db).route_followup(
+        tenant_id=c.tenant, founder_id=c.info['founder_id'], project_id=c.id,
+        stage='discovery', code='stage_not_staffed', feedback='old problem',
+        owner_kind='ceo', blocked=True)
+    assert stale['status'] == 'blocked'
+    reply = post(c.client, c.advance, c.founder)
+    assert (reply['stage'], reply['progressed']) == ('discovery', True)
+    assert c.db.execute("SELECT status FROM ago_project_followups WHERE tenant_id=%s AND id=%s",
+                        (c.tenant, stale['id'])).fetchone()['status'] == 'resolved'
