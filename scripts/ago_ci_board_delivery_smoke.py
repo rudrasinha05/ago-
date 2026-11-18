@@ -39,6 +39,10 @@ class FixedBoardProvider:
             candidate["acceptance_checks"] = [
                 "  " + check + "  " for check in candidate["acceptance_checks"]
             ]
+            # The implementation deliverable includes technical documentation.
+            candidate["files"].append({
+                "path": "docs/arithmetic.md",
+                "content": "# Arithmetic\nSmall helpers checked by the CI smoke.\n"})
             return json.dumps(candidate)
         if "ROLE: RISK\n" in prompt and self.deny_risk:
             return "BOARD_RECOMMENDATION: DENY\nRISKS: Static fixture veto"
