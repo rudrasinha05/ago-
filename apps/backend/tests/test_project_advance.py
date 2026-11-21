@@ -17,7 +17,7 @@ import ago.ai_qa_review as ai_qa_review
 from ago.credit_domain import CreditBudgetMissing
 from ago.stage_progression import next_step
 from test_m7_http_postgres import case as case, post
-from test_stage_progression import STAGES, Company
+from test_stage_progression import STAGES, Company, formatted_draft
 
 DIR = Path(__file__).resolve().parents[3]/"scripts"
 sys.path.insert(0, str(DIR))
@@ -36,7 +36,7 @@ def company(case, monkeypatch):
         if c.failures:
             raise c.failures.pop(0)
         return {'kind': 'local_company_governed_handoff', 'handoffs': [
-            {'role': 'employee', 'employee_id': task.assignee_id, 'draft': 'stage deliverable'}]}
+            {'role': 'employee', 'employee_id': task.assignee_id, 'draft': formatted_draft(task.project_context.get('stage'))}]}
 
     monkeypatch.setattr(api_agents, 'optional_model_handlers',
                         lambda *a, **k: {'internal:brief': handler})

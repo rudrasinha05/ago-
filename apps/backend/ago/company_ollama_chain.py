@@ -5,7 +5,7 @@ import time
 
 from ago.company_engineering import (
     ENGINEERING_CANDIDATE_SCHEMA, EngineeringCandidateInvalid, assert_documented,
-    assert_discoverable_unittest, reviewed_candidate,
+    STAGE_FORMATS, assert_discoverable_unittest, reviewed_candidate, stage_format_rule,
 )
 
 ROLE_STAGES=(
@@ -240,6 +240,7 @@ def run_four_role_chain(
         "Produce the "+project_stage+" stage deliverable of this project: "
         +stage_deliverable
         +". Build on the approved earlier work below; do not restart discovery."
+        +(" "+stage_format_rule(project_stage) if stage_format_rule(project_stage) else "")
     )
     # A revision adds Board feedback; keep the whole prompt inside the 4000 bound.
     revision_notes=str(revision_notes or "")[:500]
@@ -448,6 +449,13 @@ def run_four_role_chain(
         if not output or len(output)>12000:
             raise RuntimeError("Local model did not return bounded role evidence")
         bounded=output[:950]
+        if role=="employee" and STAGE_FORMATS.get(project_stage):
+            # Keep the labelled lines QA checks; a long preamble must not push
+            # them past the stored 950 characters.
+            first=min((i for i in (output.upper().find(label+":")
+                       for label in STAGE_FORMATS[project_stage]) if i>=0), default=-1)
+            if first>0:
+                bounded=output[first:][:950]
         if code_author:
             # Untrusted model output must become an exact-file artifact before
             # it can be considered reviewable. Invalid content fails the task

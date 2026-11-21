@@ -70,3 +70,26 @@ def test_fit_prompt_trims_only_quoted_data_and_keeps_instructions():
     assert fitted.startswith("ROLE: CEO\nRULE: keep me\n") and fitted.endswith("REMINDER: vote first\n")
     with pytest.raises(ValueError):
         fit_prompt("instructions only " * 400)
+
+
+def test_a_long_preamble_never_pushes_the_quality_lines_out_of_the_stored_draft():
+    db = ApprovedProjectDb()
+    task = db.task()
+    task.project_context.update({"stage": "quality", "deliverable": "QA evidence",
+                                 "prior_work": [{"stage": "implementation", "draft": "code"}]})
+    lines = "QA PLAN: a\nTEST CASES: test_add\nTEST REPORT: 1 passed\nACCEPTANCE MAP: add -> test_add\nRELEASE BLOCKERS: none"
+
+    class Model:
+        prompts = []
+
+        def generate(self, prompt, **_):
+            self.prompts.append(prompt)
+            if "BOARD_ADVISORY:" in prompt:
+                return "BOARD_RECOMMENDATION: APPROVE\nDELIVERABLE: ok"
+            if "ROLE: EMPLOYEE" in prompt:
+                assert "FORMAT: start DELIVERABLE with one short line for each label" in prompt
+                return "DECISION: " + "long preamble " * 120 + "\nDELIVERABLE:\n" + lines
+            return "DECISION: plan"
+    result = run_four_role_chain(task=task, participants=participants(db), provider=Model())
+    draft = [h for h in result["handoffs"] if h["role"] == "employee"][-1]["draft"]
+    assert draft.startswith("QA PLAN: a") and "RELEASE BLOCKERS: none" in draft

@@ -16,7 +16,7 @@ from ago.company_engineering import (
     assert_documented, failure_summary, receipt_text, reviewed_candidate, run_candidate_tests,
 )
 from test_m7_http_postgres import case as case, post
-from test_stage_progression import STAGES, Company
+from test_stage_progression import STAGES, Company, formatted_draft
 
 SOURCE = "def add(a, b):\n    return a + b\n"
 TEST = ("import unittest\nfrom src.calc import add\n\n"
@@ -109,7 +109,7 @@ def company(case, monkeypatch):
     def handler(task):
         c.seen.append(dict(task.project_context))
         result = {'kind': 'local_company_governed_handoff', 'handoffs': [
-            {'role': 'employee', 'employee_id': task.assignee_id, 'draft': 'stage deliverable'}]}
+            {'role': 'employee', 'employee_id': task.assignee_id, 'draft': formatted_draft(task.project_context.get('stage'))}]}
         if task.project_context.get('stage') == 'implementation':
             result['engineering_candidate'] = candidate()
             result['engineering_candidate_status'] = 'syntax_reviewed'
@@ -286,3 +286,43 @@ def test_a_solved_blocker_is_closed_when_the_stage_moves_on(company):
     assert (reply['stage'], reply['progressed']) == ('discovery', True)
     assert c.db.execute("SELECT status FROM ago_project_followups WHERE tenant_id=%s AND id=%s",
                         (c.tenant, stale['id'])).fetchone()['status'] == 'resolved'
+
+
+def test_quality_without_its_labelled_lines_fails_with_the_exact_missing_labels(company):
+    """Live 2026-11-21: QA failed quality six times as 'incomplete, not detailed'.
+    Now the worker gets a fixed format and a missing line is named exactly."""
+    c = company
+    c.docker.outcomes = [PASS]
+    real = api_agents.optional_model_handlers
+
+    def partial(*a, **k):
+        handler = real(*a, **k)['internal:brief']
+
+        def run(task):
+            result = handler(task)
+            if task.project_context.get('stage') == 'quality':
+                result['handoffs'][0]['draft'] = 'QA PLAN: smoke test\nTEST CASES: test_add'
+            return result
+        return {'internal:brief': run}
+    api_agents.optional_model_handlers = partial
+    try:
+        reply, _ = steps_until(c, 'quality', 'qa', limit=60)
+    finally:
+        api_agents.optional_model_handlers = real
+    assert reply['qa_verdict'] == 'fail'
+    evidence = c.db.execute(
+        "SELECT q.evidence FROM ago_task_reviews q WHERE q.tenant_id=%s AND q.verdict='fail'",
+        (c.tenant,)).fetchone()['evidence']
+    assert 'missing these labelled lines: TEST REPORT, ACCEPTANCE MAP, RELEASE BLOCKERS' in evidence
+    quality_qa = next(p for p in c.qa_prompts if 'Stage: quality' in p)
+    assert 'FORMAT CHECK' in quality_qa and 'ACCEPTANCE MAP' in quality_qa
+
+
+def test_the_quality_worker_is_told_the_format_and_keeps_it_in_the_stored_draft():
+    from ago.company_engineering import missing_stage_labels, stage_format_rule
+    rule = stage_format_rule('quality')
+    assert all(label + ':' in rule for label in
+               ('QA PLAN', 'TEST CASES', 'TEST REPORT', 'ACCEPTANCE MAP', 'RELEASE BLOCKERS'))
+    assert stage_format_rule('architecture') == ''
+    assert missing_stage_labels('release', 'release package: a\nPR TITLE: b') == [
+        'PR DESCRIPTION', 'RELEASE NOTES', 'RECOMMENDATION']

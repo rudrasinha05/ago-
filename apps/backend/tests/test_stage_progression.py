@@ -18,6 +18,7 @@ import ago.ai_qa_review as ai_qa_review
 import ago.api_agents as api_agents
 from ago.agent_runtime import stage_deliverable
 from ago.company_chat import CompanyChat
+from ago.company_engineering import STAGE_FORMATS
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.credit_domain import CreditBudgetMissing
@@ -39,6 +40,12 @@ PEOPLE = (
     ('DevOps Release Specialist', 'Release Manager'),
 )
 
+
+
+def formatted_draft(stage):
+    """A worker draft in the fixed format quality and release must use."""
+    labels = STAGE_FORMATS.get(stage)
+    return '\n'.join(label + ': done' for label in labels) if labels else stage + ' deliverable'
 
 class Company:
     """One Founder-approved, CEO-staffed project and the steps a session can take."""
@@ -124,7 +131,7 @@ class Company:
             if fail is not None:
                 raise fail
             result = {'kind': 'local_company_governed_handoff', 'handoffs': [
-                {'role': 'employee', 'employee_id': assignee, 'draft': name+' deliverable'}]}
+                {'role': 'employee', 'employee_id': assignee, 'draft': formatted_draft(name)}]}
             if board_stop:
                 result.update(board_blocked=True, blocked_by_board_seat=board_seat,
                               board_block_reason='deny', board_recommendations=[
@@ -203,7 +210,7 @@ def test_qa_pass_opens_every_next_stage_until_the_project_is_done(company):
         assert c.seen[-1]['deliverable']
         # The run is given what the earlier stages delivered and QA passed.
         assert c.seen[-1]['prior_work'] == [
-            {'stage': done, 'draft': done+' deliverable'} for done in STAGES[:index]]
+            {'stage': done, 'draft': formatted_draft(done)} for done in STAGES[:index]]
         review = c.qa(name)
         assert review['verdict'] == 'pass' and review['qa_reviewer_auto_selected'] is True
         # The server-chosen tester has a QA role and did not build the work.

@@ -488,3 +488,36 @@ def project_test_evidence_text(candidate: dict, *, cases: int) -> str:
             "Docker, ALL PASSED: " + (", ".join(names)[:400] or "see tests/")
             + ". Files: " + ", ".join(paths)[:300] + ". Acceptance checks: "
             + "; ".join(checks)[:400] + ". (Recorded by AGO, not written by a model.)")[:1200]
+
+
+# One fixed, checkable shape per text-only later stage. The worker writes these
+# labelled lines and AI QA checks the same labels, so a small model cannot fail
+# the work for being "not detailed enough" (live 2026-11-21, quality stage).
+STAGE_FORMATS = {
+    "quality": ("QA PLAN", "TEST CASES", "TEST REPORT", "ACCEPTANCE MAP", "RELEASE BLOCKERS"),
+    "release": ("RELEASE PACKAGE", "PR TITLE", "PR DESCRIPTION", "RELEASE NOTES",
+                "RECOMMENDATION"),
+}
+STAGE_FORMAT_HINTS = {
+    "quality": ("TEST CASES: the test names in AGO TEST EVIDENCE; TEST REPORT: how many "
+                "AGO executed and that all passed; ACCEPTANCE MAP: each check -> its test; "
+                "RELEASE BLOCKERS: none, or each blocker"),
+    "release": ("RELEASE PACKAGE: the files; RECOMMENDATION: release or hold for the "
+                "owner, with one reason"),
+}
+
+
+def stage_format_rule(stage: str) -> str:
+    """The worker's required labelled lines for this stage ('' if free form)."""
+    labels = STAGE_FORMATS.get(stage)
+    if not labels:
+        return ""
+    return ("FORMAT: start DELIVERABLE with one short line for each label (under 900 "
+            "characters in total), in this order: " + "; ".join(label + ":" for label in labels) + " ("
+            + STAGE_FORMAT_HINTS[stage] + ").")
+
+
+def missing_stage_labels(stage: str, text: str) -> list[str]:
+    """Labels of this stage's format that the deliverable does not contain."""
+    upper = str(text or "").upper()
+    return [label for label in STAGE_FORMATS.get(stage, ()) if label + ":" not in upper]

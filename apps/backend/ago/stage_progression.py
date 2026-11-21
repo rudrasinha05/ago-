@@ -29,8 +29,9 @@ from uuid import UUID, uuid4, uuid5
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
-from ago.company_engineering import (
-    project_test_evidence_text, receipt_text, run_candidate_tests, test_runner_available,
+from ago.company_engineering import (  # STAGE_FORMATS/missing_stage_labels: used by AI QA
+    STAGE_FORMATS, missing_stage_labels, project_test_evidence_text, receipt_text,  # noqa: F401
+    run_candidate_tests, test_runner_available,
 )
 from ago.organization_store import OrganizationStore
 from ago.plan_execution import PlanExecution

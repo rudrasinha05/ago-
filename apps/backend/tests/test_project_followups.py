@@ -30,7 +30,7 @@ def test_qa_feedback_reaches_same_worker_and_resolves_only_after_qa(company):
     for _ in range(3):
         post(c.client, c.advance, c.founder)
     assert 'acceptance checklist' in c.seen[-1]['recovery_feedback']
-    assert 'stage deliverable' in c.seen[-1]['failed_work']
+    assert 'discovery deliverable' in c.seen[-1]['failed_work']
     assert followups(c)[0]['status'] == 'assigned'
     c.qa_answer = 'QA_VERDICT: PASS'
     post(c.client, c.advance, c.founder)

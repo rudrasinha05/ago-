@@ -20,7 +20,7 @@ from ago.credits import CreditBudget
 from ago.model_provider import OllamaLocalTextProvider
 from ago.quality import Verdict
 from ago.quality_store import QualityStore
-from ago.stage_progression import StageProgression
+from ago.stage_progression import STAGE_FORMATS, StageProgression, missing_stage_labels
 
 STAGES = ("discovery", "architecture", "implementation", "quality", "release")
 QA_ROLE = re.compile(r"\b(qa|quality|test(er|ing)?)\b", re.IGNORECASE)
@@ -73,6 +73,15 @@ def builder_ids(result) -> set[str]:
     }
 
 
+def worker_draft(result) -> str:
+    """The stage worker's own last draft (what the stage format applies to)."""
+    if not isinstance(result, dict):
+        return ""
+    drafts = [str(h.get("draft") or "") for h in result.get("handoffs") or []
+              if isinstance(h, dict) and h.get("role") == "employee"]
+    return drafts[-1] if drafts else ""
+
+
 def deliverable_text(result) -> str:
     """Bounded, quoted view of what the builders recorded."""
     if not isinstance(result, dict):
@@ -115,6 +124,11 @@ def qa_prompt(*, title: str, stage: str, acceptance: str, delivered: str) -> str
             "report. FAIL only if the deliverable does not give what the acceptance asks "
             "for (for example the QA plan or release steps).\n")
            if "AGO TEST EVIDENCE" in delivered else "")
+        + (("FORMAT CHECK: the stage deliverable must contain these labelled lines: "
+            + ", ".join(STAGE_FORMATS[stage]) + ". PASS when all are present, filled and "
+            "consistent with AGO TEST EVIDENCE. Saying it is 'incomplete' or 'not detailed "
+            "enough' is NOT a FAIL reason unless you name the label that is missing or "
+            "wrong.\n") if stage in STAGE_FORMATS else "")
         + (("RELEASE RULE: this stage PREPARES the GitHub review package and RECOMMENDS a "
             "release decision. The real PR and the owner's decision happen AFTER this "
             "stage; never FAIL because no PR exists, GitHub is not connected or the owner "
@@ -285,6 +299,17 @@ class AiQaReview:
                              if not line.strip().upper().startswith("QA_VERDICT:"))
             response = (tests["text"] + "\n" + kept[:2400]
                         + "\nAGO RULE: the isolated tests did not pass, so this review is "
+                          "recorded as FAIL.\nQA_VERDICT: FAIL")[:MAX_RESPONSE]
+            verdict = "fail"
+        missing = missing_stage_labels(stage, worker_draft(row["run_result"]))
+        if stage in STAGE_FORMATS and missing:
+            # AGO rule: a later stage without its labelled lines is incomplete in
+            # a way the worker can fix exactly; never a vague "not detailed".
+            kept = "\n".join(line for line in response.splitlines()
+                             if not line.strip().upper().startswith("QA_VERDICT:"))
+            response = ("AGO FORMAT CHECK: the deliverable is missing these labelled "
+                        "lines: " + ", ".join(missing) + ".\n" + kept[:2400]
+                        + "\nAGO RULE: required lines are missing, so this review is "
                           "recorded as FAIL.\nQA_VERDICT: FAIL")[:MAX_RESPONSE]
             verdict = "fail"
         if verdict == "unverified" and auto_selected and attempts + 1 >= UNCLEAR_QA_LIMIT:
