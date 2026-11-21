@@ -326,3 +326,24 @@ def test_the_quality_worker_is_told_the_format_and_keeps_it_in_the_stored_draft(
     assert stage_format_rule('architecture') == ''
     assert missing_stage_labels('release', 'release package: a\nPR TITLE: b') == [
         'PR DESCRIPTION', 'RELEASE NOTES', 'RECOMMENDATION']
+
+
+def test_local_model_requests_fit_their_context_and_qwen3_answers_without_thinking():
+    """2026-11-21: num_ctx 2048 could not hold a 4000-character prompt plus a
+    1024-token answer, so Ollama dropped the prompt's start (the role and rules).
+    qwen3:4b is supported: thinking is switched off and any think block removed."""
+    import io
+    from ago.model_provider import LOCAL_CONTEXT_TOKENS, OllamaLocalTextProvider
+    sent = []
+
+    def opener(request, timeout):
+        sent.append(json.loads(request.data))
+        return io.BytesIO(json.dumps({"done": True, "response":
+                                      "<think>long private reasoning</think>\nQA_VERDICT: PASS"}).encode())
+    for model, thinks in (("qwen3:4b", False), ("qwen2.5-coder:3b", None)):
+        answer = OllamaLocalTextProvider(model=model, opener=opener,
+                                         max_output_tokens=1024).generate("p" * 3990)
+        assert answer == "QA_VERDICT: PASS"
+        body = sent[-1]
+        assert body["options"]["num_ctx"] == LOCAL_CONTEXT_TOKENS >= 4096
+        assert body.get("think") is thinks
