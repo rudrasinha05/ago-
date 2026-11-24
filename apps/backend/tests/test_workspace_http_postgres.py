@@ -67,3 +67,42 @@ def test_live_workspace_terminal_uses_offline_container(company):
     assert response.status_code == 200, response.text
     assert response.json()["exit_code"] == 0
     assert "workspace output" in response.json()["output"]
+
+
+def test_failed_docker_revision_can_repair_once_and_retest(company, monkeypatch):
+    import ago.model_handlers as models
+    import ago.stage_progression as service
+    import json
+    from ago.company_engineering import run_candidate_tests
+    from test_stage_candidate_tests import FAIL
+
+    monkeypatch.setattr(service, "run_candidate_tests", lambda value, **kw:
+                        run_candidate_tests(value, runner=company.docker, **kw))
+    monkeypatch.setenv("AGO_LOCAL_REPAIR_PROPOSALS", "true")
+    monkeypatch.setenv("AGO_LLM_MODEL", "local")
+    monkeypatch.setenv("AGO_LLM_PROVIDER", "ollama_local")
+    monkeypatch.setenv("AGO_ENABLE_LOCAL_MODELS", "true")
+    response, _ = steps_until(company, "implementation", "run")
+    path = f"/v1/agents/projects/{company.id}/tasks/{response['task_id']}/workspace"
+    current = company.client.get(path, headers=company.founder).json()
+    source = next(f for f in current["files"] if f["path"].startswith("src/"))
+
+    class LocalModel:
+        def reachable(self):
+            return True
+
+        def generate(self, prompt, **kwargs):
+            return json.dumps({"files": [{**source, "content": source["content"] + "\n# fix\n"}]})
+
+    monkeypatch.setattr(models, "OllamaLocalTextProvider", lambda **kw: LocalModel())
+    request = {k: current[k] for k in ("run_id", "revision", "candidate_sha256")}
+    request["attempt_id"] = str(uuid4())
+    company.docker.outcomes = [FAIL, PASS]
+    test = company.client.post(path+"/tests", headers=company.founder, json=request)
+    assert test.json()["receipt"]["status"] == "failed", test.text
+    url = path + "/tests/" + request["attempt_id"] + "/repair"
+    repaired = company.client.post(url, headers=company.founder)
+    assert repaired.status_code == 200, repaired.text
+    assert repaired.json()["workspace"]["revision"] == 1
+    assert repaired.json()["test"]["receipt"]["tests_passed"] is True
+    assert company.client.post(url, headers=company.founder).status_code == 409

@@ -498,3 +498,31 @@ def stop_terminal(project_id: UUID, task_id: UUID, attempt_id: UUID,
                   actor: Principal = Depends(authenticated),
                   repositories: RepositoryScope = Depends(repository_scope)):
     return _workspace(actor, repositories, project_id, task_id, {}, terminal=True, stop=str(attempt_id))
+
+
+@router.post("/projects/{project_id}/tasks/{task_id}/workspace/tests/{attempt_id}/repair")
+def repair_workspace(project_id: UUID, task_id: UUID, attempt_id: UUID,
+                     actor: Principal = Depends(authenticated),
+                     repositories: RepositoryScope = Depends(repository_scope)):
+    from ago.model_handlers import workspace_repair
+
+    allowed(repositories, actor, "agent:dispatch")
+    current = _workspace(actor, repositories, project_id, task_id)
+    runs = _workspace(actor, repositories, project_id, task_id, tests=True)["attempts"]
+    failed = next((r for r in runs if str(r["attempt_id"]) == str(attempt_id)
+                   and r["revision"] == current["revision"]), None)
+    if not failed or not failed["receipt"]:
+        raise HTTPException(409, "A finished test of the current revision is required")
+    try:
+        files = workspace_repair(current, failed["receipt"], repositories=repositories,
+                                 actor=actor, task_id=task_id, attempt_id=attempt_id)
+    except (PermissionError, ValueError) as exc:
+        translate_error(exc)
+    except (OSError, RuntimeError) as exc:
+        raise HTTPException(503, "Local repair inference unavailable") from exc
+    revised = _workspace(actor, repositories, project_id, task_id, {
+        "run_id": current["run_id"], "expected_revision": current["revision"], "files": files})
+    test = {k: revised[k] for k in ("run_id", "revision", "candidate_sha256")}
+    test["attempt_id"] = str(uuid4())
+    return {"workspace": revised, "test": _workspace(actor, repositories, project_id,
+                                                     task_id, test, tests=True)}
