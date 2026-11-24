@@ -1495,3 +1495,58 @@ test('Board members have call names; the Founder asks JARVIS and hears the recor
  expect(calls.filter(x=>/\/advance$|\/run$|\/decision$|\/approve/.test(x.path))).toEqual([]);
  expect(errors).toEqual([]);
 });
+
+test('AI Models: the Founder adds a cloud key, tests it and routes code writing to it; the key never comes back',async({page})=>{
+ const {calls,errors}=await fixtures(page);
+ const key='gsk_browser_fixture_key_9876';
+ const providers=['openai','anthropic','gemini','groq'].map(provider=>({provider,label:provider,saved:false,model:null,key_hint:null,test_status:null,tested_at:null,last_error:null}));
+ const view={kind:'ago_cloud_model_settings_v1',available:true,stored_on:'this computer (~/.ago), encrypted',providers,
+  routes:{code:null,qa:null,chat:null},monthly_call_cap:100,usage:{month:'2026-11',calls:0,input_tokens:0,output_tokens:0,by_provider:{}}};
+ const groq=()=>view.providers.find(p=>p.provider==='groq');
+ const bodies=[];
+ await page.route(/\/v1\/organization\/company\/cloud-model/,async route=>{
+  const request=route.request(),path=new URL(request.url()).pathname,method=request.method(),body=request.postDataJSON();
+  bodies.push({path,method,body});
+  if(path==='/v1/organization/company/cloud-models/groq'&&method==='PUT')Object.assign(groq(),{saved:true,model:body.model,key_hint:'…'+body.api_key.slice(-4),test_status:null});
+  if(path==='/v1/organization/company/cloud-models/groq/models')return route.fulfill({json:{provider:'groq',models:['llama-big','gpt-oss-big']}});
+  if(path==='/v1/organization/company/cloud-models/groq/test'){Object.assign(groq(),{test_status:'ok'});view.usage.calls=1;
+   return route.fulfill({json:{...view,test:{provider:'groq',ok:true,code:null}}});}
+  if(path==='/v1/organization/company/cloud-model-routes'){view.routes={code:body.code,qa:body.qa,chat:body.chat};view.monthly_call_cap=body.monthly_call_cap;}
+  return route.fulfill({json:view});
+ });
+ await login(page);
+ await openOrganizationLanding(page);
+ await page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:'AI Models'}).click();
+ const panel=page.getByRole('region',{name:'AI models'});
+ await expect(panel.getByRole('heading',{name:'AI models'})).toBeVisible();
+ await expect(panel.getByRole('listitem',{name:'Groq'})).toContainText('Not added');
+ const card=panel.getByRole('listitem',{name:'Groq'});
+ await card.getByLabel('API key').fill(key);
+ await card.getByLabel('Model').fill('llama-big');
+ await card.getByRole('button',{name:'Save'}).click();
+ await expect(panel.getByRole('status')).toContainText('Groq saved. Press Test');
+ await expect(card.getByLabel('API key')).toHaveValue('');
+ await expect(card.getByLabel('API key')).toHaveAttribute('placeholder','Saved …9876 · paste to replace');
+ expect(bodies.find(b=>b.method==='PUT'&&b.path.endsWith('/groq')).body).toEqual({model:'llama-big',api_key:key});
+ await card.getByRole('button',{name:'Load models'}).click();
+ await expect(panel.getByRole('status')).toContainText('2 models found for Groq');
+ // Before the test call the key cannot be chosen for work.
+ const code=panel.getByLabel(/Code writing/);
+ await expect(code.locator('option')).toHaveCount(1);
+ await card.getByRole('button',{name:'Test Groq'}).click();
+ await expect(card).toContainText('Working');
+ await expect(panel.getByLabel('Cloud usage this month')).toContainText('1 of 100 cloud calls');
+ await code.selectOption('groq');
+ await panel.getByLabel(/Monthly limit/).fill('40');
+ await panel.getByRole('button',{name:'Save choices'}).click();
+ await expect(panel.getByRole('status')).toContainText('AGO uses these models from the next AI task');
+ await expect(panel.getByRole('list',{name:'Now in use'})).toContainText('Code writing: Groq (llama-big)');
+ await expect(panel.getByRole('list',{name:'Now in use'})).toContainText('QA review: Local model (Ollama)');
+ expect(bodies.find(b=>b.path==='/v1/organization/company/cloud-model-routes').body).toEqual({code:'groq',qa:null,chat:null,monthly_call_cap:40});
+ // The key went out once, in the save body only; nothing on the page shows it.
+ expect(bodies.filter(b=>JSON.stringify(b.body||{}).includes(key)).length).toBe(1);
+ await expect(page.locator('body')).not.toContainText(key);
+ expect(calls.filter(x=>/\/run$/.test(x.path))).toEqual([]);
+ await page.screenshot({path:test.info().outputPath('ai-models.png'),fullPage:true});
+ await accessibility(page);expect(errors).toEqual([]);
+});

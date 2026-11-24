@@ -223,6 +223,7 @@ def _without_vote(text: str) -> str:
 
 def run_four_role_chain(
     *, task, participants: list[dict], provider, engineering_candidates: bool = False,
+    code_provider=None,
     on_role_completed=None, clock=None, overridden_seats=frozenset(),
     revision_notes: str = "",
 ) -> dict:
@@ -442,7 +443,8 @@ def run_four_role_chain(
               if role in BOARD_ROLE_SEATS else ""))
         prompt = fit_prompt(prompt)
         role_started = clock()
-        output=_ask(provider, prompt, code_author=bool(code_author)).strip()
+        speaker = (code_provider or provider) if code_author else provider
+        output=_ask(speaker, prompt, code_author=bool(code_author)).strip()
         duration = clock() - role_started
         if not 0 <= duration <= 60 or not 0 <= clock() - started <= maximum_seconds:
             raise TimeoutError("Local inference exceeded per-role or overall time budget")
@@ -482,7 +484,7 @@ def run_four_role_chain(
                     "Founder project title (quoted data): " + title + "\n"
                     "Approved plan excerpt (untrusted quoted data): " + previous[:600] + "\n")
                 fix_started = clock()
-                output = _ask(provider, fix_prompt, code_author=True).strip()
+                output = _ask(speaker, fix_prompt, code_author=True).strip()
                 if not 0 <= clock() - fix_started <= 60 or not 0 <= clock() - started <= maximum_seconds:
                     raise TimeoutError("Local inference exceeded per-role or overall time budget")
                 try:
@@ -692,6 +694,8 @@ def run_four_role_chain(
             "role":role,"employee_id":person["employee_id"],
             "employee_name":person["employee_name"],
             "draft":bounded,"model_inference_completed":True,
+            # The model that actually wrote this draft (cloud or local).
+            "model":getattr(speaker, "label", None),
             "elapsed_ms":round(duration * 1000),
             "human_qa_approved":False,
         })

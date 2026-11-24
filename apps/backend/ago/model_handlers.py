@@ -9,7 +9,13 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.credits import CreditBudget
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
-from ago.model_provider import OllamaLocalTextProvider, ResponsesTextProvider
+from ago.model_provider import (
+    CLOUD_PROVIDERS, CloudProviderError, FallbackProvider, OllamaLocalTextProvider,
+    ProviderVault, ResponsesTextProvider, cloud_models_available,
+)
+
+# Re-exported for the Founder's cloud model settings API (AI-001).
+__all__ = ["CLOUD_PROVIDERS", "CloudProviderError", "ProviderVault", "cloud_models_available"]
 
 
 
@@ -258,6 +264,8 @@ def optional_model_handlers(
             # Charge BEFORE each localhost call; an attempted request still
             # costs one virtual unit, even if the model times out or refuses.
             class MeteredLocalProvider:
+                label = "ollama:" + model
+
                 def __init__(self):
                     self.attempts = 0
 
@@ -285,8 +293,17 @@ def optional_model_handlers(
             overrides = repositories.resolve(CompanyOllamaChainQueries).founder_board_overrides(
                 tenant_id=actor.tenant_id, intake_id=str(task.project_context["intake_id"]),
             )
+            local = MeteredLocalProvider()
+            code_provider = None
+            cloud = (ProviderVault().for_route(actor.tenant_id, "code")
+                     if engineering_enabled else None)
+            if cloud is not None:
+                code_provider = FallbackProvider(
+                    CreditedCloudProvider(cloud, repositories, actor, task.id), local,
+                    fallback_label=local.label)
             return run_four_role_chain(
-                task=task, participants=participants, provider=MeteredLocalProvider(),
+                task=task, participants=participants, provider=local,
+                code_provider=code_provider,
                 engineering_candidates=engineering_enabled,
                 on_role_completed=record_role_completed,
                 overridden_seats=overrides,
@@ -296,6 +313,30 @@ def optional_model_handlers(
 
         handlers["internal:brief"] = governed_company_handoff
     return handlers
+
+
+class CreditedCloudProvider:
+    """A Founder-chosen cloud model that also spends one virtual AGO credit per
+    call (the provider bills real money separately, within the monthly cap)."""
+
+    supports_response_schema = True
+
+    def __init__(self, cloud, repositories, actor, task_id):
+        self.cloud, self.repositories, self.actor = cloud, repositories, actor
+        self.task_id, self.attempts = task_id, 0
+
+    @property
+    def label(self) -> str:
+        return self.cloud.label
+
+    def generate(self, prompt, **options):
+        self.attempts += 1
+        self.repositories.resolve(CreditBudget).charge(
+            tenant_id=self.actor.tenant_id, actor_id=self.actor.subject,
+            operation_key=f"cloud:{self.task_id}:call:{self.attempts}",
+            amount="1", category="paid_model_attempt",
+        )
+        return self.cloud.generate(prompt, **options)
 
 
 def respond_company_chat(*, actor, store, message_id: int, employee_id: str,
@@ -309,15 +350,25 @@ def respond_company_chat(*, actor, store, message_id: int, employee_id: str,
     if "founder" not in actor.roles:
         raise PermissionError("Founder authority required for local AI chat response")
     if provider is None:
-        if (os.getenv("AGO_LLM_PROVIDER") != "ollama_local"
-                or os.getenv("AGO_ENABLE_LOCAL_MODELS") != "true"
-                or os.getenv("AGO_ENABLE_PAID_MODELS") == "true"):
+        local_ready = (os.getenv("AGO_LLM_PROVIDER") == "ollama_local"
+                       and os.getenv("AGO_ENABLE_LOCAL_MODELS") == "true"
+                       and os.getenv("AGO_ENABLE_PAID_MODELS") != "true")
+        cloud = ProviderVault().for_route(actor.tenant_id, "chat")
+        if local_ready:
+            model = os.getenv("AGO_LLM_MODEL") or "qwen2.5-coder:1.5b"
+            provider = OllamaLocalTextProvider(
+                model=model, timeout_seconds=60,max_output_tokens=384,keep_alive="90s",
+            )
+            provider.label = "ollama:" + model
+            if cloud is not None:
+                # The Founder chose a cloud model for chat; the local model
+                # answers only if that call fails or the monthly cap is reached.
+                provider = FallbackProvider(cloud, provider, fallback_label=provider.label)
+        elif cloud is not None:
+            provider = cloud
+        else:
             return {"status": "local_model_disabled", "message_id": message_id,
                     "ai_acknowledged": False}
-        provider = OllamaLocalTextProvider(
-            model=os.getenv("AGO_LLM_MODEL") or "qwen2.5-coder:1.5b",
-            timeout_seconds=60,max_output_tokens=384,keep_alive="90s",
-        )
     claim=store.claim_ai_chat_reply(actor,message_id,employee_id)
     if claim["status"] != "claimed":
         return {**claim,"ai_acknowledged":claim["status"] == "already_replied"}
@@ -363,9 +414,12 @@ def respond_company_chat(*, actor, store, message_id: int, employee_id: str,
                 if candidate in allowed_ids:
                     delegated=candidate
                 answer=(answer[:marker.start()]+answer[marker.end():]).strip()
+        used=str(getattr(provider,"label","") or "")
         result=store.commit_ai_chat_reply(
             actor,message_id,employee_id,claim["claim_token"],answer,
-            delegate_employee_id=delegated)
+            delegate_employee_id=delegated,
+            # Only a cloud answer is labelled differently from a local one.
+            **({"model_label":used} if used and not used.startswith("ollama:") else {}))
         return {**result,"ai_acknowledged":True}
     except Exception:
         # Error text can contain local machine paths, secrets or quoted user

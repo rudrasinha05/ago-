@@ -220,3 +220,39 @@ def test_quality_qa_is_told_agos_executed_tests_are_the_test_report():
     assert "EVIDENCE RULE" not in qa_prompt(title="t", stage="quality", acceptance="a",
                                              delivered="a plan without AGO evidence")
 
+
+
+def test_founder_chosen_cloud_qa_model_reviews_and_the_receipt_names_it(case, monkeypatch):
+    """AI-001: QA by the Founder's cloud model is recorded under that model, as a paid attempt."""
+    client, headers, info = case
+    db, tenant, founder = info['db'], info['tenant'], headers['founder']
+    project, task_id, people = _completed_discovery(client, headers, info, monkeypatch)
+
+    class Cloud:
+        label = 'openai:gpt-test'
+        prompts = []
+
+        def generate(self, prompt, **options):
+            Cloud.prompts.append(prompt)
+            return 'FINDINGS:\n- checklist present\nQA_VERDICT: PASS'
+
+    class Vault:
+        def for_route(self, tenant_id, route):
+            assert (tenant_id, route) == (tenant, 'qa')
+            return Cloud()
+
+    monkeypatch.setattr(ai_qa_review, 'ProviderVault', Vault)
+    _use_model(monkeypatch, 'QA_VERDICT: FAIL')           # local must not be used
+    endpoint = BASE+'/projects/'+project['id']+'/stages/discovery/ai-qa'
+    result = post(client, endpoint, founder, {'qa_employee_id': people['qa'], 'operation_key': str(uuid4())})
+    assert result['verdict'] == 'pass' and result['model'] == 'openai:gpt-test'
+    assert len(Cloud.prompts) == 1
+    receipt = db.execute("SELECT model FROM ago_ai_qa_reviews WHERE tenant_id=%s AND task_id=%s",
+                         (tenant, task_id)).fetchone()
+    assert receipt['model'] == 'openai:gpt-test'
+    evidence = db.execute("SELECT evidence FROM ago_task_reviews WHERE tenant_id=%s AND task_id=%s",
+                          (tenant, task_id)).fetchone()['evidence']
+    assert 'model openai:gpt-test' in evidence and 'local model' not in evidence
+    usage = db.execute("SELECT category FROM ago_credit_usage WHERE tenant_id=%s ORDER BY created_at DESC LIMIT 1",
+                       (tenant,)).fetchone()
+    assert usage['category'] == 'paid_model_attempt'

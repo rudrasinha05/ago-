@@ -904,7 +904,7 @@ section and a founder amendment indicates traceability, not a reason to merge.
 
 ### AI — LLM orchestration and actual worker execution
 - [~] AI-001 — Support explicit authorized connectors for Ollama, OpenAI, Gemini, Claude and future providers.
-  - *PARTIAL* — Ollama connector live; OpenAI/Gemini/Claude paths exist but are disabled
+  - *PARTIAL* — Ollama connector live. OpenAI, Claude, Gemini and Groq connectors built (Founder enters keys in AI Models; tested key routed to code writing, QA review or Board chat; monthly call limit; Ollama fallback). Evidence: tests/test_cloud_model_providers.py, tests/test_cloud_model_api.py, Playwright 'AI Models: the Founder adds a cloud key…' (fake HTTP only). Not yet proved with a real key on the Founder's laptop
 - [x] AI-002 — Consumer ChatGPT/Claude quota is not a transferable token balance for another provider.
   - *DONE* — Consumer quota is never treated as a provider balance
 - [x] AI-003 — Seven distinct Board/PM/worker identities can run their bounded sequential inference roles with receipts.

@@ -5,7 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, repository_scope, translate_error
-from ago.model_handlers import respond_company_chat
+from ago.model_handlers import (
+    CLOUD_PROVIDERS, CloudProviderError, ProviderVault, cloud_models_available,
+    respond_company_chat,
+)
 from ago.repository_ports import (
     AiQaReviewPort, CompanyChatPort, PlanExecutionPort, StageProgressionPort,
 )
@@ -652,3 +655,93 @@ def create_approved_market_project(signal_id: UUID,actor=Depends(authenticated),
             actor,str(signal_id))
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)
+
+
+# --- Founder's cloud model settings (AI-001) -------------------------------
+# Keys are entered by the Founder, stored encrypted on this computer and are
+# write-only: no response ever contains a key. A key does work only after a
+# successful test call and the Founder routing a kind of work to it.
+
+class CloudModelKey(StrictInput):
+    model: str = Field(min_length=1, max_length=120)
+    api_key: str | None = Field(default=None, max_length=1000)
+
+
+class CloudModelRoutes(StrictInput):
+    code: str | None = None
+    qa: str | None = None
+    chat: str | None = None
+    monthly_call_cap: int = Field(ge=0, le=5000)
+
+
+def _cloud_founder(repositories, actor, *, write: bool = False) -> None:
+    allowed(repositories, actor, "approval:founder")
+    if write and not cloud_models_available():
+        raise HTTPException(409, "Cloud model keys are entered only on the Founder's local AGO")
+
+
+def _known_provider(provider: str) -> str:
+    if provider not in CLOUD_PROVIDERS:
+        raise HTTPException(404, "Unknown cloud model provider")
+    return provider
+
+
+@router.get("/cloud-models")
+def cloud_models(actor=Depends(authenticated),
+                 repositories=Depends(repository_scope)):
+    _cloud_founder(repositories, actor)
+    return ProviderVault().view(actor.tenant_id)
+
+
+@router.put("/cloud-models/{provider}")
+def save_cloud_model(provider: str, body: CloudModelKey,
+                     actor=Depends(authenticated),
+                     repositories=Depends(repository_scope)):
+    _cloud_founder(repositories, actor, write=True)
+    try:
+        return ProviderVault().save(actor.tenant_id, _known_provider(provider),
+                                    model=body.model, api_key=body.api_key)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@router.delete("/cloud-models/{provider}")
+def remove_cloud_model(provider: str, actor=Depends(authenticated),
+                       repositories=Depends(repository_scope)):
+    _cloud_founder(repositories, actor, write=True)
+    return ProviderVault().remove(actor.tenant_id, _known_provider(provider))
+
+
+@router.post("/cloud-models/{provider}/test")
+def test_cloud_model(provider: str, actor=Depends(authenticated),
+                     repositories=Depends(repository_scope)):
+    _cloud_founder(repositories, actor, write=True)
+    try:
+        return ProviderVault().test(actor.tenant_id, _known_provider(provider))
+    except LookupError:
+        raise HTTPException(404, "Save a key for this provider first") from None
+
+
+@router.get("/cloud-models/{provider}/models")
+def cloud_model_names(provider: str, actor=Depends(authenticated),
+                      repositories=Depends(repository_scope)):
+    _cloud_founder(repositories, actor, write=True)
+    try:
+        names = ProviderVault().models(actor.tenant_id, _known_provider(provider))
+    except LookupError:
+        raise HTTPException(404, "Save a key for this provider first") from None
+    except CloudProviderError as exc:
+        raise HTTPException(502, "Could not read the model list: " + exc.code) from None
+    return {"provider": provider, "models": names}
+
+
+@router.put("/cloud-model-routes")
+def route_cloud_models(body: CloudModelRoutes, actor=Depends(authenticated),
+                       repositories=Depends(repository_scope)):
+    _cloud_founder(repositories, actor, write=True)
+    try:
+        return ProviderVault().set_routes(
+            actor.tenant_id, {"code": body.code, "qa": body.qa, "chat": body.chat},
+            body.monthly_call_cap)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None

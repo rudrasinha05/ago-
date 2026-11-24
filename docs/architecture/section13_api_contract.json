@@ -319,7 +319,13 @@
     "POST /v1/organization/company/projects/{project_id}/stages/{stage}/ai-qa": "59d4858ad0b1992c902e24485b32e19101b0acef6235178a14537416914b164f",
     "POST /v1/organization/company/projects/{project_id}/stages/{stage}/board-override": "c1ea5d66fd6372f83c000771e2f324bc4c263aa5a10077fd3fbf53a235c18846",
     "POST /v1/organization/company/projects/{project_id}/continue": "b25f4e45eee4a5e56d91da0cc755399dd9d3b096cf2483327a0e22ad0588af91",
-    "POST /v1/agents/projects/{project_id}/advance": "b2ef4716ff0ecb6c1d6eac1d5edac7636821c7c5e047c137fa12765c24578460"
+    "POST /v1/agents/projects/{project_id}/advance": "b2ef4716ff0ecb6c1d6eac1d5edac7636821c7c5e047c137fa12765c24578460",
+    "PUT /v1/organization/company/cloud-model-routes": "fd312821b463a3e5797752fe5b539b42e632f050c995b93720e0334bd4026078",
+    "GET /v1/organization/company/cloud-models": "0207d93c187c177f0db533b3756678030c645219d3306385598d4c9a90ee28ed",
+    "DELETE /v1/organization/company/cloud-models/{provider}": "16b3a2fd1ae7964f4bb7232ea1906065fa3eb72237f01102395add98b1f6e1cd",
+    "PUT /v1/organization/company/cloud-models/{provider}": "86782066692107190eaf4050ed58242da01195437467817426fc8877b8b356ca",
+    "GET /v1/organization/company/cloud-models/{provider}/models": "54407c4e3691cd40f05559e0551ae77fd4b44756569d88e06fee88bb5955374f",
+    "POST /v1/organization/company/cloud-models/{provider}/test": "659dfdd6beb781c5c461fea44b669b16bc1d17a1c15b21e4f58e5d733d13cf16"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",
@@ -463,6 +469,8 @@
     "ProjectManagerInput": "fad55695e618731d8ad4eb8c9b4ba421df6c84fff8d20dd14d8187dbcea56069",
     "StageRecoveryInput": "2eaa1649c96a67b8ecdd078e0d7433e4650f846cf0f7cb23b878a107984127ae",
     "StageAiQaInput": "3410f67813364a817a751eea8f0396d87090402eda67369717be0eb3d442d6a6",
-    "BoardOverrideInput": "d44e3146eb59a4d16ae645dad21fb3dc942d02bb81f25e3f41756faa4ae9d13e"
+    "BoardOverrideInput": "d44e3146eb59a4d16ae645dad21fb3dc942d02bb81f25e3f41756faa4ae9d13e",
+    "CloudModelKey": "c67d4f1c39e3152f31cb2a7299cb74826d3b53dc4dc29d087d15ed4ac7c061de",
+    "CloudModelRoutes": "852ea639e3073d2f9f6e4c7a4c1f1a0d30fac2b9bd311ac5a289f2a0029849c6"
   }
 }

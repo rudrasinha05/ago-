@@ -350,7 +350,7 @@ class GlobalChatOrders:
                     'eligible_delegates':delegates}
 
     def commit_ai_reply(self, actor, message_id, employee_id, token, text,
-                        delegate_employee_id=None):
+                        delegate_employee_id=None, model_label=None):
         """Append actual local-model text and its ACK atomically."""
         if 'founder' not in actor.roles:
             raise PermissionError("Founder authority required")
@@ -414,8 +414,10 @@ class GlobalChatOrders:
                     (tenant_id,channel,author_name,body,reply_to,kind,employee_id)
                 VALUES (%s,'global',%s,%s,%s,'message',%s)
                 RETURNING id
-            """,(actor.tenant_id,'AGO local AI · '+row['name'],
-                 'Local model reply (not task execution/QA evidence):\n'+text,
+            """,(actor.tenant_id,('AGO AI · ' if model_label else 'AGO local AI · ')+row['name'],
+                 ('AI model reply ('+model_label[:80]+'; not task execution/QA evidence):\n'
+                  if model_label else
+                  'Local model reply (not task execution/QA evidence):\n')+text,
                  message_id,employee_id)).fetchone()
             self.db.execute("""
                 UPDATE ago_chat_work_items
@@ -431,12 +433,14 @@ class GlobalChatOrders:
                   (tenant_id,channel,author_name,body,kind,employee_id)
                 VALUES (%s,%s,'AGO AI response event',%s,'status',%s)
             """,(actor.tenant_id,'employee:'+employee_id,
-                 'Local AI reply #'+str(message['id'])+' recorded for Global Chat '
+                 ('AI reply ('+model_label[:80]+') #' if model_label else 'Local AI reply #')
+                 +str(message['id'])+' recorded for Global Chat '
                  'message #'+str(message_id)+'. Task execution and QA not claimed.',
                  employee_id))
             return {'status':'responded','message_id':message_id,
                     'employee_id':employee_id,'ack_message_id':message['id'],
-                    'source':'local_ollama_model','task_executed':False,
+                    'source':'cloud_model' if model_label else 'local_ollama_model',
+                    'model':model_label,'task_executed':False,
                     'qa_verified':False,'delegated_employee_id':delegated}
 
     def abort_ai_reply(self, actor, message_id, employee_id, token):
@@ -704,10 +708,11 @@ class CompanyChat:
 
     def commit_ai_chat_reply(self, actor, message_id: int, employee_id: str,
                              claim_token: str, answer: str,
-                             delegate_employee_id: str | None = None) -> dict:
+                             delegate_employee_id: str | None = None,
+                             model_label: str | None = None) -> dict:
         return GlobalChatOrders(self.db).commit_ai_reply(
             actor,message_id,employee_id,claim_token,answer,
-            delegate_employee_id=delegate_employee_id)
+            delegate_employee_id=delegate_employee_id,model_label=model_label)
 
     def abort_ai_chat_reply(self, actor, message_id: int, employee_id: str,
                             claim_token: str) -> None:

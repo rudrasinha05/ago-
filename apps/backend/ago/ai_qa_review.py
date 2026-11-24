@@ -17,7 +17,9 @@ from uuid import UUID, uuid4
 from ago.ai_qa_review_queries import AiQaReviewQueries
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.credits import CreditBudget
-from ago.model_provider import OllamaLocalTextProvider
+from ago.model_provider import (
+    CLOUD_PROVIDERS, FallbackProvider, OllamaLocalTextProvider, ProviderVault,
+)
 from ago.quality import Verdict
 from ago.quality_store import QualityStore
 from ago.stage_progression import STAGE_FORMATS, StageProgression, missing_stage_labels
@@ -38,6 +40,20 @@ def local_qa_provider():
         model=model, timeout_seconds=60, max_output_tokens=512, keep_alive="90s",
     )
     return provider, model
+
+
+def qa_provider(tenant_id: str):
+    """(provider, model) for this review: the Founder's chosen cloud QA model
+    first (local model as fallback), otherwise the local model, else None.
+    ``provider.label`` names the model that actually answered."""
+    local = local_qa_provider()
+    cloud = ProviderVault().for_route(tenant_id, "qa")
+    if cloud is None:
+        return local
+    if local is None:
+        return cloud, cloud.label
+    provider = FallbackProvider(cloud, local[0], fallback_label=local[1])
+    return provider, cloud.label
 
 
 def qa_verdict(text: str) -> str:
@@ -226,7 +242,7 @@ class AiQaReview:
             UUID(qa_employee_id)
         if stage not in STAGES:
             raise ValueError("Unknown project stage")
-        configured = local_qa_provider()
+        configured = qa_provider(tenant_id)
         if configured is None:
             raise PermissionError(
                 "AI QA needs the local AI model (start AGO with START_AGO.cmd)"
@@ -283,13 +299,16 @@ class AiQaReview:
         usage = self.repositories.resolve(CreditBudget).charge(
             tenant_id=tenant_id, actor_id=founder_id,
             operation_key="ai-qa:" + task_id + ":" + operation_key,
-            amount="1", category="local_model_attempt",
+            amount="1", category=("paid_model_attempt" if model.split(":")[0] in CLOUD_PROVIDERS
+                                  else "local_model_attempt"),
         )
         if not usage["charged"]:
             raise ValueError("This AI QA request was already made; use a new request")
         output = (provider.generate(prompt) or "").strip()
         if not output:
             raise RuntimeError("Local model returned no QA answer")
+        # Receipt names the model that answered (cloud, or local after a fallback).
+        model = str(getattr(provider, "label", None) or model)
         response = output[:MAX_RESPONSE]
         verdict = qa_verdict(response)
         if tests["required"] and tests["status"] != "passed":
@@ -335,7 +354,8 @@ class AiQaReview:
             if verdict in ("pass", "fail"):
                 evidence = (
                     "AI QA by " + reviewer["name"] + " (" + reviewer["role_title"] + "), "
-                    "local model " + model + ", receipt " + receipt_id + ".\n" + response
+                    + ("model " if model.split(":")[0] in CLOUD_PROVIDERS
+                       else "local model ") + model + ", receipt " + receipt_id + ".\n" + response
                 )[:4000]
                 self.repositories.resolve(QualityStore).record_ai_review(
                     tenant_id=tenant_id, task_id=task_id, qa_employee_id=qa_employee_id,

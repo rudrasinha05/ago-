@@ -523,3 +523,27 @@ def test_ceo_cannot_delegate_founder_tagged_or_unrelated_employee(case):
     response=respond_company_chat(actor=actor,store=store,message_id=third['id'],
                                   employee_id=ceo,provider=PlainModel())
     assert response['delegated_employee_id'] is None
+
+
+def test_a_founder_chosen_cloud_model_answers_chat_and_says_so(case):
+    """AI-001: a cloud answer is never labelled as a local one."""
+    client,headers,info=case
+    founder=headers['founder']
+    ceo,worker=make_staff(client,founder)
+    msg=send(client,founder,'JARVIS, what should we do next?',intent='order',mentions=[worker])
+    actor=Principal(subject=info['founder_id'],tenant_id=info['tenant'],roles=('founder',))
+
+    class CloudModel:
+        label='anthropic:claude-test'
+        def generate(self,prompt):
+            return 'Next: finish the QA rework.'
+
+    result=respond_company_chat(actor=actor,store=CompanyChat(info['db']),
+                                message_id=msg['id'],employee_id=ceo,provider=CloudModel())
+    assert result['status']=='responded' and result['source']=='cloud_model'
+    assert result['model']=='anthropic:claude-test' and result['task_executed'] is False
+    reply=info['db'].execute("SELECT author_name,body FROM ago_company_chat WHERE tenant_id=%s AND id=%s",
+                             (info['tenant'],result['ack_message_id'])).fetchone()
+    assert reply['author_name']=='AGO AI · Company Executive'
+    assert reply['body'].startswith('AI model reply (anthropic:claude-test; not task execution/QA evidence):\n')
+    assert 'Local model' not in reply['body']

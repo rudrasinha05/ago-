@@ -16,6 +16,7 @@ import {CompanyGithubDelivery} from './company-github-delivery';
 import {CompanyRolePlanner} from './company-role-planner';
 import {OpportunityRadar} from './company-opportunities';
 import {FounderToday} from './founder-today';
+import {AiModels} from './ai-models';
 import {CompanyNotificationCenter,mergeNotificationPage} from './company-notification-center';
 import {treeCompanyLayout,departmentCompanyLayout,circularDepartmentLayout,withMembership,departmentColors,MAP_VIEWS} from './company-layouts';
 const BASE='/v1/organization/company';
@@ -505,6 +506,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
       ?[{id:'ago-tab-projects',label:'Projects'}]:[]),
     ...(me.permissions?.includes('task:read')||founderView?[{id:'ago-tab-delivery',label:'Execution & Delivery',badge:liveTaskCount||null,badgeLabel:liveTaskCount+' tasks running'}]:[]),
     {id:'ago-tab-board',label:'Board & Roles'},
+    ...(founderView?[{id:'ago-tab-models',label:'AI Models'}]:[]),
     {id:'ago-tab-organization',label:'Organization & Chat'},
   ];
   const openSection=useCallback((id,{updateHash=false}={})=>{
@@ -620,6 +622,9 @@ export function CompanyMap({api,me,data,onRefresh}) {
       onTalk={founderView?seat=>{setTalkRequest({seat,at:Date.now()});openSection('ago-board-room',{updateHash:true});}:undefined}/>
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
     </section>
+    {founderView&&<section id="ago-tab-models" className="company-tab-panel" data-tab-panel aria-label="AI models" hidden={activeTab!=='ago-tab-models'}>
+    <AiModels api={api} me={me} active={activeTab==='ago-tab-models'}/>
+    </section>}
     <section id="ago-tab-organization" className="company-tab-panel" data-tab-panel aria-label="Organization and chat" hidden={activeTab!=='ago-tab-organization'}>
     <div id="ago-company-org-map" className={"company-shell"+(fullscreen?" company-fullscreen":"")} aria-label="Organization map workspace">
       <aside className="company-channels" aria-label="Conversation channels"><h2>Conversations</h2><input aria-label="Find department or employee" placeholder="Find a person or team…" value={query} onChange={e=>setQuery(e.target.value)}/>

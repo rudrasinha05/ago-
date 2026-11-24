@@ -541,3 +541,42 @@ def test_every_generated_test_module_can_contain_a_discoverable_case():
     reviewed = reviewed_candidate(json.dumps(proposed))
     assert assert_discoverable_unittest(reviewed) is reviewed
     assert reviewed["tests_executed"] is False
+
+
+def test_founder_cloud_code_model_writes_the_code_and_every_draft_names_its_model():
+    """AI-001/AI-005: the Founder's chosen cloud model authors the code; the
+    board and managers stay on the local model; receipts say which wrote what."""
+    class Local:
+        label = "ollama:qwen3:4b"
+
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, prompt):
+            self.calls.append(prompt)
+            assert "ROLE: EMPLOYEE\n" not in prompt           # code never goes local here
+            return "BOARD_RECOMMENDATION: APPROVE\nDECISION: scoped work"
+
+    class Cloud:
+        label = "anthropic:claude-test"
+        supports_response_schema = True
+
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, prompt, *, response_schema=None):
+            self.calls.append(prompt)
+            assert response_schema is not None              # asked for exact JSON
+            return json.dumps(candidate())
+
+    local, cloud = Local(), Cloud()
+    result = run_four_role_chain(
+        task=fake_task(), participants=participants(), provider=local,
+        engineering_candidates=True, code_provider=cloud,
+    )
+    assert len(local.calls) == 6 and len(cloud.calls) == 1
+    assert result["engineering_candidate_status"] == "syntax_reviewed"
+    models = [h["model"] for h in result["handoffs"]]
+    assert models[-1] == "anthropic:claude-test"
+    assert set(models[:-1]) == {"ollama:qwen3:4b"}
+    assert result["github_commits_created"] is False and result["requires_human_qa"] is True
