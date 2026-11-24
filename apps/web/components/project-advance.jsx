@@ -72,7 +72,7 @@ export function ProjectAdvance({api,project,onChanged}){
     // A wait (calendar, Docker, Ollama, a running task): keep this page open
     // and AGO carries on by itself when it is due.
     const ms=waitMs(r);
-    add('Waiting; AGO asks again at '+clock(ms)+'. Keep this page open or press Stop.','info');
+    add((r.scheduled||r.followup?.eligible_at?'The schedule is saved. ':'Waiting. ')+'AGO asks again at '+clock(ms)+'. Keep this page open or press Stop.','info');
     if(!await pause(ms)){add('Stopped by the Founder.','stop');break;}
    }
    setPreview(nextAdvanceStep(await detail()));

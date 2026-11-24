@@ -15,6 +15,7 @@ import {CompanyExecutionDesk} from './company-execution-desk';
 import {CompanyGithubDelivery} from './company-github-delivery';
 import {CompanyRolePlanner} from './company-role-planner';
 import {OpportunityRadar} from './company-opportunities';
+import {FounderToday} from './founder-today';
 import {CompanyNotificationCenter,mergeNotificationPage} from './company-notification-center';
 import {treeCompanyLayout,departmentCompanyLayout,circularDepartmentLayout,withMembership,departmentColors,MAP_VIEWS} from './company-layouts';
 const BASE='/v1/organization/company';
@@ -62,6 +63,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [addingDepartment,setAddingDepartment]=useState(false);
   const [updated,setUpdated]=useState(null),[popup,setPopup]=useState(null),[loading,setLoading]=useState(false);
   const [eventData,setEventData]=useState(null),[eventQueue,setEventQueue]=useState([]);const [githubState,setGithubState]=useState(null),[governanceData,setGovernanceData]=useState(null);const lastEvent=useRef(null);
+  // Board seats can hold people outside any department (the AI CEO): governance lists them too.
+  const boardPeople=useMemo(()=>{const byId=new Map((governanceData?.employees||[]).map(e=>[e.id,e]));for(const e of employees)byId.set(e.id,{...byId.get(e.id),...e});return [...byId.values()];},[employees,governanceData]);
   // Unread counts exist only with the server's per-reader cursor; otherwise
   // the badge shows lifetime recorded events and says so.
   const unreadKnown=Number.isInteger(eventData?.read_through_id)&&eventData?.unread_by_employee&&typeof eventData.unread_by_employee==='object';
@@ -489,11 +492,13 @@ export function CompanyMap({api,me,data,onRefresh}) {
   // Organization tabs: every section stays mounted (polling, drafts and
   // selection survive switching); only the active panel is shown. Any
   // in-page link to a section id opens the tab that contains it.
-  const [activeTab,setActiveTab]=useState('ago-tab-command');
+  // The Founder lands on "Today" (plain summary); other roles on the Command Center.
+  const [activeTab,setActiveTab]=useState(()=>founderView?'ago-tab-today':'ago-tab-command');
   const [requestedProject,setRequestedProject]=useState(null),[workProject,setWorkProject]=useState(null);
-  const [approvalFocus,setApprovalFocus]=useState(null);
+  const [approvalFocus,setApprovalFocus]=useState(null),[talkRequest,setTalkRequest]=useState(null);
   const pendingApprovals=(approvalList||[]).filter(a=>a.status==='pending').length;
   const tabs=[
+    ...(founderView?[{id:'ago-tab-today',label:'Today'}]:[]),
     {id:'ago-tab-command',label:'Command Center'},
     {id:'ago-tab-approvals',label:'Approvals',badge:pendingApprovals||null,badgeLabel:pendingApprovals+' pending approval requests'},
     ...((founderView&&me.permissions?.includes('brain:manage'))||(me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read'))
@@ -566,6 +571,16 @@ export function CompanyMap({api,me,data,onRefresh}) {
         {tab.label}{tab.badge?<><b className="company-tab-badge" aria-hidden="true">{tab.badge}</b><span className="sr-only">, {tab.badgeLabel}</span></>:null}
       </a>)}
     </nav>
+    {founderView&&<section id="ago-tab-today" className="company-tab-panel" data-tab-panel aria-label="Today" hidden={activeTab!=='ago-tab-today'}>
+    <FounderToday api={api} me={me} tasks={tasks} board={governanceData?.board||[]} employees={boardPeople}
+      active={activeTab==='ago-tab-today'} refreshSignal={approvalRefresh} talkRequest={talkRequest}
+      onApproval={id=>{setApprovalFocus({id,at:Date.now()});openSection('ago-tab-approvals',{updateHash:true});}}
+      onProject={project=>{setRequestedProject({...project,request:Date.now()});openSection('ago-project-portfolio');}}
+      onRunProject={project=>{openSection('ago-tab-command',{updateHash:true});
+        requestAnimationFrame(()=>[...document.querySelectorAll('#ago-tab-command article')]
+          .find(a=>a.getAttribute('aria-label')==='Delivery: '+project.title)?.scrollIntoView({block:'start',behavior:'auto'}));}}
+      onSection={id=>openSection(id,{updateHash:true})}/>
+    </section>}
     <section id="ago-tab-command" className="company-tab-panel" data-tab-panel aria-label="Command Center" hidden={activeTab!=='ago-tab-command'}>
     <FounderDeliveryJourney api={api} me={me} profiles={governanceData?.employees||[]} active={activeTab==='ago-tab-command'} refreshSignal={approvalRefresh}
       onSection={id=>openSection(id)}
@@ -601,7 +616,8 @@ export function CompanyMap({api,me,data,onRefresh}) {
      {founderView&&<CompanyGithubDelivery api={api} me={me}/>} 
     </section>
     <section id="ago-tab-board" className="company-tab-panel" data-tab-panel aria-label="Board and roles" hidden={activeTab!=='ago-tab-board'}>
-    <CompanyBoard employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}/>
+    <CompanyBoard employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}
+      onTalk={founderView?seat=>{setTalkRequest({seat,at:Date.now()});openSection('ago-board-room',{updateHash:true});}:undefined}/>
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
     </section>
     <section id="ago-tab-organization" className="company-tab-panel" data-tab-panel aria-label="Organization and chat" hidden={activeTab!=='ago-tab-organization'}>

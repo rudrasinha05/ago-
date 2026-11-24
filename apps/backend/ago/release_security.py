@@ -223,7 +223,11 @@ class ReleasePerimeterMiddleware:
                 headers["X-Content-Type-Options"] = "nosniff"
                 headers["X-Frame-Options"] = "DENY"
                 headers["Referrer-Policy"] = "no-referrer"
-                headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+                # Microphone only for the workspace's own pages (Board room voice).
+                workspace = path == "/workspace" or path.startswith("/workspace/")
+                headers["Permissions-Policy"] = (
+                    "camera=(), microphone=" + ("(self)" if workspace else "()") + ", geolocation=()"
+                )
                 if path.startswith("/v1/") or health:
                     headers["Cache-Control"] = "no-store, private"
                 if self.production and scheme == "https":

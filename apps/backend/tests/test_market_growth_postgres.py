@@ -1,4 +1,6 @@
 """Real PostgreSQL evidence and tenant-bound visibility for ongoing company growth."""
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from uuid import uuid4
@@ -15,8 +17,11 @@ FEED = b"""<rss version="2.0"><channel>
 <item><title>Small business invoice fraud security automation</title>
 <link>https://example.org/report/market-need</link>
 <description>Compliance and privacy workflow for customer billing</description>
-<pubDate>Tue, 20 Oct 2026 12:00:00 GMT</pubDate>
-</item></channel></rss>"""
+<pubDate>%s</pubDate>
+</item></channel></rss>""" % (
+    # Fresh relative to today: nomination only considers the last 30 days.
+    format_datetime(datetime.now(timezone.utc) - timedelta(days=1), usegmt=True).encode()
+)
 
 
 def test_source_ingestion_ceo_ownership_founder_gate_and_tenant_isolation(case, monkeypatch):

@@ -57,6 +57,13 @@ async function navigate(page,label) {
   if(await page.getByRole('button',{name:'Menu',exact:true}).isVisible())await page.getByRole('button',{name:'Menu',exact:true}).click();
   await page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:label,exact:true}).click();
   await expect(page.locator(label==='Organization'?'#screen .company-command':'#screen .workspace-view')).toBeVisible();
+  // The Founder lands on "Today" (2026-11-24); these journeys continue in the
+  // Command Center, where the delivery journey and Advance project live.
+  if(label==='Organization'){
+   const command=page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:/^Command Center/});
+   if(await command.getAttribute('aria-current')!=='page')await command.click();
+   await expect(command).toHaveAttribute('aria-current','page');
+  }
 }
 // Organization page sections live in tabs; open one by its tab link.
 async function openCompanyTab(page,label){
@@ -1141,7 +1148,7 @@ test('Board failure shows the assigned manager and follows server recovery decis
  await accessibility(page);expect(errors).toEqual([]);
 });
 
-test('advance project displays a saved schedule and stops without a duplicate run',async({page})=>{
+test('advance project shows a saved schedule, waits instead of stopping, and the Founder can stop it',async({page})=>{
  const {calls,errors}=await deliveryFixtures(page);
  const task='53000000-0000-4000-8000-000000000053';
  const followup={id:task,owner_name:'Bea',stage:'discovery',status:'scheduled',feedback:'Outside the worker calendar.',
@@ -1160,6 +1167,11 @@ test('advance project displays a saved schedule and stops without a duplicate ru
  const box=card.getByRole('group',{name:'Advance '+project.title});await box.getByRole('checkbox').check();
  await box.getByRole('button',{name:'Keep going until I am needed'}).click();
  await expect(box).toContainText('The schedule is saved.');await expect(box).toContainText('Assigned to Bea');
+ // 2026-11-18: "Keep going" waits through a saved schedule (no duplicate run,
+ // no busy loop) until it is due or the Founder presses Stop.
+ await expect(box).toContainText('AGO asks again at');expect(requests).toBe(1);
+ await box.getByRole('button',{name:'Stop',exact:true}).click();
+ await expect(box).toContainText('Stopped by the Founder.');
  await expect(box.getByRole('checkbox')).not.toBeChecked();expect(requests).toBe(1);
  expect(calls.filter(x=>/\/run$/.test(x.path))).toEqual([]);await accessibility(page);expect(errors).toEqual([]);
 });
@@ -1385,5 +1397,101 @@ test('existing project manager change needs explicit confirmation and preserves 
  await expect(page.locator('.project-portfolio-details')).toContainText('Preserved founder requirement');
  await expect(control).toContainText('No eligible replacement AI Project Manager');
  expect(attempts).toBe(2);expect(calls.filter(c=>c.method==='POST'&&c.path!=='/v1/sessions')).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
+// ---- Today: the Founder's first glance, and the Board room (2026-11-24) ----
+async function openOrganizationLanding(page){
+ if(await page.getByRole('button',{name:'Menu',exact:true}).isVisible())await page.getByRole('button',{name:'Menu',exact:true}).click();
+ await page.getByRole('navigation',{name:'Workspaces'}).getByRole('link',{name:'Organization',exact:true}).click();
+ await expect(page.locator('#screen .company-command')).toBeVisible();
+}
+const heldProject=()=>({...deliveryProject(),title:'AdmissionFlow',delivery_state:'blocked',stages:[
+ {stage:'discovery',position:1,employee:'Analyst',task_id:'71000000-0000-4000-8000-000000000071',task_status:'completed',qa_verdict:'pass'},
+ {stage:'architecture',position:2,employee:'Architect',task_id:'72000000-0000-4000-8000-000000000072',task_status:'completed',qa_verdict:'pass'},
+ {stage:'implementation',position:3,employee:'Engineer',task_id:'73000000-0000-4000-8000-000000000073',task_status:'completed',qa_verdict:'pass'},
+ {stage:'quality',position:4,employee:'Tester',task_id:'74000000-0000-4000-8000-000000000074',task_status:'completed',qa_verdict:'fail'},
+ {stage:'release',position:5,employee:'Coordinator',task_id:null,task_status:null,qa_verdict:null}],
+ followups:[{id:'75000000-0000-4000-8000-000000000075',stage:'quality',code:'recovery_limit_reached',status:'blocked',owner_id:user,owner_name:'Founder',
+  feedback:'CEO REPORT: the AI CEO put the quality stage on hold after 6 automatic attempts.',next_action:'Review the recorded blocker.'}]});
+
+test('the Founder lands on Today: plain status, one rework action for the hold, and nothing runs',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const project=heldProject();
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([project])}));
+ await page.route('**/v1/organization/company/projects/'+project.project_id+'/stages/quality/recovery',route=>{
+  calls.push({path:new URL(route.request().url()).pathname,method:route.request().method(),body:route.request().postDataJSON()});
+  return route.fulfill({status:200,json:{
+  kind:'ago_stage_task_recovery_v1',failed_task_id:project.stages[3].task_id,recovery_task_id:'76000000-0000-4000-8000-000000000076',stage:'quality',run_started:false}});});
+ await login(page);await openOrganizationLanding(page);
+ const tabs=page.getByRole('navigation',{name:'Company control center sections'});
+ await expect(tabs.getByRole('link',{name:'Today',exact:true})).toHaveAttribute('aria-current','page');
+ const today=page.getByRole('region',{name:'Today'});
+ await expect(today.getByRole('heading',{level:2})).toHaveText('1 project is active. 1 thing needs you.');
+ await expect(today.getByRole('list',{name:'Stages of AdmissionFlow'}).getByRole('listitem')).toHaveCount(5);
+ await expect(today).toContainText('Quality: On hold after 6 automatic attempts. The AI CEO sent you a report.');
+ await expect(today).toContainText('3 of 5 stages passed');
+ await accessibility(page);
+ await page.screenshot({path:test.info().outputPath('today.png'),fullPage:true});
+ await today.getByRole('button',{name:'Rework the QA-failed quality stage of AdmissionFlow'}).click();
+ const box=today.getByRole('group',{name:'Rework the QA-failed quality stage of AdmissionFlow'});
+ await box.getByRole('textbox').fill('Use the fixed QA format built from the AGO test evidence.');
+ await box.getByRole('checkbox').check();await box.getByRole('button',{name:'Create rework task'}).click();
+ await expect(today.getByRole('status').filter({hasText:'Rework task created for quality'})).toBeVisible();
+ const recovery=calls.filter(c=>c.path.endsWith('/stages/quality/recovery'));
+ expect(recovery).toHaveLength(1);expect(recovery[0].body.failed_task_id).toBe(project.stages[3].task_id);
+ await today.getByRole('button',{name:'Run the project'}).click();
+ await expect(tabs.getByRole('link',{name:/^Command Center/})).toHaveAttribute('aria-current','page');
+ await expect(page.getByRole('group',{name:'Advance AdmissionFlow'})).toBeVisible();
+ expect(calls.filter(x=>/\/advance$|\/run$|\/decision$/.test(x.path))).toEqual([]);
+ expect(errors).toEqual([]);
+});
+
+test('Board members have call names; the Founder asks JARVIS and hears the recorded answer',async({page})=>{
+ const {calls,errors}=await deliveryFixtures(page);
+ const ceo='77000000-0000-4000-8000-000000000077';
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({status:200,json:deliveryOverview([])}));
+ await page.route(/\/v1\/organization\/employees(\?|$)/,route=>route.fulfill({status:200,json:[
+  {id:user,name:'Test member',department_id:department,kind:'human'},{id:ceo,name:'AGO AI CEO',department_id:department,kind:'ai',manager_id:null}]}));
+ await page.route('**/v1/organization/company/governance',route=>route.fulfill({status:200,json:{
+  board:[{seat:'Strategy & Vision',employee_id:ceo}],employees:[{id:ceo,name:'AGO AI CEO',kind:'ai',role_title:'Chief Executive Officer'}]}}));
+ let sent=null;
+ await page.route('**/v1/organization/company/chat?**',route=>route.fulfill({status:200,json:{next_before:null,items:sent?[
+  {id:77,channel:'global',author_name:'Test member',body:sent.body,kind:'message',created_at:'2026-11-24T10:00:00Z'},
+  {id:78,channel:'global',author_name:'AGO local AI · AGO AI CEO',reply_to:77,employee_id:ceo,kind:'message',created_at:'2026-11-24T10:00:05Z',
+   body:'Local model reply (not task execution/QA evidence):\nAdmissionFlow has 3 of 5 stages passed; quality needs a rework.\nDELEGATE_ID: NONE'}]:[]}}));
+ await page.route('**/v1/organization/company/chat',route=>{
+  if(route.request().method()!=='POST')return route.fallback();
+  sent=route.request().postDataJSON();
+  return route.fulfill({status:200,json:{id:77,channel:'global',body:sent.body,author_name:'Test member',kind:'message'}});
+ });
+ await page.route('**/v1/organization/company/chat/orders/77/respond',route=>{
+  calls.push({path:new URL(route.request().url()).pathname,method:route.request().method(),body:route.request().postDataJSON()});
+  return route.fulfill({status:200,json:{
+  status:'responded',message_id:77,employee_id:ceo,ack_message_id:78,task_executed:false,qa_verified:false}});});
+ await login(page);await openOrganizationLanding(page);
+ const today=page.getByRole('region',{name:'Today'});
+ await expect(today.getByRole('button',{name:'Talk to JARVIS'})).toBeEnabled();
+ await expect(today.getByRole('button',{name:'Talk to STARK'})).toBeDisabled();
+ await expect(today).toContainText('Vacant seat');
+ await today.getByRole('button',{name:'Talk to JARVIS'}).click();
+ const room=page.getByRole('region',{name:'Board room'});
+ await room.getByRole('textbox',{name:'Message JARVIS'}).fill('kya haal hai?');
+ await room.getByRole('button',{name:'Ask',exact:true}).click();
+ const talk=room.getByRole('list',{name:'Conversation with JARVIS'});
+ await expect(talk).toContainText('AdmissionFlow has 3 of 5 stages passed; quality needs a rework.');
+ await expect(talk).not.toContainText('DELEGATE_ID');await expect(talk).not.toContainText('Local model reply');
+ await page.screenshot({path:test.info().outputPath('board-room.png'),fullPage:true});
+ expect(sent.body).toBe('Voice chat with JARVIS (Strategy & Vision): kya haal hai?');
+ expect(sent.mentions).toEqual([ceo]);expect(sent.intent).toBe('message');expect(sent.channel).toBe('global');
+ const respond=calls.filter(c=>c.path.endsWith('/chat/orders/77/respond'));
+ expect(respond).toHaveLength(1);expect(respond[0].body).toEqual({employee_id:ceo});
+ await accessibility(page);
+ // Board & Roles shows the same call names and opens the Board room.
+ await openCompanyTab(page,'Board & Roles');
+ await expect(page.getByRole('region',{name:'Board governance functions'})).toContainText('JARVIS');
+ await page.getByRole('button',{name:'Talk to JARVIS',exact:true}).click();
+ await expect(page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:'Today',exact:true})).toHaveAttribute('aria-current','page');
+ expect(calls.filter(x=>/\/advance$|\/run$|\/decision$|\/approve/.test(x.path))).toEqual([]);
  expect(errors).toEqual([]);
 });

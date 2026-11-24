@@ -101,6 +101,10 @@ def test_trusted_host_tls_docs_and_hsts_protection(prod):
         assert private.headers["cache-control"] == "no-store, private"
         assert private.headers["x-content-type-options"] == "nosniff"
         assert "access-control-allow-origin" not in private.headers
+        # Board room voice: microphone only for the workspace's own pages.
+        assert "microphone=()" in private.headers["permissions-policy"]
+        workspace = client.get("/workspace/")
+        assert workspace.headers["permissions-policy"] == "camera=(), microphone=(self), geolocation=()"
         invalid_id = client.get("/console/", headers={"x-request-id": "\t"})
         assert invalid_id.headers["x-request-id"] != "\t"
     with TestClient(app, base_url="http://ago.example.com") as client:

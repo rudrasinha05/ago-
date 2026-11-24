@@ -27,6 +27,13 @@ def register_console(app: FastAPI) -> None:
         return RedirectResponse(url=COMPANY_MAP, status_code=308)
 
 
+def permissions_policy(path: str) -> str:
+    """Microphone only for the Founder workspace's own pages (Board room voice
+    chat); never for other origins, the console or the API."""
+    workspace = path == "/workspace" or path.startswith("/workspace/")
+    return "camera=(), microphone=" + ("(self)" if workspace else "()") + ", geolocation=()"
+
+
 def console_headers(path: str) -> dict[str, str]:
     is_workspace = path == "/workspace" or path.startswith("/workspace/")
     if not (is_workspace or path == "/console" or path.startswith("/console/")):
@@ -45,7 +52,7 @@ def console_headers(path: str) -> dict[str, str]:
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "no-referrer",
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Permissions-Policy": permissions_policy(path),
         "Cache-Control": "no-store, private",
         "Cross-Origin-Resource-Policy": "same-origin",
     }

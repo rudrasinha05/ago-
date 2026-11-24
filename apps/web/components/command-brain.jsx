@@ -3,6 +3,7 @@ import {useCallback,useMemo,useState} from 'react';
 import {Brain3DScene,BRAIN_ZOOM} from './brain-3d-scene';
 import {brainNetwork} from './brain-network';
 import {boardFunctionSeats} from '@ago/sdk/company';
+import {BOARD_CODENAMES} from './board-codenames';
 
 const brief=(text,max=110)=>text?.length>max?text.slice(0,max)+'…':text;
 const BOARD_TITLES={
@@ -164,7 +165,7 @@ export function CommandBrain({tasks,notifications,employees,departments=[],found
 }
 
 /** Board of Directors seats: approved appointments only; AI roles, not legal directors. */
-export function CompanyBoard({employees,governance,onAppoint,onSelect,canGovern}) {
+export function CompanyBoard({employees,governance,onAppoint,onSelect,canGovern,onTalk}) {
  const [choices,setChoices]=useState({});
  const approved=(governance?.board||[]).map(s=>({...s,member_id:s.employee_id,approved:true}));
  const seats=boardFunctionSeats(employees,approved);
@@ -176,11 +177,14 @@ export function CompanyBoard({employees,governance,onAppoint,onSelect,canGovern}
     <div className="board-seats">{seats.map(s=>{
       const options=employees.filter(e=>e.kind==='ai'&&(!assignedToOtherSeat.has(e.id)||e.id===s.member?.id));
       const selected=choices[s.title]||s.member?.id||'';
-      return <div key={s.title} className="board-seat">
+      const call=BOARD_CODENAMES[s.title];
+      return <div key={s.title} className="board-seat" style={call?{'--seat':call.color}:undefined}>
+        {call&&<span className="board-codename">{call.codename}</span>}
         <strong>{BOARD_TITLES[s.title]}</strong>
         <small>{s.member?'Appointed: '+s.member.name:'Vacant · AI appointment required'}</small>
         <span><b>{s.title}</b> · {s.responsibility}</span>
         {s.member&&<button type="button" className="board-detail" onClick={()=>onSelect(s.member.id)}>View officer profile</button>}
+        {s.member&&call&&onTalk&&<button type="button" className="board-detail" onClick={()=>onTalk(s.title)}>Talk to {call.codename}</button>}
         {canGovern&&<div className="board-appoint">
           <select aria-label={'Appoint AI '+BOARD_TITLES[s.title]} value={selected} disabled={Boolean(s.member)}
             onChange={e=>setChoices(old=>({...old,[s.title]:e.target.value}))}>

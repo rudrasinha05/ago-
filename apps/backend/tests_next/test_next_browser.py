@@ -64,6 +64,13 @@ def navigate_next(page, name, heading):
     expect(page.locator('#screen h1')).to_have_text(heading)
 
 
+def open_command_center(page):
+    # The Founder lands on the plain "Today" tab; delivery details live in Command Center.
+    page.get_by_role('navigation', name='Company control center sections').get_by_role(
+        'link', name='Command Center',
+    ).click()
+
+
 def test_next_real_eight_routes_goal_and_session_revoke(page, app_url, tenant):
     sign_in_next(page, app_url, tenant)
     for label, heading in [
@@ -562,6 +569,7 @@ def test_saved_founder_project_resumes_from_real_delivery_journey(page, app_url,
 
     sign_in_next(page, app_url, tenant)
     navigate_next(page, 'Organization', 'Company map')
+    open_command_center(page)
     journey = page.get_by_role('region', name='Project delivery journey')
     card = journey.get_by_role('article', name='Delivery: ' + title)
     expect(card).to_be_visible()
@@ -600,6 +608,7 @@ def test_saved_founder_project_resumes_from_real_delivery_journey(page, app_url,
     page.get_by_role('button', name='Sign out', exact=True).click()
     sign_in_next(page, app_url, tenant)
     navigate_next(page, 'Organization', 'Company map')
+    open_command_center(page)
     journey.get_by_role('article', name='Delivery: ' + title).get_by_role(
         'button', name='Inspect project', exact=True,
     ).click()
