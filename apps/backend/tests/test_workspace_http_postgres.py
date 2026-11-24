@@ -7,7 +7,12 @@ from test_m7_http_postgres import case as case
 from test_stage_candidate_tests import PASS, company as company, steps_until
 
 
-def test_founder_edits_tests_and_replays_one_attempt(company, case):
+def test_founder_edits_tests_and_replays_one_attempt(company, case, monkeypatch):
+    import ago.stage_progression as service
+    from ago.company_engineering import run_candidate_tests
+
+    monkeypatch.setattr(service, "run_candidate_tests", lambda value, **kw:
+                        run_candidate_tests(value, runner=company.docker, **kw))
     client, headers, _ = case
     response, _ = steps_until(company, "implementation", "run")
     task = response["task_id"]

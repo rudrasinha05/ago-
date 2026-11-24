@@ -71,6 +71,10 @@ def _without_code_fence(raw: str) -> str:
 
 
 def reviewed_candidate(raw: str) -> dict:
+    return _review_candidate(raw, workspace=False)
+
+
+def _review_candidate(raw: str, *, workspace: bool) -> dict:
     """Return an exact-file, syntax-checked candidate; never execute it."""
     if not isinstance(raw, str) or not 1 <= len(raw.encode("utf-8")) <= 12000:
         raise ValueError("AI engineering response outside allowed size")
@@ -101,11 +105,16 @@ def reviewed_candidate(raw: str) -> dict:
             "files": files,
         },
     })
-    if not all(_SAFE_SOURCE.fullmatch(item["path"]) for item in files):
+    def supported(path):
+        if workspace and re.fullmatch(r"(?:src|tests)/[A-Za-z0-9_./-]+\.(?:js|mjs|cjs)", path):
+            return True
+        return bool(_SAFE_SOURCE.fullmatch(path))
+
+    if not all(supported(item["path"]) for item in files):
         raise ValueError("Only small src/*.py, tests/test_*.py and docs/*.md candidates allowed")
     if not any(x["path"].startswith("src/") for x in files):
         raise ValueError("Python source file required")
-    if not any(x["path"].startswith("tests/test_") for x in files):
+    if not any(x["path"].startswith("tests/test_") or (workspace and x["path"].startswith("tests/") and x["path"].endswith((".test.js", ".test.cjs", ".test.mjs"))) for x in files):
         raise ValueError("Independent acceptance test source required")
     evidence = []
     for item in files:
@@ -242,14 +251,14 @@ def assert_documented(value: dict) -> dict:
     return value
 
 
-def verify_persisted_candidate(value: dict) -> dict:
+def verify_persisted_candidate(value: dict, *, workspace: bool = False) -> dict:
     """Reject any post-inference tampering before the founder stages files."""
     if not isinstance(value, dict):
         raise ValueError("Stored engineering candidate required")
-    expected = reviewed_candidate(json.dumps({
+    expected = _review_candidate(json.dumps({
         "files": value.get("files"),
         "acceptance_checks": value.get("acceptance_checks"),
-    }))
+    }), workspace=workspace)
     # Evidence and digest must still describe precisely these source bytes.
     if (
         value.get("kind") != expected["kind"]
@@ -265,11 +274,11 @@ def verify_persisted_candidate(value: dict) -> dict:
     return expected
 
 
-def stage_candidate(value: dict, destination) -> dict:
+def stage_candidate(value: dict, destination, *, workspace: bool = False) -> dict:
     """Write a *new*, explicit local review directory, never modify Git history."""
     from pathlib import Path
 
-    candidate = verify_persisted_candidate(value)
+    candidate = verify_persisted_candidate(value, workspace=workspace)
     root = Path(destination)
     if root.exists() or root.is_symlink():
         raise FileExistsError("Review destination already exists; never overwrite")
@@ -386,10 +395,10 @@ def failure_summary(output: str, limit: int = 700) -> str:
     return summary[-limit:] if len(summary) > limit else summary
 
 
-def test_runner_available(*, runner=subprocess.run) -> bool:
+def test_runner_available(*, runner=subprocess.run, image=TEST_IMAGE) -> bool:
     """Docker answers and the test image is already on this computer (no pull)."""
     try:
-        probe = runner(["docker", "image", "inspect", TEST_IMAGE], capture_output=True,
+        probe = runner(["docker", "image", "inspect", image], capture_output=True,
                        text=True, timeout=20, check=False)
     except (OSError, subprocess.SubprocessError):
         return False
@@ -397,28 +406,34 @@ def test_runner_available(*, runner=subprocess.run) -> bool:
 
 
 def run_candidate_tests(value: dict, *, runner=subprocess.run,
-                        timeout: int = TEST_TIMEOUT_SECONDS) -> dict:
+                        timeout: int = TEST_TIMEOUT_SECONDS, workspace: bool = False) -> dict:
     """Run a persisted candidate's unittest suite in an isolated container.
 
     Returns a receipt with ``status`` one of: ``passed``, ``failed``,
     ``timeout`` or ``runner_unavailable`` (Docker or the image is missing - a
     machine problem, not a defect of the code, and nothing was executed).
     """
-    candidate = verify_persisted_candidate(value)
+    candidate = verify_persisted_candidate(value, workspace=workspace)
+    node_files = [f["path"] for f in candidate["files"] if f["path"].endswith((".js", ".cjs", ".mjs"))]
+    node_tests = [p for p in node_files if p.startswith("tests/")]
+    image = "node:22-alpine" if node_files else TEST_IMAGE
     base = {
         "kind": "ago_isolated_candidate_test_receipt_v1",
         "candidate_sha256": candidate["candidate_sha256"],
-        "image": TEST_IMAGE, "network_disabled": True, "read_only_container": True,
+        "image": image, "network_disabled": True, "read_only_container": True,
         "unittest_cases": 0, "tests_executed": False, "tests_passed": False,
         "failure_category": "none", "failure_summary": "", "docker_exit_code": None,
     }
-    if not test_runner_available(runner=runner):
+    if node_files and (not node_tests or any(f["path"].endswith(".py") for f in candidate["files"])):
+        return {**base, "status": "unsupported_suite", "failure_summary":
+                "Select a single runtime and include matching test files for this revision."}
+    if not test_runner_available(runner=runner, image=image):
         return {**base, "status": "runner_unavailable",
-                "failure_summary": "Docker is not running or the " + TEST_IMAGE
+                "failure_summary": "Docker is not running or the " + image
                                    + " image is not present on this computer."}
     with tempfile.TemporaryDirectory(prefix="ago-test-") as temp:
         root = Path(temp) / "work"
-        stage_candidate(candidate, root)
+        stage_candidate(candidate, root, workspace=workspace)
         # The container user (nobody) must be able to read the mounted files.
         for path in [Path(temp), *root.rglob("*"), root]:
             try:
@@ -427,7 +442,10 @@ def run_candidate_tests(value: dict, *, runner=subprocess.run,
                 pass
         container = "ago-test-" + uuid4().hex
         try:
-            result = runner(isolated_test_command(root, container), capture_output=True,
+            command = isolated_test_command(root, container)
+            if node_files:
+                command = command[:-4] + [image, "node", "--test", "--test-reporter=tap", *node_tests]
+            result = runner(command, capture_output=True,
                             text=True, timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
             try:
@@ -443,6 +461,8 @@ def run_candidate_tests(value: dict, *, runner=subprocess.run,
                     "failure_summary": "Docker could not start the test container."}
     output = str(result.stdout or "") + "\n" + str(result.stderr or "")
     seen = re.findall(r"(?:^|\n)" + _CASES_MARKER + r"(\d+)(?:\r?\n|$)", output)
+    if node_files:
+        seen = re.findall(r"^# tests (\d+)$", output, re.MULTILINE)
     cases = int(seen[0]) if len(seen) == 1 else 0
     passed = result.returncode == 0 and cases >= 1
     category = "none" if passed else "tests_not_discovered" if not cases else next(
@@ -534,7 +554,7 @@ def workspace_snapshot(row, draft):
     if row["run_status"] != "completed" or not result.get("engineering_candidate"):
         raise LookupError("This task has no completed engineering candidate")
     original = verify_persisted_candidate(result["engineering_candidate"])
-    current = verify_persisted_candidate(draft["candidate"]) if draft else original
+    current = verify_persisted_candidate(draft["candidate"], workspace=True) if draft else original
     return {
         "run_id": str(row["run_id"]),
         "revision": draft["revision"] if draft else 0,
@@ -553,28 +573,30 @@ def edited_candidate(snapshot, changes):
         raise ValueError("Invalid workspace revision")
     if changes["run_id"] != snapshot["run_id"] or revision != snapshot["revision"]:
         raise RevisionConflict("Workspace changed. Reload before saving.")
-    return reviewed_candidate(json.dumps({
+    return _review_candidate(json.dumps({
         "files": changes["files"], "acceptance_checks": snapshot["acceptance_checks"],
-    }))
+    }), workspace=True)
 
 
 def entry_command(root, container, candidate, entry):
     paths = {f["path"] for f in candidate["files"]}
-    if entry not in paths or not re.fullmatch(r"src/[A-Za-z0-9_./-]+\.py", entry):
-        raise ValueError("Select a reviewed Python source file")
+    if entry not in paths or not re.fullmatch(r"src/[A-Za-z0-9_./-]+\.(py|js|cjs|mjs)", entry):
+        raise ValueError("Select a reviewed Python or Node.js entry point")
     command = isolated_test_command(root, container)
-    return command[:-2] + ["-B", "/work/" + entry]
+    if entry.endswith(".py"):
+        return command[:-2] + ["-B", "/work/" + entry]
+    return command[:-4] + ["node:22-alpine", "node", "/work/" + entry]
 
 
 def execute_entry(candidate, entry, on_output, stop_requested, timeout=90):
     from threading import Thread
     from time import monotonic
 
-    candidate = verify_persisted_candidate(candidate)
+    candidate = verify_persisted_candidate(candidate, workspace=True)
     container = "ago-test-" + uuid4().hex
     with tempfile.TemporaryDirectory(prefix="ago-terminal-") as temp:
         root = Path(temp) / "work"
-        stage_candidate(candidate, root)
+        stage_candidate(candidate, root, workspace=True)
         for path in [root, *root.rglob("*")]:
             os.chmod(path, 0o755 if path.is_dir() else 0o644)
         command = entry_command(root, container, candidate, entry)

@@ -32,7 +32,7 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
 from ago.company_engineering import (  # STAGE_FORMATS/missing_stage_labels: used by AI QA
     STAGE_FORMATS, missing_stage_labels, project_test_evidence_text, receipt_text,  # noqa: F401
-    execute_entry, reviewed_candidate, run_candidate_tests, test_runner_available,
+    execute_entry, run_candidate_tests, test_runner_available,
 )
 from ago.company_engineering import RevisionConflict, edited_candidate, workspace_snapshot
 from ago.organization_store import OrganizationStore
@@ -418,7 +418,7 @@ class StageProgression:
             return workspace_snapshot(row, draft)
 
     def workspace_terminal(self, *, tenant_id: str, founder_id: str, project_id: str,
-                           task_id: str, request: dict | None = None, stop: str | None = None):
+                           task_id: str, request: dict | None = None, stop: str | None = None) -> dict:
         queries = self.repositories.resolve(StageProgressionQueries)
         with self.db.transaction():
             current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
@@ -453,9 +453,8 @@ class StageProgression:
             if not queries.open_terminal((*run_key, current["revision"], current["candidate_sha256"],
                                           entry)).fetchone():
                 raise RevisionConflict("Attempt already recorded")
-        candidate = reviewed_candidate(json.dumps({
-            "files": current["files"], "acceptance_checks": current["acceptance_checks"],
-        }))
+        candidate = edited_candidate(current, {"run_id": current["run_id"],
+            "expected_revision": current["revision"], "files": current["files"]})
         def output(value):
             queries.terminal_output((value.replace(chr(0), ""), *run_key))
         def stopped():
@@ -495,10 +494,9 @@ class StageProgression:
                                                       current["candidate_sha256"])).fetchone()
             if not inserted:
                 raise RevisionConflict("Attempt already recorded")
-        candidate = reviewed_candidate(json.dumps({
-            "files": current["files"], "acceptance_checks": current["acceptance_checks"],
-        }))
-        receipt = run_candidate_tests(candidate)
+        candidate = edited_candidate(current, {"run_id": current["run_id"],
+            "expected_revision": current["revision"], "files": current["files"]})
+        receipt = run_candidate_tests(candidate, workspace=True)
         with self.db.transaction():
             queries.finish_workspace_test((json.dumps(receipt), *key, attempt))
         return {"attempt_id": attempt, "revision": current["revision"],

@@ -2,7 +2,8 @@
 import json
 import unittest
 
-from ago.company_engineering import reviewed_candidate
+from pathlib import Path
+from ago.company_engineering import entry_command, reviewed_candidate, verify_persisted_candidate
 from ago.company_engineering import RevisionConflict, edited_candidate, workspace_snapshot
 
 
@@ -46,6 +47,20 @@ class DevelopmentWorkspaceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 edited_candidate(self.initial, {**self.change,
                     "files": [{**self.files[0], **item}, self.files[1]]})
+
+    def test_node_uses_fixed_offline_runtime_and_workspace_scope(self):
+        files = [{"path": "src/main.mjs", "content": "export const value = 3;"},
+                 {"path": "tests/main.test.mjs", "content": "import 'node:test';"}]
+        edited = edited_candidate(self.initial, {**self.change, "files": files})
+        self.assertEqual(verify_persisted_candidate(edited, workspace=True), edited)
+        with self.assertRaises(ValueError):
+            verify_persisted_candidate(edited)
+        command = entry_command(Path("."), "ago-test-" + "1"*32, edited, "src/main.mjs")
+        self.assertEqual(command[-3:], ["node:22-alpine", "node", "/work/src/main.mjs"])
+        self.assertIn("--pull=never", command)
+        self.assertEqual(command[command.index("--network")+1], "none")
+        with self.assertRaises(ValueError):
+            entry_command(Path("."), "ago-test-" + "1"*32, edited, "/bin/sh")
 
     def test_rejects_modified_stored_evidence(self):
         with self.assertRaises(PermissionError):

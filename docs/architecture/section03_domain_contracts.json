@@ -801,7 +801,10 @@
       "ago_project_stage_progressions",
       "ago_stage_candidate_tests",
       "ago_strategy_plans",
-      "ago_task_reviews"
+      "ago_task_reviews",
+      "ago_workspace_revisions",
+      "ago_workspace_terminal",
+      "ago_workspace_test_runs"
     ],
     "brain_skill_store": [
       "ago_brain_skill_gaps",
