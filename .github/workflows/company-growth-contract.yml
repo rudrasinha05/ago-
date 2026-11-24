@@ -74,6 +74,8 @@ jobs:
         # The Python image is preloaded expressly into this ephemeral CI runner.
         run: |
           docker pull python:3.11-slim
+          docker pull node:22-alpine
+          python -m pytest -q apps/backend/tests/test_workspace_http_postgres.py
           python scripts/ago_ci_isolated_docker_smoke.py
           python scripts/ago_ci_board_delivery_smoke.py
       - name: Enforce focused Python lint

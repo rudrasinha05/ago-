@@ -28,6 +28,7 @@ const departments=[{id:department,name:'Engineering'}];
 let tasks=[{id:id(6),action:'research:brief',assignee_id:developer,status:'running',project_name:'Orchestration research'}];
 let messages=[], calls=[];
 let appointments=[],roles={},reports=[],founderProjects=[],approvalRecords=[],asReviewer=false;
+let revision=0,workspaceFiles=[{path:'src/main.py',content:'print(1)'},{path:'tests/test_main.py',content:'import unittest'}];
 let companyDocs=[],docAccess=[],docAudit=[];
 let githubProjects=[],githubOperations=[],integrationProposals=[],githubRunState=null;
 let workEvents=[{id:1,employee_id:developer,task_id:id(6),body:'research:brief → running',created_at:new Date().toISOString()}];
@@ -44,6 +45,11 @@ try{
   else if(path==='/v1/organization/employees')result=employees;
   else if(path.endsWith('/company/activity'))result=tasks;
   else if(path.endsWith('/company/notifications'))result={by_employee:{[developer]:workEvents.length,[cto]:0},recent:[...workEvents].reverse(),event_type:'committed_task_status'};
+  else if(path.endsWith('/workspace')&&path.includes('/v1/agents/projects/')){
+    if(req.method()==='PUT'){assert.equal(body.expected_revision,revision);workspaceFiles=body.files;revision++;}
+    result={revision,files:workspaceFiles,run_id:id(60),candidate_sha256:String(revision).repeat(64)};
+  }
+  else if(path.includes('/workspace/terminal')||path.includes('/workspace/tests'))result={attempts:[]};
   else if(path==='/v1/platform/catalog')result={github_projects:githubProjects,github_operations:githubOperations};
   else if(path.startsWith('/v1/platform/github/projects/')&&path.endsWith('/status'))result=githubRunState||{status:'unavailable'};
   else if(path.startsWith('/v1/platform/github/operations/')&&path.endsWith('/execute')){
@@ -275,7 +281,18 @@ try{
    github_commits_created:false,project_released:false,
  };
  // UI regression: founder manages per-document ACL inside AGO; no GitHub calls.
+ Object.assign(founderProjects[0].stages[2],{task_id:id(61),agent_run_status:'completed'});
  await page.getByRole('button',{name:/Inspect full project/}).first().click();
+ await page.getByRole('button',{name:'Open development workspace'}).click();
+ const editor=page.getByRole('textbox',{name:'Edit src/main.py'});
+ await editor.fill('print(2)');
+ assert.equal(await page.getByRole('button',{name:'Run selected file'}).isDisabled(),true);
+ await page.getByRole('button',{name:'Save revision'}).click();
+ await page.getByText('Saved revision 1',{exact:true}).waitFor();
+ assert.equal(workspaceFiles[0].content,'print(2)');
+ await page.getByRole('button',{name:'tests/test_main.py',exact:true}).click();
+ assert.equal(await page.getByRole('textbox',{name:'Edit tests/test_main.py'}).inputValue(),'import unittest');
+
  await page.locator('.ago-ai-chain summary').getByText('4/7 recorded AI passes',{exact:false}).waitFor();
  await page.locator('.ago-ai-chain summary').click();
  await page.getByText('Board objection recorded',{exact:false}).waitFor();

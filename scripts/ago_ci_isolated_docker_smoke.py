@@ -11,7 +11,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from ago.company_engineering import execute_entry, reviewed_candidate, stage_candidate
+from ago.company_engineering import edited_candidate, execute_entry, reviewed_candidate, run_candidate_tests, stage_candidate
 from ago_verify_candidate import CONFIRM, verify
 
 
@@ -89,8 +89,19 @@ def main() -> None:
     waiting = reviewed_candidate(json.dumps(source))
     stopped = execute_entry(waiting, "src/arithmetic.py", lambda output: None, lambda: True)
     assert stopped["status"] == "stopped", stopped
+    node = edited_candidate({"run_id": "fixture", "revision": 0, "acceptance_checks": ["sum"]}, {
+        "run_id": "fixture", "expected_revision": 0, "files": [
+            {"path": "src/main.mjs", "content": "export const sum = (a,b) => a+b; console.log(sum(2,3));"},
+            {"path": "tests/sum.test.mjs", "content": "import test from 'node:test'; "
+             "import assert from 'node:assert/strict'; import {sum} from '../src/main.mjs'; "
+             "test('sum',()=>assert.equal(sum(2,3),5));"}]})
+    node_terminal = execute_entry(node, "src/main.mjs", lambda output: None, lambda: False)
+    assert node_terminal["exit_code"] == 0 and node_terminal["output"].strip() == "5", node_terminal
+    node_receipt = run_candidate_tests(node, workspace=True)
+    assert node_receipt["tests_passed"] and node_receipt["unittest_cases"] == 1, node_receipt
     print(json.dumps({"kind": "ago_ci_real_docker_smoke",
                       "trusted_static_fixture_only": True,
+                      "node_terminal": node_terminal, "node_tests": node_receipt["unittest_cases"],
                       "workspace_terminal": terminal, "workspace_stop": stopped["status"],
                       "passing_fixture": passed,
                       "failing_fixture": failed,
