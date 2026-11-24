@@ -33,3 +33,8 @@ test('Connect results read as one sentence',()=>{
  assert.equal(connectText('Gemini',{ok:true,model:'gemini-3.8-flash',code_writing_routed:true}),'Gemini connected. Model: gemini-3.8-flash. Code writing now uses it.');
  assert.equal(connectText('Groq',{ok:false,code:'auth_failed',saved:false}),'Groq: The key was refused. Check it, or make a new key. The key was not saved.');
 });
+test('Connect says which busy models were tried first, and how to fix a workspace key',()=>{
+ assert.equal(connectText('Gemini',{ok:true,model:'gemini-2.5-flash',code_writing_routed:true,tried:[{model:'gemini-3.8-flash',ok:false},{model:'gemini-2.5-flash',ok:true}]}),
+  'Gemini connected. Model: gemini-2.5-flash (tried first: gemini-3.8-flash). Code writing now uses it.');
+ assert.match(connectText('Claude',{ok:false,code:'workspace_id_needed',saved:false}),/Workspace ID .*wrkspc_.*The key was not saved\.$/);
+});

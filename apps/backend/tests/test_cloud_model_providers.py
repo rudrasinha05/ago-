@@ -68,6 +68,7 @@ def test_each_provider_sends_one_bounded_call_and_reads_answer_and_usage(name):
     assert KEY in headers[secret]
     assert KEY not in json.dumps(body(request))          # the key never goes in the body
     assert "tools" not in body(request) and "Say OK" in json.dumps(body(request))
+    assert headers["user-agent"].startswith("AGO/")       # never Python's default agent
 
 
 def test_code_answers_ask_for_json_where_the_provider_supports_it():
@@ -86,13 +87,16 @@ def test_code_answers_ask_for_json_where_the_provider_supports_it():
 
 @pytest.mark.parametrize("error,code", [
     (HTTPError("u", 401, "x", {}, None), "auth_failed"),
+    (HTTPError("u", 403, "x", {}, None), "access_denied"),
     (HTTPError("u", 404, "x", {}, None), "model_not_found"),
     (HTTPError("u", 429, "x", {}, None), "rate_limited_or_no_credit"),
     (HTTPError("u", 503, "x", {}, None), "provider_unavailable"),
     (URLError("no route"), "network_unreachable"),
 ])
 def test_failures_become_agos_own_words_never_provider_text(error, code):
-    provider = CloudTextProvider(provider="openai", api_key=KEY, model="m", opener=FakeOpener(error))
+    # A 5xx gets one retry; give the fake the same failure twice.
+    provider = CloudTextProvider(provider="openai", api_key=KEY, model="m",
+                                 opener=FakeOpener(error, error), sleep=lambda s: None)
     with pytest.raises(CloudProviderError) as raised:
         provider.generate("hi")
     assert raised.value.code == code and KEY not in str(raised.value)
@@ -232,10 +236,11 @@ def test_connect_with_only_a_key_picks_tests_and_routes_code_writing(tmp_path, m
     listing = {"models": [{"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
                           {"name": "models/gemini-3.5-flash-lite", "supportedGenerationMethods": ["generateContent"]}]}
     opener = FakeOpener(listing, ANSWERS["gemini"])
-    vault = ProviderVault(tmp_path, opener=opener)
+    vault = ProviderVault(tmp_path, opener=opener, sleep=lambda s: None)
     result = vault.connect(TENANT, "gemini", KEY)
     assert result["connect"] == {"provider": "gemini", "ok": True, "code": None, "saved": True,
-                                 "model": "gemini-3.8-flash", "code_writing_routed": True}
+                                 "model": "gemini-3.8-flash", "code_writing_routed": True,
+                                 "tried": [{"model": "gemini-3.8-flash", "ok": True, "code": None}]}
     assert [r.get_method() for r in opener.requests] == ["GET", "POST"]   # list, then one test call
     gemini = next(p for p in result["providers"] if p["provider"] == "gemini")
     assert gemini["test_status"] == "ok" and gemini["models"] == ["gemini-3.5-flash-lite", "gemini-3.8-flash"]
@@ -259,3 +264,63 @@ def test_a_refused_key_is_not_saved(tmp_path, monkeypatch):
     result = vault.connect(TENANT, "anthropic", KEY)
     assert result["connect"] == {"provider": "anthropic", "ok": False, "code": "auth_failed", "saved": False}
     assert not any(p["saved"] for p in result["providers"])
+
+
+def test_a_busy_provider_gets_one_retry_then_success():
+    waits = []
+    opener = FakeOpener(HTTPError("u", 503, "x", {}, None), ANSWERS["gemini"])
+    provider = CloudTextProvider(provider="gemini", api_key=KEY, model="m", opener=opener,
+                                 sleep=waits.append)
+    assert provider.generate("hi") == "OK" and waits == [2.0] and len(opener.requests) == 2
+    # 429 (limit or no credit) is not retried: it would only spend more.
+    opener = FakeOpener(HTTPError("u", 429, "x", {}, None))
+    with pytest.raises(CloudProviderError):
+        CloudTextProvider(provider="groq", api_key=KEY, model="m", opener=opener,
+                          sleep=waits.append).generate("hi")
+    assert len(opener.requests) == 1
+
+
+def test_claude_workspace_keys_send_the_workspace_and_say_when_one_is_missing(tmp_path, monkeypatch):
+    opener = FakeOpener(ANSWERS["anthropic"])
+    CloudTextProvider(provider="anthropic", api_key=KEY, model="c", opener=opener,
+                      workspace_id="wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ").generate("hi")
+    headers = {k.lower(): v for k, v in opener.requests[0].header_items()}
+    assert headers["anthropic-workspace-id"] == "wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ"
+    with pytest.raises(ValueError):
+        CloudTextProvider(provider="anthropic", api_key=KEY, model="c", workspace_id="org-123")
+    body = io.BytesIO(b'{"error":{"message":"This API key is not scoped to a workspace, so this request '
+                      b'must include the anthropic-workspace-id header"}}')
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    vault = ProviderVault(tmp_path, opener=FakeOpener(HTTPError("u", 400, "x", {}, body)))
+    result = vault.connect(TENANT, "anthropic", KEY)
+    assert result["connect"] == {"provider": "anthropic", "ok": False, "code": "workspace_id_needed",
+                                 "saved": False}
+    # With the workspace ID the key connects and keeps sending it.
+    opener = FakeOpener({"data": [{"id": "claude-sonnet-5-5"}]}, ANSWERS["anthropic"], ANSWERS["anthropic"])
+    vault = ProviderVault(tmp_path, opener=opener)
+    result = vault.connect(TENANT, "anthropic", KEY, workspace_id="wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ")
+    assert result["connect"]["ok"] is True
+    assert next(p for p in result["providers"] if p["provider"] == "anthropic")["workspace_id"] \
+        == "wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ"
+    vault.for_route(TENANT, "code").generate("again")
+    assert all({k.lower(): v for k, v in r.header_items()}["anthropic-workspace-id"]
+               == "wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ" for r in opener.requests)
+
+
+def test_connect_tries_the_next_model_when_one_is_busy(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    listing = {"models": [{"name": "models/" + n, "supportedGenerationMethods": ["generateContent"]}
+                          for n in ("gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-flash")]}
+    busy = HTTPError("u", 503, "x", {}, None)
+    opener = FakeOpener(listing, busy, busy, ANSWERS["gemini"])
+    vault = ProviderVault(tmp_path, opener=opener, sleep=lambda s: None)
+    result = vault.connect(TENANT, "gemini", KEY)
+    assert result["connect"]["ok"] is True and result["connect"]["model"] == "gemini-2.5-flash"
+    assert result["connect"]["tried"] == [
+        {"model": "gemini-3.8-flash", "ok": False, "code": "provider_unavailable"},
+        {"model": "gemini-2.5-flash", "ok": True, "code": None}]
+    assert result["routes"]["code"] == "gemini"
+    # A refused key is not retried with other models.
+    opener = FakeOpener(listing, HTTPError("u", 401, "x", {}, None))
+    other = ProviderVault(tmp_path / "b", opener=opener, sleep=lambda s: None).connect(TENANT, "gemini", KEY)
+    assert other["connect"]["tried"] == [{"model": "gemini-3.8-flash", "ok": False, "code": "auth_failed"}]

@@ -11,7 +11,7 @@ export function AiModels({api,me,active=true}){
  const founder=Boolean(me?.roles?.includes('founder'));
  const [view,setView]=useState(null),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [drafts,setDrafts]=useState({}),[models,setModels]=useState({}),[busy,setBusy]=useState('');
- const [routes,setRoutes]=useState(null);
+ const [routes,setRoutes]=useState(null),[workspace,setWorkspace]=useState('');
  const apply=useCallback(raw=>{
   const next=settingsView(raw);
   if(!next)throw new Error('AI model settings could not be read. Press Refresh.');
@@ -35,7 +35,7 @@ export function AiModels({api,me,active=true}){
   finally{setBusy('');}
  }
  // One step: AGO checks the key, picks the code model, tests it and uses it.
- const connect=name=>act(name+':connect',()=>api.request(BASE+'/cloud-models/'+name+'/connect',{method:'POST',body:{api_key:keyOf(name).trim()},timeoutMs:130000}),
+ const connect=name=>act(name+':connect',()=>api.request(BASE+'/cloud-models/'+name+'/connect',{method:'POST',body:{api_key:keyOf(name).trim(),...(name==='anthropic'&&workspace.trim()?{workspace_id:workspace.trim()}:{})},timeoutMs:400000}),
   r=>{setKey(name,'');setNotice(connectText(PROVIDER_INFO[name].name,r.connect));});
  const useModel=(name,model)=>act(name+':model',()=>api.request(BASE+'/cloud-models/'+name+'/model',{method:'PUT',body:{model},timeoutMs:65000}),
   r=>{setModels(old=>({...old,[name]:undefined}));setNotice(r.test.ok?PROVIDER_INFO[name].name+' now uses '+model+'.':PROVIDER_INFO[name].name+': '+errorText(r.test.code));});
@@ -79,6 +79,11 @@ export function AiModels({api,me,active=true}){
       <input id={id+'-key'} type="password" autoComplete="off" spellCheck={false} value={key} disabled={!view.available}
        placeholder={p.saved?'Saved '+p.key_hint:'Paste your key ('+info.keyLooks+')'}
        onChange={e=>setKey(p.provider,e.target.value)}/>
+      {p.provider==='anthropic'&&(!p.saved||key.trim())&&<>
+       <label htmlFor={id+'-workspace'}>Workspace ID (only if your key works across workspaces)</label>
+       <input id={id+'-workspace'} value={workspace} autoComplete="off" spellCheck={false} disabled={!view.available}
+        placeholder={p.workspace_id||'wrkspc_…'} onChange={e=>setWorkspace(e.target.value)}/>
+      </>}
       <div className="ai-provider-actions">
        {(!p.saved||key.trim())&&<button type="button" className="ai-primary" disabled={!editable||!key.trim()} onClick={()=>connect(p.provider)} aria-label={'Connect '+info.name}>
         {busy===p.provider+':connect'?'Connecting…':'Connect'}</button>}

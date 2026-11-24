@@ -16,6 +16,7 @@ export const ROUTE_INFO=[
 
 const ERROR_TEXT={
  auth_failed:'The key was refused. Check it, or make a new key.',
+ access_denied:'The provider blocked this request (key permissions, account not activated, or region). Check the key\'s permissions in the provider console.',
  model_not_found:'This model name is not available for your key. Use "Load models".',
  rate_limited_or_no_credit:'Too many calls, or no credit left on this account.',
  request_rejected:'The provider rejected the request. Try another model.',
@@ -27,6 +28,7 @@ const ERROR_TEXT={
  unreadable_response:'The provider sent an answer AGO could not read.',
  monthly_cap_reached:'This month\'s call limit is used up. The local model does the work.',
  no_text_model:'This key has no text model AGO can use.',
+ workspace_id_needed:'This Claude key works across workspaces. Add its Workspace ID (Console → Workspaces, starts with wrkspc_), or make a key for one workspace.',
 };
 /** One sentence for AGO's own failure code. */
 export function errorText(code){
@@ -36,8 +38,10 @@ export function errorText(code){
 /** Plain result of pressing Connect. */
 export function connectText(name,c){
  if(!c)return '';
- if(!c.ok)return name+': '+errorText(c.code)+(c.saved?'':' The key was not saved.');
- return name+' connected. Model: '+c.model+'.'+(c.code_writing_routed?' Code writing now uses it.':'');
+ const busy=(c.tried||[]).filter(t=>!t.ok).map(t=>t.model);
+ const before=busy.length?' (tried first: '+busy.join(', ')+')':'';
+ if(!c.ok)return name+': '+errorText(c.code)+before+(c.saved?'':' The key was not saved.');
+ return name+' connected. Model: '+c.model+before+'.'+(c.code_writing_routed?' Code writing now uses it.':'');
 }
 
 /** Status chip for one provider row. */

@@ -671,6 +671,8 @@ class CloudModelKey(StrictInput):
 
 class CloudModelConnect(StrictInput):
     api_key: str = Field(min_length=1, max_length=1000)
+    # Only for Claude keys that work across workspaces (Console -> Workspaces -> ID).
+    workspace_id: str | None = Field(default=None, max_length=80)
 
 
 class CloudModelChoice(StrictInput):
@@ -722,7 +724,8 @@ def connect_cloud_model(provider: str, body: CloudModelConnect,
     """Key only: AGO checks it, picks the code model, tests it and uses it."""
     _cloud_founder(repositories, actor, write=True)
     try:
-        return ProviderVault().connect(actor.tenant_id, _known_provider(provider), body.api_key)
+        return ProviderVault().connect(actor.tenant_id, _known_provider(provider), body.api_key,
+                                       workspace_id=body.workspace_id)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
 

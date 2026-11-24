@@ -9,6 +9,7 @@ import json
 import os
 import re
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -205,8 +206,10 @@ class CloudCapReached(CloudProviderError):
 
 
 def _status_code(status: int) -> str:
-    if status in (401, 403):
+    if status == 401:
         return "auth_failed"
+    if status == 403:
+        return "access_denied"
     if status == 404:
         return "model_not_found"
     if status == 429:
@@ -214,6 +217,19 @@ def _status_code(status: int) -> str:
     if 400 <= status < 500:
         return "request_rejected"
     return "provider_unavailable"
+
+
+_WORKSPACE_ID = re.compile(r"wrkspc_[A-Za-z0-9]{8,64}")
+
+
+def safe_workspace_id(value: str | None) -> str | None:
+    """An Anthropic workspace ID (wrkspc_...), or None when not given."""
+    value = str(value or "").strip()
+    if not value:
+        return None
+    if _WORKSPACE_ID.fullmatch(value) is None:
+        raise ValueError("Workspace ID looks like wrkspc_ followed by letters and digits")
+    return value
 
 
 def safe_model_name(model: str) -> str:
@@ -232,8 +248,12 @@ class CloudTextProvider:
 
     supports_response_schema = True
 
+    # A busy provider (5xx) gets one more try after this many seconds.
+    RETRY_AFTER = 2.0
+
     def __init__(self, *, provider: str, api_key: str, model: str,
-                 timeout_seconds: int = 60, max_output_tokens: int = 4096, opener=None):
+                 timeout_seconds: int = 60, max_output_tokens: int = 4096, opener=None,
+                 workspace_id: str | None = None, sleep=time.sleep):
         if provider not in CLOUD_PROVIDERS:
             raise ValueError("Unknown cloud provider")
         api_key = str(api_key or "").strip()
@@ -248,6 +268,9 @@ class CloudTextProvider:
         self.max_output_tokens = max_output_tokens
         self.opener = opener or build_opener(ProxyHandler({}), _DenyRedirect()).open
         self.last_usage = (0, 0)
+        # Anthropic keys that work across workspaces must name one per request.
+        self.workspace_id = safe_workspace_id(workspace_id) if provider == "anthropic" else None
+        self.sleep = sleep
 
     @property
     def label(self) -> str:
@@ -255,25 +278,43 @@ class CloudTextProvider:
 
     def _headers(self) -> dict:
         if self.provider == "anthropic":
-            return {"x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
+            headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
+            if self.workspace_id:
+                headers["anthropic-workspace-id"] = self.workspace_id
+            return headers
         if self.provider == "gemini":
             return {"x-goog-api-key": self.api_key}
         return {"Authorization": "Bearer " + self.api_key}
 
     def _call(self, url: str, body: dict | None, limit: int) -> dict:
-        headers = {**self._headers(), "Accept": "application/json"}
+        # A named client: some provider firewalls refuse Python's default agent.
+        headers = {**self._headers(), "Accept": "application/json", "User-Agent": "AGO/1.0 (local company OS)"}
         data = None
         if body is not None:
             headers["Content-Type"] = "application/json"
             data = json.dumps(body).encode("utf-8")
         request = Request(url, data=data, headers=headers, method="POST" if body is not None else "GET")
-        try:
-            with self.opener(request, timeout=self.timeout) as response:
-                raw = response.read(limit + 1)
-        except HTTPError as error:
-            raise CloudProviderError(_status_code(error.code)) from None
-        except (URLError, TimeoutError, OSError):
-            raise CloudProviderError("network_unreachable") from None
+        for attempt in (1, 2):
+            try:
+                with self.opener(request, timeout=self.timeout) as response:
+                    raw = response.read(limit + 1)
+                break
+            except HTTPError as error:
+                if error.code >= 500 and attempt == 1:
+                    self.sleep(self.RETRY_AFTER)          # busy or overloaded: one more try
+                    continue
+                code = _status_code(error.code)
+                if error.code == 400 and self.provider == "anthropic":
+                    # Read only to recognise one known cause; never shown or stored.
+                    try:
+                        detail = error.read(4096) if error.fp else b""
+                    except OSError:
+                        detail = b""
+                    if b"anthropic-workspace-id" in (detail or b""):
+                        code = "workspace_id_needed"
+                raise CloudProviderError(code) from None
+            except (URLError, TimeoutError, OSError):
+                raise CloudProviderError("network_unreachable") from None
         if len(raw) > limit:
             raise CloudProviderError("response_too_large")
         try:
@@ -395,17 +436,37 @@ def _version(name: str) -> tuple:
     return tuple(int(n) for n in re.findall(r"\d+", name)[:3])
 
 
-def choose_code_model(provider: str, names: list[str]) -> str | None:
-    """The model AGO suggests for code writing from this key's own model list:
-    a text model of the preferred family, newest version, no preview/lite builds."""
+def code_model_candidates(provider: str, names: list[str], limit: int = 5) -> list[str]:
+    """Models AGO tries for code writing, best first: preferred families, newest
+    stable versions first, then preview builds; never embeddings, audio or images."""
     usable = [n for n in names if not _NOT_TEXT.search(n)]
     stable = [n for n in usable if not re.search(r"(preview|exp|lite|nano|mini|instant|dated|-\d{8}$|latest)", n, re.I)]
+    order: list[str] = []
     for family in _CODE_PREFERENCE.get(provider, ()):
         for pool in (stable, usable):
-            matches = [n for n in pool if family in n.lower()]
-            if matches:
-                return max(matches, key=lambda n: (_version(n), -len(n)))
-    return (stable or usable or [None])[0]
+            ranked = sorted((n for n in pool if family in n.lower()),
+                            key=lambda n: (_version(n), -len(n)), reverse=True)
+            # The newest of each major version first (3.8, then 2.5), so one busy
+            # generation does not hide an older, well-proven one.
+            majors, firsts = set(), []
+            for n in ranked:
+                major = _version(n)[:1]
+                if major not in majors:
+                    majors.add(major)
+                    firsts.append(n)
+            for n in firsts + ranked:
+                if n not in order:
+                    order.append(n)
+    for n in stable + usable:
+        if n not in order:
+            order.append(n)
+    return order[:limit]
+
+
+def choose_code_model(provider: str, names: list[str]) -> str | None:
+    """The model AGO suggests first for code writing from this key's own list."""
+    candidates = code_model_candidates(provider, names, limit=1)
+    return candidates[0] if candidates else None
 
 
 def _vault_dir() -> Path:
@@ -431,7 +492,8 @@ class ProviderVault:
 
     _lock = threading.Lock()
 
-    def __init__(self, directory: Path | None = None, *, opener=None):
+    def __init__(self, directory: Path | None = None, *, opener=None, sleep=time.sleep):
+        self.sleep = sleep
         self.directory = Path(directory) if directory else _vault_dir()
         self.settings = self.directory / "model_providers.json"
         self.keyfile = self.directory / "model_providers.key"
@@ -478,7 +540,8 @@ class ProviderVault:
         if not entry:
             raise LookupError("No key saved for this provider")
         key = self._fernet().decrypt(entry["key"].encode()).decode()
-        return CloudTextProvider(provider=name, api_key=key, model=entry["model"], opener=self.opener)
+        return CloudTextProvider(provider=name, api_key=key, model=entry["model"], opener=self.opener,
+                                 workspace_id=entry.get("workspace_id"), sleep=self.sleep)
 
     # -- Founder actions -------------------------------------------------
     def view(self, tenant_id: str) -> dict:
@@ -498,6 +561,7 @@ class ProviderVault:
                 "tested_at": tenant["providers"].get(name, {}).get("tested_at"),
                 "last_error": tenant["providers"].get(name, {}).get("last_error"),
                 "models": tenant["providers"].get(name, {}).get("models", []),
+                "workspace_id": tenant["providers"].get(name, {}).get("workspace_id"),
             } for name, label in CLOUD_PROVIDERS.items()],
             "routes": {route: tenant["routes"].get(route) for route in CLOUD_ROUTES},
             "monthly_call_cap": tenant["monthly_call_cap"],
@@ -507,25 +571,36 @@ class ProviderVault:
                       "by_provider": usage.get("by_provider", {})},
         }
 
-    def connect(self, tenant_id: str, name: str, api_key: str) -> dict:
-        """Key only: AGO reads this key's model list, picks the code model,
-        saves the key encrypted, makes one test call and, when Code writing
-        is still on the local model, puts code writing on this model."""
+    # Failures where another model of the same key may work.
+    _TRY_NEXT = frozenset({"provider_unavailable", "model_not_found", "rate_limited_or_no_credit",
+                           "request_rejected", "incomplete_answer", "empty_answer"})
+
+    def connect(self, tenant_id: str, name: str, api_key: str,
+                workspace_id: str | None = None) -> dict:
+        """Key only: AGO reads this key's model list, tries the best code models
+        in turn (one test call each) until one works, saves the key encrypted
+        and, when Code writing is still on the local model, uses this model."""
         if name not in CLOUD_PROVIDERS:
             raise ValueError("Unknown cloud provider")
-        probe = CloudTextProvider(provider=name, api_key=api_key, model="probe", opener=self.opener)
+        probe = CloudTextProvider(provider=name, api_key=api_key, model="probe", opener=self.opener,
+                                  workspace_id=workspace_id, sleep=self.sleep)
         try:
             names = probe.list_models()
         except CloudProviderError as failed:
             return {**self.view(tenant_id), "connect": {
                 "provider": name, "ok": False, "code": failed.code, "saved": False}}
-        model = choose_code_model(name, names)
-        if model is None:
+        candidates = code_model_candidates(name, names)
+        if not candidates:
             return {**self.view(tenant_id), "connect": {
                 "provider": name, "ok": False, "code": "no_text_model", "saved": False}}
-        self.save(tenant_id, name, model=model, api_key=api_key)
-        self._mark(tenant_id, name, models=names)
-        result = self.test(tenant_id, name)
+        tried = []
+        for model in candidates:
+            self.save(tenant_id, name, model=model, api_key=api_key, workspace_id=workspace_id)
+            self._mark(tenant_id, name, models=names)
+            result = self.test(tenant_id, name)
+            tried.append({"model": model, "ok": result["test"]["ok"], "code": result["test"]["code"]})
+            if result["test"]["ok"] or result["test"]["code"] not in self._TRY_NEXT:
+                break
         routed = False
         if result["test"]["ok"]:
             with self._lock:
@@ -537,17 +612,19 @@ class ProviderVault:
                     self._save(data)
         return {**self.view(tenant_id), "connect": {
             "provider": name, "ok": result["test"]["ok"], "code": result["test"]["code"],
-            "saved": True, "model": model, "code_writing_routed": routed}}
+            "saved": True, "model": model, "code_writing_routed": routed, "tried": tried}}
 
     def choose_model(self, tenant_id: str, name: str, model: str) -> dict:
         """Switch to another model of the same saved key and test it at once."""
         self.save(tenant_id, name, model=model, api_key=None)
         return self.test(tenant_id, name)
 
-    def save(self, tenant_id: str, name: str, *, model: str, api_key: str | None) -> dict:
+    def save(self, tenant_id: str, name: str, *, model: str, api_key: str | None,
+             workspace_id: str | None = None) -> dict:
         if name not in CLOUD_PROVIDERS:
             raise ValueError("Unknown cloud provider")
         model = safe_model_name(model)
+        workspace_id = safe_workspace_id(workspace_id) if name == "anthropic" else None
         with self._lock:
             data = self._load()
             tenant = self._tenant(data, tenant_id)
@@ -555,7 +632,8 @@ class ProviderVault:
             if api_key:
                 CloudTextProvider(provider=name, api_key=api_key, model=model)  # validates shape
                 key = api_key.strip()
-                entry = {"key": self._fernet().encrypt(key.encode()).decode(), "key_hint": "…" + key[-4:]}
+                entry = {"key": self._fernet().encrypt(key.encode()).decode(), "key_hint": "…" + key[-4:],
+                         "workspace_id": workspace_id}
             elif not entry:
                 raise ValueError("Enter the API key the first time")
             entry = {**entry, "model": model, "test_status": None, "tested_at": None, "last_error": None,
