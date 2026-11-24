@@ -11,7 +11,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from ago.company_engineering import reviewed_candidate, stage_candidate
+from ago.company_engineering import execute_entry, reviewed_candidate, stage_candidate
 from ago_verify_candidate import CONFIRM, verify
 
 
@@ -80,8 +80,18 @@ def main() -> None:
     passed = exercise(broken=False)
     failed = exercise(broken=True)
     assert passed["candidate_sha256"] != failed["candidate_sha256"]
+    source = candidate_source(broken=False)
+    source["files"][0]["content"] += "\nprint(multiply(3, 4), flush=True)\n"
+    entry = reviewed_candidate(json.dumps(source))
+    terminal = execute_entry(entry, "src/arithmetic.py", lambda output: None, lambda: False)
+    assert terminal["exit_code"] == 0 and terminal["output"].strip() == "12", terminal
+    source["files"][0]["content"] += "import time\ntime.sleep(30)\n"
+    waiting = reviewed_candidate(json.dumps(source))
+    stopped = execute_entry(waiting, "src/arithmetic.py", lambda output: None, lambda: True)
+    assert stopped["status"] == "stopped", stopped
     print(json.dumps({"kind": "ago_ci_real_docker_smoke",
                       "trusted_static_fixture_only": True,
+                      "workspace_terminal": terminal, "workspace_stop": stopped["status"],
                       "passing_fixture": passed,
                       "failing_fixture": failed,
                       "live_model_execution_proved": False,

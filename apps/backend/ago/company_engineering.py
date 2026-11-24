@@ -632,12 +632,11 @@ def execute_entry(candidate, entry, on_output, stop_requested, timeout=90):
                     pass
         finally:
             if process.poll() is None:
-                try:
-                    subprocess.run(["docker", "rm", "-f", container], timeout=10,
-                                   capture_output=True, check=False)
-                finally:
-                    process.kill()
-                    process.wait()
+                process.kill()
+                process.wait()
+                # A stop can arrive while Docker is still creating the container.
+                subprocess.run(["docker", "rm", "-f", container], timeout=10,
+                               capture_output=True, check=False)
             reader.join(timeout=2)
             process.stdout.close()
         if status == "completed" and process.returncode:
