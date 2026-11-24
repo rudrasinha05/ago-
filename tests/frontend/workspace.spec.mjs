@@ -1496,25 +1496,29 @@ test('Board members have call names; the Founder asks JARVIS and hears the recor
  expect(errors).toEqual([]);
 });
 
-test('AI Models: the Founder pastes only a key and presses Connect; AGO picks, tests and uses the model; the key never comes back',async({page})=>{
+test('AI Models: the Founder pastes only a key and presses Connect; the Manager decides which model works; the key never comes back',async({page})=>{
  const {calls,errors}=await fixtures(page);
  const key='gsk_browser_fixture_key_9876';
  const providers=['openai','anthropic','gemini','groq'].map(provider=>({provider,label:provider,saved:false,model:null,key_hint:null,test_status:null,tested_at:null,last_error:null,models:[]}));
  const view={kind:'ago_cloud_model_settings_v1',available:true,stored_on:'this computer (~/.ago), encrypted',providers,
-  routes:{code:null,qa:null,chat:null},monthly_call_cap:100,usage:{month:'2026-11',calls:0,input_tokens:0,output_tokens:0,by_provider:{}}};
+  allow_paid:true,monthly_call_cap:100,usage:{month:'2026-11',calls:0,paid_calls:0,input_tokens:0,output_tokens:0,by_provider:{}}};
  const groq=()=>view.providers.find(p=>p.provider==='groq');
  const bodies=[];
+ await page.route(/\/v1\/organization\/company\/model-decisions/,route=>route.fulfill({json:{kind:'ago_model_decisions_v1',decisions:[
+  {id:'a1',task_id:null,work:'code',role:'employee',model_label:'groq:openai/gpt-oss-120b',reason:'Code writing: a free model strong enough for code goes first.',created_at:'2026-11-24T10:00:00Z'},
+  {id:'a2',task_id:null,work:'qa',role:'qa',model_label:'anthropic:claude-sonnet-4-6',reason:'QA review: a capable model from a different provider than the builder checks the work.',created_at:'2026-11-24T10:01:00Z'},
+  {id:'a3',task_id:null,work:'nonsense',role:'x',model_label:'x:y',reason:'dropped',created_at:'2026-11-24T10:02:00Z'}]}}));
  await page.route(/\/v1\/organization\/company\/cloud-model/,async route=>{
   const request=route.request(),path=new URL(request.url()).pathname,method=request.method(),body=request.postDataJSON();
   bodies.push({path,method,body});
   if(path.endsWith('/groq/connect')){
    Object.assign(groq(),{saved:true,model:'openai/gpt-oss-120b',key_hint:'…'+body.api_key.slice(-4),test_status:'ok',models:['llama-3.3-70b-versatile','openai/gpt-oss-120b']});
-   view.routes.code='groq';view.usage.calls=1;
-   return route.fulfill({json:{...view,connect:{provider:'groq',ok:true,code:null,saved:true,model:'openai/gpt-oss-120b',code_writing_routed:true}}});
+   view.usage.calls=1;
+   return route.fulfill({json:{...view,connect:{provider:'groq',ok:true,code:null,saved:true,model:'openai/gpt-oss-120b'}}});
   }
   if(path.endsWith('/groq/model')){Object.assign(groq(),{model:body.model});view.usage.calls=2;
    return route.fulfill({json:{...view,test:{provider:'groq',ok:true,code:null}}});}
-  if(path.endsWith('/cloud-model-routes')){view.routes={code:body.code,qa:body.qa,chat:body.chat};view.monthly_call_cap=body.monthly_call_cap;}
+  if(path.endsWith('/cloud-model-policy')){view.allow_paid=body.allow_paid;view.monthly_call_cap=body.monthly_call_cap;}
   return route.fulfill({json:view});
  });
  await login(page);
@@ -1523,31 +1527,37 @@ test('AI Models: the Founder pastes only a key and presses Connect; AGO picks, t
  const panel=page.getByRole('region',{name:'AI models'});
  const card=panel.getByRole('listitem',{name:'Groq'});
  await expect(card).toContainText('Not connected');
- // Nothing to choose before a model is connected; Connect waits for a key.
- await expect(panel.getByLabel(/Code writing/)).toBeDisabled();
+ // No manual routing: the Manager decides. Connect waits for a key.
+ await expect(panel.getByText('Which model does which work')).toHaveCount(0);
+ await expect(panel.getByLabel('Models the Manager can use')).toHaveText('Can use now: Local model (Ollama)');
  await expect(card.getByRole('button',{name:'Connect Groq'})).toBeDisabled();
  await card.getByLabel('API key').fill(key);
  await card.getByRole('button',{name:'Connect Groq'}).click();
- await expect(panel.getByRole('status').first()).toContainText('Groq connected. Model: openai/gpt-oss-120b. Code writing now uses it.');
+ await expect(panel.getByRole('status').first()).toContainText('Groq connected. Model: openai/gpt-oss-120b. The Manager can now use it.');
  await expect(card).toContainText('Working');
  await expect(card.getByLabel('Replace key')).toHaveValue('');
  await expect(card.getByLabel('Replace key')).toHaveAttribute('placeholder','Saved …9876');
  await expect(card.getByRole('button',{name:'Connect Groq'})).toHaveCount(0);
  expect(bodies.find(b=>b.path.endsWith('/groq/connect')).body).toEqual({api_key:key});
- await expect(panel.getByRole('list',{name:'Now in use'})).toContainText('Code writing: Groq (openai/gpt-oss-120b)');
- await expect(panel.getByLabel('Cloud usage this month')).toContainText('1 of 100 cloud calls');
+ await expect(panel.getByLabel('Models the Manager can use')).toHaveText('Can use now: Local model (Ollama) · Groq');
+ await expect(panel.getByLabel('Cloud usage this month')).toContainText('1 cloud calls in 2026-11 (0 of 100 paid)');
+ // Every choice is shown with its reason; unknown records are dropped.
+ const chosen=panel.getByRole('list',{name:'Recent model choices'});
+ await expect(chosen.getByRole('listitem')).toHaveCount(2);
+ await expect(chosen).toContainText('Code writing · employee → groq:openai/gpt-oss-120b');
+ await expect(chosen).toContainText('from a different provider than the builder');
  // Switch model from the key's own list; AGO tests it at once.
  await card.getByLabel('Model').selectOption('llama-3.3-70b-versatile');
  await card.getByRole('button',{name:'Use this model'}).click();
  await expect(panel.getByRole('status').first()).toContainText('Groq now uses llama-3.3-70b-versatile.');
  expect(bodies.find(b=>b.path.endsWith('/groq/model')).body).toEqual({model:'llama-3.3-70b-versatile'});
- // Choose more work for it and a lower limit.
- await panel.getByLabel(/QA review/).selectOption('groq');
- await panel.getByLabel(/Monthly limit/).fill('40');
- await panel.getByRole('button',{name:'Save choices'}).click();
- await expect(panel.getByRole('status').first()).toContainText('AGO uses these models from the next AI task');
- expect(bodies.find(b=>b.path.endsWith('/cloud-model-routes')).body).toEqual({code:'groq',qa:'groq',chat:null,monthly_call_cap:40});
- await expect(panel.getByRole('list',{name:'Now in use'})).toContainText('QA review: Groq (llama-3.3-70b-versatile)');
+ // The Founder only sets the paid-model rule and its limit.
+ await panel.getByLabel(/Allow paid models/).uncheck();
+ await panel.getByLabel(/Monthly paid-call limit/).fill('40');
+ await panel.getByRole('button',{name:'Save',exact:true}).click();
+ await expect(panel.getByRole('status').first()).toContainText('The Manager follows this from the next AI task');
+ expect(bodies.find(b=>b.path.endsWith('/cloud-model-policy')).body).toEqual({allow_paid:false,monthly_call_cap:40});
+ await expect(panel.getByLabel(/Allow paid models/)).not.toBeChecked();
  // The key went out once, in the Connect body only; nothing on the page shows it.
  expect(bodies.filter(b=>JSON.stringify(b.body||{}).includes(key)).length).toBe(1);
  await expect(page.locator('body')).not.toContainText(key);

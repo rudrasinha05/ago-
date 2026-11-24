@@ -25,6 +25,8 @@ from ago.ai_qa_review import AiQaReview as _AiQaReview
 from ago.ai_qa_review_queries import AiQaReviewQueries as _AiQaReviewQueries
 from ago.brain_skill_store import BrainSkillStore as _BrainSkillStore
 from ago.brain_skills import BrainSkillTeacher as _BrainSkillTeacher
+from ago.model_manager import Choice, ModelManager as _ModelManager
+from ago.model_manager_store import ModelManagerStore as _ModelManagerStore
 from ago.agent_runtime_queries import AgentRuntimeQueries as _AgentRuntimeQueries
 from ago.approvals import ApprovalRequest
 from ago.backend_contracts import Cursor, DatabaseConnection
@@ -596,6 +598,18 @@ class BrainSkillStorePort(Protocol):
 
 class BrainSkillTeacherPort(Protocol):
     def learn(self, *, tenant_id: str, founder_id: str, topic: str | None=None, gap_id: str | None=None) -> dict: ...
+
+
+class ModelManagerPort(Protocol):
+    def choose(self, *, tenant_id: str, work: str, task_id: str | None=None, role: str | None=None, project_id: str | None=None, stage: str | None=None, avoid_provider: str | None=None) -> Choice | None: ...
+    def recent(self, tenant_id: str) -> list[dict]: ...
+
+
+class ModelManagerStorePort(Protocol):
+    def builder_results(self, tenant_id: str) -> dict[str, dict]: ...
+    def stage_failed_before(self, tenant_id: str, project_id: str, stage: str) -> bool: ...
+    def record(self, tenant_id: str, task_id: str | None, work: str, role: str | None, model_label: str, reason: str) -> None: ...
+    def recent(self, tenant_id: str, limit: int=30) -> list[dict]: ...
 
 
 class AiQaReviewPort(Protocol):
@@ -1302,6 +1316,8 @@ REPOSITORY_BINDINGS = {
     AiQaReviewQueriesPort: _AiQaReviewQueries,
     BrainSkillStorePort: _BrainSkillStore,
     BrainSkillTeacherPort: _BrainSkillTeacher,
+    ModelManagerPort: _ModelManager,
+    ModelManagerStorePort: _ModelManagerStore,
     AgentRuntimeQueriesPort: _AgentRuntimeQueries,
     ApprovalRepositoryPort: _ApprovalRepository,
     CalendarStorePort: _CalendarStore,

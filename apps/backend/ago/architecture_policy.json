@@ -127,6 +127,7 @@
         "brain_skill_store",
         "brain_skills",
         "model_handlers",
+        "model_manager",
         "repository_ports"
       ]
     },
@@ -787,6 +788,7 @@
         "company_ollama_chain",
         "company_ollama_chain_queries",
         "credits",
+        "model_manager",
         "model_provider"
       ]
     },
@@ -956,6 +958,8 @@
         "message_store",
         "meta_brain",
         "meta_brain_queries",
+        "model_manager",
+        "model_manager_store",
         "organization",
         "organization_store",
         "organizational_dna",
@@ -1164,6 +1168,7 @@
         "backend_contracts",
         "brain_skills",
         "credits",
+        "model_manager",
         "model_provider",
         "quality",
         "quality_store",
@@ -1216,8 +1221,25 @@
         "backend_contracts",
         "brain_skill_store",
         "credits",
+        "model_manager",
         "model_provider",
         "skill_library"
+      ]
+    },
+    "model_manager": {
+      "context": "workforce",
+      "layer": "service",
+      "imports": [
+        "backend_contracts",
+        "model_manager_store",
+        "model_provider"
+      ]
+    },
+    "model_manager_store": {
+      "context": "workforce",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
       ]
     }
   },

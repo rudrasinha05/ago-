@@ -236,17 +236,25 @@ def test_founder_chosen_cloud_qa_model_reviews_and_the_receipt_names_it(case, mo
             Cloud.prompts.append(prompt)
             return 'FINDINGS:\n- checklist present\nQA_VERDICT: PASS'
 
-    class Vault:
-        def for_route(self, tenant_id, route):
-            assert (tenant_id, route) == (tenant, 'qa')
-            return Cloud()
+    from ago.model_manager import Choice
 
-    monkeypatch.setattr(ai_qa_review, 'ProviderVault', Vault)
+    class Manager:
+        asked = []
+
+        def __init__(self, connection, *, repositories=None):
+            pass
+
+        def choose(self, **ask):
+            Manager.asked.append(ask)
+            return Choice(label='openai:gpt-test', cloud=Cloud(), reason='QA needs a capable model.')
+
+    monkeypatch.setattr(ai_qa_review, 'ModelManager', Manager)
     _use_model(monkeypatch, 'QA_VERDICT: FAIL')           # local must not be used
     endpoint = BASE+'/projects/'+project['id']+'/stages/discovery/ai-qa'
     result = post(client, endpoint, founder, {'qa_employee_id': people['qa'], 'operation_key': str(uuid4())})
     assert result['verdict'] == 'pass' and result['model'] == 'openai:gpt-test'
     assert len(Cloud.prompts) == 1
+    assert Manager.asked[0]['work'] == 'qa' and Manager.asked[0]['task_id'] == task_id
     receipt = db.execute("SELECT model FROM ago_ai_qa_reviews WHERE tenant_id=%s AND task_id=%s",
                          (tenant, task_id)).fetchone()
     assert receipt['model'] == 'openai:gpt-test'

@@ -225,7 +225,7 @@ def _without_vote(text: str) -> str:
 
 def run_four_role_chain(
     *, task, participants: list[dict], provider, engineering_candidates: bool = False,
-    code_provider=None, skill_guide=None,
+    code_provider=None, skill_guide=None, provider_for=None,
     on_role_completed=None, clock=None, overridden_seats=frozenset(),
     revision_notes: str = "",
 ) -> dict:
@@ -452,7 +452,10 @@ def run_four_role_chain(
               if role in BOARD_ROLE_SEATS else ""))
         prompt = fit_prompt(prompt)
         role_started = clock()
-        speaker = (code_provider or provider) if code_author else provider
+        # MGR-002: the Workforce Manager may choose a model per role and stage.
+        base = (provider_for(role, project_stage, bool(code_author)) if provider_for is not None
+                else None) or provider
+        speaker = (code_provider or base) if code_author else base
         output=_ask(speaker, prompt, code_author=bool(code_author)).strip()
         duration = clock() - role_started
         if not 0 <= duration <= 60 or not 0 <= clock() - started <= maximum_seconds:

@@ -853,31 +853,39 @@ def test_release_board_denials_about_the_later_pr_or_owner_decision_are_the_ago_
 
 
 
-def test_engineering_code_author_uses_the_founders_cloud_model_and_spends_paid_credits(monkeypatch):
-    """AI-001: with a cloud code model routed, the chain receives it as the code
-    author (local model as fallback); each cloud call spends one paid credit."""
+def test_the_workforce_manager_chooses_each_roles_model_and_cloud_calls_spend_credits(monkeypatch):
+    """MGR-002: the chain asks the Manager per role; a cloud choice is wrapped with
+    the local model as fallback and spends one virtual credit per call."""
+    from ago.model_manager import Choice
     db=ApprovedProjectDb()
     actor=SimpleNamespace(tenant_id=db.tenant,subject=db.founder,roles=("founder",))
     charges=[]
     class Credits:
         def charge(self, **details):
             charges.append(details)
+    class Cloud:
+        label="groq:test-model"
+        supports_response_schema=True
+        def generate(self,prompt,**options):
+            return "cloud answer"
+    asked=[]
+    class Manager:
+        def __init__(self, connection, *, repositories=None):
+            pass
+        def choose(self, **ask):
+            asked.append(ask)
+            if ask["work"]=="code":
+                return Choice(label="groq:test-model", cloud=Cloud(), reason="free capable model")
+            return Choice(label="ollama:qwen3:4b", cloud=None, reason="short work")
     class Repos:
         def resolve(self,port):
             if port is CreditBudget:
                 return Credits()
             if port is CompanyOllamaChainQueries:
                 return CompanyOllamaChainQueries(db)
+            if port is Manager:
+                return Manager(None)
             raise AssertionError("Unexpected repository port")
-    class Cloud:
-        label="groq:test-model"
-        supports_response_schema=True
-        def generate(self,prompt,**options):
-            return "cloud code"
-    class Vault:
-        def for_route(self,tenant_id,route):
-            assert (tenant_id,route)==(db.tenant,"code")
-            return Cloud()
     seen={}
     def chain(**kwargs):
         seen.update(kwargs)
@@ -889,17 +897,19 @@ def test_engineering_code_author_uses_the_founders_cloud_model_and_spends_paid_c
     monkeypatch.setenv("AGO_LOCAL_FULL_BOARD_REVIEW","true")
     monkeypatch.setenv("AGO_ENVIRONMENT","development")
     monkeypatch.setenv("AGO_LLM_MODEL","qwen3:4b")
-    monkeypatch.setattr(handlers,"ProviderVault",Vault)
+    monkeypatch.setattr(handlers,"ModelManager",Manager)
     monkeypatch.setattr(handlers,"run_four_role_chain",chain)
     monkeypatch.setattr(handlers,"OllamaLocalTextProvider",lambda **o: FakeModel())
     h=handlers.optional_model_handlers(db,actor,repositories=Repos())
     h["internal:brief"](db.task())
-    code=seen["code_provider"]
+    provider_for=seen["provider_for"]
     assert seen["provider"].label=="ollama:qwen3:4b"
-    assert code.generate("write code")=="cloud code" and code.label=="groq:test-model"
+    assert provider_for("ceo","implementation",False) is None          # local model stays
+    code=provider_for("employee","implementation",True)
+    assert code.generate("write code")=="cloud answer" and code.label=="groq:test-model"
     assert [c["category"] for c in charges]==["paid_model_attempt"]
-    # Without a routed cloud model, the code author stays on the local model.
-    monkeypatch.setattr(handlers,"ProviderVault",lambda: SimpleNamespace(for_route=lambda *a: None))
-    seen.clear()
-    handlers.optional_model_handlers(db,actor,repositories=Repos())["internal:brief"](db.task())
-    assert seen["code_provider"] is None
+    assert [(a["work"],a["role"],a["stage"]) for a in asked]==[
+        ("board","ceo","implementation"),("code","employee","implementation")]
+    assert all(a["task_id"]==db.task_id for a in asked)
+    provider_for("cto","implementation",False)
+    assert len(asked)==2                                                # one decision per kind of work and stage

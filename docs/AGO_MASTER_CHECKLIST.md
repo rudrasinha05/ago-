@@ -1034,6 +1034,16 @@ section and a founder amendment indicates traceability, not a reason to merge.
 - [~] SKL-005 — AGO measures which skills were used in work that passed or failed QA and shows this to the Founder.
   - *PARTIAL* — Built: uses per task and QA pass/fail shown in the Brain tab (test_gap_to_ceo_approved_skill_to_next_work_and_qa_results). Not yet proved with real project work
 
+### MGR — AI Workforce Manager and Founder Assistant (Founder, 2026-11-24)
+- [ ] MGR-001 — An AI Workforce Manager assigns AI employees to projects, stages and departments by role, skill, workload and past QA results, records every decision with its reason, and the Founder can change any assignment. Approval rules stay unchanged.
+  - *NOT STARTED* — Approved by the Founder 2026-11-24
+- [~] MGR-002 — The Manager chooses the AI model for each piece of work by what the work needs and what each connected model has proved (strong models for code and QA, light or local models for short work), within the Founder's monthly limit; the Founder does not route models by hand.
+  - *CODE EXISTS, NOT PROVED LIVE* — Evidence: `tests/test_model_manager.py`, `test_cloud_model_api.py::test_manager_decisions_are_recorded_in_postgres_and_shown_to_the_founder`, `test_local_company_ollama_chain.py::test_the_workforce_manager_chooses_each_roles_model_and_cloud_calls_spend_credits`, `test_ai_qa_review.py::test_founder_chosen_cloud_qa_model_reviews_and_the_receipt_names_it`, Playwright "AI Models … the Manager decides which model works" (local, 2026-11-24). Not yet proved: a live project on the Founder's laptop where the Manager's choice writes code that passes QA.
+- [ ] MGR-003 — Every AI employee has a full, kept history: tasks, projects, models used, skills used, QA pass/fail, credits and time.
+  - *NOT STARTED* — Approved by the Founder 2026-11-24
+- [ ] MGR-004 — The Founder Assistant is a separate, fixed AI that works only for the Founder; only the Founder chooses its name and model; the Manager cannot assign, change or use it.
+  - *NOT STARTED* — Approved by the Founder 2026-11-24
+
 ## 8. Source-recovery and evidence gates (SRC)
 - [ ] SRC-001 — Crosswalk the full previously recovered ~6,115-line original Sections 0–35 blueprint verbatim.
   - *NOT STARTED* — The ~6,115-line original blueprint has not been crosswalked verbatim
@@ -1083,3 +1093,4 @@ Only the Founder authorizes a line here.
 | 2026-11-10 | Founder | Ordered one single checklist; all earlier lists superseded. Future feature or architecture changes enter here only on the Founder's word. |
 | 2026-11-10 | Claude | Built this file from the frozen 429 requirements, added evidence-based status to every item, and recorded the blocking line. No requirement text changed. |
 | 2026-11-24 | Founder | Approved a Company Brain skill library (all domains at once; AI-drafted skills join only with the AI CEO's approval). Added as SKL-001 to SKL-005. |
+| 2026-11-24 | Founder | Approved an AI Workforce Manager (assigns employees and chooses models wisely, keeps every employee's history) and a separate Founder Assistant under the Founder's sole control. Added as MGR-001 to MGR-004. |

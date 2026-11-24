@@ -10,6 +10,7 @@ from ago.brain_skills import skill_guide
 from ago.credits import CreditBudget
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
+from ago.model_manager import ModelManager
 from ago.model_provider import (
     CLOUD_PROVIDERS, CloudProviderError, FallbackProvider, OllamaLocalTextProvider,
     ProviderVault, ResponsesTextProvider, cloud_models_available,
@@ -295,13 +296,26 @@ def optional_model_handlers(
                 tenant_id=actor.tenant_id, intake_id=str(task.project_context["intake_id"]),
             )
             local = MeteredLocalProvider()
-            code_provider = None
-            cloud = (ProviderVault().for_route(actor.tenant_id, "code")
-                     if engineering_enabled else None)
-            if cloud is not None:
-                code_provider = FallbackProvider(
-                    CreditedCloudProvider(cloud, repositories, actor, task.id), local,
-                    fallback_label=local.label)
+            chosen = {}
+
+            def provider_for(role, stage, code_author):
+                """MGR-002: the Workforce Manager's model for this role's work."""
+                work = ("code" if code_author else "plan" if role in ("pm", "employee")
+                        else "board")
+                key = (work, stage)
+                if key not in chosen:
+                    try:
+                        choice = repositories.resolve(ModelManager).choose(
+                            tenant_id=actor.tenant_id, work=work, task_id=task.id, role=role,
+                            project_id=str(task.project_context.get("intake_id") or "") or None,
+                            stage=stage)
+                    except Exception:  # noqa: BLE001 - the local model still works
+                        choice = None
+                    chosen[key] = (FallbackProvider(
+                        CreditedCloudProvider(choice.cloud, repositories, actor, task.id), local,
+                        fallback_label=local.label) if choice and choice.cloud else None)
+                return chosen[key]
+
             def guide(role, stage, text):
                 # SKL-002: guidance only; it records use or a gap, never authority.
                 return skill_guide(repositories, tenant_id=actor.tenant_id, task_id=task.id,
@@ -309,7 +323,7 @@ def optional_model_handlers(
 
             return run_four_role_chain(
                 task=task, participants=participants, provider=local,
-                code_provider=code_provider, skill_guide=guide,
+                skill_guide=guide, provider_for=provider_for,
                 engineering_candidates=engineering_enabled,
                 on_role_completed=record_role_completed,
                 overridden_seats=overrides,
@@ -346,7 +360,7 @@ class CreditedCloudProvider:
 
 
 def respond_company_chat(*, actor, store, message_id: int, employee_id: str,
-                         provider=None) -> dict:
+                         provider=None, repositories: RepositoryScope | None = None) -> dict:
     """Founder-triggered, local-only real model reply to a routed Global Chat item.
 
     No paid provider fallback, automatic task approval, tool execution, or
@@ -359,7 +373,14 @@ def respond_company_chat(*, actor, store, message_id: int, employee_id: str,
         local_ready = (os.getenv("AGO_LLM_PROVIDER") == "ollama_local"
                        and os.getenv("AGO_ENABLE_LOCAL_MODELS") == "true"
                        and os.getenv("AGO_ENABLE_PAID_MODELS") != "true")
-        cloud = ProviderVault().for_route(actor.tenant_id, "chat")
+        cloud = None
+        if repositories is not None:
+            try:
+                choice = repositories.resolve(ModelManager).choose(
+                    tenant_id=actor.tenant_id, work="chat", role="chat")
+                cloud = choice.cloud if choice else None
+            except Exception:  # noqa: BLE001 - the local model still answers
+                cloud = None
         if local_ready:
             model = os.getenv("AGO_LLM_MODEL") or "qwen2.5-coder:1.5b"
             provider = OllamaLocalTextProvider(

@@ -134,7 +134,7 @@ def test_model_lists_are_read_only_gets():
     assert CloudTextProvider(provider="openai", api_key=KEY, model="m", opener=opener).list_models() == ["a", "b"]
 
 
-def test_vault_keeps_keys_encrypted_write_only_and_tested_before_use(tmp_path, monkeypatch):
+def test_vault_keeps_keys_encrypted_write_only_and_only_tested_models_reach_the_manager(tmp_path, monkeypatch):
     monkeypatch.setenv("AGO_ENVIRONMENT", "development")
     opener = FakeOpener(ANSWERS["anthropic"])
     vault = ProviderVault(tmp_path, opener=opener)
@@ -143,49 +143,53 @@ def test_vault_keeps_keys_encrypted_write_only_and_tested_before_use(tmp_path, m
     assert entry["saved"] and entry["key_hint"] == "…abcd" and entry["test_status"] is None
     stored = (tmp_path / "model_providers.json").read_text()
     assert KEY not in stored and KEY not in json.dumps(view)
-    with pytest.raises(ValueError, match="Test"):
-        vault.set_routes(TENANT, {"code": "anthropic"}, 10)   # untested key cannot do work
-    assert vault.for_route(TENANT, "code") is None
+    assert vault.policy(TENANT)["models"] == []                      # untested key does no work
     tested = vault.test(TENANT, "anthropic")
     assert tested["test"] == {"provider": "anthropic", "ok": True, "code": None}
-    vault.set_routes(TENANT, {"code": "anthropic", "qa": None, "chat": None}, 10)
-    assert vault.for_route(TENANT, "code").label == "anthropic:claude-x"
-    assert vault.for_route(TENANT, "qa") is None
-    assert vault.view(TENANT)["usage"]["calls"] == 1      # the test call counted
-    # A new key or model must be tested again; its routes are cleared.
+    assert vault.policy(TENANT) == {"allow_paid": True, "paid_cap_reached": False,
+                                    "models": [{"provider": "anthropic", "model": "claude-x"}]}
+    usage = vault.view(TENANT)["usage"]
+    assert usage["calls"] == 1 and usage["paid_calls"] == 1           # Claude is paid
+    # A new key or model must pass a test again before the Manager may use it.
     vault.save(TENANT, "anthropic", model="claude-y", api_key=None)
-    assert vault.view(TENANT)["routes"]["code"] is None
-    # Other organizations see nothing.
+    assert vault.policy(TENANT)["models"] == []
     other = vault.view("20000000-0000-4000-8000-000000000002")
     assert not any(p["saved"] for p in other["providers"])
     vault.remove(TENANT, "anthropic")
     assert not any(p["saved"] for p in vault.view(TENANT)["providers"])
 
 
-def test_monthly_cap_stops_cloud_calls_and_local_model_takes_over(tmp_path, monkeypatch):
+def test_the_monthly_limit_counts_paid_calls_only_and_the_founder_can_forbid_paid(tmp_path, monkeypatch):
     monkeypatch.setenv("AGO_ENVIRONMENT", "development")
-    opener = FakeOpener(ANSWERS["groq"], ANSWERS["groq"], ANSWERS["groq"])
+    opener = FakeOpener(ANSWERS["groq"], ANSWERS["openai"], ANSWERS["groq"], ANSWERS["groq"],
+                        ANSWERS["groq"], ANSWERS["openai"])
     vault = ProviderVault(tmp_path, opener=opener)
-    vault.save(TENANT, "groq", model="g-1", api_key=KEY)
+    for name, model in (("groq", "g-1"), ("openai", "o-1")):
+        vault.save(TENANT, name, model=model, api_key=KEY)
+    vault.set_policy(TENANT, allow_paid=True, monthly_call_cap=2)
     vault.test(TENANT, "groq")
-    vault.set_routes(TENANT, {"code": "groq"}, 2)
+    vault.test(TENANT, "openai")                                       # paid call 1 of 2
+    for _ in range(3):
+        vault.metered(TENANT, "groq").generate("free work")            # free calls never hit the limit
+    vault.metered(TENANT, "openai").generate("paid work")              # paid call 2 of 2
 
     class Local:
         supports_response_schema = True
-        calls = 0
 
         def generate(self, prompt, **options):
-            Local.calls += 1
             return "local answer"
 
-    chained = FallbackProvider(vault.for_route(TENANT, "code"), Local(), fallback_label="ollama:qwen3:4b")
-    assert chained.generate("first") == "OK" and chained.label == "groq:g-1"
-    assert chained.generate("second") == "local answer"      # cap of 2 reached (test + 1)
+    chained = FallbackProvider(vault.metered(TENANT, "openai"), Local(), fallback_label="ollama:qwen3:4b")
+    assert chained.generate("third paid") == "local answer"
     assert chained.label == "ollama:qwen3:4b" and chained.cloud_failures == ["monthly_cap_reached"]
     usage = vault.view(TENANT)["usage"]
-    assert usage["calls"] == 2 and usage["input_tokens"] == 22 and usage["by_provider"]["groq"]["calls"] == 2
+    assert usage["calls"] == 6 and usage["paid_calls"] == 2 and usage["by_provider"]["groq"]["calls"] == 4
+    assert vault.policy(TENANT)["paid_cap_reached"] is True
+    vault.set_policy(TENANT, allow_paid=False, monthly_call_cap=500)
     with pytest.raises(CloudCapReached):
-        vault.metered(TENANT, "groq").generate("third")
+        vault.metered(TENANT, "openai").generate("not allowed")
+    with pytest.raises(ValueError):
+        vault.set_policy(TENANT, allow_paid=True, monthly_call_cap=-1)
 
 
 def test_cloud_failure_falls_back_and_is_recorded_for_the_founder(tmp_path, monkeypatch):
@@ -194,28 +198,21 @@ def test_cloud_failure_falls_back_and_is_recorded_for_the_founder(tmp_path, monk
     vault = ProviderVault(tmp_path, opener=opener)
     vault.save(TENANT, "openai", model="o-1", api_key=KEY)
     vault.test(TENANT, "openai")
-    vault.set_routes(TENANT, {"qa": "openai"}, 50)
 
     class Local:
         def generate(self, prompt, **options):
             assert "response_schema" not in options             # local cannot take a schema
             return "QA_VERDICT: PASS"
 
-    chained = FallbackProvider(vault.for_route(TENANT, "qa"), Local(), fallback_label="ollama:q")
+    chained = FallbackProvider(vault.metered(TENANT, "openai"), Local(), fallback_label="ollama:q")
     assert chained.generate("review", response_schema={"type": "object"}) == "QA_VERDICT: PASS"
     entry = next(p for p in vault.view(TENANT)["providers"] if p["provider"] == "openai")
     assert entry["last_error"] == "auth_failed"
 
 
 def test_cloud_models_stay_off_in_production(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
-    vault = ProviderVault(tmp_path, opener=FakeOpener(ANSWERS["groq"]))
-    vault.save(TENANT, "groq", model="g", api_key=KEY)
-    vault.test(TENANT, "groq")
-    vault.set_routes(TENANT, {"chat": "groq"}, 5)
     monkeypatch.setenv("AGO_ENVIRONMENT", "production")
-    assert vault.for_route(TENANT, "chat") is None
-    assert vault.view(TENANT)["available"] is False
+    assert ProviderVault(tmp_path).view(TENANT)["available"] is False
 
 
 def test_agos_code_model_choice_is_a_strong_text_model_from_the_keys_own_list():
@@ -231,7 +228,7 @@ def test_agos_code_model_choice_is_a_strong_text_model_from_the_keys_own_list():
     assert choose_code_model("groq", ["whisper-large-v3"]) is None
 
 
-def test_connect_with_only_a_key_picks_tests_and_routes_code_writing(tmp_path, monkeypatch):
+def test_connect_with_only_a_key_picks_and_tests_a_model(tmp_path, monkeypatch):
     monkeypatch.setenv("AGO_ENVIRONMENT", "development")
     listing = {"models": [{"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
                           {"name": "models/gemini-3.5-flash-lite", "supportedGenerationMethods": ["generateContent"]}]}
@@ -239,17 +236,13 @@ def test_connect_with_only_a_key_picks_tests_and_routes_code_writing(tmp_path, m
     vault = ProviderVault(tmp_path, opener=opener, sleep=lambda s: None)
     result = vault.connect(TENANT, "gemini", KEY)
     assert result["connect"] == {"provider": "gemini", "ok": True, "code": None, "saved": True,
-                                 "model": "gemini-3.8-flash", "code_writing_routed": True,
+                                 "model": "gemini-3.8-flash",
                                  "tried": [{"model": "gemini-3.8-flash", "ok": True, "code": None}]}
     assert [r.get_method() for r in opener.requests] == ["GET", "POST"]   # list, then one test call
     gemini = next(p for p in result["providers"] if p["provider"] == "gemini")
     assert gemini["test_status"] == "ok" and gemini["models"] == ["gemini-3.5-flash-lite", "gemini-3.8-flash"]
-    assert result["routes"] == {"code": "gemini", "qa": None, "chat": None}
+    assert vault.policy(TENANT)["models"] == [{"provider": "gemini", "model": "gemini-3.8-flash"}]
     assert KEY not in (tmp_path / "model_providers.json").read_text()
-    # A second provider does not take code writing away from the first.
-    opener.answers += [{"data": [{"id": "openai/gpt-oss-120b"}]}, ANSWERS["groq"]]
-    second = vault.connect(TENANT, "groq", KEY)
-    assert second["connect"]["code_writing_routed"] is False and second["routes"]["code"] == "gemini"
     # Switching model keeps the list and tests again.
     opener.answers.append(ANSWERS["gemini"])
     switched = vault.choose_model(TENANT, "gemini", "gemini-3.5-flash-lite")
@@ -302,7 +295,7 @@ def test_claude_workspace_keys_send_the_workspace_and_say_when_one_is_missing(tm
     assert result["connect"]["ok"] is True
     assert next(p for p in result["providers"] if p["provider"] == "anthropic")["workspace_id"] \
         == "wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ"
-    vault.for_route(TENANT, "code").generate("again")
+    vault.metered(TENANT, "anthropic").generate("again")
     assert all({k.lower(): v for k, v in r.header_items()}["anthropic-workspace-id"]
                == "wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ" for r in opener.requests)
 
@@ -319,7 +312,6 @@ def test_connect_tries_the_next_model_when_one_is_busy(tmp_path, monkeypatch):
     assert result["connect"]["tried"] == [
         {"model": "gemini-3.8-flash", "ok": False, "code": "provider_unavailable"},
         {"model": "gemini-2.5-flash", "ok": True, "code": None}]
-    assert result["routes"]["code"] == "gemini"
     # A refused key is not retried with other models.
     opener = FakeOpener(listing, HTTPError("u", 401, "x", {}, None))
     other = ProviderVault(tmp_path / "b", opener=opener, sleep=lambda s: None).connect(TENANT, "gemini", KEY)

@@ -43,11 +43,11 @@
     },
     "workforce": {
       "purpose": "Organization, task ownership and bounded execution",
-      "aggregates": "Department; Employee; governed Task; agent Run",
+      "aggregates": "Department; Employee; governed Task; agent Run; Model decision (append-only, with reason).",
       "value_objects": "Employee kind; manager_id; task action/state",
-      "repositories": "organization_store; task_store; agent_runtime",
-      "services": "AgentRuntime; execution handlers; model_handlers",
-      "invariants": "Same-department manager, active assignee, per-task authorization, single-use run, allowlist",
+      "repositories": "organization_store; task_store; agent_runtime; ModelManagerStore.",
+      "services": "AgentRuntime; execution handlers; model_handlers; ModelManager (Workforce Manager model choice).",
+      "invariants": "Same-department manager, active assignee, per-task authorization, single-use run, allowlist; A model decision grants no authority; the Founder Assistant is never chosen by the Manager.",
       "published_language": "Tenant/task/employee IDs; task/run states; evidence result",
       "consistency": "Claim transaction then bounded handler then result transaction; crash is not automatic replay"
     },
@@ -224,7 +224,9 @@
     "stage_progression_queries": "strategy",
     "skill_library": "knowledge",
     "brain_skill_store": "knowledge",
-    "brain_skills": "knowledge"
+    "brain_skills": "knowledge",
+    "model_manager": "workforce",
+    "model_manager_store": "workforce"
   },
   "sql_access": {
     "__init__": [],
@@ -812,6 +814,13 @@
       "ago_task_reviews"
     ],
     "brain_skills": [],
-    "skill_library": []
+    "skill_library": [],
+    "model_manager": [],
+    "model_manager_store": [
+      "ago_agent_runs",
+      "ago_model_decisions",
+      "ago_project_followups",
+      "ago_task_reviews"
+    ]
   }
 }

@@ -182,8 +182,8 @@ CLOUD_PROVIDERS = {
     "gemini": "Google Gemini",
     "groq": "Groq",
 }
-# Which kinds of AGO work can use a cloud model. Everything else stays local.
-CLOUD_ROUTES = ("code", "qa", "chat")
+# Providers that bill real money per call; the Founder's monthly limit counts these.
+PAID_PROVIDERS = ("openai", "anthropic")
 DEFAULT_MONTHLY_CALL_CAP = 100
 MAX_MONTHLY_CALL_CAP = 5000
 _MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/@-]{0,119}")
@@ -530,8 +530,9 @@ class ProviderVault:
     def _tenant(data: dict, tenant_id: str) -> dict:
         tenant = data["tenants"].setdefault(str(tenant_id), {})
         tenant.setdefault("providers", {})
-        tenant.setdefault("routes", {route: None for route in CLOUD_ROUTES})
+        tenant.pop("routes", None)          # the Workforce Manager chooses models now
         tenant.setdefault("monthly_call_cap", DEFAULT_MONTHLY_CALL_CAP)
+        tenant.setdefault("allow_paid", True)
         tenant.setdefault("usage", {})
         return tenant
 
@@ -563,9 +564,10 @@ class ProviderVault:
                 "models": tenant["providers"].get(name, {}).get("models", []),
                 "workspace_id": tenant["providers"].get(name, {}).get("workspace_id"),
             } for name, label in CLOUD_PROVIDERS.items()],
-            "routes": {route: tenant["routes"].get(route) for route in CLOUD_ROUTES},
+            "allow_paid": tenant["allow_paid"],
             "monthly_call_cap": tenant["monthly_call_cap"],
             "usage": {"month": _month(), "calls": usage.get("calls", 0),
+                      "paid_calls": usage.get("paid_calls", 0),
                       "input_tokens": usage.get("input_tokens", 0),
                       "output_tokens": usage.get("output_tokens", 0),
                       "by_provider": usage.get("by_provider", {})},
@@ -601,18 +603,9 @@ class ProviderVault:
             tried.append({"model": model, "ok": result["test"]["ok"], "code": result["test"]["code"]})
             if result["test"]["ok"] or result["test"]["code"] not in self._TRY_NEXT:
                 break
-        routed = False
-        if result["test"]["ok"]:
-            with self._lock:
-                data = self._load()
-                tenant = self._tenant(data, tenant_id)
-                if not tenant["routes"].get("code"):
-                    tenant["routes"]["code"] = name
-                    routed = True
-                    self._save(data)
         return {**self.view(tenant_id), "connect": {
             "provider": name, "ok": result["test"]["ok"], "code": result["test"]["code"],
-            "saved": True, "model": model, "code_writing_routed": routed, "tried": tried}}
+            "saved": True, "model": model, "tried": tried}}
 
     def choose_model(self, tenant_id: str, name: str, model: str) -> dict:
         """Switch to another model of the same saved key and test it at once."""
@@ -638,9 +631,8 @@ class ProviderVault:
                 raise ValueError("Enter the API key the first time")
             entry = {**entry, "model": model, "test_status": None, "tested_at": None, "last_error": None,
                      "models": (tenant["providers"].get(name) or {}).get("models", []) if not api_key else []}
+            # A changed key or model must pass a test again before work uses it.
             tenant["providers"][name] = entry
-            # A changed key or model must be tested again before work uses it.
-            tenant["routes"] = {r: (None if p == name else p) for r, p in tenant["routes"].items()}
             self._save(data)
         return self.view(tenant_id)
 
@@ -649,7 +641,6 @@ class ProviderVault:
             data = self._load()
             tenant = self._tenant(data, tenant_id)
             tenant["providers"].pop(name, None)
-            tenant["routes"] = {r: (None if p == name else p) for r, p in tenant["routes"].items()}
             self._save(data)
         return self.view(tenant_id)
 
@@ -681,24 +672,32 @@ class ProviderVault:
         self._mark(tenant_id, name, models=names)
         return names
 
-    def set_routes(self, tenant_id: str, routes: dict, monthly_call_cap: int) -> dict:
+    def set_policy(self, tenant_id: str, *, allow_paid: bool, monthly_call_cap: int) -> dict:
+        """The Founder's only model settings: may paid models be used, and how many
+        paid calls a month at most. Which model does which work is the Manager's job."""
         if not isinstance(monthly_call_cap, int) or not 0 <= monthly_call_cap <= MAX_MONTHLY_CALL_CAP:
-            raise ValueError("Monthly call limit must be 0 to %d" % MAX_MONTHLY_CALL_CAP)
+            raise ValueError("Monthly paid-call limit must be 0 to %d" % MAX_MONTHLY_CALL_CAP)
         with self._lock:
             data = self._load()
             tenant = self._tenant(data, tenant_id)
-            chosen = {}
-            for route in CLOUD_ROUTES:
-                name = routes.get(route)
-                if name is not None:
-                    entry = tenant["providers"].get(name)
-                    if not entry or entry.get("test_status") != "ok":
-                        raise ValueError("Test the " + CLOUD_PROVIDERS.get(name, "model") + " key before using it")
-                chosen[route] = name
-            tenant["routes"] = chosen
+            tenant["allow_paid"] = bool(allow_paid)
             tenant["monthly_call_cap"] = monthly_call_cap
             self._save(data)
         return self.view(tenant_id)
+
+    def policy(self, tenant_id: str) -> dict:
+        """What the Workforce Manager may use: tested models and the paid rules."""
+        try:
+            with self._lock:
+                tenant = self._tenant(self._load(), tenant_id)
+        except (OSError, ValueError):
+            return {"allow_paid": False, "paid_cap_reached": True, "models": []}
+        month = tenant["usage"].get(_month(), {})
+        return {"allow_paid": bool(tenant["allow_paid"]),
+                "paid_cap_reached": month.get("paid_calls", 0) >= tenant["monthly_call_cap"],
+                "models": [{"provider": name, "model": entry["model"]}
+                           for name, entry in tenant["providers"].items()
+                           if name in CLOUD_PROVIDERS and entry.get("test_status") == "ok"]}
 
     # -- work routing ----------------------------------------------------
     def metered(self, tenant_id: str, name: str) -> MeteredCloudProvider:
@@ -707,28 +706,18 @@ class ProviderVault:
             provider = self._provider(tenant, name)
         return MeteredCloudProvider(provider, self, str(tenant_id))
 
-    def for_route(self, tenant_id: str, route: str) -> MeteredCloudProvider | None:
-        """The Founder's cloud model for this kind of work, or None (stay local)."""
-        if route not in CLOUD_ROUTES or not cloud_models_available():
-            return None
-        try:
-            with self._lock:
-                tenant = self._tenant(self._load(), tenant_id)
-            name = tenant["routes"].get(route)
-            if not name or tenant["providers"].get(name, {}).get("test_status") != "ok":
-                return None
-            return self.metered(tenant_id, name)
-        except (OSError, ValueError, LookupError):
-            return None
-
     def reserve_call(self, tenant_id: str, name: str) -> None:
         with self._lock:
             data = self._load()
             tenant = self._tenant(data, tenant_id)
             month = tenant["usage"].setdefault(_month(), {})
-            if month.get("calls", 0) >= tenant["monthly_call_cap"]:
+            paid = name in PAID_PROVIDERS
+            # The limit is about money: free providers have their own limits.
+            if paid and (not tenant["allow_paid"] or month.get("paid_calls", 0) >= tenant["monthly_call_cap"]):
                 raise CloudCapReached()
             month["calls"] = month.get("calls", 0) + 1
+            if paid:
+                month["paid_calls"] = month.get("paid_calls", 0) + 1
             by = month.setdefault("by_provider", {}).setdefault(name, {"calls": 0, "input_tokens": 0, "output_tokens": 0})
             by["calls"] += 1
             # Keep only the last 12 months of counts.

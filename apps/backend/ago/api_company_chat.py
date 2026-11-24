@@ -7,6 +7,7 @@ from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, repository_scope, translate_error
 from ago.brain_skill_store import BrainSkillStore
 from ago.brain_skills import BrainSkillTeacher, brain_view
+from ago.model_manager import ModelManager
 from ago.model_handlers import (
     CLOUD_PROVIDERS, CloudProviderError, ProviderVault, cloud_models_available,
     respond_company_chat,
@@ -81,7 +82,8 @@ def respond_chat_order(message_id: int, data: LocalChatReplyInput,
     try:
         return respond_company_chat(
             actor=actor,store=repositories.resolve(CompanyChatPort),
-            message_id=message_id,employee_id=str(data.employee_id))
+            message_id=message_id,employee_id=str(data.employee_id),
+            repositories=repositories)
     except (ValueError,PermissionError) as exc:
         translate_error(exc)
 
@@ -679,10 +681,8 @@ class CloudModelChoice(StrictInput):
     model: str = Field(min_length=1, max_length=120)
 
 
-class CloudModelRoutes(StrictInput):
-    code: str | None = None
-    qa: str | None = None
-    chat: str | None = None
+class CloudModelPolicy(StrictInput):
+    allow_paid: bool
     monthly_call_cap: int = Field(ge=0, le=5000)
 
 
@@ -773,16 +773,25 @@ def cloud_model_names(provider: str, actor=Depends(authenticated),
     return {"provider": provider, "models": names}
 
 
-@router.put("/cloud-model-routes")
-def route_cloud_models(body: CloudModelRoutes, actor=Depends(authenticated),
-                       repositories=Depends(repository_scope)):
+@router.put("/cloud-model-policy")
+def set_cloud_model_policy(body: CloudModelPolicy, actor=Depends(authenticated),
+                           repositories=Depends(repository_scope)):
+    """The Founder's only model settings: may paid models be used, and the monthly
+    paid-call limit. The Workforce Manager chooses the model for each piece of work."""
     _cloud_founder(repositories, actor, write=True)
     try:
-        return ProviderVault().set_routes(
-            actor.tenant_id, {"code": body.code, "qa": body.qa, "chat": body.chat},
-            body.monthly_call_cap)
+        return ProviderVault().set_policy(actor.tenant_id, allow_paid=body.allow_paid,
+                                          monthly_call_cap=body.monthly_call_cap)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
+
+
+@router.get("/model-decisions")
+def model_decisions(actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    """MGR-002: the Workforce Manager's recent model choices and their reasons."""
+    _cloud_founder(repositories, actor)
+    return {"kind": "ago_model_decisions_v1",
+            "decisions": repositories.resolve(ModelManager).recent(actor.tenant_id)}
 
 
 # --- Company Brain skills (SKL-001..005) ------------------------------------

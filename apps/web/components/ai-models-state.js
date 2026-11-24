@@ -8,11 +8,9 @@ export const PROVIDER_INFO={
  groq:{name:'Groq',keyUrl:'https://console.groq.com/keys',keyLooks:'gsk_…',example:'pick from "Load models"'},
 };
 
-export const ROUTE_INFO=[
- {route:'code',label:'Code writing',help:'The AI engineer writes source files and tests.'},
- {route:'qa',label:'QA review',help:'The AI tester checks finished work.'},
- {route:'chat',label:'Board chat',help:'JARVIS and the Board answer you.'},
-];
+// MGR-002: plain names for the kinds of work the Workforce Manager assigns.
+export const WORK_NAMES={code:'Code writing',qa:'QA review',plan:'Planning',board:'Board review',chat:'Board chat',learn:'Writing a skill'};
+export const PAID=new Set(['openai','anthropic']);
 
 const ERROR_TEXT={
  auth_failed:'The key was refused. Check it, or make a new key.',
@@ -26,7 +24,7 @@ const ERROR_TEXT={
  empty_answer:'The model gave an empty answer.',
  response_too_large:'The answer was too large.',
  unreadable_response:'The provider sent an answer AGO could not read.',
- monthly_cap_reached:'This month\'s call limit is used up. The local model does the work.',
+ monthly_cap_reached:'This month\'s paid-call limit is used up, or paid models are off. Free models do the work.',
  no_text_model:'This key has no text model AGO can use.',
  workspace_id_needed:'This Claude key works across workspaces. Add its Workspace ID (Console → Workspaces, starts with wrkspc_), or make a key for one workspace.',
 };
@@ -41,7 +39,7 @@ export function connectText(name,c){
  const busy=(c.tried||[]).filter(t=>!t.ok).map(t=>t.model);
  const before=busy.length?' (tried first: '+busy.join(', ')+')':'';
  if(!c.ok)return name+': '+errorText(c.code)+before+(c.saved?'':' The key was not saved.');
- return name+' connected. Model: '+c.model+before+'.'+(c.code_writing_routed?' Code writing now uses it.':'');
+ return name+' connected. Model: '+c.model+before+'. The Manager can now use it.';
 }
 
 /** Status chip for one provider row. */
@@ -53,29 +51,41 @@ export function providerStatus(p){
  return {tone:'warn',text:'Saved, test it'};
 }
 
-/** Providers the Founder may route work to: saved AND passed the test. */
-export function routable(view){
+/** Connected models the Manager may use: saved AND passed the test. */
+export function usable(view){
  return (view?.providers||[]).filter(p=>p.saved&&p.test_status==='ok');
 }
 
 /** One line for this month's usage. */
 export function usageLine(view){
  const u=view?.usage;if(!u)return '';
- const cap=view.monthly_call_cap;
- return u.calls+' of '+cap+' cloud calls used in '+u.month
+ return u.calls+' cloud calls in '+u.month+' ('+(u.paid_calls||0)+' of '+view.monthly_call_cap+' paid)'
   +(u.input_tokens||u.output_tokens?' · '+u.input_tokens.toLocaleString('en-IN')+' tokens in, '+u.output_tokens.toLocaleString('en-IN')+' out':'');
 }
 
-/** Which model does each kind of work, in words. */
-export function routeSummary(view){
- const names=Object.fromEntries((view?.providers||[]).map(p=>[p.provider,PROVIDER_INFO[p.provider]?.name+(p.model?' ('+p.model+')':'')]));
- return ROUTE_INFO.map(r=>({...r,uses:view?.routes?.[r.route]?names[view.routes[r.route]]||view.routes[r.route]:'Local model (Ollama)'}));
+/** What the Manager can use right now, in words. */
+export function managerPool(view){
+ const ok=usable(view);
+ const free=ok.filter(p=>!PAID.has(p.provider)).map(p=>PROVIDER_INFO[p.provider].name);
+ const paid=ok.filter(p=>PAID.has(p.provider)).map(p=>PROVIDER_INFO[p.provider].name);
+ const parts=['Local model (Ollama)',...free];
+ if(paid.length)parts.push(view.allow_paid?paid.join(', ')+' (paid, when the work needs it)':paid.join(', ')+' (paid, switched off)');
+ return parts.join(' · ');
 }
 
 /** The server's settings, or null when the answer is not that shape. */
 export function settingsView(raw){
- if(!raw||typeof raw!=='object'||!Array.isArray(raw.providers)||!raw.routes||typeof raw.routes!=='object')return null;
+ if(!raw||typeof raw!=='object'||!Array.isArray(raw.providers))return null;
  return {...raw,providers:raw.providers.filter(p=>p&&PROVIDER_INFO[p.provider]),
-  usage:raw.usage&&typeof raw.usage==='object'?raw.usage:{month:'',calls:0,input_tokens:0,output_tokens:0},
+  allow_paid:raw.allow_paid!==false,
+  usage:raw.usage&&typeof raw.usage==='object'?raw.usage:{month:'',calls:0,paid_calls:0,input_tokens:0,output_tokens:0},
   monthly_call_cap:Number.isInteger(raw.monthly_call_cap)?raw.monthly_call_cap:0};
+}
+
+/** The Manager's recent decisions, or [] when the answer is not that shape. */
+export function decisionsView(raw){
+ if(!raw||raw.kind!=='ago_model_decisions_v1'||!Array.isArray(raw.decisions))return [];
+ return raw.decisions.filter(d=>d&&WORK_NAMES[d.work]&&typeof d.model_label==='string').map(d=>({
+  id:String(d.id),work:WORK_NAMES[d.work],role:d.role||'',model:d.model_label,reason:String(d.reason||''),
+  at:String(d.created_at||''),paid:PAID.has(d.model_label.split(':')[0])}));
 }

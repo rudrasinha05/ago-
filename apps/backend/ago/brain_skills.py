@@ -18,8 +18,9 @@ from uuid import uuid4
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.brain_skill_store import BrainSkillStore
 from ago.credits import CreditBudget
+from ago.model_manager import ModelManager
 from ago.model_provider import (
-    CLOUD_PROVIDERS, CloudProviderError, FallbackProvider, OllamaLocalTextProvider, ProviderVault,
+    CLOUD_PROVIDERS, CloudProviderError, FallbackProvider, OllamaLocalTextProvider,
 )
 from ago.skill_library import (
     ROLES, STAGES, Skill, builtin_skills, company_skill, guide_text, select, validate,
@@ -159,9 +160,6 @@ class BrainSkillTeacher:
     def _provider(self, tenant_id: str):
         if self.provider is not None:
             return self.provider, self.label or getattr(self.provider, "label", "model")
-        vault = ProviderVault()
-        cloud = next((c for c in (vault.for_route(tenant_id, r) for r in ("code", "qa", "chat"))
-                      if c is not None), None)
         local = None
         if (os.getenv("AGO_LLM_PROVIDER") == "ollama_local"
                 and os.getenv("AGO_ENABLE_LOCAL_MODELS") == "true"):
@@ -169,6 +167,14 @@ class BrainSkillTeacher:
             local = OllamaLocalTextProvider(model=model, timeout_seconds=60,
                                             max_output_tokens=1024, keep_alive="90s")
             local.label = "ollama:" + model
+        # MGR-002: writing a skill needs a capable model; the Manager chooses it.
+        choice = None
+        try:
+            choice = self.repositories.resolve(ModelManager).choose(
+                tenant_id=tenant_id, work="learn", role="cto")
+        except Exception:  # noqa: BLE001 - the local model can still try
+            choice = None
+        cloud = choice.cloud if choice else None
         if cloud and local:
             return FallbackProvider(cloud, local, fallback_label=local.label), cloud.label
         if cloud or local:

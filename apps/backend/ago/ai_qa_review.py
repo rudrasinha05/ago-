@@ -18,9 +18,8 @@ from ago.ai_qa_review_queries import AiQaReviewQueries
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.brain_skills import skill_guide
 from ago.credits import CreditBudget
-from ago.model_provider import (
-    CLOUD_PROVIDERS, FallbackProvider, OllamaLocalTextProvider, ProviderVault,
-)
+from ago.model_manager import ModelManager
+from ago.model_provider import CLOUD_PROVIDERS, FallbackProvider, OllamaLocalTextProvider
 from ago.quality import Verdict
 from ago.quality_store import QualityStore
 from ago.stage_progression import STAGE_FORMATS, StageProgression, missing_stage_labels
@@ -43,12 +42,22 @@ def local_qa_provider():
     return provider, model
 
 
-def qa_provider(tenant_id: str):
-    """(provider, model) for this review: the Founder's chosen cloud QA model
-    first (local model as fallback), otherwise the local model, else None.
+def qa_provider(tenant_id: str, repositories: RepositoryScope | None = None, *,
+                task_id: str | None = None, builder_provider: str | None = None):
+    """(provider, model) for this review, chosen by the Workforce Manager (MGR-002):
+    a capable model, from a different provider than the builder when possible; the
+    local model answers if the cloud call fails. None when no model is available.
     ``provider.label`` names the model that actually answered."""
     local = local_qa_provider()
-    cloud = ProviderVault().for_route(tenant_id, "qa")
+    choice = None
+    if repositories is not None:
+        try:
+            choice = repositories.resolve(ModelManager).choose(
+                tenant_id=tenant_id, work="qa", task_id=task_id, role="qa",
+                avoid_provider=builder_provider)
+        except Exception:  # noqa: BLE001 - the local model still reviews
+            choice = None
+    cloud = choice.cloud if choice else None
     if cloud is None:
         return local
     if local is None:
@@ -243,12 +252,6 @@ class AiQaReview:
             UUID(qa_employee_id)
         if stage not in STAGES:
             raise ValueError("Unknown project stage")
-        configured = qa_provider(tenant_id)
-        if configured is None:
-            raise PermissionError(
-                "AI QA needs the local AI model (start AGO with START_AGO.cmd)"
-            )
-        provider, model = configured
         queries = self.repositories.resolve(AiQaReviewQueries)
         auto_selected = qa_employee_id is None
         with self.db.transaction():
@@ -269,6 +272,15 @@ class AiQaReview:
                 stage=stage, qa_employee_id=qa_employee_id,
             )
         task_id = str(row["task_id"])
+        handoffs = (row["run_result"] or {}).get("handoffs") or [{}] if isinstance(row["run_result"], dict) else [{}]
+        builder = str((handoffs[-1] if isinstance(handoffs[-1], dict) else {}).get("model") or "")
+        configured = qa_provider(tenant_id, self.repositories, task_id=task_id,
+                                 builder_provider=builder.split(":")[0] or None)
+        if configured is None:
+            raise PermissionError(
+                "AI QA needs the local AI model (start AGO with START_AGO.cmd)"
+            )
+        provider, model = configured
         attempts = self.repositories.resolve(StageProgression).qa_attempts(
             tenant_id=tenant_id, task_id=task_id)
         if auto_selected and attempts >= UNCLEAR_QA_LIMIT:

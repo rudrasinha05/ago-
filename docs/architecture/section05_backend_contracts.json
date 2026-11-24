@@ -2245,6 +2245,40 @@
           "returns": "dict"
         }
       }
+    },
+    "ModelManager": {
+      "module": "model_manager",
+      "methods": {
+        "choose": {
+          "arguments": "self, *, tenant_id: str, work: str, task_id: str | None=None, role: str | None=None, project_id: str | None=None, stage: str | None=None, avoid_provider: str | None=None",
+          "returns": "Choice | None"
+        },
+        "recent": {
+          "arguments": "self, tenant_id: str",
+          "returns": "list[dict]"
+        }
+      }
+    },
+    "ModelManagerStore": {
+      "module": "model_manager_store",
+      "methods": {
+        "builder_results": {
+          "arguments": "self, tenant_id: str",
+          "returns": "dict[str, dict]"
+        },
+        "stage_failed_before": {
+          "arguments": "self, tenant_id: str, project_id: str, stage: str",
+          "returns": "bool"
+        },
+        "record": {
+          "arguments": "self, tenant_id: str, task_id: str | None, work: str, role: str | None, model_label: str, reason: str",
+          "returns": "None"
+        },
+        "recent": {
+          "arguments": "self, tenant_id: str, limit: int=30",
+          "returns": "list[dict]"
+        }
+      }
     }
   }
 }
