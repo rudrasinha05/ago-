@@ -34,6 +34,7 @@ out/
 # Section 6 generated, reproducible Next.js Python wheel assets
 apps/backend/ago/frontend/
 tests/frontend/artifacts/
+apps/backend/tests_browser/artifacts/
 playwright-report/
 test-results/
 tests/frontend/tests/
