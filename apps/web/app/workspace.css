@@ -852,3 +852,7 @@
 .brain-body{margin:12px 0 8px;color:var(--text);line-height:1.6}
 .brain-meta{margin:0 0 10px;color:var(--muted);font-size:13px}
 @media (max-width:760px){.brain-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.brain-skills section{padding:14px}.brain-gaps li,.brain-decisions li{flex-wrap:wrap}}
+.brain-manager{margin-bottom:24px}
+.brain-manager h3{margin:18px 0 8px;font-size:16px}
+.brain-manager-rules{display:grid;gap:6px;margin:0 0 12px;padding-left:20px;color:var(--soft);font-size:14px;line-height:1.5}
+.brain-manager>button.ai-primary{justify-self:start;width:auto}

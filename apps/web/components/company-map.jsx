@@ -18,6 +18,7 @@ import {OpportunityRadar} from './company-opportunities';
 import {FounderToday} from './founder-today';
 import {AiModels} from './ai-models';
 import {BrainSkills} from './brain-skills';
+import {BrainManager} from './brain-manager';
 import {CompanyNotificationCenter,mergeNotificationPage} from './company-notification-center';
 import {treeCompanyLayout,departmentCompanyLayout,circularDepartmentLayout,withMembership,departmentColors,MAP_VIEWS} from './company-layouts';
 const BASE='/v1/organization/company';
@@ -624,6 +625,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
     </section>
     {founderView&&<section id="ago-tab-brain" className="company-tab-panel" data-tab-panel aria-label="Company Brain" hidden={activeTab!=='ago-tab-brain'}>
+    <BrainManager api={api} me={me} active={activeTab==='ago-tab-brain'}/>
     <BrainSkills api={api} me={me} active={activeTab==='ago-tab-brain'}/>
     </section>}
     {founderView&&<section id="ago-tab-models" className="company-tab-panel" data-tab-panel aria-label="AI models" hidden={activeTab!=='ago-tab-models'}>

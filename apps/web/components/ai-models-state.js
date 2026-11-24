@@ -39,7 +39,7 @@ export function connectText(name,c){
  const busy=(c.tried||[]).filter(t=>!t.ok).map(t=>t.model);
  const before=busy.length?' (tried first: '+busy.join(', ')+')':'';
  if(!c.ok)return name+': '+errorText(c.code)+before+(c.saved?'':' The key was not saved.');
- return name+' connected. Model: '+c.model+before+'. The Manager can now use it.';
+ return name+' connected. Model: '+c.model+before+'. The Employee Manager can now use it.';
 }
 
 /** Status chip for one provider row. */
