@@ -98,3 +98,22 @@ def test_keys_cannot_be_entered_on_a_production_server(case, vault, monkeypatch)
     founder = headers["founder"]
     assert client.put(BASE + "/cloud-models/groq", headers=founder,
                       json={"model": "m", "api_key": KEY}).status_code == 409
+
+
+def test_founder_connects_with_only_a_key(case, vault):
+    client, headers, _ = case
+    founder = headers["founder"]
+    assert client.post(BASE + "/cloud-models/groq/connect", headers=headers["reviewer"],
+                       json={"api_key": KEY}).status_code == 403
+    assert client.post(BASE + "/cloud-models/groq/connect", headers=founder,
+                       json={"api_key": KEY, "model": "x"}).status_code == 422
+    result = client.post(BASE + "/cloud-models/groq/connect", headers=founder, json={"api_key": KEY})
+    assert result.status_code == 200 and KEY not in result.text
+    body = result.json()
+    assert body["connect"]["ok"] is True and body["connect"]["model"] == "model-a"
+    assert body["routes"]["code"] == "groq"
+    switched = client.put(BASE + "/cloud-models/groq/model", headers=founder, json={"model": "model-b"}).json()
+    assert switched["test"]["ok"] is True
+    assert next(p for p in switched["providers"] if p["provider"] == "groq")["model"] == "model-b"
+    assert client.put(BASE + "/cloud-models/openai/model", headers=founder,
+                      json={"model": "m"}).status_code == 422          # not connected yet

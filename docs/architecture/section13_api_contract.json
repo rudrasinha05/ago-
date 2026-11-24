@@ -325,7 +325,9 @@
     "DELETE /v1/organization/company/cloud-models/{provider}": "16b3a2fd1ae7964f4bb7232ea1906065fa3eb72237f01102395add98b1f6e1cd",
     "PUT /v1/organization/company/cloud-models/{provider}": "86782066692107190eaf4050ed58242da01195437467817426fc8877b8b356ca",
     "GET /v1/organization/company/cloud-models/{provider}/models": "54407c4e3691cd40f05559e0551ae77fd4b44756569d88e06fee88bb5955374f",
-    "POST /v1/organization/company/cloud-models/{provider}/test": "659dfdd6beb781c5c461fea44b669b16bc1d17a1c15b21e4f58e5d733d13cf16"
+    "POST /v1/organization/company/cloud-models/{provider}/test": "659dfdd6beb781c5c461fea44b669b16bc1d17a1c15b21e4f58e5d733d13cf16",
+    "POST /v1/organization/company/cloud-models/{provider}/connect": "779ad824833dba137dedd548d6a1c241e6943a4f06d0d0440361b233856ebed1",
+    "PUT /v1/organization/company/cloud-models/{provider}/model": "f93312e6d528316e9c092a3c9bc2eb56fa6e4127e16fb6bd27cb2036bcc38cee"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",
@@ -471,6 +473,8 @@
     "StageAiQaInput": "3410f67813364a817a751eea8f0396d87090402eda67369717be0eb3d442d6a6",
     "BoardOverrideInput": "d44e3146eb59a4d16ae645dad21fb3dc942d02bb81f25e3f41756faa4ae9d13e",
     "CloudModelKey": "c67d4f1c39e3152f31cb2a7299cb74826d3b53dc4dc29d087d15ed4ac7c061de",
-    "CloudModelRoutes": "852ea639e3073d2f9f6e4c7a4c1f1a0d30fac2b9bd311ac5a289f2a0029849c6"
+    "CloudModelRoutes": "852ea639e3073d2f9f6e4c7a4c1f1a0d30fac2b9bd311ac5a289f2a0029849c6",
+    "CloudModelChoice": "091699b8381416dca2ee8edff03db6471071a3e4b94886844263cdfec5427652",
+    "CloudModelConnect": "cbdc45eba2b96238e4ef0d28a59a09f74a9e3aa0c14ba42e0f565e930e3badeb"
   }
 }

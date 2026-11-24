@@ -667,6 +667,14 @@ class CloudModelKey(StrictInput):
     api_key: str | None = Field(default=None, max_length=1000)
 
 
+class CloudModelConnect(StrictInput):
+    api_key: str = Field(min_length=1, max_length=1000)
+
+
+class CloudModelChoice(StrictInput):
+    model: str = Field(min_length=1, max_length=120)
+
+
 class CloudModelRoutes(StrictInput):
     code: str | None = None
     qa: str | None = None
@@ -701,6 +709,31 @@ def save_cloud_model(provider: str, body: CloudModelKey,
     try:
         return ProviderVault().save(actor.tenant_id, _known_provider(provider),
                                     model=body.model, api_key=body.api_key)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@router.post("/cloud-models/{provider}/connect")
+def connect_cloud_model(provider: str, body: CloudModelConnect,
+                        actor=Depends(authenticated),
+                        repositories=Depends(repository_scope)):
+    """Key only: AGO checks it, picks the code model, tests it and uses it."""
+    _cloud_founder(repositories, actor, write=True)
+    try:
+        return ProviderVault().connect(actor.tenant_id, _known_provider(provider), body.api_key)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@router.put("/cloud-models/{provider}/model")
+def choose_cloud_model(provider: str, body: CloudModelChoice,
+                       actor=Depends(authenticated),
+                       repositories=Depends(repository_scope)):
+    _cloud_founder(repositories, actor, write=True)
+    try:
+        return ProviderVault().choose_model(actor.tenant_id, _known_provider(provider), body.model)
+    except LookupError:
+        raise HTTPException(404, "Connect this provider first") from None
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
 

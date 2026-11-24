@@ -380,6 +380,34 @@ class CloudTextProvider:
         return sorted({n for n in names if _MODEL_NAME.fullmatch(n)})[:300]
 
 
+_NOT_TEXT = re.compile(r"(embed|whisper|tts|audio|realtime|transcri|image|vision-only|moderation|"
+                       r"search|guard|safety|live|dall|sora|veo|imagen|aqa|learnlm|computer|robotics)", re.I)
+# Preferred families for code writing: strong but not the most expensive.
+_CODE_PREFERENCE = {
+    "anthropic": ("sonnet", "opus", "haiku"),
+    "openai": ("-sol", "-terra", "gpt-5", "-luna", "gpt-4.1"),
+    "gemini": ("flash", "pro"),
+    "groq": ("gpt-oss-120b", "llama-3.3-70b", "gpt-oss-20b", "qwen", "llama"),
+}
+
+
+def _version(name: str) -> tuple:
+    return tuple(int(n) for n in re.findall(r"\d+", name)[:3])
+
+
+def choose_code_model(provider: str, names: list[str]) -> str | None:
+    """The model AGO suggests for code writing from this key's own model list:
+    a text model of the preferred family, newest version, no preview/lite builds."""
+    usable = [n for n in names if not _NOT_TEXT.search(n)]
+    stable = [n for n in usable if not re.search(r"(preview|exp|lite|nano|mini|instant|dated|-\d{8}$|latest)", n, re.I)]
+    for family in _CODE_PREFERENCE.get(provider, ()):
+        for pool in (stable, usable):
+            matches = [n for n in pool if family in n.lower()]
+            if matches:
+                return max(matches, key=lambda n: (_version(n), -len(n)))
+    return (stable or usable or [None])[0]
+
+
 def _vault_dir() -> Path:
     return Path(os.getenv("AGO_PROVIDER_VAULT_DIR") or (Path.home() / ".ago"))
 
@@ -469,6 +497,7 @@ class ProviderVault:
                 "test_status": tenant["providers"].get(name, {}).get("test_status"),
                 "tested_at": tenant["providers"].get(name, {}).get("tested_at"),
                 "last_error": tenant["providers"].get(name, {}).get("last_error"),
+                "models": tenant["providers"].get(name, {}).get("models", []),
             } for name, label in CLOUD_PROVIDERS.items()],
             "routes": {route: tenant["routes"].get(route) for route in CLOUD_ROUTES},
             "monthly_call_cap": tenant["monthly_call_cap"],
@@ -477,6 +506,43 @@ class ProviderVault:
                       "output_tokens": usage.get("output_tokens", 0),
                       "by_provider": usage.get("by_provider", {})},
         }
+
+    def connect(self, tenant_id: str, name: str, api_key: str) -> dict:
+        """Key only: AGO reads this key's model list, picks the code model,
+        saves the key encrypted, makes one test call and, when Code writing
+        is still on the local model, puts code writing on this model."""
+        if name not in CLOUD_PROVIDERS:
+            raise ValueError("Unknown cloud provider")
+        probe = CloudTextProvider(provider=name, api_key=api_key, model="probe", opener=self.opener)
+        try:
+            names = probe.list_models()
+        except CloudProviderError as failed:
+            return {**self.view(tenant_id), "connect": {
+                "provider": name, "ok": False, "code": failed.code, "saved": False}}
+        model = choose_code_model(name, names)
+        if model is None:
+            return {**self.view(tenant_id), "connect": {
+                "provider": name, "ok": False, "code": "no_text_model", "saved": False}}
+        self.save(tenant_id, name, model=model, api_key=api_key)
+        self._mark(tenant_id, name, models=names)
+        result = self.test(tenant_id, name)
+        routed = False
+        if result["test"]["ok"]:
+            with self._lock:
+                data = self._load()
+                tenant = self._tenant(data, tenant_id)
+                if not tenant["routes"].get("code"):
+                    tenant["routes"]["code"] = name
+                    routed = True
+                    self._save(data)
+        return {**self.view(tenant_id), "connect": {
+            "provider": name, "ok": result["test"]["ok"], "code": result["test"]["code"],
+            "saved": True, "model": model, "code_writing_routed": routed}}
+
+    def choose_model(self, tenant_id: str, name: str, model: str) -> dict:
+        """Switch to another model of the same saved key and test it at once."""
+        self.save(tenant_id, name, model=model, api_key=None)
+        return self.test(tenant_id, name)
 
     def save(self, tenant_id: str, name: str, *, model: str, api_key: str | None) -> dict:
         if name not in CLOUD_PROVIDERS:
@@ -492,7 +558,8 @@ class ProviderVault:
                 entry = {"key": self._fernet().encrypt(key.encode()).decode(), "key_hint": "…" + key[-4:]}
             elif not entry:
                 raise ValueError("Enter the API key the first time")
-            entry = {**entry, "model": model, "test_status": None, "tested_at": None, "last_error": None}
+            entry = {**entry, "model": model, "test_status": None, "tested_at": None, "last_error": None,
+                     "models": (tenant["providers"].get(name) or {}).get("models", []) if not api_key else []}
             tenant["providers"][name] = entry
             # A changed key or model must be tested again before work uses it.
             tenant["routes"] = {r: (None if p == name else p) for r, p in tenant["routes"].items()}
@@ -532,7 +599,9 @@ class ProviderVault:
         with self._lock:
             tenant = self._tenant(self._load(), tenant_id)
             provider = self._provider(tenant, name)
-        return provider.list_models()
+        names = provider.list_models()
+        self._mark(tenant_id, name, models=names)
+        return names
 
     def set_routes(self, tenant_id: str, routes: dict, monthly_call_cap: int) -> dict:
         if not isinstance(monthly_call_cap, int) or not 0 <= monthly_call_cap <= MAX_MONTHLY_CALL_CAP:

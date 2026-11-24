@@ -8,7 +8,7 @@ const view={monthly_call_cap:100,routes:{code:'anthropic',qa:null,chat:null},
   {provider:'gemini',saved:true,model:'g',test_status:'failed',last_error:'auth_failed'},{provider:'groq',saved:true,model:'q',test_status:null}]};
 
 test('status chips say plainly where each key stands',()=>{
- assert.deepEqual(view.providers.map(p=>providerStatus(p).text),['Not added','Working','Test failed','Saved, test it']);
+ assert.deepEqual(view.providers.map(p=>providerStatus(p).text),['Not connected','Working','Test failed','Saved, test it']);
  assert.equal(providerStatus({saved:true,test_status:'ok',last_error:'rate_limited_or_no_credit'}).tone,'warn');
 });
 test('only a saved and tested key can be chosen for work',()=>{
@@ -27,4 +27,9 @@ test('an unexpected server answer is refused, never rendered half-broken',()=>{
  const v=settingsView({providers:[{provider:'groq'},{provider:'evil'}],routes:{code:null}});
  assert.deepEqual(v.providers.map(p=>p.provider),['groq']);
  assert.equal(v.monthly_call_cap,0);assert.equal(v.usage.calls,0);
+});
+import {connectText} from '../apps/web/components/ai-models-state.js';
+test('Connect results read as one sentence',()=>{
+ assert.equal(connectText('Gemini',{ok:true,model:'gemini-3.8-flash',code_writing_routed:true}),'Gemini connected. Model: gemini-3.8-flash. Code writing now uses it.');
+ assert.equal(connectText('Groq',{ok:false,code:'auth_failed',saved:false}),'Groq: The key was refused. Check it, or make a new key. The key was not saved.');
 });

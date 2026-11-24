@@ -212,3 +212,50 @@ def test_cloud_models_stay_off_in_production(tmp_path, monkeypatch):
     monkeypatch.setenv("AGO_ENVIRONMENT", "production")
     assert vault.for_route(TENANT, "chat") is None
     assert vault.view(TENANT)["available"] is False
+
+
+def test_agos_code_model_choice_is_a_strong_text_model_from_the_keys_own_list():
+    from ago.model_provider import choose_code_model
+    assert choose_code_model("anthropic", ["claude-haiku-5-5", "claude-opus-5-5", "claude-sonnet-5-5",
+                                           "claude-sonnet-4-6"]) == "claude-sonnet-5-5"
+    assert choose_code_model("openai", ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-sol", "gpt-6-luna",
+                                        "whisper-1", "text-embedding-3", "gpt-image-1"]) == "gpt-6.2-sol"
+    assert choose_code_model("gemini", ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite",
+                                        "gemini-3.1-pro-preview", "gemini-embedding-001"]) == "gemini-3.8-flash"
+    assert choose_code_model("groq", ["llama-3.1-8b-instant", "openai/gpt-oss-120b", "whisper-large-v3"]) \
+        == "openai/gpt-oss-120b"
+    assert choose_code_model("groq", ["whisper-large-v3"]) is None
+
+
+def test_connect_with_only_a_key_picks_tests_and_routes_code_writing(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    listing = {"models": [{"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
+                          {"name": "models/gemini-3.5-flash-lite", "supportedGenerationMethods": ["generateContent"]}]}
+    opener = FakeOpener(listing, ANSWERS["gemini"])
+    vault = ProviderVault(tmp_path, opener=opener)
+    result = vault.connect(TENANT, "gemini", KEY)
+    assert result["connect"] == {"provider": "gemini", "ok": True, "code": None, "saved": True,
+                                 "model": "gemini-3.8-flash", "code_writing_routed": True}
+    assert [r.get_method() for r in opener.requests] == ["GET", "POST"]   # list, then one test call
+    gemini = next(p for p in result["providers"] if p["provider"] == "gemini")
+    assert gemini["test_status"] == "ok" and gemini["models"] == ["gemini-3.5-flash-lite", "gemini-3.8-flash"]
+    assert result["routes"] == {"code": "gemini", "qa": None, "chat": None}
+    assert KEY not in (tmp_path / "model_providers.json").read_text()
+    # A second provider does not take code writing away from the first.
+    opener.answers += [{"data": [{"id": "openai/gpt-oss-120b"}]}, ANSWERS["groq"]]
+    second = vault.connect(TENANT, "groq", KEY)
+    assert second["connect"]["code_writing_routed"] is False and second["routes"]["code"] == "gemini"
+    # Switching model keeps the list and tests again.
+    opener.answers.append(ANSWERS["gemini"])
+    switched = vault.choose_model(TENANT, "gemini", "gemini-3.5-flash-lite")
+    assert switched["test"]["ok"] is True
+    entry = next(p for p in switched["providers"] if p["provider"] == "gemini")
+    assert entry["model"] == "gemini-3.5-flash-lite" and len(entry["models"]) == 2
+
+
+def test_a_refused_key_is_not_saved(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    vault = ProviderVault(tmp_path, opener=FakeOpener(HTTPError("u", 401, "x", {}, None)))
+    result = vault.connect(TENANT, "anthropic", KEY)
+    assert result["connect"] == {"provider": "anthropic", "ok": False, "code": "auth_failed", "saved": False}
+    assert not any(p["saved"] for p in result["providers"])

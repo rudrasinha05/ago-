@@ -1,6 +1,6 @@
 "use client";
 import {useCallback,useEffect,useState} from 'react';
-import {PROVIDER_INFO,ROUTE_INFO,errorText,providerStatus,routable,routeSummary,settingsView,usageLine} from './ai-models-state';
+import {PROVIDER_INFO,ROUTE_INFO,connectText,errorText,providerStatus,routable,routeSummary,settingsView,usageLine} from './ai-models-state';
 
 const BASE='/v1/organization/company';
 
@@ -26,74 +26,83 @@ export function AiModels({api,me,active=true}){
   return()=>{live=false;};
  },[api,founder,active,apply]);
  if(!founder)return <div className="ai-models"><h2>AI models</h2><p>Only the Founder can add or change AI models.</p></div>;
- const draft=name=>drafts[name]||{model:view?.providers.find(p=>p.provider===name)?.model||'',key:''};
- const setDraft=(name,patch)=>setDrafts(old=>({...old,[name]:{...draft(name),...patch}}));
+ const keyOf=name=>drafts[name]||'';
+ const setKey=(name,value)=>setDrafts(old=>({...old,[name]:value}));
  async function act(label,work,done){
   setBusy(label);setError('');setNotice('');
   try{const result=await work();if(result?.providers)apply(result);if(done)done(result);}
   catch(e){setError(e?.message||'That did not work.');}
   finally{setBusy('');}
  }
- const save=name=>act(name+':save',()=>api.request(BASE+'/cloud-models/'+name,{method:'PUT',body:{model:draft(name).model.trim(),api_key:draft(name).key.trim()||null}}),
-  ()=>{setDraft(name,{key:''});setNotice(PROVIDER_INFO[name].name+' saved. Press Test to check it.');});
+ // One step: AGO checks the key, picks the code model, tests it and uses it.
+ const connect=name=>act(name+':connect',()=>api.request(BASE+'/cloud-models/'+name+'/connect',{method:'POST',body:{api_key:keyOf(name).trim()},timeoutMs:130000}),
+  r=>{setKey(name,'');setNotice(connectText(PROVIDER_INFO[name].name,r.connect));});
+ const useModel=(name,model)=>act(name+':model',()=>api.request(BASE+'/cloud-models/'+name+'/model',{method:'PUT',body:{model},timeoutMs:65000}),
+  r=>{setModels(old=>({...old,[name]:undefined}));setNotice(r.test.ok?PROVIDER_INFO[name].name+' now uses '+model+'.':PROVIDER_INFO[name].name+': '+errorText(r.test.code));});
  const test=name=>act(name+':test',()=>api.request(BASE+'/cloud-models/'+name+'/test',{method:'POST',body:{},timeoutMs:65000}),
-  r=>setNotice(r.test.ok?PROVIDER_INFO[name].name+' works. You can now choose it below.':PROVIDER_INFO[name].name+': '+errorText(r.test.code)));
- const load=name=>act(name+':models',()=>api.request(BASE+'/cloud-models/'+name+'/models',{timeoutMs:30000}),
-  r=>{setModels(old=>({...old,[name]:r.models}));setNotice(r.models.length+' models found for '+PROVIDER_INFO[name].name+'. Pick one and press Save.');});
+  r=>setNotice(r.test.ok?PROVIDER_INFO[name].name+' works.':PROVIDER_INFO[name].name+': '+errorText(r.test.code)));
  const remove=name=>act(name+':remove',()=>api.request(BASE+'/cloud-models/'+name,{method:'DELETE'}),
   ()=>setNotice(PROVIDER_INFO[name].name+' key removed from this computer.'));
  const saveRoutes=()=>act('routes',()=>api.request(BASE+'/cloud-model-routes',{method:'PUT',body:{...routes,monthly_call_cap:Number(routes.monthly_call_cap)}}),
   ()=>setNotice('Saved. AGO uses these models from the next AI task.'));
  const ready=routable(view);
+ const editable=Boolean(view?.available)&&busy==='';
  return <div className="ai-models">
   <header className="ai-models-head">
    <div><h2>AI models</h2>
-    <p>The local model (Ollama) does all work by default, for free. Add a cloud model for work that needs a stronger brain.</p></div>
+    <p>The local model (Ollama) does all work by default, for free. Connect a cloud model for work that needs a stronger brain.</p></div>
    {view&&<p className="ai-models-usage" aria-label="Cloud usage this month">{usageLine(view)}</p>}
   </header>
   {error&&<p role="alert" className="ai-models-error">{error}</p>}
   {notice&&<p role="status" className="ai-models-notice">{notice}</p>}
+  {busy.endsWith(':connect')&&<p role="status" className="ai-models-notice">Checking the key, choosing a model and testing it…</p>}
   {view&&!view.available&&<p role="alert" className="ai-models-error">Cloud model keys can only be entered on the Founder's own computer.</p>}
   {view&&<>
-   <section aria-labelledby="ai-models-who"><h3 id="ai-models-who">Which model does which work</h3>
-    <div className="ai-routes">
-     {ROUTE_INFO.map(r=><label key={r.route} className="ai-route"><span><b>{r.label}</b><small>{r.help}</small></span>
-      <select value={routes?.[r.route]||''} disabled={!view.available} onChange={e=>setRoutes(old=>({...old,[r.route]:e.target.value||null}))}>
-       <option value="">Local model (Ollama)</option>
-       {ready.map(p=><option key={p.provider} value={p.provider}>{PROVIDER_INFO[p.provider].name} · {p.model}</option>)}
-      </select></label>)}
-     <label className="ai-route"><span><b>Monthly limit</b><small>Most cloud calls per month. 0 turns cloud models off.</small></span>
-      <input type="number" min="0" max="5000" inputMode="numeric" value={routes?.monthly_call_cap??0} disabled={!view.available}
-       onChange={e=>setRoutes(old=>({...old,monthly_call_cap:e.target.value}))}/></label>
-    </div>
-    {!ready.length&&<p className="ai-models-hint">Add a key below and press Test. Then you can choose it here.</p>}
-    <button type="button" className="ai-primary" disabled={!view.available||busy==='routes'} onClick={saveRoutes}>{busy==='routes'?'Saving…':'Save choices'}</button>
-    <ul className="ai-route-now" aria-label="Now in use">{routeSummary(view).map(r=><li key={r.route}>{r.label}: <b>{r.uses}</b></li>)}</ul>
-   </section>
-   <section aria-labelledby="ai-models-keys"><h3 id="ai-models-keys">Cloud model keys</h3>
+   <section aria-labelledby="ai-models-keys"><h3 id="ai-models-keys">1. Connect a cloud model</h3>
+    <p className="ai-models-hint first">Paste the key and press Connect. AGO checks it, picks the best model for code, tests it and uses it for code writing.</p>
     <ul className="ai-providers">{view.providers.map(p=>{
-     const info=PROVIDER_INFO[p.provider],status=providerStatus(p),d=draft(p.provider),id='ai-'+p.provider;
+     const info=PROVIDER_INFO[p.provider],status=providerStatus(p),id='ai-'+p.provider,key=keyOf(p.provider);
+     const list=p.models?.length?p.models:(p.model?[p.model]:[]);
+     const picked=models[p.provider]??p.model??'';
      return <li key={p.provider} className="ai-provider" aria-label={info.name}>
       <div className="ai-provider-head"><strong>{info.name}</strong><span className={'ai-chip '+status.tone}>{status.text}</span>
        <a href={info.keyUrl} target="_blank" rel="noreferrer noopener">Get a key ↗</a></div>
       {p.last_error&&<p className="ai-models-error small">{errorText(p.last_error)}</p>}
-      <label htmlFor={id+'-key'}>API key</label>
-      <input id={id+'-key'} type="password" autoComplete="off" spellCheck={false} value={d.key} disabled={!view.available}
-       placeholder={p.saved?'Saved '+p.key_hint+' · paste to replace':'Paste your key ('+info.keyLooks+')'}
-       onChange={e=>setDraft(p.provider,{key:e.target.value})}/>
-      <label htmlFor={id+'-model'}>Model</label>
-      <input id={id+'-model'} list={id+'-list'} value={d.model} disabled={!view.available} placeholder={info.example}
-       onChange={e=>setDraft(p.provider,{model:e.target.value})}/>
-      <datalist id={id+'-list'}>{(models[p.provider]||[]).map(m=><option key={m} value={m}/>)}</datalist>
+      {p.saved&&<>
+       <label htmlFor={id+'-model'}>Model</label>
+       <select id={id+'-model'} value={picked} disabled={!editable} onChange={e=>setModels(old=>({...old,[p.provider]:e.target.value}))}>
+        {list.map(m=><option key={m} value={m}>{m}</option>)}</select>
+       {picked&&picked!==p.model&&<button type="button" className="ai-primary" disabled={!editable} onClick={()=>useModel(p.provider,picked)}>
+        {busy===p.provider+':model'?'Testing…':'Use this model'}</button>}
+      </>}
+      <label htmlFor={id+'-key'}>{p.saved?'Replace key':'API key'}</label>
+      <input id={id+'-key'} type="password" autoComplete="off" spellCheck={false} value={key} disabled={!view.available}
+       placeholder={p.saved?'Saved '+p.key_hint:'Paste your key ('+info.keyLooks+')'}
+       onChange={e=>setKey(p.provider,e.target.value)}/>
       <div className="ai-provider-actions">
-       <button type="button" className="ai-primary" disabled={!view.available||busy!==''||!d.model.trim()||(!p.saved&&!d.key.trim())} onClick={()=>save(p.provider)}>{busy===p.provider+':save'?'Saving…':'Save'}</button>
-       <button type="button" disabled={!p.saved||busy!==''} onClick={()=>load(p.provider)}>{busy===p.provider+':models'?'Loading…':'Load models'}</button>
-       <button type="button" disabled={!p.saved||busy!==''} onClick={()=>test(p.provider)} aria-label={'Test '+info.name}>{busy===p.provider+':test'?'Testing…':'Test'}</button>
-       {p.saved&&<button type="button" disabled={busy!==''} onClick={()=>remove(p.provider)} aria-label={'Remove '+info.name+' key'}>Remove</button>}
+       {(!p.saved||key.trim())&&<button type="button" className="ai-primary" disabled={!editable||!key.trim()} onClick={()=>connect(p.provider)} aria-label={'Connect '+info.name}>
+        {busy===p.provider+':connect'?'Connecting…':'Connect'}</button>}
+       {p.saved&&<button type="button" disabled={!editable} onClick={()=>test(p.provider)} aria-label={'Test '+info.name}>{busy===p.provider+':test'?'Testing…':'Test again'}</button>}
+       {p.saved&&<button type="button" disabled={!editable} onClick={()=>remove(p.provider)} aria-label={'Remove '+info.name+' key'}>Remove</button>}
       </div>
      </li>;})}</ul>
    </section>
-   <p className="ai-models-foot">Keys stay encrypted on this computer, in AGO's private ~/.ago folder: never in the database or GitHub. The text of the work goes to the provider you choose. Test counts as one call. Also set a spending limit in the provider's own dashboard.</p>
+   <section aria-labelledby="ai-models-who"><h3 id="ai-models-who">2. Which model does which work</h3>
+    {!ready.length&&<p className="ai-models-hint first">Everything runs on the local model now. Connect a cloud model above to choose it here.</p>}
+    <div className="ai-routes">
+     {ROUTE_INFO.map(r=><label key={r.route} className="ai-route"><span><b>{r.label}</b><small>{r.help}</small></span>
+      <select value={routes?.[r.route]||''} disabled={!editable||!ready.length} onChange={e=>setRoutes(old=>({...old,[r.route]:e.target.value||null}))}>
+       <option value="">Local model (Ollama)</option>
+       {ready.map(p=><option key={p.provider} value={p.provider}>{PROVIDER_INFO[p.provider].name} · {p.model}</option>)}
+      </select></label>)}
+     <label className="ai-route"><span><b>Monthly limit</b><small>Most cloud calls per month. 0 turns cloud models off.</small></span>
+      <input type="number" min="0" max="5000" inputMode="numeric" value={routes?.monthly_call_cap??0} disabled={!editable}
+       onChange={e=>setRoutes(old=>({...old,monthly_call_cap:e.target.value}))}/></label>
+    </div>
+    <button type="button" className="ai-primary" disabled={!editable} onClick={saveRoutes}>{busy==='routes'?'Saving…':'Save choices'}</button>
+    <ul className="ai-route-now" aria-label="Now in use">{routeSummary(view).map(r=><li key={r.route}>{r.label}: <b>{r.uses}</b></li>)}</ul>
+   </section>
+   <p className="ai-models-foot">Keys stay encrypted on this computer, in AGO's private ~/.ago folder: never in the database or GitHub. The text of the work goes to the provider you choose. Each test is one call. Also set a spending limit in the provider's own dashboard.</p>
   </>}
  </div>;
 }

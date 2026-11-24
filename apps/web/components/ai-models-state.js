@@ -26,15 +26,23 @@ const ERROR_TEXT={
  response_too_large:'The answer was too large.',
  unreadable_response:'The provider sent an answer AGO could not read.',
  monthly_cap_reached:'This month\'s call limit is used up. The local model does the work.',
+ no_text_model:'This key has no text model AGO can use.',
 };
 /** One sentence for AGO's own failure code. */
 export function errorText(code){
  return ERROR_TEXT[code]||(code?'Failed ('+String(code)+').':'');
 }
 
+/** Plain result of pressing Connect. */
+export function connectText(name,c){
+ if(!c)return '';
+ if(!c.ok)return name+': '+errorText(c.code)+(c.saved?'':' The key was not saved.');
+ return name+' connected. Model: '+c.model+'.'+(c.code_writing_routed?' Code writing now uses it.':'');
+}
+
 /** Status chip for one provider row. */
 export function providerStatus(p){
- if(!p?.saved)return {tone:'idle',text:'Not added'};
+ if(!p?.saved)return {tone:'idle',text:'Not connected'};
  if(p.test_status==='ok'&&!p.last_error)return {tone:'ok',text:'Working'};
  if(p.test_status==='ok')return {tone:'warn',text:'Working, last call failed'};
  if(p.test_status==='failed')return {tone:'bad',text:'Test failed'};

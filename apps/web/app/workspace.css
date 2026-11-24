@@ -799,3 +799,5 @@
 .ai-chip.warn{border-color:#7a6232;background:#2e2614;color:#f5dfae}
 .ai-chip.bad{border-color:#8a3a4a;background:#351820;color:#ffc9d3}
 @media (max-width:760px){.ai-models section{padding:14px}.ai-provider-actions button{flex:1 1 40%}}
+.ai-models .ai-primary:disabled{border-color:var(--border);background:transparent;color:var(--muted)}
+.ai-models-hint.first{margin:0 0 14px}
