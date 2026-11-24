@@ -32,7 +32,7 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
 from ago.company_engineering import (  # STAGE_FORMATS/missing_stage_labels: used by AI QA
     STAGE_FORMATS, missing_stage_labels, project_test_evidence_text, receipt_text,  # noqa: F401
-    execute_entry, run_candidate_tests, test_runner_available,
+    draft_github_commit_operation, execute_entry, run_candidate_tests, test_runner_available,
 )
 from ago.company_engineering import RevisionConflict, edited_candidate, workspace_snapshot
 from ago.organization_store import OrganizationStore
@@ -465,6 +465,57 @@ class StageProgression:
             result = {"status": "runner_error", "output": "", "exit_code": None}
         return dict(queries.close_terminal((result["status"], result["output"].replace(chr(0), ""),
                                             result["exit_code"], *run_key)).fetchone())
+
+    def request_workspace_review(self, *, tenant_id: str, founder_id: str, project_id: str,
+                                 task_id: str, attempt_id: str, reviewer_id: str) -> dict:
+        if founder_id == reviewer_id:
+            raise PermissionError("Assign a separate QA reviewer")
+        with self.db.transaction():
+            current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
+                                                 project_id=project_id, task_id=task_id)
+            record = self.repositories.resolve(StageProgressionQueries).request_workspace_review((
+                str(uuid4()), founder_id, reviewer_id, json.dumps(current), tenant_id, project_id,
+                task_id, current["run_id"], attempt_id, current["revision"], current["candidate_sha256"],
+            )).fetchone()
+            if not record:
+                raise RevisionConflict("Review already requested or current revision lacks a passing test")
+            return dict(record)
+
+    def workspace_review(self, *, tenant_id: str, actor_id: str, review_id: str,
+                         decision: dict | None = None) -> dict:
+        queries = self.repositories.resolve(StageProgressionQueries)
+        if decision is None:
+            row = queries.assigned_workspace_review((tenant_id, review_id, actor_id, actor_id)).fetchone()
+            if not row:
+                raise LookupError("Workspace QA request not found")
+            return dict(row)
+        verdict, notes = decision.get("verdict"), decision.get("notes")
+        if verdict not in ("pass", "fail") or not isinstance(notes, str) or not 15 <= len(notes.strip()) <= 2000:
+            raise ValueError("Provide a verdict and 15-2000 characters of review findings")
+        row = queries.decide_workspace_review((verdict, notes.strip(), tenant_id, review_id, actor_id)).fetchone()
+        if not row:
+            raise PermissionError("Only the assigned reviewer may decide a pending review once")
+        return dict(row)
+
+    def workspace_handoff(self, *, tenant_id: str, founder_id: str, review_id: str,
+                          github_project_id: str, operation_id: str, expected_sha: str, message: str) -> dict:
+        with self.db.transaction():
+            review = self.workspace_review(tenant_id=tenant_id, actor_id=founder_id, review_id=review_id)
+            if review["verdict"] != "pass":
+                raise PermissionError("Independent QA pass required for GitHub handoff")
+            current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
+                project_id=str(review["project_id"]), task_id=str(review["task_id"]))
+            if (current["run_id"] != str(review["run_id"]) or current["revision"] != review["revision"]
+                    or current["candidate_sha256"] != review["candidate_sha256"]):
+                raise RevisionConflict("Workspace changed after QA")
+            candidate = edited_candidate(current, {"run_id": current["run_id"],
+                "expected_revision": current["revision"], "files": current["files"]})
+            operation = draft_github_commit_operation(candidate, project_id=github_project_id,
+                operation_id=operation_id, expected_sha=expected_sha, message=message, workspace=True)
+            return {"github_operation": operation, "candidate_sha256": current["candidate_sha256"],
+                    "workspace_revision": current["revision"], "review_id": review_id,
+                    "reviewer_id": review["reviewer_id"], "test_receipt": review["receipt"],
+                    "github_committed": False}
 
     def workspace_tests(self, *, tenant_id: str, founder_id: str, project_id: str,
                         task_id: str, request: dict | None = None) -> dict:

@@ -340,7 +340,11 @@
     "GET /v1/agents/projects/{project_id}/tasks/{task_id}/workspace/terminal": "154fdbcb856515c6ef024787457965ac6de2c9b1867e1e363eb3b455112ebc1d",
     "POST /v1/agents/projects/{project_id}/tasks/{task_id}/workspace/terminal": "3e8b74876fd7f8cd0637f9d373b765576c1dcf952f6a474f82b900c3d98806e0",
     "POST /v1/agents/projects/{project_id}/tasks/{task_id}/workspace/terminal/{attempt_id}/stop": "116a3a1cf080e766e78d4730a035a7e573fbb7952364804a1b92191663a2fcc9",
-    "POST /v1/agents/projects/{project_id}/tasks/{task_id}/workspace/tests/{attempt_id}/repair": "d7baacb1bf70670d702e101d5a2231ef2aadd7353fe3cbe8ea730f4b420d704b"
+    "POST /v1/agents/projects/{project_id}/tasks/{task_id}/workspace/tests/{attempt_id}/repair": "d7baacb1bf70670d702e101d5a2231ef2aadd7353fe3cbe8ea730f4b420d704b",
+    "POST /v1/agents/projects/{project_id}/tasks/{task_id}/workspace/tests/{attempt_id}/review/{reviewer_id}": "6ee160358ed2665ba297bde55bbcc9d3776c7caec460266702394c36bd08d118",
+    "GET /v1/agents/workspace-reviews/{review_id}": "09e74b8c398714cf656cfbce5ee3984666bbd22d2913f0067ac55a9252eaa047",
+    "POST /v1/agents/workspace-reviews/{review_id}": "d151dc59dc59bfeb7dd02f28185780603a00c7f9796849127eeabb46ebf4e931",
+    "POST /v1/agents/workspace-reviews/{review_id}/github-handoff/{github_project_id}/{operation_id}": "8d251b935cb975ec3077ae3b7d7599b3b0967c95a99356a7ce5cbccd43465392"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",

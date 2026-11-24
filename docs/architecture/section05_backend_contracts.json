@@ -2076,6 +2076,18 @@
         "workspace_tests": {
           "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str, request: dict | None=None",
           "returns": "dict"
+        },
+        "request_workspace_review": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str, attempt_id: str, reviewer_id: str",
+          "returns": "dict"
+        },
+        "workspace_review": {
+          "arguments": "self, *, tenant_id: str, actor_id: str, review_id: str, decision: dict | None=None",
+          "returns": "dict"
+        },
+        "workspace_handoff": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, review_id: str, github_project_id: str, operation_id: str, expected_sha: str, message: str",
+          "returns": "dict"
         }
       }
     },
@@ -2227,6 +2239,18 @@
           "returns": "Cursor"
         },
         "close_terminal": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "request_workspace_review": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "assigned_workspace_review": {
+          "arguments": "self, parameters: Any=None",
+          "returns": "Cursor"
+        },
+        "decide_workspace_review": {
           "arguments": "self, parameters: Any=None",
           "returns": "Cursor"
         }

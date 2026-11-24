@@ -371,3 +371,28 @@ class StageProgressionQueries:
             """UPDATE ago_workspace_terminal SET status=%s,output=%s,exit_code=%s,finished_at=clock_timestamp()
                WHERE tenant_id=%s AND project_id=%s AND task_id=%s AND run_id=%s AND attempt_id=%s
                AND finished_at IS NULL RETURNING attempt_id,status,output,exit_code""", parameters)
+
+    def request_workspace_review(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """INSERT INTO ago_workspace_reviews
+               (id,requested_by,reviewer_id,candidate,tenant_id,project_id,task_id,run_id,
+                attempt_id,revision,candidate_sha256)
+               SELECT %s,%s,%s,%s::jsonb,tenant_id,project_id,task_id,run_id,attempt_id,
+                      revision,candidate_sha256 FROM ago_workspace_test_runs
+               WHERE tenant_id=%s AND project_id=%s AND task_id=%s AND run_id=%s AND attempt_id=%s
+                 AND revision=%s AND candidate_sha256=%s AND receipt->>'status'='passed'
+               ON CONFLICT DO NOTHING RETURNING id""", parameters)
+
+    def assigned_workspace_review(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT q.id,q.project_id,q.task_id,q.run_id,q.revision,q.candidate_sha256,q.candidate,
+                      q.reviewer_id,q.verdict,q.notes,c.receipt FROM ago_workspace_reviews q
+               JOIN ago_workspace_test_runs c USING(tenant_id,project_id,task_id,run_id,attempt_id)
+               WHERE q.tenant_id=%s AND q.id=%s AND (q.reviewer_id=%s OR q.requested_by=%s)""",
+            parameters)
+
+    def decide_workspace_review(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """UPDATE ago_workspace_reviews SET verdict=%s,notes=%s,decided_at=clock_timestamp()
+               WHERE tenant_id=%s AND id=%s AND reviewer_id=%s AND verdict IS NULL
+               RETURNING id,verdict,decided_at""", parameters)

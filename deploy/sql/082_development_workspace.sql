@@ -64,3 +64,28 @@ CREATE TABLE ago_workspace_terminal (
     FOREIGN KEY (tenant_id,task_id) REFERENCES ago_governed_tasks(tenant_id,id),
     PRIMARY KEY (tenant_id,project_id,task_id,run_id,attempt_id)
 );
+
+CREATE TABLE ago_workspace_reviews (
+    id uuid PRIMARY KEY, tenant_id uuid NOT NULL, project_id uuid NOT NULL, task_id uuid NOT NULL,
+    run_id uuid NOT NULL, attempt_id uuid NOT NULL, revision integer NOT NULL,
+    candidate_sha256 text NOT NULL, candidate jsonb NOT NULL,
+    requested_by uuid NOT NULL, reviewer_id uuid NOT NULL CHECK (reviewer_id <> requested_by),
+    verdict text CHECK (verdict IN ('pass','fail')), notes text, decided_at timestamptz,
+    UNIQUE(tenant_id,project_id,task_id,run_id,attempt_id,reviewer_id),
+    FOREIGN KEY(tenant_id,project_id,task_id,run_id,attempt_id)
+      REFERENCES ago_workspace_test_runs(tenant_id,project_id,task_id,run_id,attempt_id)
+);
+
+CREATE FUNCTION ago_guard_workspace_review() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP='DELETE' OR OLD.verdict IS NOT NULL OR NEW.verdict IS NULL
+       OR NEW.decided_at IS NULL OR length(trim(coalesce(NEW.notes,''))) < 15
+       OR (to_jsonb(NEW)-ARRAY['verdict','notes','decided_at']) IS DISTINCT FROM
+          (to_jsonb(OLD)-ARRAY['verdict','notes','decided_at']) THEN
+        RAISE EXCEPTION 'Workspace QA evidence is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER ago_workspace_review_guard BEFORE UPDATE OR DELETE ON ago_workspace_reviews
+FOR EACH ROW EXECUTE FUNCTION ago_guard_workspace_review();

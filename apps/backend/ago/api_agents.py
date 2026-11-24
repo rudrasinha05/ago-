@@ -526,3 +526,56 @@ def repair_workspace(project_id: UUID, task_id: UUID, attempt_id: UUID,
     test["attempt_id"] = str(uuid4())
     return {"workspace": revised, "test": _workspace(actor, repositories, project_id,
                                                      task_id, test, tests=True)}
+
+
+@router.post("/projects/{project_id}/tasks/{task_id}/workspace/tests/{attempt_id}/review/{reviewer_id}")
+def request_workspace_review(project_id: UUID, task_id: UUID, attempt_id: UUID, reviewer_id: UUID,
+                             actor: Principal = Depends(authenticated),
+                             repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, "approval:founder")
+    try:
+        return repositories.resolve(StageProgressionPort).request_workspace_review(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id),
+            task_id=str(task_id), attempt_id=str(attempt_id), reviewer_id=str(reviewer_id))
+    except RevisionConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+def _review(repositories, actor, review_id, decision=None):
+    allowed(repositories, actor, "qa:review" if decision is not None else "qa:read")
+    try:
+        return repositories.resolve(StageProgressionPort).workspace_review(
+            tenant_id=actor.tenant_id, actor_id=actor.subject, review_id=str(review_id), decision=decision)
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)
+
+
+@router.get("/workspace-reviews/{review_id}")
+def workspace_review_packet(review_id: UUID, actor: Principal = Depends(authenticated),
+                            repositories: RepositoryScope = Depends(repository_scope)):
+    return _review(repositories, actor, review_id)
+
+
+@router.post("/workspace-reviews/{review_id}")
+def decide_workspace_review(review_id: UUID, decision: dict, actor: Principal = Depends(authenticated),
+                            repositories: RepositoryScope = Depends(repository_scope)):
+    return _review(repositories, actor, review_id, decision)
+
+
+@router.post("/workspace-reviews/{review_id}/github-handoff/{github_project_id}/{operation_id}")
+def workspace_handoff(review_id: UUID, github_project_id: UUID, operation_id: UUID, request: dict,
+                      actor: Principal = Depends(authenticated),
+                      repositories: RepositoryScope = Depends(repository_scope)):
+    allowed(repositories, actor, "approval:founder")
+    if set(request) != {"expected_sha", "message"}:
+        raise HTTPException(400, "Expected develop SHA and commit message required")
+    try:
+        return repositories.resolve(StageProgressionPort).workspace_handoff(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, review_id=str(review_id),
+            github_project_id=str(github_project_id), operation_id=str(operation_id), **request)
+    except RevisionConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (ValueError, PermissionError, LookupError) as exc:
+        translate_error(exc)

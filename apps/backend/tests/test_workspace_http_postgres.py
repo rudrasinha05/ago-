@@ -13,7 +13,7 @@ def test_founder_edits_tests_and_replays_one_attempt(company, case, monkeypatch)
 
     monkeypatch.setattr(service, "run_candidate_tests", lambda value, **kw:
                         run_candidate_tests(value, runner=company.docker, **kw))
-    client, headers, _ = case
+    client, headers, info = case
     response, _ = steps_until(company, "implementation", "run")
     task = response["task_id"]
     path = f"/v1/agents/projects/{company.id}/tasks/{task}/workspace"
@@ -41,6 +41,25 @@ def test_founder_edits_tests_and_replays_one_attempt(company, case, monkeypatch)
     history = client.get(path+"/tests", headers=company.founder).json()["attempts"]
     assert len(history) == 1 and history[0]["revision"] == 1
     assert history[0]["receipt"]["tests_passed"] is True
+    reviewer = str(info["reviewer_id"])
+    review = client.post(path+"/tests/"+request["attempt_id"]+"/review/"+reviewer, headers=company.founder)
+    assert review.status_code == 200, review.text
+    review_url = "/v1/agents/workspace-reviews/" + review.json()["id"]
+    packet = client.get(review_url, headers=headers["reviewer"])
+    assert packet.json()["candidate"]["files"] == files
+    decision = {"verdict": "pass", "notes": "Reviewed implementation and matching Docker evidence."}
+    assert client.post(review_url, headers=company.founder, json=decision).status_code == 403
+    assert client.post(review_url, headers=headers["reviewer"], json=decision).status_code == 200
+    assert client.post(review_url, headers=headers["reviewer"], json=decision).status_code == 403
+    handoff = review_url + f"/github-handoff/{uuid4()}/{uuid4()}"
+    commit = {"expected_sha": "1"*40, "message": "Reviewed workspace revision"}
+    draft = client.post(handoff, headers=company.founder, json=commit)
+    assert draft.status_code == 200, draft.text
+    assert draft.json()["github_operation"]["payload"]["files"] == files
+    files[0]["content"] += "# another edit\n"
+    assert client.put(path, headers=company.founder, json={
+        **edit, "expected_revision": 1, "files": files}).status_code == 200
+    assert client.post(handoff, headers=company.founder, json=commit).status_code == 409
     with pytest.raises(Exception, match="immutable"):
         with company.db.transaction():
             company.db.execute("DELETE FROM ago_workspace_test_runs WHERE attempt_id=%s",

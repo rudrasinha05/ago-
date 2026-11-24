@@ -802,6 +802,7 @@
       "ago_stage_candidate_tests",
       "ago_strategy_plans",
       "ago_task_reviews",
+      "ago_workspace_reviews",
       "ago_workspace_revisions",
       "ago_workspace_terminal",
       "ago_workspace_test_runs"

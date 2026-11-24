@@ -303,14 +303,14 @@ def stage_candidate(value: dict, destination, *, workspace: bool = False) -> dic
 
 
 def draft_github_commit_operation(
-    value: dict, *, project_id: str, operation_id: str, expected_sha: str, message: str,
+    value: dict, *, project_id: str, operation_id: str, expected_sha: str, message: str, workspace: bool = False,
 ) -> dict:
     """Exact unsubmitted Section34 operation; never invokes GitHub or grants RBAC."""
     from uuid import UUID
 
     UUID(project_id)
     UUID(operation_id)
-    candidate = verify_persisted_candidate(value)
+    candidate = verify_persisted_candidate(value, workspace=workspace)
     operation = {
         "id": operation_id,
         "project_id": project_id,
