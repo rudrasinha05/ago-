@@ -97,11 +97,11 @@ def test_failed_docker_revision_can_repair_once_and_retest(company, monkeypatch)
 
     monkeypatch.setattr(service, "run_candidate_tests", lambda value, **kw:
                         run_candidate_tests(value, runner=company.docker, **kw))
+    response, _ = steps_until(company, "implementation", "run")
     monkeypatch.setenv("AGO_LOCAL_REPAIR_PROPOSALS", "true")
     monkeypatch.setenv("AGO_LLM_MODEL", "local")
     monkeypatch.setenv("AGO_LLM_PROVIDER", "ollama_local")
     monkeypatch.setenv("AGO_ENABLE_LOCAL_MODELS", "true")
-    response, _ = steps_until(company, "implementation", "run")
     path = f"/v1/agents/projects/{company.id}/tasks/{response['task_id']}/workspace"
     current = company.client.get(path, headers=company.founder).json()
     source = next(f for f in current["files"] if f["path"].startswith("src/"))

@@ -18,7 +18,7 @@ export function DevelopmentWorkspace({api,project,stage}){
  const [runs,setRuns]=useState([]),[tests,setTests]=useState([]),[review,setReview]=useState('');
  const [reviewer,setReviewer]=useState(''),[target,setTarget]=useState(''),[sha,setSha]=useState('');
  const [message,setMessage]=useState(''),[operation,setOperation]=useState(null),[notice,setNotice]=useState('');
- const [newFile,setNewFile]=useState('');
+ const [newFile,setNewFile]=useState(''),[autoRepair,setAutoRepair]=useState(false);
  const paint=useRef(null),alive=useRef(false),lock=useRef(false);
  useEffect(()=>{alive.current=true;return ()=>{alive.current=false;};},[]);
  const current=files.find(f=>f.path===path);
@@ -60,7 +60,16 @@ export function DevelopmentWorkspace({api,project,stage}){
  <button disabled={!!busy||!dirty} onClick={()=>action('Saving',async()=>install(await api.request(root,send({files,expected_revision:snapshot.revision,run_id:snapshot.run_id},'PUT'))))}>Save revision</button>
  <button disabled={!!busy} onClick={()=>{if(!dirty||window.confirm('Discard unsaved edits and reload?'))action('Reloading',load);}}>Reload</button>
  <button disabled={disabled||!path.startsWith('src/')} onClick={()=>action('Running',async()=>{await api.request(root+'/terminal',send({...revisionOf(snapshot),attempt_id:uid(),entry:path}));await refresh();})}>Run selected file</button>
- <button disabled={disabled} onClick={()=>action('Testing',async()=>{await api.request(root+'/tests',send({...revisionOf(snapshot),attempt_id:uid()}));await refresh();})}>Run tests</button>
+ <label><input type="checkbox" checked={autoRepair} disabled={!!busy} onChange={e=>setAutoRepair(e.target.checked)}/> Repair once if tests fail</label>
+ <button disabled={disabled} onClick={()=>action('Testing',async()=>{
+  const attempt=uid();
+  const result=await api.request(root+'/tests',send({...revisionOf(snapshot),attempt_id:attempt}));
+  if(autoRepair&&result.receipt?.status==='failed'&&result.receipt.tests_executed){
+   setBusy('Repairing and retesting');
+   const repaired=await api.request(root+'/tests/'+attempt+'/repair',send({}));install(repaired.workspace);
+  }
+  await refresh();
+ })}>Run tests</button>
  {latest?.receipt?.status==='failed'&&<button disabled={disabled} onClick={()=>action('Repairing',async()=>{const r=await api.request(root+'/tests/'+latest.attempt_id+'/repair',send({}));install(r.workspace);await refresh();})}>Repair and retest</button>}</div>
  <p role="status">{busy||notice||(dirty?'Unsaved changes':'Saved revision '+snapshot.revision)}</p>{error&&<p role="alert">{error}</p>}
  <h5>Terminal</h5>{!runs.length&&<p>No commands recorded.</p>}
