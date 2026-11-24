@@ -396,21 +396,44 @@ def test_runner_available(*, runner=subprocess.run) -> bool:
     return probe.returncode == 0
 
 
+def _write_files(files: list[dict], root: Path) -> None:
+    """Write an exact, already validated file set into a new directory."""
+    root.mkdir(parents=True, exist_ok=False)
+    for item in files:
+        target = root.joinpath(*item["path"].split("/"))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("x", encoding="utf-8", newline="") as handle:
+            handle.write(item["content"])
+
+
 def run_candidate_tests(value: dict, *, runner=subprocess.run,
-                        timeout: int = TEST_TIMEOUT_SECONDS) -> dict:
+                        timeout: int = TEST_TIMEOUT_SECONDS,
+                        with_files: list[dict] | None = None) -> dict:
     """Run a persisted candidate's unittest suite in an isolated container.
+
+    ``with_files`` (PROJ-014): the complete integrated project INCLUDING this
+    candidate. Then every earlier test runs together with the new ones
+    (complete regression), so a module that breaks an older module fails.
 
     Returns a receipt with ``status`` one of: ``passed``, ``failed``,
     ``timeout`` or ``runner_unavailable`` (Docker or the image is missing - a
     machine problem, not a defect of the code, and nothing was executed).
     """
     candidate = verify_persisted_candidate(value)
+    if with_files is not None:
+        from ago.project_modules import check_project_files
+        check_project_files(with_files)
+        listed = {(f["path"], f["content"]) for f in with_files}
+        if not all((f["path"], f["content"]) in listed for f in candidate["files"]):
+            raise ValueError("The project file set must contain this candidate unchanged")
     base = {
         "kind": "ago_isolated_candidate_test_receipt_v1",
         "candidate_sha256": candidate["candidate_sha256"],
         "image": TEST_IMAGE, "network_disabled": True, "read_only_container": True,
         "unittest_cases": 0, "tests_executed": False, "tests_passed": False,
         "failure_category": "none", "failure_summary": "", "docker_exit_code": None,
+        "regression": with_files is not None,
+        "files_tested": len(with_files) if with_files is not None else len(candidate["files"]),
     }
     if not test_runner_available(runner=runner):
         return {**base, "status": "runner_unavailable",
@@ -418,7 +441,10 @@ def run_candidate_tests(value: dict, *, runner=subprocess.run,
                                    + " image is not present on this computer."}
     with tempfile.TemporaryDirectory(prefix="ago-test-") as temp:
         root = Path(temp) / "work"
-        stage_candidate(candidate, root)
+        if with_files is not None:
+            _write_files(with_files, root)
+        else:
+            stage_candidate(candidate, root)
         # The container user (nobody) must be able to read the mounted files.
         for path in [Path(temp), *root.rglob("*"), root]:
             try:
@@ -494,11 +520,17 @@ def project_test_evidence_text(candidate: dict, *, cases: int) -> str:
 # labelled lines and AI QA checks the same labels, so a small model cannot fail
 # the work for being "not detailed enough" (live 2026-11-21, quality stage).
 STAGE_FORMATS = {
+    # PROJ-014: the architect plans the modules; AGO reads the MODULES line into
+    # the module plan the Founder approves before implementation starts.
+    "architecture": ("ARCHITECTURE", "MODULES"),
     "quality": ("QA PLAN", "TEST CASES", "TEST REPORT", "ACCEPTANCE MAP", "RELEASE BLOCKERS"),
     "release": ("RELEASE PACKAGE", "PR TITLE", "PR DESCRIPTION", "RELEASE NOTES",
                 "RECOMMENDATION"),
 }
 STAGE_FORMAT_HINTS = {
+    "architecture": ("ARCHITECTURE: the main parts and how they connect; MODULES: M01 Name - "
+                     "what it does; M02 Name - what it does; ... (small modules, each one "
+                     "engineer task, built on a working prototype)"),
     "quality": ("TEST CASES: the test names in AGO TEST EVIDENCE; TEST REPORT: how many "
                 "AGO executed and that all passed; ACCEPTANCE MAP: each check -> its test; "
                 "RELEASE BLOCKERS: none, or each blocker"),

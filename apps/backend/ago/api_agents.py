@@ -400,14 +400,19 @@ def _qa(actor, repositories, project_id, step) -> dict:
                                 "a virtual credit. The next advance checks recorded state "
                                 "before retrying.")
     verdict = review["verdict"]
+    after = review.get('continuation') or {}
+    # What the Founder must decide next (e.g. approve the module plan) is part
+    # of the message, not hidden in the continuation details.
+    waiting = (" Next, the Founder: " + str(after.get("reason") or "")[:400]
+               if after.get('needs_founder') and after.get('reason') else "")
     return _outcome(
         step, progressed=verdict in ("pass", "fail"),
-        needs_founder=bool((review.get('continuation') or {}).get('needs_founder')),
+        needs_founder=bool(after.get('needs_founder')),
         qa_verdict=verdict,
         qa_employee_name=review["qa_employee_name"], decision=review.get("continuation"),
         followup=review.get('followup'),
         message=("AI QA by " + review["qa_employee_name"] + ": " + verdict.upper() + " for "
-                 + stage + "." if verdict in ("pass", "fail")
+                 + stage + "." + waiting if verdict in ("pass", "fail")
                  else "AI QA gave no clear verdict for " + stage
                       + "; the review receipt and one virtual-credit charge were recorded."))
 

@@ -69,6 +69,7 @@
         "company_ollama_chain_queries",
         "enterprise_store",
         "organizational_dna",
+        "project_delivery",
         "security_controls",
         "stage_progression",
         "task_store"
@@ -322,7 +323,8 @@
       "context": "workforce",
       "layer": "service",
       "imports": [
-        "github_adapter"
+        "github_adapter",
+        "project_modules"
       ]
     },
     "company_engineering_preflight": {
@@ -966,6 +968,8 @@
         "plan_execution",
         "plan_execution_queries",
         "plan_store",
+        "project_delivery",
+        "project_module_store",
         "quality",
         "quality_store",
         "reviewed_changes",
@@ -1170,6 +1174,7 @@
         "credits",
         "model_manager",
         "model_provider",
+        "project_delivery",
         "quality",
         "quality_store",
         "stage_progression"
@@ -1191,6 +1196,7 @@
         "company_engineering",
         "organization_store",
         "plan_execution",
+        "project_delivery",
         "stage_progression_queries",
         "task_store"
       ]
@@ -1240,6 +1246,27 @@
       "layer": "persistence",
       "imports": [
         "backend_contracts"
+      ]
+    },
+    "project_modules": {
+      "context": "strategy",
+      "layer": "domain",
+      "imports": []
+    },
+    "project_module_store": {
+      "context": "strategy",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
+    "project_delivery": {
+      "context": "strategy",
+      "layer": "service",
+      "imports": [
+        "backend_contracts",
+        "project_module_store",
+        "project_modules"
       ]
     }
   },

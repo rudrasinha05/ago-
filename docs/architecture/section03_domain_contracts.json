@@ -226,7 +226,10 @@
     "brain_skill_store": "knowledge",
     "brain_skills": "knowledge",
     "model_manager": "workforce",
-    "model_manager_store": "workforce"
+    "model_manager_store": "workforce",
+    "project_delivery": "strategy",
+    "project_module_store": "strategy",
+    "project_modules": "strategy"
   },
   "sql_access": {
     "__init__": [],
@@ -821,6 +824,17 @@
       "ago_model_decisions",
       "ago_project_followups",
       "ago_task_reviews"
+    ],
+    "project_delivery": [],
+    "project_modules": [],
+    "project_module_store": [
+      "ago_founder_intakes",
+      "ago_plan_steps",
+      "ago_project_module_plans",
+      "ago_project_source_versions",
+      "ago_project_unit_tasks",
+      "ago_project_units",
+      "ago_stage_candidate_tests"
     ]
   }
 }

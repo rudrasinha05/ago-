@@ -16,7 +16,7 @@ from ago.company_engineering import (
     assert_documented, failure_summary, receipt_text, reviewed_candidate, run_candidate_tests,
 )
 from test_m7_http_postgres import case as case, post
-from test_stage_progression import STAGES, Company, formatted_draft
+from test_stage_progression import STAGES, Company, formatted_draft, unit_candidate
 
 SOURCE = "def add(a, b):\n    return a + b\n"
 TEST = ("import unittest\nfrom src.calc import add\n\n"
@@ -111,7 +111,10 @@ def company(case, monkeypatch):
         result = {'kind': 'local_company_governed_handoff', 'handoffs': [
             {'role': 'employee', 'employee_id': task.assignee_id, 'draft': formatted_draft(task.project_context.get('stage'))}]}
         if task.project_context.get('stage') == 'implementation':
-            result['engineering_candidate'] = candidate()
+            # PROJ-014: the prototype is the calculator; each module adds its own files.
+            unit = task.project_context.get('unit') or {}
+            result['engineering_candidate'] = (candidate() if unit.get('position', 0) == 0
+                                               else unit_candidate(unit))
             result['engineering_candidate_status'] = 'syntax_reviewed'
         return result
 
@@ -121,15 +124,27 @@ def company(case, monkeypatch):
     monkeypatch.setattr(stage_progression, 'test_runner_available',
                         lambda runner=None: c.docker.image)
     monkeypatch.setattr(stage_progression, 'run_candidate_tests',
-                        lambda value, runner=None: real(value, runner=c.docker))
+                        lambda value, runner=None, **kw: real(value, runner=c.docker, **kw))
     c.advance = '/v1/agents/projects/'+c.id+'/advance'
     return c
+
+
+def approve_module_plan_if_asked(c, reply):
+    """PROJ-016: the Founder approves the module plan when AGO asks for it.
+
+    True when this reply was only that question (nothing else progressed)."""
+    if reply['needs_founder'] and 'module plan' in json.dumps(reply):
+        post(c.client, '/v1/organization/company/projects/'+c.id+'/modules/approve', c.founder)
+        return reply['step'] == 'open_stage'
+    return False
 
 
 def steps_until(c, stage, kind, limit=40):
     taken = []
     for _ in range(limit):
         reply = post(c.client, c.advance, c.founder)
+        if approve_module_plan_if_asked(c, reply):
+            continue
         taken.append((reply['stage'], reply['step']))
         if (reply['stage'], reply['step']) == (stage, kind):
             return reply, taken
@@ -145,29 +160,38 @@ def receipts(c):
 
 def test_ago_runs_the_tests_before_qa_and_the_project_finishes(company):
     c = company
-    c.docker.outcomes = [PASS]
-    taken = []
-    for _ in range(40):
+    c.docker.outcomes = [PASS, PASS]
+    taken, asked = [], 0
+    for _ in range(60):
         reply = post(c.client, c.advance, c.founder)
         if reply['done']:
             break
-        assert reply['progressed'] is True and reply['needs_founder'] is False, reply
+        asked += 'module plan' in json.dumps(reply) and reply['needs_founder']
+        if approve_module_plan_if_asked(c, reply):
+            continue
+        assert reply['progressed'] is True, reply
         taken.append((reply['stage'], reply['step']))
+    assert asked == 1             # the Founder approved the module plan once
+    unit = [('implementation', 'request'), ('implementation', 'approve'),
+            ('implementation', 'run'), ('implementation', 'qa'), ('implementation', 'qa')]
     expected = []
     for s in STAGES:
-        expected += [(s, 'request'), (s, 'approve'), (s, 'run')]
-        expected += [(s, 'qa')] * (2 if s == 'implementation' else 1)
-    # The implementation stage gets ONE extra step: AGO's isolated test run.
+        if s == 'implementation':
+            # PROJ-014: open after the plan approval, then the prototype and M01,
+            # each with AGO's isolated test run before its independent QA.
+            expected += [(s, 'open_stage')] + unit + unit
+            continue
+        expected += [(s, 'request'), (s, 'approve'), (s, 'run'), (s, 'qa')]
     assert taken == expected
-    [receipt] = receipts(c)
-    assert receipt['status'] == 'passed' and receipt['unittest_cases'] == 1
+    assert [(r['status'], r['unittest_cases']) for r in receipts(c)] == [('passed', 1), ('passed', 1)]
     implementation_qa = next(p for p in c.qa_prompts if 'AGO ISOLATED TEST RECEIPT:' in p)
     assert 'were EXECUTED by AGO' in implementation_qa and 'ALL PASSED' in implementation_qa
     # Live 2026-11-18: quality QA failed six times for "no test cases or test
     # report". Quality and release now see AGO's record of the executed tests.
+    # PROJ-016: quality sees the complete regression of the integrated product.
     quality_qa = next(p for p in c.qa_prompts if 'Stage: quality' in p)
-    assert 'AGO TEST EVIDENCE' in quality_qa and 'test_add' in quality_qa
-    assert '1 test(s) EXECUTED by AGO in offline Docker, ALL PASSED: test_add' in quality_qa
+    assert 'AGO REGRESSION EVIDENCE' in quality_qa and 'test_add' in quality_qa
+    assert 'PROTOTYPE, M01' in quality_qa
     contexts = {ctx.get('stage'): ctx for ctx in c.seen}
     assert 'test_add' in contexts['quality']['test_evidence']
     assert contexts['release']['test_evidence'] and not contexts['architecture'].get('test_evidence')
@@ -292,7 +316,7 @@ def test_quality_without_its_labelled_lines_fails_with_the_exact_missing_labels(
     """Live 2026-11-21: QA failed quality six times as 'incomplete, not detailed'.
     Now the worker gets a fixed format and a missing line is named exactly."""
     c = company
-    c.docker.outcomes = [PASS]
+    c.docker.outcomes = [PASS, PASS]          # the prototype and M01
     real = api_agents.optional_model_handlers
 
     def partial(*a, **k):
@@ -323,7 +347,9 @@ def test_the_quality_worker_is_told_the_format_and_keeps_it_in_the_stored_draft(
     rule = stage_format_rule('quality')
     assert all(label + ':' in rule for label in
                ('QA PLAN', 'TEST CASES', 'TEST REPORT', 'ACCEPTANCE MAP', 'RELEASE BLOCKERS'))
-    assert stage_format_rule('architecture') == ''
+    # PROJ-014: the architect lists the modules the Founder approves.
+    assert 'MODULES:' in stage_format_rule('architecture')
+    assert stage_format_rule('discovery') == ''
     assert missing_stage_labels('release', 'release package: a\nPR TITLE: b') == [
         'PR DESCRIPTION', 'RELEASE NOTES', 'RECOMMENDATION']
 

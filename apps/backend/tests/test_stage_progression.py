@@ -9,6 +9,9 @@ specialist; a QA FAIL, a Board stop and a retryable run failure get a recovery
 task decided by the AI manager (bounded); the server puts an independent tester
 on every stage; the database refuses every shortcut around those rules.
 """
+import json
+import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -18,7 +21,8 @@ import ago.ai_qa_review as ai_qa_review
 import ago.api_agents as api_agents
 from ago.agent_runtime import stage_deliverable
 from ago.company_chat import CompanyChat
-from ago.company_engineering import STAGE_FORMATS
+from ago.company_engineering import STAGE_FORMATS, assert_documented, reviewed_candidate
+from ago.stage_progression import StageProgression
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
 from ago.credit_domain import CreditBudgetMissing
@@ -42,20 +46,59 @@ PEOPLE = (
 
 
 
+MODULES_LINE = 'M01 Tracker core - Record and list admissions'
+
+
 def formatted_draft(stage):
-    """A worker draft in the fixed format quality and release must use."""
+    """A worker draft in the fixed format architecture, quality and release use."""
     labels = STAGE_FORMATS.get(stage)
-    return '\n'.join(label + ': done' for label in labels) if labels else stage + ' deliverable'
+    if not labels:
+        return stage + ' deliverable'
+    # PROJ-014: the architect names the modules the Founder then approves.
+    return '\n'.join(label + ': ' + (MODULES_LINE if label == 'MODULES' else 'done')
+                     for label in labels)
+
+
+def unit_candidate(unit):
+    """A small, valid code candidate that only ADDS this unit's own files."""
+    slug = unit['slug']
+    return assert_documented(reviewed_candidate(json.dumps({'files': [
+        {'path': 'src/' + slug + '.py', 'content': 'def ready():\n    return True\n'},
+        {'path': 'tests/test_' + slug + '.py', 'content': (
+            'import unittest\nfrom src.' + slug + ' import ready\n\n'
+            'class T(unittest.TestCase):\n    def test_' + slug + '(self):\n'
+            '        self.assertTrue(ready())\n')},
+        {'path': 'docs/' + slug + '.md', 'content': '# ' + unit['code'] + '\nready() says it works.\n'},
+    ], 'acceptance_checks': [unit['code'] + ' works']})))
+
+
+class FakeDocker:
+    """`docker` that finds the image and reports every test file as one passing case."""
+
+    def __init__(self):
+        self.runs = []
+
+    def __call__(self, command, **kwargs):
+        if command[:3] == ['docker', 'image', 'inspect']:
+            return subprocess.CompletedProcess(command, 0, '', '')
+        mount = next(part for part in command if part.startswith('type=bind,src='))
+        root = Path(mount.split('src=', 1)[1].split(',', 1)[0])
+        tests = sorted(p.name for p in (root / 'tests').glob('test_*.py'))
+        self.runs.append(tests)
+        return subprocess.CompletedProcess(
+            command, 0, 'AGO_UNITTEST_CASES=' + str(len(tests)) + '\n', 'OK\n')
 
 class Company:
     """One Founder-approved, CEO-staffed project and the steps a session can take."""
 
-    def __init__(self, case, monkeypatch, late_hires=(), never_hired=()):
+    def __init__(self, case, monkeypatch, late_hires=(), never_hired=(),
+                 brief='Build a local admissions tracker with reviewed acceptance criteria'):
         self.client, headers, self.info = case
         self.founder, self.reviewer = headers['founder'], headers['reviewer']
         self.db, self.tenant = self.info['db'], self.info['tenant']
         self.monkeypatch = monkeypatch
         self.seen = []            # project_context of every builder run
+        self.docker = FakeDocker()
         self.qa_answer = 'FINDINGS:\n- acceptance met\nQA_VERDICT: PASS'
         self.qa_prompts = []
         dept = department(self.client, self.founder)
@@ -76,8 +119,7 @@ class Company:
         post(self.client, BASE+'/board/appoint', self.founder, {
             'seat': 'Strategy & Vision', 'employee_id': self.people['CEO']})
         self.project = post(self.client, BASE+'/projects/start', self.founder, {
-            'brief': 'Build a local admissions tracker with reviewed acceptance criteria',
-            'operation_key': str(uuid4())})
+            'brief': brief, 'operation_key': str(uuid4())})
         self.id, plan_id = self.project['id'], self.project['plan_id']
         # Hired only after the project scope was recorded: no stage suggests them.
         for name, title in PEOPLE:
@@ -132,6 +174,10 @@ class Company:
                 raise fail
             result = {'kind': 'local_company_governed_handoff', 'handoffs': [
                 {'role': 'employee', 'employee_id': assignee, 'draft': formatted_draft(name)}]}
+            unit = task.project_context.get('unit')
+            if unit and not board_stop:
+                result['engineering_candidate'] = unit_candidate(unit)
+                result['engineering_candidate_status'] = 'syntax_reviewed'
             if board_stop:
                 result.update(board_blocked=True, blocked_by_board_seat=board_seat,
                               board_block_reason='deny', board_recommendations=[
@@ -149,6 +195,34 @@ class Company:
         self.qa_answer = 'FINDINGS:\n- reviewed\nQA_VERDICT: '+verdict
         return post(self.client, self.url+'/stages/'+name+'/ai-qa', self.founder,
                     {'operation_key': str(uuid4()), **extra})
+
+    def test_unit(self):
+        """AGO's isolated test run of the implementation unit (fake Docker)."""
+        return StageProgression(self.db).test_stage_candidate(
+            tenant_id=self.tenant, founder_id=self.info['founder_id'], project_id=self.id,
+            task_id=str(self.stage('implementation')['task_id']), runner=self.docker)
+
+    def approve_modules(self):
+        return post(self.client, self.url+'/modules/approve', self.founder)
+
+    def pass_implementation(self, **run):
+        """PROJ-014: approve the module plan, then build, test, QA and integrate
+        every unit (the prototype, then each module). Returns the last
+        continuation: the implementation is complete and quality is opened."""
+        plan = self.approve_modules()
+        assert plan['status'] == 'approved' and plan['total'] >= 2, plan
+        opened = post(self.client, self.url+'/continue', self.founder)
+        assert (opened['action'], opened['stage']) == ('opened_stage', 'implementation'), opened
+        assert opened['unit']['code'] == 'PROTOTYPE'
+        for _ in range(plan['total']):
+            self.run('implementation', **run)
+            assert self.test_unit()['status'] == 'passed'
+            step = self.qa('implementation')['continuation']
+            if step.get('implementation_complete'):
+                assert (step['action'], step['stage']) == ('opened_stage', 'quality'), step
+                return step
+            assert (step['action'], step['state']) == ('integrated_unit', 'task_proposed'), step
+        raise AssertionError('implementation did not complete')
 
     def recoveries(self, name):
         return self.db.execute("""
@@ -201,22 +275,40 @@ def test_qa_pass_opens_every_next_stage_until_the_project_is_done(company):
     previous_task = None
     for index, name in enumerate(STAGES):
         row = c.stage(name)
-        assert row['action'] == 'internal:brief' and row['status'] == 'proposed'
-        task_id, ran = c.run(name)
-        # The task belongs to the stage's approved specialist.
-        assert str(row['assignee_id']) == str(c.stage(name)['approved'])
-        assert ran['continuation'] is None
-        assert c.seen[-1]['stage'] == name and c.seen[-1]['intake_id'] == c.id
-        assert c.seen[-1]['deliverable']
-        # The run is given what the earlier stages delivered and QA passed.
-        assert c.seen[-1]['prior_work'] == [
-            {'stage': done, 'draft': formatted_draft(done)} for done in STAGES[:index]]
-        review = c.qa(name)
-        assert review['verdict'] == 'pass' and review['qa_reviewer_auto_selected'] is True
-        # The server-chosen tester has a QA role and did not build the work.
-        assert review['qa_employee_id'] in (c.people['QA Specialist'], c.people['Second Tester'])
-        assert review['qa_employee_id'] != str(row['assignee_id'])
-        step = review['continuation']
+        if name == 'implementation':
+            # Not opened yet: it waits for the Founder's module plan approval.
+            assert row['plan_step_id'] is None
+        else:
+            assert row['action'] == 'internal:brief' and row['status'] == 'proposed'
+        if name == 'implementation':
+            # PROJ-014: the prototype and every module are built, tested together
+            # and integrated before implementation counts as passed.
+            step = c.pass_implementation()
+            assert step['integrated']['code'] == 'M01' and step['task_approved'] is False
+            task_id = str(c.stage(name)['task_id'])
+            assert c.seen[-1]['unit']['code'] == 'M01'
+        else:
+            task_id, ran = c.run(name)
+            # The task belongs to the stage's approved specialist.
+            assert str(row['assignee_id']) == str(c.stage(name)['approved'])
+            assert ran['continuation'] is None
+            assert c.seen[-1]['stage'] == name and c.seen[-1]['intake_id'] == c.id
+            assert c.seen[-1]['deliverable']
+            # The run is given what the earlier stages delivered and QA passed.
+            assert c.seen[-1]['prior_work'] == [
+                {'stage': done, 'draft': formatted_draft(done)} for done in STAGES[:index]]
+            review = c.qa(name)
+            assert review['verdict'] == 'pass' and review['qa_reviewer_auto_selected'] is True
+            # The server-chosen tester has a QA role and did not build the work.
+            assert review['qa_employee_id'] in (c.people['QA Specialist'], c.people['Second Tester'])
+            assert review['qa_employee_id'] != str(row['assignee_id'])
+            step = review['continuation']
+        if name == 'architecture':
+            # Founder approval of the module plan comes before implementation.
+            assert (step['state'], step['needs_founder']) == ('module_plan_needs_approval', True)
+            assert 'M01' in step['reason'] and c.stage('implementation')['plan_step_id'] is None
+            previous_task = task_id
+            continue
         assert step['kind'] == 'ago_project_continuation_v1'
         assert step['task_approved'] is False and step['run_started'] is False
         if name == 'release':
@@ -269,7 +361,19 @@ def test_qa_pass_opens_every_next_stage_until_the_project_is_done(company):
     assert str(audit[-1]['passed_task_id']) == previous_task
     notices = db.execute("SELECT body FROM ago_company_chat WHERE tenant_id=%s "
                          "AND author_name='CEO (AI project manager)'", (tenant,)).fetchall()
-    assert len(notices) == 4 and all('still needs approval' in n['body'] for n in notices)
+    opened = [n for n in notices if 'passed independent QA. I opened' in n['body']]
+    assert len(opened) == 4 and all('still needs approval' in n['body'] for n in opened)
+    # PROJ-014: the prototype is integrated before M01 starts; then the whole product.
+    units = [n['body'] for n in notices if n not in opened]
+    assert len(units) == 2
+    assert units[0].startswith('PROTOTYPE (Working prototype) passed its tests together')
+    assert 'Next unit: M01 Tracker core' in units[0] and 'still needs approval' in units[0]
+    assert units[1].startswith('Every unit of the module plan is integrated: M01 was last')
+    # M01's tests ran TOGETHER with the prototype's (complete regression).
+    assert [len(run) for run in c.docker.runs] == [1, 2]
+    modules = c.client.get(c.url+'/modules', headers=c.founder).json()
+    assert (modules['status'], modules['integrated'], modules['total']) == ('approved', 2, 2)
+    assert modules['latest_version']['version'] == 2 and modules['latest_version']['unittest_cases'] == 2
 
     detail = c.client.get(c.url, headers=c.founder).json()
     assert detail['qa_passed_stages'] == 5 and detail['completion_percent'] == 100
@@ -360,7 +464,10 @@ def test_failed_stage_is_recovered_by_the_ai_manager_within_a_limit(company):
 
     # The Founder's retry then passes, and the project moves on by itself.
     c.run('architecture')
-    assert c.qa('architecture')['continuation']['stage'] == 'implementation'
+    # PROJ-016: the Founder approves the module plan before implementation opens.
+    assert c.qa('architecture')['continuation']['state'] == 'module_plan_needs_approval'
+    c.approve_modules()
+    assert post(c.client, c.url+'/continue', c.founder)['stage'] == 'implementation'
     assert c.stage('implementation')['status'] == 'proposed'
 
 
@@ -376,6 +483,8 @@ def test_quality_board_deny_routes_exact_tests_missing_feedback_to_implementer(c
     for stage in ('discovery', 'architecture'):
         c.run(stage)
         assert c.qa(stage)['verdict'] == 'pass'
+    c.approve_modules()
+    assert post(c.client, c.url+'/continue', c.founder)['unit']['code'] == 'PROTOTYPE'
     reason = 'The implementation stage is incomplete as the tests are not executed.'
     denied_id, blocked = c.run(
         'implementation', board_stop=True, board_seat='Quality & Release',
@@ -421,8 +530,17 @@ def test_quality_board_deny_routes_exact_tests_missing_feedback_to_implementer(c
     assert corrected_run['delivery_status'] == 'completed'
     assert c.stage('quality')['plan_step_id'] is None
     assert c.client.get(c.url, headers=c.founder).json()['qa_passed_stages'] == 2
-    # Only an independently recorded PASS opens quality.
-    assert c.qa('implementation')['verdict'] == 'pass'
+    # AGO's own test run comes before QA. A QA PASS of the prototype integrates
+    # it; quality opens only after every module is integrated (PROJ-016).
+    assert c.test_unit()['status'] == 'passed'
+    review = c.qa('implementation')
+    assert review['verdict'] == 'pass'
+    assert review['continuation']['state'] == 'task_proposed'
+    assert review['continuation']['unit']['code'] == 'M01'
+    assert c.stage('quality')['plan_step_id'] is None
+    c.run('implementation')
+    assert c.test_unit()['status'] == 'passed'
+    assert c.qa('implementation')['continuation']['stage'] == 'quality'
     assert c.stage('quality')['plan_step_id'] is not None
 
 
@@ -566,17 +684,17 @@ def test_ai_ceo_fills_a_stage_the_project_scope_left_unstaffed(case, monkeypatch
     with pytest.raises(PermissionError, match='already has staffing'):
         chat.ceo_fill_stage(stage='architecture', **ids)
 
-    for name in ('discovery', 'architecture'):
-        c.run(name)
-        assert c.qa(name)['continuation']['action'] == 'opened_stage'
+    c.run('discovery')
+    assert c.qa('discovery')['continuation']['action'] == 'opened_stage'
+    c.run('architecture')
+    assert c.qa('architecture')['continuation']['state'] == 'module_plan_needs_approval'
     # A Founder staffing request for quality is still waiting (live 2026-11-18:
     # it made the CEO stop the project). The CEO now decides THAT request.
     from types import SimpleNamespace
     founder = SimpleNamespace(tenant_id=tenant, subject=c.info['founder_id'],
                               roles={'founder'})
     waiting = chat.propose_stage_delegation(founder, c.id, 'quality', c.people['Second Tester'])
-    c.run('implementation')
-    opened = c.qa('implementation')['continuation']
+    opened = c.pass_implementation()
     # The AI CEO decided the waiting request; the AI manager opened the stage.
     assert (opened['action'], opened['stage'], opened['staffed_by_ceo']) == (
         'opened_stage', 'quality', 'CEO')

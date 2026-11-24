@@ -13,7 +13,7 @@ from ago.model_handlers import (
     respond_company_chat,
 )
 from ago.repository_ports import (
-    AiQaReviewPort, CompanyChatPort, PlanExecutionPort, StageProgressionPort,
+    AiQaReviewPort, CompanyChatPort, PlanExecutionPort, ProjectDeliveryPort, StageProgressionPort,
 )
 
 router = APIRouter(prefix='/v1/organization/company', tags=['Company map'])
@@ -536,6 +536,40 @@ def continue_project(project_id: UUID, actor=Depends(authenticated),
         translate_error(PermissionError('Only the project Founder may continue a project'))
     try:
         return repositories.resolve(StageProgressionPort).continue_project(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
+@router.get('/projects/{project_id}/modules')
+def project_modules(project_id: UUID, actor=Depends(authenticated),
+                    repositories=Depends(repository_scope)):
+    """PROJ-014: the module plan, each unit's progress and the integrated source."""
+    allowed(repositories,actor,'organization:read')
+    if 'founder' not in actor.roles:
+        translate_error(PermissionError('Only the project Founder may see its module plan'))
+    try:
+        return repositories.resolve(ProjectDeliveryPort).view(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id))
+    except (ValueError,PermissionError,LookupError) as exc:
+        translate_error(exc)
+
+
+@router.post('/projects/{project_id}/modules/approve')
+def approve_project_modules(project_id: UUID, actor=Depends(authenticated),
+                            repositories=Depends(repository_scope)):
+    """PROJ-016 step 3: the Founder approves the proposed module plan.
+
+    Approval starts nothing by itself: the AI manager opens implementation
+    (the working prototype first) on the next continuation, and every task
+    still needs its own approval before any work runs.
+    """
+    allowed(repositories,actor,'organization:read')
+    allowed(repositories,actor,'approval:founder')
+    if 'founder' not in actor.roles:
+        translate_error(PermissionError('Only the project Founder may approve its module plan'))
+    try:
+        return repositories.resolve(ProjectDeliveryPort).approve(
             tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id))
     except (ValueError,PermissionError,LookupError) as exc:
         translate_error(exc)

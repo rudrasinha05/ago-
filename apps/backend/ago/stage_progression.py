@@ -35,6 +35,7 @@ from ago.company_engineering import (  # STAGE_FORMATS/missing_stage_labels: use
 )
 from ago.organization_store import OrganizationStore
 from ago.plan_execution import PlanExecution
+from ago.project_delivery import ProjectDelivery
 from ago.stage_progression_queries import StageProgressionQueries
 from ago.task_store import TaskStore
 
@@ -108,6 +109,19 @@ def next_step(stages: list[dict]) -> dict:
     return {"step": "done", "stage": None, "task_id": None}
 
 
+class _UnitRefused(Exception):
+    """A module candidate tried to change a file an earlier unit integrated."""
+
+
+def _worker_text(result) -> str:
+    """The stage worker's recorded deliverable (for reading a module plan)."""
+    if not isinstance(result, dict):
+        return ""
+    drafts = [str(h.get("draft") or "") for h in result.get("handoffs") or []
+              if isinstance(h, dict) and h.get("role") == "employee"]
+    return drafts[-1] if drafts else ""
+
+
 def _board_feedback(result) -> str:
     points = [
         str(v.get("seat")) + ": " + (
@@ -173,6 +187,10 @@ class StageProgression:
         """
         for value in (tenant_id, project_id):
             UUID(value)
+        regression = self.repositories.resolve(ProjectDelivery).regression_evidence(
+            tenant_id=tenant_id, project_id=project_id)
+        if regression:
+            return regression
         row = self.repositories.resolve(StageProgressionQueries).select_project_test_evidence_26(
             (tenant_id, project_id)).fetchone()
         result = row["result"] if row and isinstance(row["result"], dict) else {}
@@ -311,6 +329,21 @@ class StageProgression:
             base["decided_by_employee_id"] = manager_id
             base["decided_by_name"] = project["manager_name"]
             stages = queries.select_stages_02((tenant_id, project_id)).fetchall()
+            impl = next((s for s in stages if s["stage"] == "implementation"), None)
+            delivery = self.repositories.resolve(ProjectDelivery)
+            integrated = None
+            if (impl is not None and impl["qa_verdict"] == "pass" and impl["task_id"]
+                    and delivery.is_modular(tenant_id=tenant_id, project_id=project_id)
+                    and not delivery.implementation_complete(tenant_id=tenant_id,
+                                                             project_id=project_id)):
+                unit_step = self._advance_unit(
+                    queries, tenant_id=tenant_id, founder_id=founder_id, project=project,
+                    impl=impl)
+                if unit_step["state"] != "implementation_complete":
+                    return {**base, "stage": "implementation", **unit_step}
+                # The last module is in: the complete product passed together, so
+                # the manager opens quality in this same decision.
+                integrated = unit_step["integrated"]
             current = next((s for s in stages if s["qa_verdict"] != "pass"), None)
             for passed in stages:
                 if passed['qa_verdict'] == 'pass':
@@ -327,6 +360,9 @@ class StageProgression:
                 result = {**base, **self._recover_stage(
                     tenant_id=tenant_id, founder_id=founder_id, project=project,
                     current=current, queries=queries, revise_board_stop=revise_board_stop)}
+            if integrated is not None:
+                result["integrated"] = integrated
+                result["implementation_complete"] = True
             if result.get('action') == 'recovered_stage' or result.get('needs_founder') \
                     or result.get('state') == 'board_stopped':
                 recovered = result.get('action') == 'recovered_stage'
@@ -470,7 +506,22 @@ class StageProgression:
                 return {"status": "started", "executed": False,
                         "message": "Another request started this test."}
         try:
-            receipt = run_candidate_tests(candidate, **tools)
+            whole = None
+            if row["stage"] == "implementation":
+                try:
+                    whole = self.repositories.resolve(ProjectDelivery).files_to_test(
+                        tenant_id=tenant_id, project_id=project_id, candidate=candidate)
+                except ValueError as refused:
+                    raise _UnitRefused(str(refused)) from refused
+            receipt = run_candidate_tests(
+                candidate, **tools, **({"with_files": whole["files"]} if whole else {}))
+        except _UnitRefused as refused:
+            # A module that changes an integrated file never runs: it could
+            # break an older module (Founder rule).
+            receipt = {"status": "failed", "unittest_cases": 0,
+                       "failure_category": "changed_integrated_file",
+                       "failure_summary": str(refused)[:900],
+                       "docker_exit_code": None, "output_sha256": None}
         except Exception:  # noqa: BLE001 - recorded as evidence, never hidden
             receipt = {"status": "failed", "unittest_cases": 0,
                        "failure_category": "runner_error",
@@ -543,6 +594,16 @@ class StageProgression:
             return self._wait(
                 "stage_specialist_unavailable", True,
                 "The approved " + stage + " specialist is no longer an active AI employee.")
+        unit = None
+        if stage == "implementation":
+            # PROJ-014/016: architecture and module planning, then the Founder's
+            # approval, then the working prototype as the first unit.
+            prep = self.repositories.resolve(ProjectDelivery).prepare_implementation(
+                tenant_id=tenant_id, project_id=str(project["id"]),
+                architecture_text=_worker_text(previous.get("run_result")))
+            if not prep["ready"]:
+                return self._wait(prep["state"], True, prep["reason"])
+            unit = prep["unit"]
         manager_id = str(project["accountable_manager_id"])
         by_stage = {s["stage"]: s for s in stages}
         other = {"quality": "implementation", "implementation": "quality"}.get(stage)
@@ -572,11 +633,13 @@ class StageProgression:
             tenant_id, founder_id, project["manager_name"] + " (AI project manager)",
             previous["stage"].capitalize() + " passed independent QA. I opened the " + stage
             + " stage and assigned its task to " + str(current["approved_assignee_name"])
+            + (" First unit: " + unit["code"] + " " + unit["title"] + "." if unit else "")
             + ". The task is proposed; it still needs approval before any work runs.",
             assignee,
         ))
         return {
             "action": "opened_stage", "state": "task_proposed", "needs_founder": False,
+            **({"unit": {"code": unit["code"], "title": unit["title"]}} if unit else {}),
             "reason": previous["stage"] + " passed QA",
             "from_stage": previous["stage"], "task_id": task.id, "plan_step_id": step_id,
             "assignee_id": assignee, "assignee_name": current["approved_assignee_name"],
@@ -584,6 +647,61 @@ class StageProgression:
             "progression_id": int(record["id"]),
             "recorded_at": record["created_at"].isoformat(),
         }
+
+    def _advance_unit(self, queries, *, tenant_id, founder_id, project, impl):
+        """PROJ-014: the implementation task of the unit in progress PASSED QA.
+
+        Integrate it as a new source version (it was tested together with every
+        earlier unit), then give the implementation step the NEXT unit's task.
+        After the last module the stage is complete and the next continuation
+        opens quality as usual. Caller holds the transaction.
+        """
+        delivery = self.repositories.resolve(ProjectDelivery)
+        task_id = str(impl["task_id"])
+        result = impl["run_result"] if isinstance(impl["run_result"], dict) else {}
+        candidate = result.get("engineering_candidate")
+        test = delivery.task_test(tenant_id=tenant_id, task_id=task_id)
+        if not isinstance(candidate, dict) or test is None or test["status"] != "passed" \
+                or test["candidate_sha256"] != candidate.get("candidate_sha256"):
+            return self._wait(
+                "unit_tests_missing", True,
+                "This unit passed QA but has no passed AGO test receipt for its code, so it "
+                "cannot be integrated. Run its tests (Advance) first.")
+        try:
+            done = delivery.integrate_passed_unit(
+                tenant_id=tenant_id, project_id=str(project["id"]), task_id=task_id,
+                candidate=candidate, cases=int(test["unittest_cases"]))
+        except ValueError as exc:
+            return self._wait("unit_not_integrated", True, str(exc)[:500])
+        nxt, made = done["next"], done["integrated"]
+        manager = project["manager_name"] + " (AI project manager)"
+        if nxt is None:
+            queries.insert_project_notice_07((
+                tenant_id, founder_id, manager,
+                "Every unit of the module plan is integrated: " + made["code"] + " was last. "
+                "The complete product (version " + str(made["version"]) + ", "
+                + str(made["unittest_cases"]) + " tests) passed together in offline Docker. "
+                "Implementation is complete; quality verification comes next.", None))
+            return {"action": "integrated_unit", "state": "implementation_complete",
+                    "needs_founder": False, "integrated": made,
+                    "reason": "All units integrated; complete regression passed."}
+        task = self.repositories.resolve(TaskStore).propose(
+            tenant_id=tenant_id, action="internal:brief",
+            assignee_id=str(impl["approved_assignee_id"]))
+        delivery.link_next_unit_task(
+            tenant_id=tenant_id, unit_id=str(nxt["id"]), plan_step_id=str(impl["plan_step_id"]),
+            previous_task_id=task_id, task_id=task.id)
+        queries.insert_project_notice_07((
+            tenant_id, founder_id, manager,
+            made["code"] + " (" + made["title"] + ") passed its tests together with everything "
+            "before it and independent QA, and is integrated (version " + str(made["version"])
+            + "). Next unit: " + nxt["code"] + " " + nxt["title"]
+            + ". Its task is proposed; it still needs approval before any work runs.",
+            str(impl["approved_assignee_id"])))
+        return {"action": "integrated_unit", "state": "task_proposed", "needs_founder": False,
+                "integrated": made, "task_id": task.id,
+                "unit": {"code": nxt["code"], "title": nxt["title"]},
+                "reason": made["code"] + " integrated; " + nxt["code"] + " started"}
 
     def _recover_stage(self, *, tenant_id, founder_id, project, current, queries,
                        revise_board_stop):

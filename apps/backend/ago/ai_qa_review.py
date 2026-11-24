@@ -22,6 +22,7 @@ from ago.model_manager import ModelManager
 from ago.model_provider import CLOUD_PROVIDERS, FallbackProvider, OllamaLocalTextProvider
 from ago.quality import Verdict
 from ago.quality_store import QualityStore
+from ago.project_delivery import ProjectDelivery
 from ago.stage_progression import STAGE_FORMATS, StageProgression, missing_stage_labels
 
 STAGES = ("discovery", "architecture", "implementation", "quality", "release")
@@ -303,9 +304,19 @@ class AiQaReview:
                 tenant_id=tenant_id, project_id=project_id)
             if evidence:
                 delivered = (evidence + "\n" + delivered)[:2400]
+        acceptance = str(row["deliverable"] or "")
+        if stage == "implementation":
+            # PROJ-014: each unit is judged on ITS goal; its tests ran together
+            # with every integrated unit before it.
+            unit = self.repositories.resolve(ProjectDelivery).unit_context(
+                tenant_id=tenant_id, project_id=project_id)
+            if unit:
+                acceptance = ("Unit " + str(unit["code"]) + " " + str(unit["title"]) + ": "
+                              + str(unit["goal"]) + " (AGO ran its tests together with all "
+                              + str(unit["existing_tests"]) + " earlier tests of the project.)")[:900]
         prompt = qa_prompt(
             title=str(row["project_title"]), stage=stage,
-            acceptance=str(row["deliverable"] or ""),
+            acceptance=acceptance,
             delivered=delivered,
         )
         # SKL-002: the Brain's QA guide, only in room the evidence does not need.

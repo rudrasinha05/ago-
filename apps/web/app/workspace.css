@@ -873,3 +873,17 @@
 .workforce-corrections td small{display:block}
 .workforce-corrections s{color:#9fb2c8}
 .workforce-corrections input[type=checkbox]{width:20px;height:20px;accent-color:#7fe3c4}
+
+/* PROJ-014: the project's prototype + module plan. */
+.project-modules{margin:12px 0;padding:14px;border:1px solid #3d719d;background:#142b43;border-radius:12px;min-width:0}
+.project-modules h5{margin:0 0 6px;font-size:14px;color:#d8eaff}
+.project-modules p,.project-modules small{font-size:13px;color:#c4d6ea}
+.project-module-list{display:grid;gap:6px;margin:8px 0;padding-left:22px;font-size:13px;color:#e5efff}
+.project-module{overflow-wrap:anywhere}
+.project-module-status{margin-left:8px;color:#9fb2c8}
+.project-module.integrated .project-module-status{color:#7fe3c4}
+.project-module.in_progress .project-module-status{color:#f9d38d}
+.project-module-deferred{color:#f9d38d!important}
+.project-modules button{padding:7px 12px;margin:6px 6px 6px 0;border:1px solid #3f8f7c;border-radius:7px;background:#143029;color:#d2fbef;cursor:pointer}
+.project-modules button:disabled{opacity:.55;cursor:not-allowed}
+.project-modules button:focus-visible{outline:3px solid #7fe3c4;outline-offset:2px}

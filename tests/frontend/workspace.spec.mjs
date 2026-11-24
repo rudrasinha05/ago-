@@ -30,6 +30,8 @@ async function fixtures(page,{reviewer=false}={}) {
     else if(url.pathname==='/v1/operations/calendar')data=[{id:other,title:'Evidence review',status:'scheduled',starts_at:'2026-10-10T10:00:00Z',ends_at:'2026-10-10T11:00:00Z'}];
     // Valid empty delivery page by default; delivery tests override it.
     else if(url.pathname==='/v1/organization/company/projects/delivery-overview')data={kind:'ago_founder_delivery_overview_v1',read_only:true,projects:[],more_projects_possible:false};
+    // PROJ-014: a project without a module plan yet; module tests override it.
+    else if(/^\/v1\/organization\/company\/projects\/[^/]+\/modules$/.test(url.pathname))data={kind:'ago_project_modules_v1',status:'not_planned',preview:[],deferred:[],units:[],integrated:0,total:0,latest_version:null};
     else if(url.pathname==='/v1/knowledge/nodes')data=[{id:other,label:'<img src=x onerror="window.xss=true">',statement:'Untrusted evidence is displayed as text',source_ref:'test-only'}];
     await route.fulfill({status:200,json:data});
   });
@@ -1677,5 +1679,46 @@ test('Employee Manager proposes matching designations and a real hierarchy; noth
    core_responsibilities:expect.stringContaining('Independent testing'),extra_responsibilities:'Keep this'}},
   {path:'/v1/organization/company/employees/'+tester+'/manager',method:'PUT',body:{manager_id:qa}}]);
  expect(writes.some(w=>w.path.includes(engineer))).toBe(false);              // unticked rows are left alone
+ expect(errors).toEqual([]);
+});
+
+test('the Founder approves the module plan; AGO then shows each unit integrating with all tests passing together',async({page})=>{
+ const {errors,calls}=await fixtures(page);
+ const project=deliveryProject(other,'AdmissionFlow');
+ const details={id:other,title:'AdmissionFlow',brief:'P0 modules M01-M03',plan_id:department,plan_status:'active',
+  accountable_manager_id:user,accountable_manager_name:'Founder',stage_count:5,qa_passed_stages:2,stages:[]};
+ const unit=(code,title,status,extra={})=>({id:code,position:code==='PROTOTYPE'?0:Number(code.slice(1)),code,title,goal:title,status,version:null,unittest_cases:null,...extra});
+ let view={kind:'ago_project_modules_v1',status:'proposed',source:'brief',deferred:['M14','M22'],decided_at:null,
+  units:[unit('PROTOTYPE','Working prototype','planned'),unit('M01','Institute Setup','planned'),unit('M02','Enquiry Capture','planned')],
+  integrated:0,total:3,latest_version:null};
+ await page.route(/\/company\/projects\/delivery-overview\?/,route=>route.fulfill({json:deliveryOverview([project])}));
+ await page.route(/\/company\/projects\?/,route=>route.fulfill({json:[details]}));
+ await page.route('**/v1/organization/company/projects/'+other,route=>route.fulfill({json:details}));
+ await page.route('**/v1/organization/company/projects/'+other+'/modules',route=>route.fulfill({json:view}));
+ await page.route('**/v1/organization/company/projects/'+other+'/modules/approve',route=>{
+  expect(route.request().method()).toBe('POST');
+  view={...view,status:'approved',decided_at:'2026-11-25T10:00:00Z'};
+  return route.fulfill({json:view});
+ });
+ await login(page);await navigate(page,'Organization');
+ await page.getByRole('article',{name:'Delivery: AdmissionFlow'}).getByRole('button',{name:'Inspect project',exact:true}).click();
+ const panel=page.getByRole('region',{name:'Prototype and modules'});
+ await expect(panel).toContainText('Module plan waiting for your approval: a working prototype, then 2 modules. Nothing is built until you approve.');
+ await expect(panel.getByRole('list',{name:'Module plan'}).getByRole('listitem')).toHaveText([
+  /Prototype Working prototype\s*Waiting/,/M01 Institute Setup\s*Waiting/,/M02 Enquiry Capture\s*Waiting/]);
+ await expect(panel).toContainText('Deferred for later: M14, M22');
+ await accessibility(page);
+ await panel.getByRole('button',{name:'Approve module plan'}).click();
+ await expect(panel.getByRole('status')).toContainText('starts with the working prototype on the next step');
+ await expect(panel.getByRole('button',{name:'Approve module plan'})).toHaveCount(0);
+ expect(calls.filter(c=>c.method==='POST'&&/\/(run|advance|continue)$/.test(c.path))).toEqual([]);   // approving runs nothing
+ // Later: the prototype and M01 are integrated; M02 is being built.
+ view={...view,integrated:2,units:[unit('PROTOTYPE','Working prototype','integrated',{version:1,unittest_cases:3}),
+  unit('M01','Institute Setup','integrated',{version:2,unittest_cases:7}),unit('M02','Enquiry Capture','in_progress')],
+  latest_version:{version:2,files:6,unittest_cases:7,test_names:['test_lead']}};
+ await panel.getByRole('button',{name:'Refresh'}).click();
+ await expect(panel).toContainText('2 of 3 units integrated. Now building: M02 Enquiry Capture.');
+ await expect(panel.getByRole('list',{name:'Module plan'}).getByRole('listitem').nth(1)).toHaveText(/M01 Institute Setup\s*Integrated · 7 tests passed together/);
+ await expect(panel).toContainText('Integrated source: version 2, 6 files, 7 tests passed together in offline Docker.');
  expect(errors).toEqual([]);
 });

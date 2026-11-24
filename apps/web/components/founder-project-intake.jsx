@@ -4,6 +4,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {CompanyDocumentVault} from './company-document-vault';
 import {ProjectStageRouting} from './project-stage-routing';
 import {ProjectManagerChange} from './project-manager-change';
+import {ProjectModules} from './project-modules';
 import {hierarchyApprovalLine} from './company-founder-decision';
 
 export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],onChanged,requestedProject=null}) {
@@ -224,6 +225,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
           {ceoNotice&&<p role="status">{ceoNotice}</p>}
          </div>}
          <p><b>Evidence-backed QA completion:</b> {projectDetail.qa_passed_stages}/{projectDetail.stage_count} stages · {projectDetail.completion_percent}% · {projectDetail.running_stages} running · {projectDetail.failed_stages} failed · {projectDetail.unassigned_stages} staffing gaps.</p>
+         <ProjectModules key={'modules:'+projectDetail.id} api={api} project={projectDetail} onChanged={()=>{refresh();onChanged?.();}}/>
          <p><b>Reviewed workforce assignments:</b> {projectDetail.reviewed_delegations_count??0}/{projectDetail.stage_count}. Suggestions are not approved assignments; assignments do not execute tasks.</p>
          <button type="button" onClick={exportProjectReport}>Export current evidence report (.md)</button>
          <p><b>Founder requirement:</b> {projectDetail.brief}</p>

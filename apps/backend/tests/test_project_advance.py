@@ -17,7 +17,8 @@ import ago.ai_qa_review as ai_qa_review
 from ago.credit_domain import CreditBudgetMissing
 from ago.stage_progression import next_step
 from test_m7_http_postgres import case as case, post
-from test_stage_progression import STAGES, Company, formatted_draft
+import ago.stage_progression as stage_progression
+from test_stage_progression import STAGES, Company, FakeDocker, formatted_draft, unit_candidate
 
 DIR = Path(__file__).resolve().parents[3]/"scripts"
 sys.path.insert(0, str(DIR))
@@ -35,11 +36,20 @@ def company(case, monkeypatch):
         c.seen.append(dict(task.project_context))
         if c.failures:
             raise c.failures.pop(0)
-        return {'kind': 'local_company_governed_handoff', 'handoffs': [
+        result = {'kind': 'local_company_governed_handoff', 'handoffs': [
             {'role': 'employee', 'employee_id': task.assignee_id, 'draft': formatted_draft(task.project_context.get('stage'))}]}
+        if task.project_context.get('unit'):        # PROJ-014: prototype, then M01
+            result['engineering_candidate'] = unit_candidate(task.project_context['unit'])
+            result['engineering_candidate_status'] = 'syntax_reviewed'
+        return result
 
     monkeypatch.setattr(api_agents, 'optional_model_handlers',
                         lambda *a, **k: {'internal:brief': handler})
+    docker = FakeDocker()
+    real = stage_progression.run_candidate_tests
+    monkeypatch.setattr(stage_progression, 'test_runner_available', lambda runner=None: True)
+    monkeypatch.setattr(stage_progression, 'run_candidate_tests',
+                        lambda value, runner=None, **kw: real(value, runner=docker, **kw))
     c.advance = '/v1/agents/projects/'+c.id+'/advance'
     return c
 
@@ -50,19 +60,34 @@ def test_server_advances_a_whole_project_one_governed_step_at_a_time(company):
     post(c.client, c.advance, c.reviewer, expected=403)
     post(c.client, '/v1/agents/projects/'+str(uuid4())+'/advance', c.founder, expected=404)
 
-    taken = []
-    for _ in range(40):
+    taken, asked = [], []
+    for _ in range(60):
         reply = post(c.client, c.advance, c.founder)
         assert reply['kind'] == 'ago_project_advance_v1'
         if reply['done']:
             break
-        assert reply['progressed'] is True and reply['needs_founder'] is False, reply
+        if reply['needs_founder']:
+            # PROJ-016: the only Founder decision is approving the module plan.
+            asked.append(reply['stage'])
+            c.approve_modules()
+            if reply['step'] == 'open_stage':
+                continue
+        assert reply['progressed'] is True, reply
         taken.append((reply['stage'], reply['step']))
+    assert asked == ['architecture']
     # Each stage: ask -> AI hierarchy approves -> run -> independent QA. The next
     # stage is opened by the AI manager inside the QA step, with no extra request.
-    assert taken == [(s, k) for s in STAGES for k in ('request', 'approve', 'run', 'qa')]
+    # Implementation opens after the module plan approval and builds the
+    # prototype and M01, each with AGO's isolated test run before its QA.
+    unit = [('implementation', k) for k in ('request', 'approve', 'run', 'qa', 'qa')]
+    expected = []
+    for s in STAGES:
+        expected += ([('implementation', 'open_stage')] + unit + unit if s == 'implementation'
+                     else [(s, k) for s in [s] for k in ('request', 'approve', 'run', 'qa')])
+    assert taken == expected
     assert reply['message'] == 'Every stage passed independent AI QA.'
-    assert [seen['stage'] for seen in c.seen] == list(STAGES)
+    assert [seen['stage'] for seen in c.seen] == [
+        'discovery', 'architecture', 'implementation', 'implementation', 'quality', 'release']
     detail = c.client.get(c.url, headers=c.founder).json()
     assert detail['qa_passed_stages'] == 5
     # Done stays done: nothing more is requested, approved or run.
@@ -70,7 +95,7 @@ def test_server_advances_a_whole_project_one_governed_step_at_a_time(company):
                         (c.tenant,)).fetchone()['n']
     assert post(c.client, c.advance, c.founder)['done'] is True
     assert c.db.execute("SELECT count(*) AS n FROM ago_agent_runs WHERE tenant_id=%s",
-                        (c.tenant,)).fetchone()['n'] == runs == 5
+                        (c.tenant,)).fetchone()['n'] == runs == 6
 
 
 def test_advance_recovers_what_the_ai_manager_may_and_stops_for_the_founder(company, monkeypatch):
@@ -218,16 +243,23 @@ def test_runner_finishes_a_real_project_without_a_browser(company):
     # Founder must launch a new authenticated runner after 401. The backend
     # resumes from saved task state, not by replaying the last command.
     fresh_request, fresh_calls = _through(c)
+    held = runner.run_session(
+        fresh_request, project_id=c.id, apply=True, confirmation=runner.CONFIRM,
+        report=lines.append, pause=pauses.append)
+    # PROJ-016: the runner stops for the one Founder decision, the module plan.
+    assert (held['status'], held['step']) == ('founder_needed', 'qa'), held
+    assert 'module plan' in held['message']
+    c.approve_modules()
     resumed = runner.run_session(
         fresh_request, project_id=c.id, apply=True, confirmation=runner.CONFIRM,
         report=lines.append, pause=pauses.append)
-    assert resumed['status'] == 'project_done' and resumed['steps_done'] == 17
+    assert resumed['status'] == 'project_done', resumed
     assert resumed['automatic_replay'] is False
     assert resumed['service_started_at_boot'] is False
     assert fresh_calls['logins'] == 0 and pauses == []
     assert [line['step'] for line in lines[:4]] == ['request', 'approve', 'run', 'qa']
     assert c.client.get(c.url, headers=c.founder).json()['qa_passed_stages'] == 5
-    assert len(c.seen) == 5
+    assert len(c.seen) == 6                     # the prototype and M01 are two runs
 
 
 def test_runner_stops_for_the_founder_and_respects_its_limits(company, monkeypatch):

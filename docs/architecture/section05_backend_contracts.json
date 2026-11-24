@@ -2279,6 +2279,104 @@
           "returns": "list[dict]"
         }
       }
+    },
+    "ProjectDelivery": {
+      "module": "project_delivery",
+      "methods": {
+        "view": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str",
+          "returns": "dict"
+        },
+        "approve": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str",
+          "returns": "dict"
+        },
+        "prepare_implementation": {
+          "arguments": "self, *, tenant_id: str, project_id: str, architecture_text: str=''",
+          "returns": "dict"
+        },
+        "is_modular": {
+          "arguments": "self, *, tenant_id: str, project_id: str",
+          "returns": "bool"
+        },
+        "implementation_complete": {
+          "arguments": "self, *, tenant_id: str, project_id: str",
+          "returns": "bool"
+        },
+        "unit_context": {
+          "arguments": "self, *, tenant_id: str, project_id: str",
+          "returns": "dict | None"
+        },
+        "files_to_test": {
+          "arguments": "self, *, tenant_id: str, project_id: str, candidate: dict",
+          "returns": "dict | None"
+        },
+        "integrate_passed_unit": {
+          "arguments": "self, *, tenant_id: str, project_id: str, task_id: str, candidate: dict, cases: int",
+          "returns": "dict"
+        },
+        "regression_evidence": {
+          "arguments": "self, *, tenant_id: str, project_id: str",
+          "returns": "str"
+        },
+        "task_test": {
+          "arguments": "self, *, tenant_id: str, task_id: str",
+          "returns": "dict | None"
+        },
+        "link_next_unit_task": {
+          "arguments": "self, *, tenant_id: str, unit_id: str, plan_step_id: str, previous_task_id: str, task_id: str",
+          "returns": "None"
+        }
+      }
+    },
+    "ProjectModuleStore": {
+      "module": "project_module_store",
+      "methods": {
+        "project": {
+          "arguments": "self, tenant_id: str, project_id: str",
+          "returns": "dict | None"
+        },
+        "plan": {
+          "arguments": "self, tenant_id: str, project_id: str, *, lock: bool=False",
+          "returns": "dict | None"
+        },
+        "units": {
+          "arguments": "self, tenant_id: str, plan_id: str",
+          "returns": "list[dict]"
+        },
+        "active_unit": {
+          "arguments": "self, tenant_id: str, project_id: str",
+          "returns": "dict | None"
+        },
+        "latest_version": {
+          "arguments": "self, tenant_id: str, project_id: str",
+          "returns": "dict | None"
+        },
+        "insert_plan": {
+          "arguments": "self, tenant_id: str, project_id: str, *, source: str, deferred: str, units: list[dict]",
+          "returns": "str"
+        },
+        "approve_plan": {
+          "arguments": "self, tenant_id: str, plan_id: str, founder_id: str",
+          "returns": "None"
+        },
+        "start_unit": {
+          "arguments": "self, tenant_id: str, unit_id: str, base_version: int",
+          "returns": "None"
+        },
+        "integrate": {
+          "arguments": "self, tenant_id: str, project_id: str, *, unit_id: str, task_id: str, version: int, files: list[dict], files_sha256: str, cases: int",
+          "returns": "None"
+        },
+        "task_test": {
+          "arguments": "self, tenant_id: str, task_id: str",
+          "returns": "dict | None"
+        },
+        "link_unit_task": {
+          "arguments": "self, tenant_id: str, *, unit_id: str, plan_step_id: str, previous_task_id: str, task_id: str",
+          "returns": "None"
+        }
+      }
     }
   }
 }

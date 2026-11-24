@@ -332,7 +332,9 @@
     "POST /v1/organization/company/brain/skills/restore": "2a811785aa90d2ce3765818036804ecd2c1818603b9b61f3beccd5d5c4c2f1fe",
     "POST /v1/organization/company/brain/skills/retire": "45319b10b9b6af4c3b4148dbcf22e70a41a49c36f84502cb5c0d56ffab5c11d2",
     "PUT /v1/organization/company/cloud-model-policy": "c42da5de1a3d0dc2b8caf29191ebaa8423b2b8ea9f97e9165e9bf61525e1ae28",
-    "GET /v1/organization/company/model-decisions": "2aa8f1b229aadda5567b4a4f3eda978992e44ddd41bdcef57081c4d126482455"
+    "GET /v1/organization/company/model-decisions": "2aa8f1b229aadda5567b4a4f3eda978992e44ddd41bdcef57081c4d126482455",
+    "GET /v1/organization/company/projects/{project_id}/modules": "1b8da4e73c9d7badf53c50cc9f9d87f8a3e950d906500a95fbd614dcd377ce25",
+    "POST /v1/organization/company/projects/{project_id}/modules/approve": "31fe5ec7252dd0fdc35da62215fcc2441719ccce0e4495513b0a925139f8f6f2"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",

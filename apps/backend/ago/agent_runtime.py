@@ -18,6 +18,7 @@ from ago.organizational_dna import GenomeStore
 from ago.enterprise_store import EnterpriseOperationsStore
 from ago.security_controls import SecurityControls
 from ago.stage_progression import StageProgression
+from ago.project_delivery import ProjectDelivery
 
 
 # Fixed, secret-free labels for why a run failed. Exception text is never stored.
@@ -105,6 +106,10 @@ class AgentRuntime:
                 "deliverable": context_row["deliverable"],
                 "recovery_feedback": context_row.get("recovery_feedback") or "",
                 "failed_work": stage_deliverable(context_row.get("failed_work")),
+                # PROJ-014: the prototype or module this implementation task builds.
+                "unit": (self.repositories.resolve(ProjectDelivery).unit_context(
+                    tenant_id=actor.tenant_id, project_id=str(context_row["id"]))
+                    if context_row["stage"] == "implementation" else None),
                 # Quality and release cite AGO's executed implementation tests.
                 "test_evidence": (self.repositories.resolve(StageProgression).project_test_evidence(
                     tenant_id=actor.tenant_id, project_id=str(context_row["id"]))

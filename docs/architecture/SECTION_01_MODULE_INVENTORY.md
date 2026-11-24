@@ -8,9 +8,9 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [__init__](../../apps/backend/ago/__init__.py) | entrypoints | composition | None |
 | [access](../../apps/backend/ago/access.py) | governance | persistence | backend_contracts, security |
 | [agent_handlers](../../apps/backend/ago/agent_handlers.py) | workforce | service | workflows |
-| [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, company_ollama_chain_queries, enterprise_store, organizational_dna, security_controls, stage_progression, task_store |
+| [agent_runtime](../../apps/backend/ago/agent_runtime.py) | workforce | service | agent_runtime_queries, backend_contracts, company_ollama_chain_queries, enterprise_store, organizational_dna, project_delivery, security_controls, stage_progression, task_store |
 | [agent_runtime_queries](../../apps/backend/ago/agent_runtime_queries.py) | workforce | persistence | backend_contracts |
-| [ai_qa_review](../../apps/backend/ago/ai_qa_review.py) | governance | service | ai_qa_review_queries, backend_contracts, brain_skills, credits, model_manager, model_provider, quality, quality_store, stage_progression |
+| [ai_qa_review](../../apps/backend/ago/ai_qa_review.py) | governance | service | ai_qa_review_queries, backend_contracts, brain_skills, credits, model_manager, model_provider, project_delivery, quality, quality_store, stage_progression |
 | [ai_qa_review_queries](../../apps/backend/ago/ai_qa_review_queries.py) | governance | persistence | backend_contracts |
 | [analytics_store](../../apps/backend/ago/analytics_store.py) | strategy | persistence | architecture_guard, backend_contracts, graph_store, reviewed_changes, security, security_controls |
 | [api_agents](../../apps/backend/ago/api_agents.py) | transport | transport | agent_handlers, api_m2, backend_contracts, company_engineering_preflight, model_handlers, repository_ports, security, stage_progression |
@@ -38,7 +38,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [brain_skills](../../apps/backend/ago/brain_skills.py) | knowledge | service | backend_contracts, brain_skill_store, credits, model_manager, model_provider, skill_library |
 | [calendar_store](../../apps/backend/ago/calendar_store.py) | operations | persistence | backend_contracts, enterprise_domains, governance, security, security_controls |
 | [company_chat](../../apps/backend/ago/company_chat.py) | workforce | persistence | backend_contracts, governance, organization_store |
-| [company_engineering](../../apps/backend/ago/company_engineering.py) | workforce | service | github_adapter |
+| [company_engineering](../../apps/backend/ago/company_engineering.py) | workforce | service | github_adapter, project_modules |
 | [company_engineering_preflight](../../apps/backend/ago/company_engineering_preflight.py) | workforce | persistence | agent_runtime_queries, backend_contracts, company_ollama_chain_queries |
 | [company_ollama_chain](../../apps/backend/ago/company_ollama_chain.py) | workforce | service | company_engineering |
 | [company_ollama_chain_queries](../../apps/backend/ago/company_ollama_chain_queries.py) | workforce | persistence | backend_contracts |
@@ -107,6 +107,9 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [platform](../../apps/backend/ago/platform.py) | platform | foundation | events |
 | [plugins](../../apps/backend/ago/plugins.py) | platform | foundation | None |
 | [postgres_event_store](../../apps/backend/ago/postgres_event_store.py) | platform | persistence | events |
+| [project_delivery](../../apps/backend/ago/project_delivery.py) | strategy | service | backend_contracts, project_module_store, project_modules |
+| [project_module_store](../../apps/backend/ago/project_module_store.py) | strategy | persistence | backend_contracts |
+| [project_modules](../../apps/backend/ago/project_modules.py) | strategy | domain | None |
 | [provision](../../apps/backend/ago/provision.py) | entrypoints | composition | identity, security_controls |
 | [quality](../../apps/backend/ago/quality.py) | governance | domain | None |
 | [quality_store](../../apps/backend/ago/quality_store.py) | governance | persistence | backend_contracts, quality, security, security_controls |
@@ -114,7 +117,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [readiness](../../apps/backend/ago/readiness.py) | platform | foundation | None |
 | [release_ops](../../apps/backend/ago/release_ops.py) | entrypoints | composition | release_security, security_material |
 | [release_security](../../apps/backend/ago/release_security.py) | platform | composition | event_runtime, identity_factors, security_material, sso_provider |
-| [repository_ports](../../apps/backend/ago/repository_ports.py) | platform | service | access, agent_runtime, agent_runtime_queries, ai_qa_review, ai_qa_review_queries, analytics_store, approvals, backend_contracts, behavior_store, brain_skill_store, brain_skills, calendar_store, company_chat, company_ollama_chain_queries, console_service, console_store, council_store, credits, database_store, department_automation, department_automation_queries, document_vault, enterprise_store, executive_intelligence, executive_intelligence_queries, experiments, goals, governance, graph_store, handoffs, identity, identity_security_store, integration_store, knowledge_store, login_security, memory, message_store, meta_brain, meta_brain_queries, model_manager, model_manager_store, organization, organization_store, organizational_dna, plan_execution, plan_execution_queries, plan_store, quality, quality_store, reviewed_changes, scorecard, scorecard_queries, security, security_controls, semantic_memory_store, session_service, stage_progression, stage_progression_queries, task_store, tool_catalog_queries, tool_enrollment, tool_enrollment_queries, tool_runtime, tool_runtime_queries, workflows |
+| [repository_ports](../../apps/backend/ago/repository_ports.py) | platform | service | access, agent_runtime, agent_runtime_queries, ai_qa_review, ai_qa_review_queries, analytics_store, approvals, backend_contracts, behavior_store, brain_skill_store, brain_skills, calendar_store, company_chat, company_ollama_chain_queries, console_service, console_store, council_store, credits, database_store, department_automation, department_automation_queries, document_vault, enterprise_store, executive_intelligence, executive_intelligence_queries, experiments, goals, governance, graph_store, handoffs, identity, identity_security_store, integration_store, knowledge_store, login_security, memory, message_store, meta_brain, meta_brain_queries, model_manager, model_manager_store, organization, organization_store, organizational_dna, plan_execution, plan_execution_queries, plan_store, project_delivery, project_module_store, quality, quality_store, reviewed_changes, scorecard, scorecard_queries, security, security_controls, semantic_memory_store, session_service, stage_progression, stage_progression_queries, task_store, tool_catalog_queries, tool_enrollment, tool_enrollment_queries, tool_runtime, tool_runtime_queries, workflows |
 | [reviewed_changes](../../apps/backend/ago/reviewed_changes.py) | governance | persistence | backend_contracts, governance, security, security_controls |
 | [scheduler](../../apps/backend/ago/scheduler.py) | platform | foundation | None |
 | [scorecard](../../apps/backend/ago/scorecard.py) | economics | service | backend_contracts, credits, scorecard_queries |
@@ -127,7 +130,7 @@ Regenerate only after a reviewed policy change; this file grants no permission.
 | [simulation](../../apps/backend/ago/simulation.py) | strategy | service | credits |
 | [skill_library](../../apps/backend/ago/skill_library.py) | knowledge | foundation | None |
 | [sso_provider](../../apps/backend/ago/sso_provider.py) | governance | foundation | security, security_material |
-| [stage_progression](../../apps/backend/ago/stage_progression.py) | strategy | service | backend_contracts, company_chat, company_engineering, organization_store, plan_execution, stage_progression_queries, task_store |
+| [stage_progression](../../apps/backend/ago/stage_progression.py) | strategy | service | backend_contracts, company_chat, company_engineering, organization_store, plan_execution, project_delivery, stage_progression_queries, task_store |
 | [stage_progression_queries](../../apps/backend/ago/stage_progression_queries.py) | strategy | persistence | backend_contracts |
 | [storage_adapters](../../apps/backend/ago/storage_adapters.py) | platform | foundation | None |
 | [storage_ops](../../apps/backend/ago/storage_ops.py) | entrypoints | composition | backend_contracts, database_store, storage_adapters |
