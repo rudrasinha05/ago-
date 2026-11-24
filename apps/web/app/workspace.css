@@ -801,3 +801,49 @@
 @media (max-width:760px){.ai-models section{padding:14px}.ai-provider-actions button{flex:1 1 40%}}
 .ai-models .ai-primary:disabled{border-color:var(--border);background:transparent;color:var(--muted)}
 .ai-models-hint.first{margin:0 0 14px}
+
+/* Company Brain skills (SKL-001..005). */
+.brain-skills{display:grid;gap:20px;max-width:1080px}
+.brain-skills h2,.brain-skills h3{margin:0}
+.brain-skills h3{font-size:16px;margin-bottom:10px}
+.brain-head p{margin:6px 0 0;color:var(--soft);max-width:70ch}
+.brain-error{margin:0;padding:10px 14px;border-radius:12px;background:#3a1720;color:#ffd3dc}
+.brain-notice{margin:0;padding:10px 14px;border-radius:12px;background:#123329;color:#d2fbef}
+.brain-skills section{padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.brain-skills :where(button){display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.brain-skills :where(button):hover:not(:disabled){border-color:#4a5470;background:#1c2234}
+.brain-skills :where(button):disabled{cursor:not-allowed;color:var(--muted);background:transparent}
+.brain-skills :where(button,input,textarea,summary):focus-visible{outline:3px solid var(--mint);outline-offset:3px}
+.brain-skills .brain-primary:not(:disabled){border-color:#3f8f7c;background:#143029;color:#d2fbef}
+.brain-skills input[type=search],.brain-skills textarea{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit}
+.brain-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.brain-stats>div{padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:var(--panel);display:grid;gap:2px}
+.brain-stats b{font-size:26px;color:var(--violet)}.brain-stats span{color:var(--soft);font-size:13px}
+.brain-teach p{margin:0 0 12px;color:var(--soft)}
+.brain-teach form{display:grid;gap:8px}.brain-teach label{font-size:13px;color:var(--soft)}
+.brain-teach button{justify-self:start}
+.brain-gaps ul,.brain-decisions ul,.brain-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.brain-gaps li,.brain-decisions li{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
+.brain-gaps li>div,.brain-decisions li>div{display:grid;gap:2px;flex:1;min-width:0}
+.brain-gaps small,.brain-decisions small{color:var(--soft)}
+.brain-chip{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border);color:var(--soft);white-space:nowrap}
+.brain-chip.ok{border-color:#3f8f7c;background:#143029;color:#bdf5e6}
+.brain-chip.bad{border-color:#8a3a4a;background:#351820;color:#ffc9d3}
+.brain-library-head{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.brain-library-head h3{margin:0}.brain-search{flex:1 1 260px;max-width:420px}
+.brain-areas{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.brain-areas button{min-height:34px;padding:0 12px;font-size:13px}
+.brain-areas button[aria-pressed="true"]{border-color:var(--violet);background:#241f3d;color:#fff}
+.brain-retired{display:inline-flex;align-items:center;gap:8px;color:var(--soft);font-size:14px}
+.brain-retired input{width:18px;height:18px;accent-color:var(--mint)}
+.brain-count{margin:8px 0;color:var(--muted);font-size:13px}
+.brain-skill details{border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:12px 14px}
+.brain-skill.retired details{opacity:.75;border-style:dashed}
+.brain-skill summary{cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;list-style:none}
+.brain-skill summary::-webkit-details-marker{display:none}
+.brain-skill summary strong{flex:1 1 260px}
+.brain-skill summary small{flex-basis:100%;color:var(--muted);font-size:13px}
+.brain-area{font-size:12px;color:var(--violet)}
+.brain-body{margin:12px 0 8px;color:var(--text);line-height:1.6}
+.brain-meta{margin:0 0 10px;color:var(--muted);font-size:13px}
+@media (max-width:760px){.brain-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.brain-skills section{padding:14px}.brain-gaps li,.brain-decisions li{flex-wrap:wrap}}

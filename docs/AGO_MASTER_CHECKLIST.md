@@ -1022,6 +1022,18 @@ section and a founder amendment indicates traceability, not a reason to merge.
 - [x] QUEUE-008 — Unlimited future approved projects can be registered without silently modifying this frozen AGO architecture.
   - *DONE* — New projects register without changing the frozen architecture
 
+### SKL — Company Brain skill library (Founder, 2026-11-24)
+- [~] SKL-001 — The Company Brain holds a skill library: short, sourced "how to do it" guides for every kind of company work, including software development, design, graphics, product, project management, QA, data, AI, business, opportunity finding, marketing, sales, finance, legal, HR, operations, research, writing, education, communication, and politics and public policy.
+  - *PARTIAL* — Built: 127 sourced skills in 21 areas (development to politics and public policy) in apps/backend/ago/skills, validated by tests/test_skill_library.py. Not yet proved live on the Founder's laptop
+- [~] SKL-002 — Every AI employee's task automatically receives the best-matching skills inside its prompt, and its receipt names the skills that were used.
+  - *PARTIAL* — Built: chain roles and AI QA get the best-matching skill in the prompt; handoffs name skills (tests/test_brain_skills.py test_every_chain_role_gets_its_guide_and_the_receipt_names_it, test_gap_to_ceo_approved_skill_to_next_work_and_qa_results). Not yet proved live
+- [~] SKL-003 — When no skill matches a task, AGO records the gap; an AI employee drafts a new skill, and it joins the Brain only after the AI CEO approves it. The Founder can retire or restore any skill.
+  - *PARTIAL* — Built: gaps recorded; STARK (CTO seat) drafts, JARVIS (CEO seat) approves or denies; Founder retires/restores (tests/test_brain_skills.py, Playwright 'Brain: …'). Not yet proved live with a real model
+- [~] SKL-004 — Every skill keeps its source; content taken from outside sources is used only when its license allows reuse, with attribution.
+  - *PARTIAL* — Built: every skill names its source; all 127 built-in skills are AGO originals (test_every_builtin_skill_is_valid_unique_short_and_sourced); no outside text copied yet
+- [~] SKL-005 — AGO measures which skills were used in work that passed or failed QA and shows this to the Founder.
+  - *PARTIAL* — Built: uses per task and QA pass/fail shown in the Brain tab (test_gap_to_ceo_approved_skill_to_next_work_and_qa_results). Not yet proved with real project work
+
 ## 8. Source-recovery and evidence gates (SRC)
 - [ ] SRC-001 — Crosswalk the full previously recovered ~6,115-line original Sections 0–35 blueprint verbatim.
   - *NOT STARTED* — The ~6,115-line original blueprint has not been crosswalked verbatim
@@ -1070,3 +1082,4 @@ Only the Founder authorizes a line here.
 |---|---|---|
 | 2026-11-10 | Founder | Ordered one single checklist; all earlier lists superseded. Future feature or architecture changes enter here only on the Founder's word. |
 | 2026-11-10 | Claude | Built this file from the frozen 429 requirements, added evidence-based status to every item, and recorded the blocking line. No requirement text changed. |
+| 2026-11-24 | Founder | Approved a Company Brain skill library (all domains at once; AI-drafted skills join only with the AI CEO's approval). Added as SKL-001 to SKL-005. |

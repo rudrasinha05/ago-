@@ -327,7 +327,11 @@
     "GET /v1/organization/company/cloud-models/{provider}/models": "54407c4e3691cd40f05559e0551ae77fd4b44756569d88e06fee88bb5955374f",
     "POST /v1/organization/company/cloud-models/{provider}/test": "659dfdd6beb781c5c461fea44b669b16bc1d17a1c15b21e4f58e5d733d13cf16",
     "POST /v1/organization/company/cloud-models/{provider}/connect": "779ad824833dba137dedd548d6a1c241e6943a4f06d0d0440361b233856ebed1",
-    "PUT /v1/organization/company/cloud-models/{provider}/model": "f93312e6d528316e9c092a3c9bc2eb56fa6e4127e16fb6bd27cb2036bcc38cee"
+    "PUT /v1/organization/company/cloud-models/{provider}/model": "f93312e6d528316e9c092a3c9bc2eb56fa6e4127e16fb6bd27cb2036bcc38cee",
+    "GET /v1/organization/company/brain/skills": "e9f6a1902bcab84e7d6c5904fe024ae7b6a67f7874b3f85903ba14071fb0824c",
+    "POST /v1/organization/company/brain/skills/learn": "d32dc6d62e0fcb57125ffafce0acb2cf9a9c5ff0f82a0e46a57a315085e5afb1",
+    "POST /v1/organization/company/brain/skills/restore": "2a811785aa90d2ce3765818036804ecd2c1818603b9b61f3beccd5d5c4c2f1fe",
+    "POST /v1/organization/company/brain/skills/retire": "45319b10b9b6af4c3b4148dbcf22e70a41a49c36f84502cb5c0d56ffab5c11d2"
   },
   "schemas": {
     "ActionInput": "bde5f19018f96bb684093e6dc432087edca1b4c2ba458895d5c46d5059a488e5",
@@ -475,6 +479,8 @@
     "CloudModelKey": "c67d4f1c39e3152f31cb2a7299cb74826d3b53dc4dc29d087d15ed4ac7c061de",
     "CloudModelRoutes": "852ea639e3073d2f9f6e4c7a4c1f1a0d30fac2b9bd311ac5a289f2a0029849c6",
     "CloudModelChoice": "091699b8381416dca2ee8edff03db6471071a3e4b94886844263cdfec5427652",
-    "CloudModelConnect": "cbdc45eba2b96238e4ef0d28a59a09f74a9e3aa0c14ba42e0f565e930e3badeb"
+    "CloudModelConnect": "cbdc45eba2b96238e4ef0d28a59a09f74a9e3aa0c14ba42e0f565e930e3badeb",
+    "BrainLearnInput": "5dfe278f5c72f09ce879fc67e249a6fea9d8f905864babecf558923b0c1d1390",
+    "BrainSkillRef": "48a3d7940156c198fad6c87bd487df65dcc875c9dc87891bded5a54ab1b91056"
   }
 }

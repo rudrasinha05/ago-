@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from ago.api_contracts import StrictInput
 from ago.api_m2 import allowed, authenticated, repository_scope, translate_error
+from ago.brain_skill_store import BrainSkillStore
+from ago.brain_skills import BrainSkillTeacher, brain_view
 from ago.model_handlers import (
     CLOUD_PROVIDERS, CloudProviderError, ProviderVault, cloud_models_available,
     respond_company_chat,
@@ -778,3 +780,56 @@ def route_cloud_models(body: CloudModelRoutes, actor=Depends(authenticated),
             body.monthly_call_cap)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
+
+
+# --- Company Brain skills (SKL-001..005) ------------------------------------
+
+class BrainLearnInput(StrictInput):
+    topic: str | None = Field(default=None, min_length=3, max_length=500)
+    gap_id: UUID | None = None
+
+
+class BrainSkillRef(StrictInput):
+    ref: str = Field(min_length=5, max_length=90, pattern=r'^(ago|co):[a-z0-9]+([.-][a-z0-9]+)*$')
+
+
+@router.get('/brain/skills')
+def brain_skills(actor=Depends(authenticated), repositories=Depends(repository_scope)):
+    """Every skill in the Brain, its source, use and QA results, and open gaps."""
+    allowed(repositories, actor, 'approval:founder')
+    return brain_view(repositories, tenant_id=actor.tenant_id)
+
+
+@router.post('/brain/skills/learn')
+def learn_brain_skill(data: BrainLearnInput, actor=Depends(authenticated),
+                      repositories=Depends(repository_scope)):
+    """The CTO-seat AI drafts one skill; the AI CEO approves or denies it."""
+    allowed(repositories, actor, 'approval:founder')
+    if (data.topic is None) == (data.gap_id is None):
+        raise HTTPException(422, 'Give either a topic or a skill gap')
+    try:
+        return repositories.resolve(BrainSkillTeacher).learn(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, topic=data.topic,
+            gap_id=str(data.gap_id) if data.gap_id else None)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from None
+    except (ValueError, PermissionError) as exc:
+        translate_error(exc)
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc)) from None
+
+
+@router.post('/brain/skills/retire')
+def retire_brain_skill(data: BrainSkillRef, actor=Depends(authenticated),
+                       repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'approval:founder')
+    repositories.resolve(BrainSkillStore).retire(actor.tenant_id, data.ref, actor.subject)
+    return brain_view(repositories, tenant_id=actor.tenant_id)
+
+
+@router.post('/brain/skills/restore')
+def restore_brain_skill(data: BrainSkillRef, actor=Depends(authenticated),
+                        repositories=Depends(repository_scope)):
+    allowed(repositories, actor, 'approval:founder')
+    repositories.resolve(BrainSkillStore).restore(actor.tenant_id, data.ref)
+    return brain_view(repositories, tenant_id=actor.tenant_id)

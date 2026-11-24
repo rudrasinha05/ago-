@@ -53,11 +53,11 @@
     },
     "knowledge": {
       "purpose": "Private organizational memory and reviewed facts",
-      "aggregates": "MemoryRecord; proposed knowledge node and edge",
-      "value_objects": "Visibility scope; provenance reference; relation/verdict type",
-      "repositories": "MemoryStore in organization_store; knowledge_store; DatabaseStore graph/vector/document metadata",
-      "services": "MemoryRecord privacy checks; KnowledgeStore review/relate; bounded traversal, offline semantic retrieval and private objects",
-      "invariants": "Tenant/private access, independent fact verification, provenance; no fabricated RAG",
+      "aggregates": "MemoryRecord; proposed knowledge node and edge; Company Brain skill (approved or denied, append-only).",
+      "value_objects": "Visibility scope; provenance reference; relation/verdict type; Skill reference (ago:/co:), skill gap, skill use.",
+      "repositories": "MemoryStore in organization_store; knowledge_store; DatabaseStore graph/vector/document metadata; BrainSkillStore.",
+      "services": "MemoryRecord privacy checks; KnowledgeStore review/relate; bounded traversal, offline semantic retrieval and private objects; BrainSkillTeacher, skill_guide, skill library selection.",
+      "invariants": "Tenant/private access, independent fact verification, provenance; no fabricated RAG; A skill is guidance only and never grants authority; an AI-drafted skill joins only with the AI CEO's approval; skills are retired, never edited.",
       "published_language": "Memory records; node/edge IDs; evidence references",
       "consistency": "Record/review transactions; graph-memory consolidation is not currently automatic"
     },
@@ -221,7 +221,10 @@
     "tool_runtime_queries": "operations",
     "workflows": "workforce",
     "stage_progression": "strategy",
-    "stage_progression_queries": "strategy"
+    "stage_progression_queries": "strategy",
+    "skill_library": "knowledge",
+    "brain_skill_store": "knowledge",
+    "brain_skills": "knowledge"
   },
   "sql_access": {
     "__init__": [],
@@ -797,6 +800,18 @@
       "ago_stage_candidate_tests",
       "ago_strategy_plans",
       "ago_task_reviews"
-    ]
+    ],
+    "brain_skill_store": [
+      "ago_brain_skill_gaps",
+      "ago_brain_skill_retired",
+      "ago_brain_skill_uses",
+      "ago_brain_skills",
+      "ago_company_board_appointments",
+      "ago_employees",
+      "ago_governed_tasks",
+      "ago_task_reviews"
+    ],
+    "brain_skills": [],
+    "skill_library": []
   }
 }

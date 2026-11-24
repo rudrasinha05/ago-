@@ -17,6 +17,7 @@ import {CompanyRolePlanner} from './company-role-planner';
 import {OpportunityRadar} from './company-opportunities';
 import {FounderToday} from './founder-today';
 import {AiModels} from './ai-models';
+import {BrainSkills} from './brain-skills';
 import {CompanyNotificationCenter,mergeNotificationPage} from './company-notification-center';
 import {treeCompanyLayout,departmentCompanyLayout,circularDepartmentLayout,withMembership,departmentColors,MAP_VIEWS} from './company-layouts';
 const BASE='/v1/organization/company';
@@ -499,7 +500,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
   const [approvalFocus,setApprovalFocus]=useState(null),[talkRequest,setTalkRequest]=useState(null);
   const pendingApprovals=(approvalList||[]).filter(a=>a.status==='pending').length;
   const tabs=[
-    ...(founderView?[{id:'ago-tab-today',label:'Today'}]:[]),
+    ...(founderView?[{id:'ago-tab-today',label:'Today'},{id:'ago-tab-brain',label:'Brain'}]:[]),
     {id:'ago-tab-command',label:'Command Center'},
     {id:'ago-tab-approvals',label:'Approvals',badge:pendingApprovals||null,badgeLabel:pendingApprovals+' pending approval requests'},
     ...((founderView&&me.permissions?.includes('brain:manage'))||(me.permissions?.includes('organization:read')&&me.permissions?.includes('brain:read'))
@@ -622,6 +623,9 @@ export function CompanyMap({api,me,data,onRefresh}) {
       onTalk={founderView?seat=>{setTalkRequest({seat,at:Date.now()});openSection('ago-board-room',{updateHash:true});}:undefined}/>
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
     </section>
+    {founderView&&<section id="ago-tab-brain" className="company-tab-panel" data-tab-panel aria-label="Company Brain" hidden={activeTab!=='ago-tab-brain'}>
+    <BrainSkills api={api} me={me} active={activeTab==='ago-tab-brain'}/>
+    </section>}
     {founderView&&<section id="ago-tab-models" className="company-tab-panel" data-tab-panel aria-label="AI models" hidden={activeTab!=='ago-tab-models'}>
     <AiModels api={api} me={me} active={activeTab==='ago-tab-models'}/>
     </section>}

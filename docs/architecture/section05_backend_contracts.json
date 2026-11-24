@@ -2175,6 +2175,76 @@
           "returns": "Cursor"
         }
       }
+    },
+    "BrainSkillStore": {
+      "module": "brain_skill_store",
+      "methods": {
+        "approved": {
+          "arguments": "self, tenant_id: str",
+          "returns": "list[dict]"
+        },
+        "decisions": {
+          "arguments": "self, tenant_id: str, limit: int=100",
+          "returns": "list[dict]"
+        },
+        "retired": {
+          "arguments": "self, tenant_id: str",
+          "returns": "frozenset[str]"
+        },
+        "usage": {
+          "arguments": "self, tenant_id: str",
+          "returns": "dict[str, dict]"
+        },
+        "open_gaps": {
+          "arguments": "self, tenant_id: str, limit: int=50",
+          "returns": "list[dict]"
+        },
+        "gap": {
+          "arguments": "self, tenant_id: str, gap_id: str",
+          "returns": "dict | None"
+        },
+        "board_seat": {
+          "arguments": "self, tenant_id: str, seat: str",
+          "returns": "dict | None"
+        },
+        "slug_taken": {
+          "arguments": "self, tenant_id: str, slug: str",
+          "returns": "bool"
+        },
+        "record_uses": {
+          "arguments": "self, tenant_id: str, task_id: str, refs: list[str], role: str, stage: str | None",
+          "returns": "None"
+        },
+        "record_gap": {
+          "arguments": "self, tenant_id: str, task_id: str, role: str, stage: str | None, topic: str",
+          "returns": "None"
+        },
+        "insert_skill": {
+          "arguments": "self, values: dict[str, Any]",
+          "returns": "dict"
+        },
+        "resolve_gap": {
+          "arguments": "self, tenant_id: str, gap_id: str, skill_id: str",
+          "returns": "None"
+        },
+        "retire": {
+          "arguments": "self, tenant_id: str, skill_ref: str, user_id: str",
+          "returns": "None"
+        },
+        "restore": {
+          "arguments": "self, tenant_id: str, skill_ref: str",
+          "returns": "None"
+        }
+      }
+    },
+    "BrainSkillTeacher": {
+      "module": "brain_skills",
+      "methods": {
+        "learn": {
+          "arguments": "self, *, tenant_id: str, founder_id: str, topic: str | None=None, gap_id: str | None=None",
+          "returns": "dict"
+        }
+      }
     }
   }
 }

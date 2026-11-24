@@ -6,6 +6,7 @@ import os
 import re
 
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
+from ago.brain_skills import skill_guide
 from ago.credits import CreditBudget
 from ago.company_ollama_chain import run_four_role_chain
 from ago.company_ollama_chain_queries import CompanyOllamaChainQueries
@@ -301,9 +302,14 @@ def optional_model_handlers(
                 code_provider = FallbackProvider(
                     CreditedCloudProvider(cloud, repositories, actor, task.id), local,
                     fallback_label=local.label)
+            def guide(role, stage, text):
+                # SKL-002: guidance only; it records use or a gap, never authority.
+                return skill_guide(repositories, tenant_id=actor.tenant_id, task_id=task.id,
+                                   role=role, stage=stage, text=text)
+
             return run_four_role_chain(
                 task=task, participants=participants, provider=local,
-                code_provider=code_provider,
+                code_provider=code_provider, skill_guide=guide,
                 engineering_candidates=engineering_enabled,
                 on_role_completed=record_role_completed,
                 overridden_seats=overrides,

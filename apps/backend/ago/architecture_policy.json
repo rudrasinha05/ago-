@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "name": "AGO Section 14 — enforceable module boundary contract",
+  "name": "AGO Section 14 \u2014 enforceable module boundary contract",
   "approved_baseline": "2026-10-10",
   "review_reference": "SECTION05-LAYERS-AND-INJECTION-001",
   "layers": {
@@ -124,6 +124,8 @@
       "imports": [
         "api_contracts",
         "api_m2",
+        "brain_skill_store",
+        "brain_skills",
         "model_handlers",
         "repository_ports"
       ]
@@ -781,6 +783,7 @@
       "layer": "service",
       "imports": [
         "backend_contracts",
+        "brain_skills",
         "company_ollama_chain",
         "company_ollama_chain_queries",
         "credits",
@@ -923,6 +926,8 @@
         "approvals",
         "backend_contracts",
         "behavior_store",
+        "brain_skill_store",
+        "brain_skills",
         "calendar_store",
         "company_chat",
         "company_ollama_chain_queries",
@@ -1157,6 +1162,7 @@
       "imports": [
         "ai_qa_review_queries",
         "backend_contracts",
+        "brain_skills",
         "credits",
         "model_provider",
         "quality",
@@ -1189,6 +1195,29 @@
       "layer": "persistence",
       "imports": [
         "backend_contracts"
+      ]
+    },
+    "skill_library": {
+      "context": "knowledge",
+      "layer": "foundation",
+      "imports": []
+    },
+    "brain_skill_store": {
+      "context": "knowledge",
+      "layer": "persistence",
+      "imports": [
+        "backend_contracts"
+      ]
+    },
+    "brain_skills": {
+      "context": "knowledge",
+      "layer": "service",
+      "imports": [
+        "backend_contracts",
+        "brain_skill_store",
+        "credits",
+        "model_provider",
+        "skill_library"
       ]
     }
   },

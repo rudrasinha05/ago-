@@ -1555,3 +1555,61 @@ test('AI Models: the Founder pastes only a key and presses Connect; AGO picks, t
  await page.screenshot({path:test.info().outputPath('ai-models.png'),fullPage:true});
  await accessibility(page);expect(errors).toEqual([]);
 });
+
+test('Brain: the Founder sees every skill area, searches, learns a missing skill and retires one; nothing runs',async({page})=>{
+ const {calls,errors}=await fixtures(page);
+ const sk=(ref,title,domain,extra={})=>({ref,slug:ref.slice(4),title,domain,roles:['employee'],stages:['implementation'],keywords:[],
+  source:'AGO original (Claude, 2026-11-24)',body:'1. Do the first step. 2. Check it.',builtin:true,retired:false,usage:{uses:0,passed:0,failed:0},...extra});
+ const view={kind:'ago_brain_skills_v1',guidance_only:true,counts:{total:3,active:3,builtin:3,company:0},
+  domains:{development:1,'politics-policy':1,graphics:1},
+  skills:[sk('ago:dev.python-module-with-tests','Python module with unittest tests','development',{usage:{uses:4,passed:3,failed:1}}),
+   sk('ago:pol.policy-analysis','Analyze a public policy neutrally','politics-policy'),sk('ago:gfx.logo-brief','Logo and brand mark','graphics')],
+  gaps:[{id:'91000000-0000-4000-8000-000000000091',task_id:'92000000-0000-4000-8000-000000000092',role:'employee',stage:'implementation',topic:'tribal handloom export certification',created_at:'2026-11-24T10:00:00Z'}],
+  decisions:[]};
+ const bodies=[];
+ await page.route(/\/v1\/organization\/company\/brain\/skills/,async route=>{
+  const request=route.request(),path=new URL(request.url()).pathname,body=request.postDataJSON();
+  bodies.push({path,method:request.method(),body});
+  if(path.endsWith('/learn')){
+   view.gaps=[];view.counts={total:4,active:4,builtin:3,company:1};view.domains.trade=1;
+   view.skills.push(sk('co:trade.handloom-export','Handloom export certification steps','trade',{builtin:false,source:'AGO AI draft by STARK, approved by the AI CEO'}));
+   view.decisions=[{id:'93000000-0000-4000-8000-000000000093',title:'Handloom export certification steps',status:'approved',review_text:'Correct and practical.',reviewed_by_name:'JARVIS'}];
+   return route.fulfill({json:{kind:'ago_brain_skill_learned_v1',status:'approved',title:'Handloom export certification steps',reviewed_by:'JARVIS',drafted_by:'STARK',reason:'Correct and practical.'}});
+  }
+  if(path.endsWith('/retire')){view.skills.find(s=>s.ref===body.ref).retired=true;view.counts.active=3;}
+  return route.fulfill({json:view});
+ });
+ await login(page);
+ await openOrganizationLanding(page);
+ await page.getByRole('navigation',{name:'Company control center sections'}).getByRole('link',{name:'Brain',exact:true}).click();
+ const panel=page.getByRole('region',{name:'Company Brain'});
+ await expect(panel.getByRole('list',{name:'Brain at a glance'})).toContainText('3skills in use');
+ await expect(panel.getByRole('group',{name:'Areas of work'})).toContainText('Politics & public policy (1)');
+ const skill=panel.getByRole('listitem').filter({hasText:'Python module with unittest tests'});
+ await expect(skill).toContainText('Used in 4 tasks · 3 passed QA · 1 failed QA');
+ await panel.getByRole('searchbox').fill('logo');
+ await expect(panel.locator('.brain-list > li')).toHaveCount(1);
+ await panel.getByRole('searchbox').fill('');
+ await panel.getByRole('group',{name:'Areas of work'}).getByRole('button',{name:/Politics/}).click();
+ await expect(panel.locator('.brain-list > li')).toHaveCount(1);
+ await panel.getByRole('group',{name:'Areas of work'}).getByRole('button',{name:/^All/}).click();
+ // A gap becomes a skill: STARK drafts, JARVIS decides.
+ await panel.getByRole('button',{name:'Learn a skill for: tribal handloom export certification'}).click();
+ await expect(panel.getByRole('status').first()).toContainText('JARVIS approved "Handloom export certification steps" (drafted by STARK)');
+ expect(bodies.find(b=>b.path.endsWith('/learn')).body).toEqual({gap_id:'91000000-0000-4000-8000-000000000091'});
+ await expect(panel.getByRole('region',{name:'AI CEO decisions'})).toContainText('Approved');
+ await expect(panel.locator('.brain-list > li').filter({hasText:'Handloom export certification steps'})).toContainText('Learned');
+ // Retire a skill; it leaves the active list.
+ const logo=panel.locator('.brain-list > li').filter({hasText:'Logo and brand mark'});
+ await logo.locator('summary').click();
+ await logo.getByRole('button',{name:'Retire Logo and brand mark'}).click();
+ await expect(panel.getByRole('status').first()).toContainText('Retired: Logo and brand mark.');
+ await expect(panel.locator('.brain-list > li').filter({hasText:'Logo and brand mark'})).toHaveCount(0);
+ expect(bodies.find(b=>b.path.endsWith('/retire')).body).toEqual({ref:'ago:gfx.logo-brief'});
+ // Teach box: a topic in plain words.
+ await panel.getByLabel('What should the Brain learn?').fill('how to apply for a GeM tender');
+ await expect(panel.getByRole('button',{name:'Teach'})).toBeEnabled();
+ expect(calls.filter(x=>/\/run$/.test(x.path))).toEqual([]);
+ await page.screenshot({path:test.info().outputPath('brain.png'),fullPage:true});
+ await accessibility(page);expect(errors).toEqual([]);
+});

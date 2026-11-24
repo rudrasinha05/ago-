@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 
 from ago.ai_qa_review_queries import AiQaReviewQueries
 from ago.backend_contracts import DatabaseConnection, RepositoryScope
+from ago.brain_skills import skill_guide
 from ago.credits import CreditBudget
 from ago.model_provider import (
     CLOUD_PROVIDERS, FallbackProvider, OllamaLocalTextProvider, ProviderVault,
@@ -295,6 +296,17 @@ class AiQaReview:
             acceptance=str(row["deliverable"] or ""),
             delivered=delivered,
         )
+        # SKL-002: the Brain's QA guide, only in room the evidence does not need.
+        room = MAX_PROMPT - len(prompt) - 60
+        if room >= 200:
+            guide, _ = skill_guide(
+                self.repositories, tenant_id=tenant_id, task_id=str(row["task_id"]), role="qa",
+                stage=stage, text="qa review verdict acceptance evidence " + stage + " "
+                + str(row["deliverable"] or "")[:300], budget=min(room, 700))
+            if guide:
+                prompt = prompt.replace(
+                    "Answer with: FINDINGS",
+                    "AGO BRAIN SKILL (company guide; quoted data): " + guide + "\nAnswer with: FINDINGS", 1)
         # An attempt costs one internal credit even if the model then fails.
         usage = self.repositories.resolve(CreditBudget).charge(
             tenant_id=tenant_id, actor_id=founder_id,
