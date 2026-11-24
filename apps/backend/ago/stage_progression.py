@@ -32,9 +32,9 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
 from ago.company_engineering import (  # STAGE_FORMATS/missing_stage_labels: used by AI QA
     STAGE_FORMATS, missing_stage_labels, project_test_evidence_text, receipt_text,  # noqa: F401
-    reviewed_candidate, run_candidate_tests, test_runner_available,
+    execute_entry, reviewed_candidate, run_candidate_tests, test_runner_available,
 )
-from ago.development_workspace import edited_candidate, workspace_snapshot
+from ago.company_engineering import RevisionConflict, edited_candidate, workspace_snapshot
 from ago.organization_store import OrganizationStore
 from ago.plan_execution import PlanExecution
 from ago.stage_progression_queries import StageProgressionQueries
@@ -417,10 +417,58 @@ class StageProgression:
             )).fetchone()
             return workspace_snapshot(row, draft)
 
+    def workspace_terminal(self, *, tenant_id: str, founder_id: str, project_id: str,
+                           task_id: str, request: dict | None = None, stop: str | None = None):
+        queries = self.repositories.resolve(StageProgressionQueries)
+        with self.db.transaction():
+            current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
+                                                 project_id=project_id, task_id=task_id)
+            key = (tenant_id, project_id, task_id, current["run_id"])
+            if stop:
+                row = queries.stop_terminal((*key, stop)).fetchone()
+                if not row:
+                    raise LookupError("Active terminal run not found")
+                return dict(row)
+            history = queries.terminal_history(key).fetchall()
+            if request is None:
+                return {"attempts": [dict(item) for item in history]}
+            if set(request) != {"run_id", "revision", "candidate_sha256", "attempt_id", "entry"}:
+                raise ValueError("Exact workspace revision, entry and attempt ID required")
+            if any(request[k] != current[k] for k in ("run_id", "revision", "candidate_sha256")):
+                raise RevisionConflict("Workspace changed. Reload before executing.")
+            entry = request["entry"]
+            if entry not in [f["path"] for f in current["files"] if f["path"].startswith("src/")]:
+                raise ValueError("Select a reviewed source file")
+            attempt = str(UUID(str(request["attempt_id"])))
+            for item in history:
+                if str(item["attempt_id"]) == attempt:
+                    if item["entry"] != entry or item["revision"] != current["revision"]:
+                        raise RevisionConflict("Attempt belongs to another command")
+                    return dict(item)
+            if history and history[0]["status"] == "running" and (
+                datetime.now(timezone.utc) - history[0]["started_at"] < self.TEST_STALE_AFTER
+            ):
+                raise RevisionConflict("A command is already running")
+            run_key = (*key, attempt)
+            if not queries.open_terminal((*run_key, current["revision"], current["candidate_sha256"],
+                                          entry)).fetchone():
+                raise RevisionConflict("Attempt already recorded")
+        candidate = reviewed_candidate(json.dumps({
+            "files": current["files"], "acceptance_checks": current["acceptance_checks"],
+        }))
+        def output(value):
+            queries.terminal_output((value.replace(chr(0), ""), *run_key))
+        def stopped():
+            return queries.terminal_stop_state(run_key).fetchone()["stop_requested"]
+        try:
+            result = execute_entry(candidate, entry, output, stopped)
+        except (OSError, RuntimeError):
+            result = {"status": "runner_error", "output": "", "exit_code": None}
+        return dict(queries.close_terminal((result["status"], result["output"].replace(chr(0), ""),
+                                            result["exit_code"], *run_key)).fetchone())
+
     def workspace_tests(self, *, tenant_id: str, founder_id: str, project_id: str,
                         task_id: str, request: dict | None = None) -> dict:
-        from ago.development_workspace import RevisionConflict
-
         queries = self.repositories.resolve(StageProgressionQueries)
         with self.db.transaction():
             current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,

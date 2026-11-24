@@ -521,3 +521,104 @@ def missing_stage_labels(stage: str, text: str) -> list[str]:
     """Labels of this stage's format that the deliverable does not contain."""
     upper = str(text or "").upper()
     return [label for label in STAGE_FORMATS.get(stage, ()) if label + ":" not in upper]
+
+
+class RevisionConflict(ValueError):
+    pass
+
+
+def workspace_snapshot(row, draft):
+    if not row:
+        raise LookupError("Project stage task not found")
+    result = row["run_result"] or {}
+    if row["run_status"] != "completed" or not result.get("engineering_candidate"):
+        raise LookupError("This task has no completed engineering candidate")
+    original = verify_persisted_candidate(result["engineering_candidate"])
+    current = verify_persisted_candidate(draft["candidate"]) if draft else original
+    return {
+        "run_id": str(row["run_id"]),
+        "revision": draft["revision"] if draft else 0,
+        "original_sha256": original["candidate_sha256"],
+        "candidate_sha256": current["candidate_sha256"],
+        "files": current["files"],
+        "acceptance_checks": current["acceptance_checks"],
+    }
+
+
+def edited_candidate(snapshot, changes):
+    if not isinstance(changes, dict) or set(changes) != {"run_id", "expected_revision", "files"}:
+        raise ValueError("run_id, expected_revision and files are required")
+    revision = changes["expected_revision"]
+    if type(revision) is not int or revision < 0:
+        raise ValueError("Invalid workspace revision")
+    if changes["run_id"] != snapshot["run_id"] or revision != snapshot["revision"]:
+        raise RevisionConflict("Workspace changed. Reload before saving.")
+    return reviewed_candidate(json.dumps({
+        "files": changes["files"], "acceptance_checks": snapshot["acceptance_checks"],
+    }))
+
+
+def entry_command(root, container, candidate, entry):
+    paths = {f["path"] for f in candidate["files"]}
+    if entry not in paths or not re.fullmatch(r"src/[A-Za-z0-9_./-]+\.py", entry):
+        raise ValueError("Select a reviewed Python source file")
+    command = isolated_test_command(root, container)
+    return command[:-2] + ["-B", "/work/" + entry]
+
+
+def execute_entry(candidate, entry, on_output, stop_requested, timeout=90):
+    from threading import Thread
+    from time import monotonic
+
+    candidate = verify_persisted_candidate(candidate)
+    container = "ago-test-" + uuid4().hex
+    with tempfile.TemporaryDirectory(prefix="ago-terminal-") as temp:
+        root = Path(temp) / "work"
+        stage_candidate(candidate, root)
+        for path in [root, *root.rglob("*")]:
+            os.chmod(path, 0o755 if path.is_dir() else 0o644)
+        command = entry_command(root, container, candidate, entry)
+        try:
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       stdin=subprocess.DEVNULL)
+        except OSError:
+            return {"status": "runner_unavailable", "exit_code": None, "output": ""}
+        buffer = bytearray()
+
+        def drain():
+            while chunk := process.stdout.read1(4096):
+                buffer.extend(chunk)
+                del buffer[:-16384]
+
+        reader = Thread(target=drain, daemon=True)
+        reader.start()
+        deadline = monotonic() + timeout
+        status = "completed"
+        last_output = None
+        try:
+            while process.poll() is None:
+                if stop_requested() or monotonic() >= deadline:
+                    status = "timeout" if monotonic() >= deadline else "stopped"
+                    break
+                output = bytes(buffer).decode("utf-8", "replace")
+                if output != last_output:
+                    on_output(output)
+                    last_output = output
+                try:
+                    process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    pass
+        finally:
+            if process.poll() is None:
+                try:
+                    subprocess.run(["docker", "rm", "-f", container], timeout=10,
+                                   capture_output=True, check=False)
+                finally:
+                    process.kill()
+                    process.wait()
+            reader.join(timeout=2)
+            process.stdout.close()
+        if status == "completed" and process.returncode:
+            status = "runner_unavailable" if process.returncode == 125 else "failed"
+        return {"status": status, "exit_code": process.returncode,
+                "output": bytes(buffer).decode("utf-8", "replace")}

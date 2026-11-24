@@ -3,7 +3,7 @@ import json
 import unittest
 
 from ago.company_engineering import reviewed_candidate
-from ago.development_workspace import RevisionConflict, edited_candidate, workspace_snapshot
+from ago.company_engineering import RevisionConflict, edited_candidate, workspace_snapshot
 
 
 class DevelopmentWorkspaceTests(unittest.TestCase):

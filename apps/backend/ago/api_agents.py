@@ -18,7 +18,7 @@ from ago.repository_ports import (
     ConsoleServicePort, StageProgressionPort,
 )
 from ago.security import Principal
-from ago.stage_progression import STAGES, next_step
+from ago.stage_progression import STAGES, RevisionConflict, next_step
 
 router = APIRouter(prefix="/v1/agents", tags=["M4 workforce"])
 
@@ -427,20 +427,21 @@ def advance_project(project_id: UUID, db=Depends(db_connection),
         translate_error(exc)
 
 
-def _workspace(actor, repositories, project_id, task_id, changes=None, *, tests=False):
-    from ago.development_workspace import RevisionConflict
-
+def _workspace(actor, repositories, project_id, task_id, changes=None, *, tests=False, terminal=False, stop=None):
     allowed(repositories, actor, "approval:founder")
     allowed(repositories, actor, "agent:read")
     if "founder" not in actor.roles:
         raise HTTPException(403, "Founder role required")
     try:
         service = repositories.resolve(StageProgressionPort)
-        if tests:
+        if tests or terminal:
             if changes is not None:
                 allowed(repositories, actor, "agent:dispatch")
                 if os.getenv("AGO_ENVIRONMENT", "development") not in ("development", "test", "testing"):
                     raise HTTPException(403, "Local development mode required")
+            if terminal:
+                return service.workspace_terminal(tenant_id=actor.tenant_id, founder_id=actor.subject,
+                    project_id=str(project_id), task_id=str(task_id), request=changes, stop=stop)
             return service.workspace_tests(tenant_id=actor.tenant_id, founder_id=actor.subject,
                                            project_id=str(project_id), task_id=str(task_id),
                                            request=changes)
@@ -477,3 +478,23 @@ def test_workspace_revision(project_id: UUID, task_id: UUID, request: dict,
                             actor: Principal = Depends(authenticated),
                             repositories: RepositoryScope = Depends(repository_scope)):
     return _workspace(actor, repositories, project_id, task_id, request, tests=True)
+
+
+@router.get("/projects/{project_id}/tasks/{task_id}/workspace/terminal")
+def terminal_history(project_id: UUID, task_id: UUID, actor: Principal = Depends(authenticated),
+                     repositories: RepositoryScope = Depends(repository_scope)):
+    return _workspace(actor, repositories, project_id, task_id, terminal=True)
+
+
+@router.post("/projects/{project_id}/tasks/{task_id}/workspace/terminal")
+def run_terminal(project_id: UUID, task_id: UUID, request: dict,
+                 actor: Principal = Depends(authenticated),
+                 repositories: RepositoryScope = Depends(repository_scope)):
+    return _workspace(actor, repositories, project_id, task_id, request, terminal=True)
+
+
+@router.post("/projects/{project_id}/tasks/{task_id}/workspace/terminal/{attempt_id}/stop")
+def stop_terminal(project_id: UUID, task_id: UUID, attempt_id: UUID,
+                  actor: Principal = Depends(authenticated),
+                  repositories: RepositoryScope = Depends(repository_scope)):
+    return _workspace(actor, repositories, project_id, task_id, {}, terminal=True, stop=str(attempt_id))
