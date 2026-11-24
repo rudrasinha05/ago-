@@ -839,6 +839,8 @@ section and a founder amendment indicates traceability, not a reason to merge.
   - *PARTIAL* — Blocker reports to the manager are live; doubt/module-done/phase-done reports not
 - [~] ORG-015 — Distinguish private manager reporting from tenant-visible company chat.
   - *PARTIAL* — Company chat exists; private manager channel not separated
+- [~] ORG-016 — Every employee's designation, skills and responsibilities match properly; employees do not all report directly to the CEO; the hierarchy is Founder → CEO → Department Heads → Managers → Employees; existing employees keep their identity, task history and permissions; no designation or reporting relationship changes without the Founder's approval.
+  - *CODE EXISTS, NOT APPLIED* — The Employee Manager's proposal (Board & Roles) and the fixed role planner. Evidence: `packages/sdk/tests/workforce-corrections.test.mjs` (the Founder's real 46-employee roster), Playwright "Employee Manager proposes matching designations and a real hierarchy; nothing changes until the Founder approves rows" (local, 2026-11-24). Not done until the Founder reviews and approves the rows on his laptop.
 
 ### VIS — Founder visual control center and Brain
 - [ ] VIS-001 — Large interactive genuine 3D Brain representing actual organization nodes and real activity.
@@ -901,6 +903,10 @@ section and a founder amendment indicates traceability, not a reason to merge.
   - *DONE* — Approvals, artifacts and history survive PM reassignment
 - [~] PROJ-013 — Track statuses separately for development, internal review, release, maintenance and measured commercial results.
   - *PARTIAL* — Development and review statuses tracked; release, maintenance and commercial are not
+- [ ] PROJ-014 — Projects are built on a prototype + integration model: a working prototype first, then each module (for example M01–M13 of a brief) gets its own code, tests and QA and is integrated into the prototype, instead of one small file standing for the whole product.
+  - *NOT STARTED* — Approved by the Founder 2026-11-24
+- [ ] PROJ-015 — Dynamic project management: one project can have one PM; with multiple projects, PMs are assigned by workload and availability; if a PM is unavailable an authorized backup resumes the existing project; two PMs never make conflicting decisions on one project without clear responsibilities; no unnecessary extra employees are created and existing qualified employees are considered first.
+  - *NOT STARTED* — Approved by the Founder 2026-11-24
 
 ### AI — LLM orchestration and actual worker execution
 - [~] AI-001 — Support explicit authorized connectors for Ollama, OpenAI, Gemini, Claude and future providers.
@@ -1094,3 +1100,4 @@ Only the Founder authorizes a line here.
 | 2026-11-10 | Claude | Built this file from the frozen 429 requirements, added evidence-based status to every item, and recorded the blocking line. No requirement text changed. |
 | 2026-11-24 | Founder | Approved a Company Brain skill library (all domains at once; AI-drafted skills join only with the AI CEO's approval). Added as SKL-001 to SKL-005. |
 | 2026-11-24 | Founder | Approved an AI Workforce Manager (assigns employees and chooses models wisely, keeps every employee's history) and a separate Founder Assistant under the Founder's sole control. Added as MGR-001 to MGR-004. |
+| 2026-11-24 | Founder | Approved: prototype + integration delivery (PROJ-014), dynamic project management (PROJ-015), and matching designations with a Founder → CEO → Department Heads → Managers → Employees hierarchy changed only with his approval (ORG-016). |

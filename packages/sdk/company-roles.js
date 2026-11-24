@@ -1,4 +1,5 @@
 /** Founder-reviewable organization staffing blueprint. Profiles describe work areas, not proven abilities. */
+import {dutyFor} from './workforce-corrections.js';
 const duty=(title,area,focus,deliverable)=>({title,area,focus,deliverable});
 const CATALOG=[
  {pattern:/executive|leadership|board|corporate|strategy|office of ceo|^management$/,name:'Executive Office',roles:[
@@ -115,12 +116,18 @@ export function buildCompanyRolePlan(employees,departments,profiles,founderId){
   const people=[...members].sort((a,b)=>a.name.localeCompare(b.name)||String(a.id).localeCompare(String(b.id)));
   people.forEach((employee,i)=>{
    const current=byProfile.get(employee.id);
-   const specialization=profile.roles[i%profile.roles.length];
+   // An employee whose name says who they are ("AI Engineer", "Test Engineer")
+   // gets that designation and matching duties (ORG-016). Only a name that
+   // says nothing ("Agent 3") falls back to the department's role list; the
+   // old position-based pick gave "AI Engineer" the title "Research Director".
+   const named=dutyFor(employee.name);
+   const specialization=named?{title:employee.name,area:named.area,focus:named.focus,deliverable:null,core:named.core}
+    :profile.roles[i%profile.roles.length];
    const keep=hasVerifiedProfile(employee,current);
    const currentTitle=String(current?.role_title||'').trim();
    const meaningfulTitle=currentTitle&&currentTitle!==employee.name&&currentTitle.toLowerCase()!=='not assigned';
    const role_title=protectedTitle(currentTitle)||(meaningfulTitle?currentTitle:protectedTitle(employee.name)||specialization.title);
-   const core_responsibilities='Work area: '+specialization.area+'. Core duties: '+specialization.focus+'. Expected deliverable: '+specialization.deliverable+'. Report progress and blockers to recorded manager.';
+   const core_responsibilities=specialization.core||('Work area: '+specialization.area+'. Core duties: '+specialization.focus+'. Expected deliverable: '+specialization.deliverable+'. Report progress and blockers to recorded manager.');
    const extra_responsibilities='Proposed expertise focus (not a verified skill assessment): '+specialization.focus+'. Cross-team collaboration, quality evidence, documentation, security/privacy and reproducible handoffs. Project execution requires a separately approved task, actual tools and CEO-led quality verification.';
    result.push({id:employee.id,name:employee.name,kind:employee.kind,department:department?.name||'Department not recorded',manager_id:employee.manager_id||null,role_title:keep?current.role_title:role_title,core_responsibilities:keep?current.core_responsibilities:(String(current?.core_responsibilities||'').trim()||core_responsibilities),extra_responsibilities:keep?current.extra_responsibilities:(String(current?.extra_responsibilities||'').trim()||extra_responsibilities),status:keep?'configured':'proposed',focus:specialization.focus});
   });

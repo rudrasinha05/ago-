@@ -16,6 +16,7 @@
     },
     "./company": "./company.js",
     "./company-roles": "./company-roles.js",
+    "./workforce-corrections": "./workforce-corrections.js",
     "./company-execution": "./company-execution.js",
     "./company-first-run": "./company-first-run.js"
   },

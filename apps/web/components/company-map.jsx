@@ -19,6 +19,7 @@ import {FounderToday} from './founder-today';
 import {AiModels} from './ai-models';
 import {BrainSkills} from './brain-skills';
 import {BrainManager} from './brain-manager';
+import {WorkforceCorrections} from './workforce-corrections';
 import {CompanyNotificationCenter,mergeNotificationPage} from './company-notification-center';
 import {treeCompanyLayout,departmentCompanyLayout,circularDepartmentLayout,withMembership,departmentColors,MAP_VIEWS} from './company-layouts';
 const BASE='/v1/organization/company';
@@ -622,6 +623,7 @@ export function CompanyMap({api,me,data,onRefresh}) {
     <section id="ago-tab-board" className="company-tab-panel" data-tab-panel aria-label="Board and roles" hidden={activeTab!=='ago-tab-board'}>
     <CompanyBoard employees={employees} governance={governanceData} canGovern={me.roles.includes('founder')} onAppoint={appointBoard} onSelect={id=>choose('employee:'+id)}
       onTalk={founderView?seat=>{setTalkRequest({seat,at:Date.now()});openSection('ago-board-room',{updateHash:true});}:undefined}/>
+    {founderView&&<WorkforceCorrections api={api} me={me} employees={employees} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>}
     <CompanyRolePlanner api={api} me={me} employees={employees} departments={departments} profiles={governanceData?.employees??null} board={governanceData?.board||[]} onSaved={async()=>{await refreshGovernance();await onRefresh();}}/>
     </section>
     {founderView&&<section id="ago-tab-brain" className="company-tab-panel" data-tab-panel aria-label="Company Brain" hidden={activeTab!=='ago-tab-brain'}>

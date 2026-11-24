@@ -1630,3 +1630,52 @@ test('Brain: the Founder sees every skill area, searches, learns a missing skill
  await page.screenshot({path:test.info().outputPath('brain.png'),fullPage:true});
  await accessibility(page);expect(errors).toEqual([]);
 });
+
+test('Employee Manager proposes matching designations and a real hierarchy; nothing changes until the Founder approves rows',async({page})=>{
+ const {errors}=await fixtures(page);
+ const u=n=>'60000000-0000-4000-8000-0000000000'+String(n).padStart(2,'0');
+ const [ceo,cqo,qa,tester,engineer]=[1,2,3,4,5].map(u);
+ const staff=[{id:ceo,name:'AGO AI CEO',manager_id:user},{id:cqo,name:'AGO AI CQO',manager_id:ceo},
+  {id:qa,name:'QA Manager',manager_id:ceo},{id:tester,name:'Accessibility Tester',manager_id:ceo},{id:engineer,name:'AI Engineer',manager_id:ceo}]
+  .map(e=>({...e,kind:'ai',department_id:department}));
+ await page.route(/\/v1\/organization\/employees(\?|$)/,route=>route.fulfill({json:[{id:user,name:'Test member',department_id:department,kind:'human'},...staff]}));
+ await page.route('**/v1/organization/company/governance',route=>route.fulfill({json:{
+  board:[{seat:'Strategy & Vision',employee_id:ceo},{seat:'Quality & Release',employee_id:cqo}],
+  employees:[{id:ceo,name:'AGO AI CEO',kind:'ai',role_title:'Chief Executive Officer (CEO)',core_responsibilities:'Own projects'},
+   {id:cqo,name:'AGO AI CQO',kind:'ai',role_title:'Chief Quality Officer (CQO)',core_responsibilities:'Quality'},
+   {id:qa,name:'QA Manager',kind:'ai',role_title:'QA Manager',core_responsibilities:'Independent QA'},
+   {id:tester,name:'Accessibility Tester',kind:'ai',role_title:'QA Manager',core_responsibilities:'x',extra_responsibilities:'Keep this'},
+   {id:engineer,name:'AI Engineer',kind:'ai',role_title:'Research Director',core_responsibilities:'Research governance'}]}}));
+ const writes=[];
+ await page.route(/\/v1\/organization\/company\/employees\/[^/]+\/(role|manager)$/,route=>{
+  const r=route.request();writes.push({path:new URL(r.url()).pathname,method:r.method(),body:r.postDataJSON()});
+  return route.fulfill({json:{}});
+ });
+ await login(page);
+ await openOrganizationLanding(page);
+ await openCompanyTab(page,'Board & Roles');
+ const panel=page.getByRole('region',{name:'Employee Manager: fix designations and reporting'});
+ await expect(panel).toContainText('2 designations and 2 reporting lines to fix');
+ await panel.getByRole('button',{name:'Review the proposal'}).click();
+ const table=panel.getByRole('region',{name:'Proposed workforce corrections'});
+ await expect(table.getByRole('row')).toHaveCount(4);                       // header + 3 employees
+ await expect(table.getByRole('row').nth(1)).toContainText('QA Manager');   // heads first
+ await expect(table).toContainText('Research Director → AI Engineer');
+ await expect(table).toContainText('AGO AI CEO → QA Manager');
+ await expect(table).toContainText('AGO AI CEO → AGO AI CQO');
+ // Nothing is written until the Founder ticks rows and approves.
+ const approve=panel.getByRole('button',{name:/^Approve/});
+ await expect(approve).toBeDisabled();expect(writes).toEqual([]);
+ await panel.getByLabel('Approve change for QA Manager').check();
+ await panel.getByLabel('Approve change for Accessibility Tester').check();
+ await accessibility(page);
+ await panel.getByRole('button',{name:'Approve 2 selected changes'}).click();
+ await expect(panel.getByRole('status')).toContainText('2 approved changes saved. Names, task history and permissions are unchanged.');
+ expect(writes).toEqual([
+  {path:'/v1/organization/company/employees/'+qa+'/manager',method:'PUT',body:{manager_id:cqo}},
+  {path:'/v1/organization/company/employees/'+tester+'/role',method:'PUT',body:{role_title:'Accessibility Tester',
+   core_responsibilities:expect.stringContaining('Independent testing'),extra_responsibilities:'Keep this'}},
+  {path:'/v1/organization/company/employees/'+tester+'/manager',method:'PUT',body:{manager_id:qa}}]);
+ expect(writes.some(w=>w.path.includes(engineer))).toBe(false);              // unticked rows are left alone
+ expect(errors).toEqual([]);
+});

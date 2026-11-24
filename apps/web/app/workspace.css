@@ -856,3 +856,19 @@
 .brain-manager h3{margin:18px 0 8px;font-size:16px}
 .brain-manager-rules{display:grid;gap:6px;margin:0 0 12px;padding-left:20px;color:var(--soft);font-size:14px;line-height:1.5}
 .brain-manager>button.ai-primary{justify-self:start;width:auto}
+
+/* ORG-016: the Employee Manager's correction proposal, approved by the Founder row by row. */
+.workforce-corrections{margin:22px 0;padding:20px;background:#101f38;border:1px solid #415b78;border-radius:14px;color:#e5efff}
+.workforce-corrections h3{margin:0 0 8px}
+.workforce-corrections p,.workforce-corrections small{color:#c1d3e6}
+.workforce-corrections .workforce-note{color:#f9d38d}
+.workforce-corrections button{background:#214d71;color:#fff;border:1px solid #5b9ec8;padding:8px 14px;border-radius:8px;margin:7px 10px 8px 0;cursor:pointer}
+.workforce-corrections button:disabled{opacity:.55;cursor:not-allowed}
+.workforce-corrections button:focus-visible,.workforce-corrections input:focus-visible{outline:3px solid #7fe3c4;outline-offset:2px}
+.workforce-corrections .workforce-approve{background:#143029;border-color:#3f8f7c;color:#d2fbef}
+.workforce-corrections .role-table-wrap{max-height:520px;overflow:auto}
+.workforce-corrections table{width:100%;border-collapse:collapse;font-size:13px}
+.workforce-corrections th,.workforce-corrections td{border-bottom:1px solid #40536d;padding:9px;text-align:left;vertical-align:top}
+.workforce-corrections td small{display:block}
+.workforce-corrections s{color:#9fb2c8}
+.workforce-corrections input[type=checkbox]{width:20px;height:20px;accent-color:#7fe3c4}
