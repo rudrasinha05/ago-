@@ -21,6 +21,7 @@ returned as ``needs_founder`` with a plain reason instead of being guessed.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from contextlib import contextmanager
@@ -31,8 +32,9 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
 from ago.company_engineering import (  # STAGE_FORMATS/missing_stage_labels: used by AI QA
     STAGE_FORMATS, missing_stage_labels, project_test_evidence_text, receipt_text,  # noqa: F401
-    run_candidate_tests, test_runner_available,
+    reviewed_candidate, run_candidate_tests, test_runner_available,
 )
+from ago.development_workspace import edited_candidate, workspace_snapshot
 from ago.organization_store import OrganizationStore
 from ago.plan_execution import PlanExecution
 from ago.stage_progression_queries import StageProgressionQueries
@@ -392,6 +394,67 @@ class StageProgression:
 
     # A 'started' receipt older than this is a crashed/abandoned attempt.
     TEST_STALE_AFTER = timedelta(minutes=10)
+
+    def development_workspace(self, *, tenant_id: str, founder_id: str, project_id: str,
+                              task_id: str, changes: dict | None = None) -> dict:
+        queries = self.repositories.resolve(StageProgressionQueries)
+        with self.db.transaction():
+            # Lock the owned task before reading the edit head, including its first edit.
+            row = queries.select_stage_test_target_22(
+                (tenant_id, project_id, founder_id, task_id)).fetchone()
+            if not row:
+                raise LookupError("Project stage task not found")
+            key = (tenant_id, project_id, task_id, row["run_id"])
+            draft = queries.latest_workspace_revision(key).fetchone()
+            snapshot = workspace_snapshot(row, draft)
+            if changes is None:
+                return snapshot
+            candidate = edited_candidate(snapshot, changes)
+            if candidate["candidate_sha256"] == snapshot["candidate_sha256"]:
+                return snapshot
+            draft = queries.insert_workspace_revision((
+                *key, snapshot["revision"] + 1, json.dumps(candidate), founder_id,
+            )).fetchone()
+            return workspace_snapshot(row, draft)
+
+    def workspace_tests(self, *, tenant_id: str, founder_id: str, project_id: str,
+                        task_id: str, request: dict | None = None) -> dict:
+        from ago.development_workspace import RevisionConflict
+
+        queries = self.repositories.resolve(StageProgressionQueries)
+        with self.db.transaction():
+            current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
+                                                 project_id=project_id, task_id=task_id)
+            key = (tenant_id, project_id, task_id, current["run_id"])
+            history = queries.workspace_test_history(key).fetchall()
+            if request is None:
+                return {"attempts": [dict(item) for item in history]}
+            if set(request) != {"attempt_id", "candidate_sha256", "run_id", "revision"}:
+                raise ValueError("Exact workspace revision and attempt_id required")
+            if any(request[k] != current[k] for k in ("candidate_sha256", "run_id", "revision")):
+                raise RevisionConflict("Workspace changed. Reload before running.")
+            attempt = str(UUID(str(request["attempt_id"])))
+            for item in history:
+                if str(item["attempt_id"]) == attempt:
+                    if item["revision"] != current["revision"]:
+                        raise RevisionConflict("Attempt already belongs to another revision")
+                    return dict(item)
+            if history and not history[0]["finished_at"] and (
+                datetime.now(timezone.utc) - history[0]["started_at"] < self.TEST_STALE_AFTER
+            ):
+                raise RevisionConflict("Another test attempt is in progress")
+            inserted = queries.start_workspace_test((*key, attempt, current["revision"],
+                                                      current["candidate_sha256"])).fetchone()
+            if not inserted:
+                raise RevisionConflict("Attempt already recorded")
+        candidate = reviewed_candidate(json.dumps({
+            "files": current["files"], "acceptance_checks": current["acceptance_checks"],
+        }))
+        receipt = run_candidate_tests(candidate)
+        with self.db.transaction():
+            queries.finish_workspace_test((json.dumps(receipt), *key, attempt))
+        return {"attempt_id": attempt, "revision": current["revision"],
+                "candidate_sha256": current["candidate_sha256"], "receipt": receipt}
 
     def candidate_test(self, *, tenant_id: str, founder_id: str, project_id: str,
                        task_id: str) -> dict:

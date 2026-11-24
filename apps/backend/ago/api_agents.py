@@ -425,3 +425,55 @@ def advance_project(project_id: UUID, db=Depends(db_connection),
         return advance_once(db, actor, repositories, str(project_id))
     except (ValueError, PermissionError, LookupError) as exc:
         translate_error(exc)
+
+
+def _workspace(actor, repositories, project_id, task_id, changes=None, *, tests=False):
+    from ago.development_workspace import RevisionConflict
+
+    allowed(repositories, actor, "approval:founder")
+    allowed(repositories, actor, "agent:read")
+    if "founder" not in actor.roles:
+        raise HTTPException(403, "Founder role required")
+    try:
+        service = repositories.resolve(StageProgressionPort)
+        if tests:
+            if changes is not None:
+                allowed(repositories, actor, "agent:dispatch")
+                if os.getenv("AGO_ENVIRONMENT", "development") not in ("development", "test", "testing"):
+                    raise HTTPException(403, "Local development mode required")
+            return service.workspace_tests(tenant_id=actor.tenant_id, founder_id=actor.subject,
+                                           project_id=str(project_id), task_id=str(task_id),
+                                           request=changes)
+        return service.development_workspace(
+            tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id),
+            task_id=str(task_id), changes=changes)
+    except RevisionConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (LookupError, ValueError, PermissionError) as exc:
+        translate_error(exc)
+
+
+@router.get("/projects/{project_id}/tasks/{task_id}/workspace")
+def read_workspace(project_id: UUID, task_id: UUID, actor: Principal = Depends(authenticated),
+                   repositories: RepositoryScope = Depends(repository_scope)):
+    return _workspace(actor, repositories, project_id, task_id)
+
+
+@router.put("/projects/{project_id}/tasks/{task_id}/workspace")
+def save_workspace(project_id: UUID, task_id: UUID, changes: dict,
+                   actor: Principal = Depends(authenticated),
+                   repositories: RepositoryScope = Depends(repository_scope)):
+    return _workspace(actor, repositories, project_id, task_id, changes)
+
+
+@router.get("/projects/{project_id}/tasks/{task_id}/workspace/tests")
+def workspace_history(project_id: UUID, task_id: UUID, actor: Principal = Depends(authenticated),
+                      repositories: RepositoryScope = Depends(repository_scope)):
+    return _workspace(actor, repositories, project_id, task_id, tests=True)
+
+
+@router.post("/projects/{project_id}/tasks/{task_id}/workspace/tests")
+def test_workspace_revision(project_id: UUID, task_id: UUID, request: dict,
+                            actor: Principal = Depends(authenticated),
+                            repositories: RepositoryScope = Depends(repository_scope)):
+    return _workspace(actor, repositories, project_id, task_id, request, tests=True)

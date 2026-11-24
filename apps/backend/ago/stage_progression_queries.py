@@ -302,3 +302,36 @@ class StageProgressionQueries:
                ORDER BY c.finished_at DESC LIMIT 1""",
             parameters,
         )
+
+    def latest_workspace_revision(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT revision,candidate FROM ago_workspace_revisions
+               WHERE tenant_id=%s AND project_id=%s AND task_id=%s AND run_id=%s
+               ORDER BY revision DESC LIMIT 1""", parameters)
+
+    def insert_workspace_revision(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """INSERT INTO ago_workspace_revisions
+               (tenant_id,project_id,task_id,run_id,revision,candidate,edited_by)
+               VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s) RETURNING revision,candidate""",
+            parameters)
+
+    def workspace_test_history(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """SELECT attempt_id,revision,candidate_sha256,started_at,finished_at,receipt
+               FROM ago_workspace_test_runs
+               WHERE tenant_id=%s AND project_id=%s AND task_id=%s AND run_id=%s
+               ORDER BY started_at DESC LIMIT 50""", parameters)
+
+    def start_workspace_test(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """INSERT INTO ago_workspace_test_runs
+               (tenant_id,project_id,task_id,run_id,attempt_id,revision,candidate_sha256)
+               VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING attempt_id""",
+            parameters)
+
+    def finish_workspace_test(self, parameters: Any = None) -> Cursor:
+        return self.connection.execute(
+            """UPDATE ago_workspace_test_runs SET receipt=%s::jsonb,finished_at=clock_timestamp()
+               WHERE tenant_id=%s AND project_id=%s AND task_id=%s AND run_id=%s
+                 AND attempt_id=%s AND receipt IS NULL RETURNING receipt""", parameters)
