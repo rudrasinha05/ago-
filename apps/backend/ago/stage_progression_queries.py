@@ -27,7 +27,7 @@ class StageProgressionQueries:
                 AND l.intake_id=i.id
                JOIN ago_employees m ON m.tenant_id=l.tenant_id
                 AND m.id=l.accountable_manager_id
-               WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
+               WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
                FOR UPDATE OF i,p""",
             parameters,
         )
@@ -74,7 +74,7 @@ class StageProgressionQueries:
                LEFT JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
                LEFT JOIN ago_plan_steps ps ON ps.tenant_id=s.tenant_id AND ps.id=s.plan_step_id
                LEFT JOIN ago_task_reviews q ON q.tenant_id=ps.tenant_id AND q.task_id=ps.task_id
-               WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s AND s.stage=%s
+               WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s AND i.founder_id=%s AND s.stage=%s
                FOR UPDATE OF i""", parameters)
 
     def select_followup_owners_11(self, parameters: Any = None) -> Cursor:
@@ -251,7 +251,7 @@ class StageProgressionQueries:
                JOIN ago_governed_tasks t ON t.tenant_id=ps.tenant_id AND t.id=ps.task_id
                LEFT JOIN ago_agent_runs r ON r.tenant_id=t.tenant_id AND r.task_id=t.id
                LEFT JOIN ago_stage_candidate_tests c ON c.tenant_id=t.tenant_id AND c.task_id=t.id
-               WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s AND t.id=%s
+               WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s AND i.founder_id=%s AND t.id=%s
                FOR UPDATE OF t""",
             parameters,
         )

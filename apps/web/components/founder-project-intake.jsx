@@ -17,6 +17,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
  const [busy,setBusy]=useState(false),[reviewBusy,setReviewBusy]=useState(false),[error,setError]=useState(''),[failure,setFailure]=useState(null);
  const [ceoBusy,setCeoBusy]=useState(false),[ceoNotice,setCeoNotice]=useState('');
  const [managerNotice,setManagerNotice]=useState('');
+ const [deleted,setDeleted]=useState([]),[deleting,setDeleting]=useState(false);
  const retry=useRef(null),detailEpoch=useRef(0);
  const isFounder=me.roles?.includes('founder')&&me.permissions?.includes('brain:manage');
  const refresh=useCallback(async()=>{
@@ -34,7 +35,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
    }).catch(e=>{if(live&&version===detailEpoch.current)setProjectError(e.message||'Project details unavailable.');});
   return()=>{live=false;};
  },[api,isFounder,requestedProject]);
- const visibleProjects=requestedProject&&!projects?.some(p=>p.id===requestedProject.project_id)
+ const visibleProjects=requestedProject&&!deleted.includes(requestedProject.project_id)&&!projects?.some(p=>p.id===requestedProject.project_id)
   ? [{id:requestedProject.project_id,title:requestedProject.title,plan_status:requestedProject.plan_status,
       accountable_manager_name:requestedProject.manager,staffing_gaps:'Not checked',
       commercial_stage:'Not verified',verified_revenue_inr:null},...(projects||[])] : projects;
@@ -54,6 +55,19 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
   try{const batch=await api.request('/v1/organization/company/projects?limit=50&offset='+projects.length);
     setProjects(old=>[...(old||[]),...batch]);setHasMore(batch.length===50);
   }catch(e){setProjectError(e.message||'Could not fetch project page.');}finally{setMoreBusy(false);}
+ }
+ async function deleteProject(project){
+  if(deleting||!window.confirm('Delete "'+project.title+'" from AGO? Its audit history is retained.'))return;
+  setDeleting(true);setProjectError('');
+  try{
+   const result=await api.request('/v1/organization/company/projects/'+encodeURIComponent(project.id),{method:'DELETE'});
+   if(result?.deleted!==true||result.project_id!==project.id)throw new Error('Deletion could not be verified.');
+   detailEpoch.current++;
+   setDeleted(ids=>[...ids,project.id]);setSelectedProject(null);setProjectDetail(null);
+   setProjects(rows=>rows?.filter(row=>row.id!==project.id));setCreated(row=>row?.id===project.id?null:row);
+   await refresh();onChanged?.();
+  }catch(e){setProjectError(e.message||'Unable to delete this project.');}
+  finally{setDeleting(false);}
  }
  async function inspectProject(project){
   const version=++detailEpoch.current;
@@ -210,6 +224,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
        <div className="project-portfolio-details">
         {!projectDetail?<p>{projectError?'Project details unavailable.':'Loading live project details…'}</p>:<>
          <h4>{projectDetail.title}</h4>
+         <button type="button" disabled={deleting} onClick={()=>deleteProject(projectDetail)}>Delete project</button>
          {projectDetail.plan_status==='draft'&&(projectDetail.stages||[]).some(s=>s.plan_step_id)&&
           <button type="button" disabled={reviewBusy} onClick={()=>submitForReview(projectDetail)}>
            {reviewBusy?'Submitting…':'Submit saved plan for founder approval'}
@@ -248,7 +263,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
           <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no QA verdict'}</small>
           <small>Delegated stage worker: {st.approved_assignee_name||'Awaiting authorized personnel decision'} {st.delegated_at?'· applied '+new Date(st.delegated_at).toLocaleString():''}</small>
           <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
-          {st.task_id&&st.stage==='implementation'&&st.agent_run_status==='completed'&&<DevelopmentWorkspace key={projectDetail.id+st.task_id} api={api} project={projectDetail.id} stage={st}/>}
+          {st.task_id&&st.stage==='implementation'&&st.agent_run_status==='completed'&&<DevelopmentWorkspace key={projectDetail.id+st.task_id} api={api} project={projectDetail.id} goal={projectDetail.goal_id} stage={st}/>}
           {st.founder_agent_result?.kind==='local_company_governed_handoff'&&
            <details className="ago-ai-chain">
             <summary>Ollama Board → PM → employee · {st.founder_agent_result.roles_completed}/{st.founder_agent_result.roles_expected||4} recorded AI passes · Quality verification pending</summary>

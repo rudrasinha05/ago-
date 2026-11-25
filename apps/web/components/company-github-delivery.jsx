@@ -10,6 +10,29 @@ function Steps({row,label}){
    <span aria-hidden="true"/>{s.title}<small>{STEP_STATE[s.state]}</small></li>)}</ol>;
 }
 
+function DraftRequest({api,project,row,onChanged}){
+ const [error,setError]=useState(''),[sent,setSent]=useState(false),[busy,setBusy]=useState(false);
+ const key=useRef(null);
+ const status=project.status;
+ const names=[...new Set([...(status.ci_check_runs||[]).map(c=>c.name),...(status.ci_statuses||[]).map(c=>c.context)])];
+ if(!row.approved||!row.committed||row.commitSha!==status.develop_sha||!verifiedGitHubChecks(status,names))return null;
+ async function propose(){
+  setBusy(true);setError('');
+  try{
+   key.current??=crypto.randomUUID();
+   const ledger=await api.request('/v1/enterprise/reviews/integration');
+   const operation={id:key.current,project_id:project.id,operation:'create_pull_request',payload:{
+    expected_sha:row.commitSha,required_checks:names,title:'Review '+project.repository+' development changes',
+    body:'AGO commit '+row.commitSha+' passed the recorded GitHub checks. Requesting independent review.'}};
+   await api.request('/v1/enterprise/reviews/integration/propose',{method:'POST',body:{
+    command:'github_operation',specification:operation,operation_key:operation.id,base_revision:ledger.revision,
+    rationale:'Prepare a draft PR for the reviewed commit '+row.commitSha}});
+   setSent(true);await onChanged();
+  }catch(e){setError(e.message);}finally{setBusy(false);}
+ }
+ return <div><button disabled={busy||sent} onClick={propose}>{sent?'Draft PR proposed':'Propose draft PR for this commit'}</button>{error&&<p role="alert">{error}</p>}</div>;
+}
+
 /** Read authenticated evidence only; backend remains the sole approval/write authority. */
 export function CompanyGithubDelivery({api,me}){
  const [projects,setProjects]=useState(null);
@@ -127,6 +150,7 @@ export function CompanyGithubDelivery({api,me}){
        <Steps row={row} label={row.label}/>
        <small>Approval: {row.approved?'independently approved':'not independently approved'} · GitHub: {row.dispatch.replaceAll('_',' ')}</small>
        {row.committed&&<small>Verified commit: <code>{row.commitSha}</code></small>}
+       {row.committed&&!proposals.some(p=>p.specification?.project_id===project.id&&p.specification?.operation==='create_pull_request'&&p.specification?.payload?.expected_sha===row.commitSha)&&<DraftRequest key={row.commitSha} api={api} project={project} row={row} onChanged={refresh}/>}
        {row.prUrl&&<a href={row.prUrl} target="_blank" rel="noreferrer">Open verified draft PR ↗</a>}
        {row.blocker&&<small>{row.blocker}</small>}
        {row.eligibleExecute&&<button type="button" disabled={Boolean(busy)} onClick={()=>request('execute',project,{

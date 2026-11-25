@@ -418,6 +418,10 @@
         "scan_opportunities": {
           "arguments": "self, tenant_id: str",
           "returns": "dict"
+        },
+        "delete_project": {
+          "arguments": "self, actor, project_id: str",
+          "returns": "dict"
         }
       }
     },

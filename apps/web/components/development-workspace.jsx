@@ -11,12 +11,13 @@ function Highlight({value}){
  return tokens.map((token,i)=>i%2?<span key={i} className={token.startsWith('#')||token.startsWith('//')?styles.comment:/^["']/.test(token)?styles.str:styles.keyword}>{token}</span>:token);
 }
 
-export function DevelopmentWorkspace({api,project,stage}){
+export function DevelopmentWorkspace({api,project,goal,stage}){
  const root='/v1/agents/projects/'+encodeURIComponent(project)+'/tasks/'+encodeURIComponent(stage.task_id)+'/workspace';
  const [open,setOpen]=useState(false),[snapshot,setSnapshot]=useState(null),[files,setFiles]=useState([]);
  const [path,setPath]=useState(''),[busy,setBusy]=useState(''),[error,setError]=useState('');
  const [runs,setRuns]=useState([]),[tests,setTests]=useState([]),[review,setReview]=useState('');
  const [reviewer,setReviewer]=useState(''),[target,setTarget]=useState(''),[sha,setSha]=useState('');
+ const [repos,setRepos]=useState([]);
  const [message,setMessage]=useState(''),[operation,setOperation]=useState(null),[notice,setNotice]=useState('');
  const [newFile,setNewFile]=useState(''),[autoRepair,setAutoRepair]=useState(false);
  const paint=useRef(null),alive=useRef(false),lock=useRef(false);
@@ -80,14 +81,18 @@ export function DevelopmentWorkspace({api,project,stage}){
  <label>QA reviewer ID <input value={reviewer} onChange={e=>setReviewer(e.target.value.trim())}/></label>
  <button disabled={disabled||!reviewer||latest?.receipt?.status!=='passed'} onClick={()=>action('Requesting QA',async()=>{const r=await api.request(root+'/tests/'+latest.attempt_id+'/review/'+encodeURIComponent(reviewer),send({}));setReview(r.id);setNotice('QA requested. Share the review ID with the assigned reviewer.');})}>Request independent QA</button>
  <label>Review ID <input value={review} onChange={e=>{setReview(e.target.value.trim());setOperation(null);}}/></label>
- <label>Registered GitHub project ID <input value={target} onChange={e=>{setTarget(e.target.value.trim());setOperation(null);}}/></label>
- <label>Expected develop commit SHA <input value={sha} onChange={e=>{setSha(e.target.value.trim());setOperation(null);}}/></label>
+ <button disabled={!!busy} onClick={()=>action('Loading repositories',async()=>{
+ const catalog=await api.request('/v1/platform/catalog');const linked=(catalog.github_projects||[]).map(x=>x.payload||x).filter(x=>goal&&x.goal_id===goal&&x.enabled===true);
+ setRepos(linked);setTarget('');setSha('');setOperation(null);if(!linked.length)setNotice('No approved private GitHub repository is linked to this project goal.');
+ })}>Load linked repositories</button>
+ <label>GitHub repository <select disabled={!!busy} value={target} onChange={e=>{const dest=e.target.value;setTarget(dest);setSha('');setOperation(null);if(dest)action('Reading develop',async()=>{const state=await api.request('/v1/platform/github/projects/'+encodeURIComponent(dest)+'/status');if(state.repository_private!==true||state.project_id!==dest)throw new Error('Private repository binding could not be confirmed');setSha(state.develop_sha||'');});}}><option value="">Select repository</option>{repos.map(r=><option key={r.id} value={r.id}>{r.repository}</option>)}</select></label>
+ {sha&&<p>Expected develop commit <code>{sha}</code></p>}
  <label>Commit message <input value={message} onChange={e=>{setMessage(e.target.value);setOperation(null);}}/></label>
  <button disabled={disabled||!review||!target||!message||!/^[a-f0-9]{40}$/.test(sha)} onClick={()=>action('Preparing handoff',async()=>{
  const packet=await api.request(reviews+encodeURIComponent(review));
  if(packet.project_id!==project||packet.task_id!==stage.task_id||packet.candidate_sha256!==snapshot.candidate_sha256)throw new Error('Review belongs to a different workspace revision');
  const r=await api.request(reviews+encodeURIComponent(review)+'/github-handoff/'+encodeURIComponent(target)+'/'+uid(),send({expected_sha:sha,message}));setOperation(r.github_operation);})}>Prepare reviewed commit</button>
- {operation&&<button disabled={disabled} onClick={()=>action('Submitting proposal',async()=>{const r=await api.request('/v1/enterprise/reviews/integration');await api.request('/v1/enterprise/reviews/integration/propose',send({command:'github_operation',specification:operation,operation_key:'workspace:'+operation.id,base_revision:r.revision,rationale:'Workspace revision '+snapshot.revision+' passed independent QA '+review}));setNotice('Commit proposal submitted. Continue in GitHub delivery.');setOperation(null);})}>Submit for GitHub approval</button>}</details></section>;
+ {operation&&<button disabled={disabled} onClick={()=>action('Submitting proposal',async()=>{const r=await api.request('/v1/enterprise/reviews/integration');await api.request('/v1/enterprise/reviews/integration/propose',send({command:'github_operation',specification:operation,operation_key:operation.id,base_revision:r.revision,rationale:'Workspace revision '+snapshot.revision+' passed independent QA '+review}));setNotice('Commit proposal submitted. Continue in GitHub delivery.');setOperation(null);})}>Submit for GitHub approval</button>}</details></section>;
 }
 
 export function WorkspaceReview({api}){

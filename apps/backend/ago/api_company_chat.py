@@ -435,6 +435,22 @@ def founder_project_staffing_proposals(
         translate_error(exc)
 
 
+@router.delete('/projects/{project_id}')
+def delete_founder_project(project_id: UUID, actor=Depends(authenticated),
+                          repositories=Depends(repository_scope)):
+    allowed(repositories,actor,'brain:manage')
+    with repositories.resolve(StageProgressionPort).advance_guard(
+            tenant_id=actor.tenant_id, project_id=str(project_id)) as acquired:
+        if not acquired:
+            raise HTTPException(409, 'Project is advancing. Try again after this step finishes.')
+        try:
+            return repositories.resolve(CompanyChatPort).delete_project(actor,str(project_id))
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except (PermissionError,LookupError) as exc:
+            translate_error(exc)
+
+
 @router.get('/projects/{project_id}')
 def founder_project_details(project_id: UUID,actor=Depends(authenticated),
                             repositories=Depends(repository_scope)):

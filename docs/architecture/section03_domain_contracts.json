@@ -357,6 +357,7 @@
       "ago_notification_read_cursors",
       "ago_personnel_events",
       "ago_plan_steps",
+      "ago_project_deletions",
       "ago_project_followups",
       "ago_project_stage_delegation_activations",
       "ago_project_stage_delegation_proposals",
@@ -365,7 +366,9 @@
       "ago_task_reviews",
       "ago_tenants",
       "ago_user_roles",
-      "ago_users"
+      "ago_users",
+      "ago_workspace_terminal",
+      "ago_workspace_test_runs"
     ],
     "company_engineering": [],
     "company_engineering_preflight": [

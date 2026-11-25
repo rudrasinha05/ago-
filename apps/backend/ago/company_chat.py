@@ -966,7 +966,7 @@ class CompanyChat:
             JOIN ago_users u ON u.tenant_id=i.tenant_id AND u.id=i.founder_id AND u.active
             JOIN ago_employees founder ON founder.tenant_id=u.tenant_id
                  AND founder.id=u.id AND founder.kind='human'
-            WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
+            WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
         """,(actor.tenant_id,project_id,actor.subject)).fetchone()
         if project is None or project["status"] != "active":
             raise PermissionError('Founder-owned active approved project required')
@@ -1124,7 +1124,7 @@ class CompanyChat:
                 JOIN ago_strategy_plans p ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
                 LEFT JOIN ago_approval_requests a
                    ON a.tenant_id=p.tenant_id AND a.id=p.approval_id
-                WHERE i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
+                WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
             """, (actor.tenant_id,project_id)).fetchone()
             if not project:
                 raise LookupError('Founder project unavailable')
@@ -1719,8 +1719,10 @@ class CompanyChat:
                 JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
                 JOIN ago_employees e ON e.tenant_id=l.tenant_id
                   AND e.id=l.accountable_manager_id
-                WHERE i.tenant_id=%s AND i.id=%s
+                WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s
             """, (actor.tenant_id,intake_id)).fetchone()
+            if row is None:
+                raise ValueError("The original project has been deleted")
             steps = self.db.execute("""
                 SELECT s.position,s.stage,s.deliverable,s.suggested_assignee_id,
                        s.plan_step_id,e.name AS suggested_assignee_name
@@ -1752,6 +1754,37 @@ class CompanyChat:
                 'staffing_required':s['suggested_assignee_id'] is None,
             } for s in steps],
         }
+
+    def delete_project(self, actor, project_id: str) -> dict:
+        """Remove the owned project from the portfolio, retaining its audit history."""
+        if 'founder' not in actor.roles:
+            raise PermissionError('Only the Founder can delete a project')
+        key = (actor.tenant_id, project_id)
+        with self.db.transaction():
+            row = self.db.execute("""
+                SELECT id,plan_id FROM ago_founder_intakes
+                WHERE tenant_id=%s AND id=%s AND founder_id=%s FOR UPDATE
+            """, (*key, actor.subject)).fetchone()
+            if not row:
+                raise LookupError('Project not found')
+            busy = self.db.execute("""
+                SELECT EXISTS (
+                  SELECT 1 FROM ago_agent_runs r JOIN ago_plan_steps s
+                    ON s.tenant_id=r.tenant_id AND s.task_id=r.task_id
+                  WHERE r.tenant_id=%s AND s.plan_id=%s AND r.status='running'
+                  UNION ALL SELECT 1 FROM ago_workspace_terminal
+                    WHERE tenant_id=%s AND project_id=%s AND finished_at IS NULL
+                  UNION ALL SELECT 1 FROM ago_workspace_test_runs
+                    WHERE tenant_id=%s AND project_id=%s AND finished_at IS NULL
+                ) AS active
+            """, (actor.tenant_id,row['plan_id'],*key,*key)).fetchone()
+            if busy['active']:
+                raise ValueError('Stop the running command or wait for the active project run to finish')
+            self.db.execute("""
+                INSERT INTO ago_project_deletions(tenant_id,project_id,deleted_by)
+                VALUES (%s,%s,%s) ON CONFLICT (tenant_id,project_id) DO NOTHING
+            """, (*key, actor.subject))
+        return {'project_id': project_id, 'deleted': True}
 
     def projects(self, tenant_id: str, limit: int = 30, offset: int = 0,
                  reader_id: str | None = None) -> list[dict]:
@@ -1799,7 +1832,7 @@ class CompanyChat:
                  AND l.intake_id=i.id
             JOIN ago_employees e ON e.tenant_id=l.tenant_id
                  AND e.id=l.accountable_manager_id
-            WHERE i.tenant_id=%s
+            WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s
               AND (
                 i.founder_id=%s
                 OR l.accountable_manager_id=%s
@@ -1831,13 +1864,13 @@ class CompanyChat:
                 SELECT t.id,t.status,t.assignee_id FROM ago_governed_tasks t
                 JOIN ago_plan_steps s ON s.tenant_id=t.tenant_id AND s.task_id=t.id
                 JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id AND i.plan_id=s.plan_id
-                WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
+                WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
                 ORDER BY t.id FOR UPDATE OF t
             """, (actor.tenant_id,project_id,actor.subject)).fetchall()
             project = self.db.execute("""
                 SELECT l.accountable_manager_id FROM ago_founder_project_lead l
                 JOIN ago_founder_intakes i ON i.tenant_id=l.tenant_id AND i.id=l.intake_id
-                WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
+                WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s AND i.founder_id=%s
                 FOR UPDATE OF l,i
             """, (actor.tenant_id,project_id,actor.subject)).fetchone()
             if project is None:
@@ -1881,7 +1914,7 @@ class CompanyChat:
                     SELECT 1 FROM ago_agent_runs r
                     JOIN ago_plan_steps s ON s.tenant_id=r.tenant_id AND s.task_id=r.task_id
                     JOIN ago_founder_intakes i ON i.tenant_id=s.tenant_id AND i.plan_id=s.plan_id
-                    WHERE i.tenant_id=%s AND i.id=%s AND r.status='running'
+                    WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s AND r.status='running'
                 """, (actor.tenant_id,project_id)).fetchone()
                 if running or any(t['status'] == 'running' for t in tasks):
                     raise ValueError('Wait for running project work to stop before changing manager')
@@ -1905,7 +1938,7 @@ class CompanyChat:
             raise PermissionError('Authenticated project reader required')
         UUID(reader_id)
         row = self.db.execute("""
-            SELECT i.id,i.title,i.brief,i.created_at,i.plan_id,p.status AS plan_status,
+            SELECT i.id,i.title,i.brief,i.created_at,i.goal_id,i.plan_id,p.status AS plan_status,
                    l.accountable_manager_id,e.name AS accountable_manager_name,
                    e.role_title AS accountable_manager_role,l.assigned_at,
                    l.assignment_source,l.commercial_objective,l.commercial_stage,
@@ -1915,7 +1948,7 @@ class CompanyChat:
             JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
             JOIN ago_employees e ON e.tenant_id=l.tenant_id
               AND e.id=l.accountable_manager_id
-            WHERE i.tenant_id=%s AND i.id=%s
+            WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s
               AND (
                 i.founder_id=%s OR l.accountable_manager_id=%s
                 OR EXISTS (
@@ -2102,7 +2135,7 @@ class CompanyChat:
                 JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
                 JOIN ago_founder_intake_stages s ON s.tenant_id=i.tenant_id
                   AND s.intake_id=i.id AND s.stage=%s
-                WHERE i.tenant_id=%s AND i.id=%s AND i.founder_id=%s FOR UPDATE OF i
+                WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s AND i.founder_id=%s FOR UPDATE OF i
             """, (stage, tenant_id, project_id, founder_id)).fetchone()
             if row is None or row['status'] != 'active':
                 raise PermissionError('Founder-owned active approved project required')
@@ -2363,7 +2396,7 @@ class CompanyChat:
                   ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
                 JOIN ago_founder_project_lead l
                   ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
-                WHERE i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
+                WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
             """,(actor.tenant_id,project_id)).fetchone()
             if project is None:
                 raise LookupError('Project does not exist in founder company')
@@ -2449,7 +2482,7 @@ class CompanyChat:
                   ON p.tenant_id=i.tenant_id AND p.id=i.plan_id
                 JOIN ago_founder_project_lead l
                   ON l.tenant_id=i.tenant_id AND l.intake_id=i.id
-                WHERE i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
+                WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s FOR UPDATE OF i
             """,(actor.tenant_id,project_id)).fetchone()
             if project is None:
                 raise LookupError('Project unavailable')
@@ -2528,7 +2561,7 @@ class CompanyChat:
             SELECT 1 FROM ago_founder_intakes i
             JOIN ago_founder_project_lead l ON l.tenant_id=i.tenant_id
               AND l.intake_id=i.id
-            WHERE i.tenant_id=%s AND i.id=%s
+            WHERE ago_project_is_open(i.tenant_id,i.id) AND i.tenant_id=%s AND i.id=%s
               AND (i.founder_id=%s OR l.accountable_manager_id=%s
                 OR EXISTS(
                   SELECT 1 FROM ago_project_stage_delegation_activations a

@@ -233,3 +233,23 @@ def test_implementation_and_qa_worker_must_be_independent_at_proposal(case):
       SELECT 1 FROM ago_project_stage_delegation_proposals
       WHERE tenant_id=%s AND intake_id=%s AND stage='quality'
     """,(ctx["tenant"],project["id"])).fetchone() is None
+
+
+def test_delete_project_is_founder_only_idempotent_and_retains_audit(case):
+    client, headers, info = case
+    founder = headers["founder"]
+    dept = department(client, founder)
+    employee(client, founder, dept)
+    payload = {"brief": "Build a departmental event registration service.", "operation_key": str(uuid4())}
+    project = post(client, BASE+"/projects/start", founder, payload)
+    path = BASE+"/projects/"+project["id"]
+    assert client.delete(path, headers=headers["reviewer"]).status_code == 403
+    for _ in range(2):
+        response = client.delete(path, headers=founder)
+        assert response.status_code == 200, response.text
+        assert response.json() == {"project_id": project["id"], "deleted": True}
+    assert client.get(path, headers=founder).status_code == 404
+    assert all(p["id"] != project["id"] for p in client.get(BASE+"/projects", headers=founder).json())
+    record = info["db"].execute("SELECT deleted_by FROM ago_project_deletions WHERE project_id=%s",
+                                (project["id"],)).fetchone()
+    assert str(record["deleted_by"]) == str(info["founder_id"])
