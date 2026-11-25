@@ -2070,7 +2070,7 @@
           "returns": "dict"
         },
         "development_workspace": {
-          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str, changes: dict | None=None",
+          "arguments": "self, *, tenant_id: str, founder_id: str, project_id: str, task_id: str, changes: dict | None=None, repair: dict | None=None",
           "returns": "dict"
         },
         "workspace_terminal": {

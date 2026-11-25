@@ -15,7 +15,7 @@ from ago.backend_contracts import RepositoryScope
 from ago.model_handlers import local_model_unavailable, optional_model_handlers
 from ago.repository_ports import (
     AgentRuntimePort, AiQaReviewPort, CalendarStorePort, CompanyChatPort,
-    ConsoleServicePort, StageProgressionPort,
+    ConsoleServicePort, IntegrationStorePort, StageProgressionPort,
 )
 from ago.security import Principal
 from ago.stage_progression import STAGES, RevisionConflict, next_step
@@ -432,7 +432,7 @@ def advance_project(project_id: UUID, db=Depends(db_connection),
         translate_error(exc)
 
 
-def _workspace(actor, repositories, project_id, task_id, changes=None, *, tests=False, terminal=False, stop=None):
+def _workspace(actor, repositories, project_id, task_id, changes=None, *, tests=False, terminal=False, stop=None, repair=None):
     allowed(repositories, actor, "approval:founder")
     allowed(repositories, actor, "agent:read")
     if "founder" not in actor.roles:
@@ -452,7 +452,7 @@ def _workspace(actor, repositories, project_id, task_id, changes=None, *, tests=
                                            request=changes)
         return service.development_workspace(
             tenant_id=actor.tenant_id, founder_id=actor.subject, project_id=str(project_id),
-            task_id=str(task_id), changes=changes)
+            task_id=str(task_id), changes=changes, repair=repair)
     except RevisionConflict as exc:
         raise HTTPException(409, str(exc)) from exc
     except (LookupError, ValueError, PermissionError) as exc:
@@ -526,7 +526,11 @@ def repair_workspace(project_id: UUID, task_id: UUID, attempt_id: UUID,
     except (OSError, RuntimeError) as exc:
         raise HTTPException(503, "Local repair inference unavailable") from exc
     revised = _workspace(actor, repositories, project_id, task_id, {
-        "run_id": current["run_id"], "expected_revision": current["revision"], "files": files})
+        "run_id": current["run_id"], "expected_revision": current["revision"], "files": files}, repair={
+            "provider": "ollama_local", "model": os.environ["AGO_LLM_MODEL"],
+            "failed_attempt_id": str(attempt_id), "parent_revision": current["revision"],
+            "parent_sha256": current["candidate_sha256"],
+        })
     test = {k: revised[k] for k in ("run_id", "revision", "candidate_sha256")}
     test["attempt_id"] = str(uuid4())
     return {"workspace": revised, "test": _workspace(actor, repositories, project_id,
@@ -577,7 +581,23 @@ def workspace_handoff(review_id: UUID, github_project_id: UUID, operation_id: UU
     if set(request) != {"expected_sha", "message"}:
         raise HTTPException(400, "Expected develop SHA and commit message required")
     try:
-        return repositories.resolve(StageProgressionPort).workspace_handoff(
+        service = repositories.resolve(StageProgressionPort)
+        packet = service.workspace_review(tenant_id=actor.tenant_id, actor_id=actor.subject,
+                                          review_id=str(review_id))
+        project = repositories.resolve(CompanyChatPort).project_details(
+            actor.tenant_id, str(packet["project_id"]), reader_id=actor.subject)
+        github = repositories.resolve(IntegrationStorePort)
+        registered = [row["payload"] for row in github.catalog(actor=actor)["github_projects"]
+                      if str(row["payload"]["id"]) == str(github_project_id)]
+        if (len(registered) != 1 or registered[0].get("enabled") is not True
+                or str(registered[0]["goal_id"]) != str(project["goal_id"])):
+            raise PermissionError("GitHub destination must be linked to the reviewed project")
+        status = github.github_status(actor=actor, project_id=str(github_project_id))
+        if status.get("repository_private") is not True or str(status.get("project_id")) != str(github_project_id):
+            raise PermissionError("Private GitHub repository binding required")
+        if status.get("develop_sha") != request["expected_sha"]:
+            raise RevisionConflict("GitHub develop moved. Reload before preparing a commit.")
+        return service.workspace_handoff(
             tenant_id=actor.tenant_id, founder_id=actor.subject, review_id=str(review_id),
             github_project_id=str(github_project_id), operation_id=str(operation_id), **request)
     except RevisionConflict as exc:

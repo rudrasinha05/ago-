@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from 'react';
+import {verifyWorkspaceDelivery} from './workspace-verification';
 import styles from './development-workspace.module.css';
 
 const reviews='/v1/agents/workspace-reviews/';
@@ -86,6 +87,16 @@ export function DevelopmentWorkspace({api,project,goal,stage}){
  setRepos(linked);setTarget('');setSha('');setOperation(null);if(!linked.length)setNotice('No approved private GitHub repository is linked to this project goal.');
  })}>Load linked repositories</button>
  <label>GitHub repository <select disabled={!!busy} value={target} onChange={e=>{const dest=e.target.value;setTarget(dest);setSha('');setOperation(null);if(dest)action('Reading develop',async()=>{const state=await api.request('/v1/platform/github/projects/'+encodeURIComponent(dest)+'/status');if(state.repository_private!==true||state.project_id!==dest)throw new Error('Private repository binding could not be confirmed');setSha(state.develop_sha||'');});}}><option value="">Select repository</option>{repos.map(r=><option key={r.id} value={r.id}>{r.repository}</option>)}</select></label>
+ <button disabled={disabled||!review||!target} onClick={()=>action('Verifying delivery',async()=>{
+ const [workspace,history,packet,catalog,ledger,status]=await Promise.all([
+  api.request(root),api.request(root+'/tests'),api.request(reviews+encodeURIComponent(review)),
+  api.request('/v1/platform/catalog'),api.request('/v1/enterprise/reviews/integration'),
+  api.request('/v1/platform/github/projects/'+encodeURIComponent(target)+'/status')]);
+ const registered=catalog.github_projects.map(x=>x.payload).find(x=>x.id===target);
+ const result=verifyWorkspaceDelivery({project,task:stage.task_id,goal,workspace,attempts:history.attempts,
+  review:packet,registered,status,catalog,proposals:ledger.proposals});
+ setNotice('Verified revision '+result.revision+' repaired by '+result.model+' and delivered at '+result.sha+' · '+result.url);
+ })}>Verify repair through draft PR</button>
  {sha&&<p>Expected develop commit <code>{sha}</code></p>}
  <label>Commit message <input value={message} onChange={e=>{setMessage(e.target.value);setOperation(null);}}/></label>
  <button disabled={disabled||!review||!target||!message||!/^[a-f0-9]{40}$/.test(sha)} onClick={()=>action('Preparing handoff',async()=>{

@@ -143,3 +143,27 @@ test('delivery steps come only from recorded state and never skip the independen
  assert.deepEqual(states({proposalId:'p',approved:true,dispatch:'failed'}),['done','done','done','done','blocked']);
  assert.deepEqual(states({proposalId:'p',approved:true,dispatch:'succeeded',committed:true}),['done','done','done','done','done']);
 });
+
+import {verifyWorkspaceDelivery} from '../apps/web/components/workspace-verification.js';
+
+test('workspace verification requires matching failure, repair, QA, commit, CI and PR evidence',()=>{
+ const sha='f'.repeat(64),goal=uuid(21),task=uuid(22),run=uuid(23);
+ const repair={provider:'ollama_local',model:'local-test',parent_revision:0,parent_sha256:'e'.repeat(64),failed_attempt_id:uuid(24)};
+ const receipt={candidate_sha256:sha,status:'passed',tests_executed:true,tests_passed:true,docker_exit_code:0,unittest_cases:1};
+ const workspace={candidate_sha256:sha,revision:1,repair,run_id:run,files:commit.payload.files};
+ const review={id:uuid(26),project_id:uuid(20),task_id:task,run_id:run,revision:1,candidate_sha256:sha,
+  reviewer_id:uuid(27),candidate:workspace,verdict:'pass',receipt};
+ const args={project:review.project_id,task,goal,workspace,review,registered:{...project,enabled:true,goal_id:goal},
+  attempts:[{attempt_id:repair.failed_attempt_id,revision:0,candidate_sha256:repair.parent_sha256,
+   receipt:{candidate_sha256:repair.parent_sha256,status:'failed',tests_executed:true}},{revision:1,candidate_sha256:sha,receipt}],
+  catalog:{github_operations:[stored(commit),stored(pr)]},proposals:[{...proposal(commit),
+   rationale:'Workspace revision 1 passed independent QA '+review.id},{...proposal(pr),id:uuid(31)}],
+  status:{...project.status,develop_sha:pr.payload.expected_sha,ci_truncated:false,ci_check_truncated:false,
+   ci_status_truncated:false,ci_check_total:2,ci_statuses:[],ci_check_runs:pr.payload.required_checks.map(name=>({name,status:'completed',conclusion:'success'})),
+   operations:[{operation_id:commit.id,status:'succeeded',result:{sha:pr.payload.expected_sha}},
+    {operation_id:pr.id,status:'succeeded',result:{number:8,head_sha:pr.payload.expected_sha,url:'https://github.com/'+project.status.repository+'/pull/8'}}]}};
+ assert.equal(verifyWorkspaceDelivery(args).sha,pr.payload.expected_sha);
+ for(const update of [{workspace:{...workspace,repair:null}},{attempts:[]},{review:{...review,task_id:uuid(99)}},
+  {registered:{...args.registered,goal_id:uuid(99)}},{status:{...args.status,develop_sha:'0'.repeat(40)}},
+  {status:{...args.status,ci_check_runs:[]}}])assert.throws(()=>verifyWorkspaceDelivery({...args,...update}));
+});

@@ -591,6 +591,7 @@ def workspace_snapshot(row, draft):
         "run_id": str(row["run_id"]),
         "revision": draft["revision"] if draft else 0,
         "original_sha256": original["candidate_sha256"],
+        "repair": draft["candidate"].get("repair") if draft else None,
         "candidate_sha256": current["candidate_sha256"],
         "files": current["files"],
         "acceptance_checks": current["acceptance_checks"],

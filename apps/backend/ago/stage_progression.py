@@ -432,7 +432,8 @@ class StageProgression:
     TEST_STALE_AFTER = timedelta(minutes=10)
 
     def development_workspace(self, *, tenant_id: str, founder_id: str, project_id: str,
-                              task_id: str, changes: dict | None = None) -> dict:
+                              task_id: str, changes: dict | None = None,
+                              repair: dict | None = None) -> dict:
         queries = self.repositories.resolve(StageProgressionQueries)
         with self.db.transaction():
             # Lock the owned task before reading the edit head, including its first edit.
@@ -448,6 +449,8 @@ class StageProgression:
             candidate = edited_candidate(snapshot, changes)
             if candidate["candidate_sha256"] == snapshot["candidate_sha256"]:
                 return snapshot
+            if repair is not None:
+                candidate["repair"] = repair
             draft = queries.insert_workspace_revision((
                 *key, snapshot["revision"] + 1, json.dumps(candidate), founder_id,
             )).fetchone()
