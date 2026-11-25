@@ -29,6 +29,10 @@ from ago.model_provider import PAID_PROVIDERS, ProviderVault, cloud_models_avail
 WORKS = ("code", "qa", "plan", "board", "chat", "learn")
 # (minimum strength, wanted strength) per kind of work.
 NEEDS = {"code": (2, 3), "learn": (2, 3), "qa": (2, 2), "plan": (1, 2), "board": (1, 2), "chat": (1, 2)}
+# Longest answer each kind of work needs from a cloud model (tokens). AGO stores
+# a bounded excerpt of Board, plan and chat answers, so a long answer there only
+# adds time; code and skills need room for whole files.
+OUTPUT_TOKENS = {"code": 4096, "learn": 2048, "qa": 1200, "plan": 1500, "board": 1200, "chat": 800}
 WORK_NAMES = {"code": "Code writing", "learn": "Writing a skill", "qa": "QA review",
               "plan": "Planning", "board": "Board review", "chat": "Board chat"}
 
@@ -106,7 +110,7 @@ class ModelManager:
         choice = self._pick(work, candidates, results, failed_before, paid_ok, avoid_provider, policy)
         cloud = None
         if choice["provider"] != "ollama":
-            cloud = vault.metered(tenant_id, choice["provider"])
+            cloud = vault.metered(tenant_id, choice["provider"], max_output_tokens=OUTPUT_TOKENS[work])
         decided = Choice(label=choice["label"], cloud=cloud, reason=choice["reason"])
         self._safe(lambda: self._record(store, tenant_id, task_id, work, role, decided), None)
         return decided

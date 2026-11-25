@@ -625,6 +625,52 @@ def test_p1_governed_chain_enforces_aggregate_and_per_role_wallclock_budgets():
     assert [x["elapsed_ms"] for x in result["handoffs"]] == [500] * 4
 
 
+def test_a_cloud_model_chosen_by_the_manager_gets_a_longer_per_role_budget_and_answers_the_votes():
+    """Live run 2026-11-25: a 60s local budget failed Gemini board answers with
+    model_timeout. A Manager-chosen cloud model gets 150s per call; the local
+    model keeps 60s; the vote follow-up goes to the seat's chosen model."""
+    db = ApprovedProjectDb()
+    people = CompanyOllamaChainQueries(db).assignments(
+        tenant_id=db.tenant, actor_id=db.founder, task=db.task()
+    )
+    now = [0.0]
+
+    class Model:
+        def __init__(self, delay, answer):
+            self.delay, self.answer, self.prompts = delay, answer, []
+
+        def generate(self, prompt, **options):
+            self.prompts.append(prompt)
+            now[0] += self.delay
+            return self.answer
+
+    local = Model(1, "DECISION: local\nDELIVERABLE: draft")
+    # The first answer has no vote line, so AGO asks the same seat for its vote.
+    cloud = Model(100, "DELIVERABLE: cloud draft without a vote line")
+    cloud_votes = iter(["DELIVERABLE: cloud draft without a vote line",
+                        "BOARD_RECOMMENDATION: APPROVE"] * 10)
+    cloud.generate = (lambda prompt, **o: (cloud.prompts.append(prompt),
+                                            now.__setitem__(0, now[0] + 100),
+                                            next(cloud_votes))[2])
+    from types import SimpleNamespace
+    board = [{"role": r, "employee_id": r, "employee_name": r}
+             for r in ("ceo", "cto", "finance", "risk", "quality", "pm", "employee")]
+    task = SimpleNamespace(id="t", project_context={
+        "title": "Tracker", "brief": "Build it", "intake_id": "i", "stage": "architecture",
+        "deliverable": "architecture"})
+    result = run_four_role_chain(
+        task=task, participants=board, provider=local, clock=lambda: now[0],
+        provider_for=lambda role, stage, code: cloud if role == "ceo" else None)
+    assert result["max_runtime_seconds"] == 1050
+    assert any("ROLE: CEO (Board vote)" in p for p in cloud.prompts)   # the seat's own model voted
+    assert not any("ROLE: CEO" in p for p in local.prompts)            # never the local model
+    # The same 100s answer from the LOCAL model is still over its 60s budget.
+    now[0] = 0
+    with pytest.raises(TimeoutError, match="time budget"):
+        run_four_role_chain(task=db.task(), participants=people, provider=Model(100, "x"),
+                            clock=lambda: now[0], provider_for=lambda *a: None)
+
+
 def test_p1_governed_chain_stops_before_next_inference_if_global_deadline_exhausted():
     db = ApprovedProjectDb()
     people = CompanyOllamaChainQueries(db).assignments(

@@ -700,10 +700,16 @@ class ProviderVault:
                            if name in CLOUD_PROVIDERS and entry.get("test_status") == "ok"]}
 
     # -- work routing ----------------------------------------------------
-    def metered(self, tenant_id: str, name: str) -> MeteredCloudProvider:
+    def metered(self, tenant_id: str, name: str, *,
+                max_output_tokens: int | None = None) -> MeteredCloudProvider:
+        """``max_output_tokens`` lowers the answer length for short work: AGO keeps
+        only a bounded excerpt of a Board or plan answer, so a long answer only
+        costs time (and, for paid models, money)."""
         with self._lock:
             tenant = self._tenant(self._load(), tenant_id)
             provider = self._provider(tenant, name)
+        if max_output_tokens is not None:
+            provider.max_output_tokens = max(256, min(int(max_output_tokens), provider.max_output_tokens))
         return MeteredCloudProvider(provider, self, str(tenant_id))
 
     def reserve_call(self, tenant_id: str, name: str) -> None:

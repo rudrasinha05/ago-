@@ -316,3 +316,22 @@ def test_connect_tries_the_next_model_when_one_is_busy(tmp_path, monkeypatch):
     opener = FakeOpener(listing, HTTPError("u", 401, "x", {}, None))
     other = ProviderVault(tmp_path / "b", opener=opener, sleep=lambda s: None).connect(TENANT, "gemini", KEY)
     assert other["connect"]["tried"] == [{"model": "gemini-3.8-flash", "ok": False, "code": "auth_failed"}]
+
+
+def test_short_work_asks_the_cloud_model_for_a_short_answer(tmp_path, monkeypatch):
+    """Live run 2026-11-25: a 4096-token Board answer was slow and AGO keeps only
+    950 characters of it. The Manager now sets the answer length per kind of work."""
+    import json as _json
+    from ago.model_manager import OUTPUT_TOKENS
+    monkeypatch.setenv("AGO_ENVIRONMENT", "development")
+    opener = FakeOpener(ANSWERS["openai"], ANSWERS["openai"])
+    vault = ProviderVault(tmp_path, opener=opener)
+    vault.save(TENANT, "openai", model="o-1", api_key=KEY)
+    assert vault.metered(TENANT, "openai").inner.max_output_tokens == 4096
+    board = vault.metered(TENANT, "openai", max_output_tokens=OUTPUT_TOKENS["board"])
+    board.generate("vote")
+    sent = _json.loads(opener.requests[-1].data)
+    assert sent["max_output_tokens"] == 1200
+    assert vault.metered(TENANT, "openai", max_output_tokens=10).inner.max_output_tokens == 256
+    assert vault.metered(TENANT, "openai", max_output_tokens=99999).inner.max_output_tokens == 4096
+    assert OUTPUT_TOKENS["code"] == 4096 and OUTPUT_TOKENS["board"] < OUTPUT_TOKENS["plan"] < OUTPUT_TOKENS["code"]
