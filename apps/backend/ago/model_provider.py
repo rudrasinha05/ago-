@@ -239,6 +239,18 @@ def safe_model_name(model: str) -> str:
     return model
 
 
+def _gemini_thinking(model: str) -> dict | None:
+    """The smallest thinking setting each Gemini family accepts (None = leave)."""
+    m = model.lower().removeprefix("models/")
+    if re.match(r"gemini-(3|[4-9])", m):
+        return {"thinkingLevel": "low"}
+    if m.startswith("gemini-2.5-flash"):
+        return {"thinkingBudget": 0}
+    if m.startswith("gemini-2.5-pro"):
+        return {"thinkingBudget": 128}
+    return None
+
+
 class CloudTextProvider:
     """One bounded text call to OpenAI, Anthropic, Gemini or Groq.
 
@@ -339,6 +351,12 @@ class CloudTextProvider:
                 "messages": [{"role": "user", "content": prompt}]}
         if self.provider == "gemini":
             config = {"maxOutputTokens": tokens}
+            # Gemini "thinks" before answering and the thinking counts against
+            # the output limit: a long think cut answers off (live run
+            # 2026-11-25). Ask for little thinking; AGO wants the answer.
+            thinking = _gemini_thinking(self.model)
+            if thinking:
+                config["thinkingConfig"] = thinking
             if schema is not None:
                 config["responseMimeType"] = "application/json"
             return ("https://generativelanguage.googleapis.com/v1beta/models/"
@@ -788,7 +806,9 @@ class FallbackProvider:
             return answer
         except CloudProviderError as failed:
             self.cloud_failures.append(failed.code)
-        self.label = self.fallback_label
         if not getattr(self.fallback, "supports_response_schema", False):
             options.pop("response_schema", None)
-        return self.fallback.generate(prompt, **options)
+        answer = self.fallback.generate(prompt, **options)
+        # A chained fallback (backup cloud, then local) names who answered.
+        self.label = getattr(self.fallback, "label", None) or self.fallback_label
+        return answer

@@ -311,9 +311,18 @@ def optional_model_handlers(
                             stage=stage)
                     except Exception:  # noqa: BLE001 - the local model still works
                         choice = None
-                    chosen[key] = (FallbackProvider(
-                        CreditedCloudProvider(choice.cloud, repositories, actor, task.id), local,
-                        fallback_label=local.label) if choice and choice.cloud else None)
+                    if choice and choice.cloud:
+                        # First choice, then a second free cloud model, then local.
+                        after = local
+                        if choice.backup is not None:
+                            after = FallbackProvider(
+                                CreditedCloudProvider(choice.backup, repositories, actor, task.id),
+                                local, fallback_label=local.label)
+                        chosen[key] = FallbackProvider(
+                            CreditedCloudProvider(choice.cloud, repositories, actor, task.id), after,
+                            fallback_label=local.label)
+                    else:
+                        chosen[key] = None
                 return chosen[key]
 
             def guide(role, stage, text):

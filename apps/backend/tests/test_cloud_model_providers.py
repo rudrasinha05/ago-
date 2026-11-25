@@ -335,3 +335,16 @@ def test_short_work_asks_the_cloud_model_for_a_short_answer(tmp_path, monkeypatc
     assert vault.metered(TENANT, "openai", max_output_tokens=10).inner.max_output_tokens == 256
     assert vault.metered(TENANT, "openai", max_output_tokens=99999).inner.max_output_tokens == 4096
     assert OUTPUT_TOKENS["code"] == 4096 and OUTPUT_TOKENS["board"] < OUTPUT_TOKENS["plan"] < OUTPUT_TOKENS["code"]
+
+
+def test_gemini_is_asked_to_think_little_so_the_answer_is_not_cut_off():
+    from ago.model_provider import _gemini_thinking
+    assert _gemini_thinking("gemini-3.6-flash") == {"thinkingLevel": "low"}
+    assert _gemini_thinking("models/gemini-2.5-flash-lite") == {"thinkingBudget": 0}
+    assert _gemini_thinking("gemini-2.5-pro") == {"thinkingBudget": 128}
+    assert _gemini_thinking("gemma-3-27b-it") is None
+    opener = FakeOpener(ANSWERS["gemini"])
+    CloudTextProvider(provider="gemini", api_key=KEY, model="gemini-3.6-flash", opener=opener).generate("hi")
+    import json as _json
+    sent = _json.loads(opener.requests[-1].data)
+    assert sent["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}

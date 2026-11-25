@@ -59,11 +59,21 @@ def strength(provider: str, model: str) -> int:
     return 1
 
 
+# Answer speed per provider, for short work where any capable model will do
+# (lower is faster). Groq serves open models on fast hardware; Gemini and the
+# paid models may think before answering; a local small model is slowest here.
+SPEED = {"groq": 0, "gemini": 1, "openai": 2, "anthropic": 2, "ollama": 3}
+
+
 @dataclass(frozen=True)
 class Choice:
     label: str           # "groq:openai/gpt-oss-120b" or "ollama:qwen3:4b"
     cloud: object | None  # metered cloud provider, or None = use the local model
     reason: str
+    # A second FREE cloud model from another provider, tried before the local
+    # model when the first one fails (cut-off answer, outage, rate limit).
+    backup: object | None = None
+    backup_label: str | None = None
 
 
 def _local_label() -> str | None:
@@ -111,9 +121,24 @@ class ModelManager:
         cloud = None
         if choice["provider"] != "ollama":
             cloud = vault.metered(tenant_id, choice["provider"], max_output_tokens=OUTPUT_TOKENS[work])
-        decided = Choice(label=choice["label"], cloud=cloud, reason=choice["reason"])
+        spare = self._backup(work, candidates, choice)
+        backup = (vault.metered(tenant_id, spare["provider"], max_output_tokens=OUTPUT_TOKENS[work])
+                  if spare else None)
+        reason = choice["reason"] + (" If it fails, " + spare["label"] + " tries next." if spare else "")
+        decided = Choice(label=choice["label"], cloud=cloud, reason=reason[:600],
+                         backup=backup, backup_label=spare["label"] if spare else None)
         self._safe(lambda: self._record(store, tenant_id, task_id, work, role, decided), None)
         return decided
+
+    @staticmethod
+    def _backup(work, candidates, chosen) -> dict | None:
+        """The fastest capable FREE cloud model from another provider."""
+        least = NEEDS[work][0]
+        spare = [c for c in candidates if c["free"] and c["provider"] not in ("ollama", chosen["provider"])
+                 and c["strength"] >= least]
+        if chosen["provider"] == "ollama" or not spare:
+            return None
+        return sorted(spare, key=lambda c: (SPEED.get(c["provider"], 9), -c["strength"], c["label"]))[0]
 
     @staticmethod
     def _pick(work, candidates, results, failed_before, paid_ok, avoid_provider, policy) -> dict:
@@ -131,7 +156,7 @@ class ModelManager:
         def order(c):
             different = 0 if avoid_provider and c["provider"] != avoid_provider else 1
             return (different, -c["strength"] if c["strength"] < wanted else -wanted,
-                    0 if c["free"] else 1, c["label"])
+                    0 if c["free"] else 1, SPEED.get(c["provider"], 9), c["label"])
 
         if work in ("code", "learn"):
             strongest = max(c["strength"] for c in able)
