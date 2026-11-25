@@ -1,4 +1,5 @@
 "use client";
+import {DevelopmentWorkspace} from './development-workspace';
 import {RecoveryHint} from './recovery-hint';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {CompanyDocumentVault} from './company-document-vault';
@@ -247,6 +248,7 @@ export function FounderProjectIntake({api,me,employees=[],profiles=[],board=[],o
           <small>Task: {st.task_status||'not materialized'} · QA: {st.qa_verdict||'no QA verdict'}</small>
           <small>Delegated stage worker: {st.approved_assignee_name||'Awaiting authorized personnel decision'} {st.delegated_at?'· applied '+new Date(st.delegated_at).toLocaleString():''}</small>
           <small>AI execution: {st.agent_run_status||'no recorded run'} {st.agent_failure_code?'· Failure: '+st.agent_failure_code:''}</small>
+          {st.task_id&&st.stage==='implementation'&&st.agent_run_status==='completed'&&<DevelopmentWorkspace key={projectDetail.id+st.task_id} api={api} project={projectDetail.id} stage={st}/>}
           {st.founder_agent_result?.kind==='local_company_governed_handoff'&&
            <details className="ago-ai-chain">
             <summary>Ollama Board → PM → employee · {st.founder_agent_result.roles_completed}/{st.founder_agent_result.roles_expected||4} recorded AI passes · Quality verification pending</summary>

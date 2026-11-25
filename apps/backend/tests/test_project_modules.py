@@ -295,3 +295,42 @@ def test_assert_documented_candidates_keep_working_for_units():
     cand = unit_candidate({"code": "M09", "title": "Reports", "slug": "m09_reports"})
     assert assert_documented(reviewed_candidate(json.dumps(
         {"files": cand["files"], "acceptance_checks": cand["acceptance_checks"]})))
+
+
+def test_a_founder_workspace_edit_of_a_module_is_tested_with_everything_before_it(admission, monkeypatch):
+    """PR #21 workspace + PROJ-016: editing the unit in progress never skips regression."""
+    import ago.stage_progression as service
+    from uuid import uuid4
+    from ago.stage_progression import StageProgression
+    c = admission
+    _approve_and_build_prototype(c)
+    c.run("implementation")                                  # M01's candidate
+    real = service.run_candidate_tests
+    monkeypatch.setattr(service, "run_candidate_tests",
+                        lambda value, **kw: real(value, runner=c.docker, **kw))
+    progression = StageProgression(c.db)
+    task_id = str(c.stage("implementation")["task_id"])
+    ids = dict(tenant_id=c.tenant, founder_id=c.info["founder_id"], project_id=c.id, task_id=task_id)
+    snap = progression.development_workspace(**ids)
+    files = [dict(f) for f in snap["files"]]
+    files[0]["content"] += "\n# founder edit\n"
+    current = progression.development_workspace(
+        **ids, changes={"run_id": snap["run_id"], "expected_revision": snap["revision"], "files": files})
+    before = len(c.docker.runs)
+    done = progression.workspace_tests(**ids, request={
+        "attempt_id": str(uuid4()), "candidate_sha256": current["candidate_sha256"],
+        "run_id": current["run_id"], "revision": current["revision"]})
+    assert done["receipt"]["status"] == "passed" and done["receipt"]["regression"] is True
+    # The prototype's test ran together with M01's edited tests.
+    assert len(c.docker.runs) == before + 1 and len(c.docker.runs[-1]) == 2
+    # An edit that rewrites the prototype's file is refused before Docker starts.
+    proto = "src/" + unit_slug("PROTOTYPE", "Working prototype") + ".py"
+    bad = files + [{"path": proto, "content": "def ready():\n    return False\n"}]
+    current = progression.development_workspace(
+        **ids, changes={"run_id": current["run_id"], "expected_revision": current["revision"],
+                        "files": bad})
+    refused = progression.workspace_tests(**ids, request={
+        "attempt_id": str(uuid4()), "candidate_sha256": current["candidate_sha256"],
+        "run_id": current["run_id"], "revision": current["revision"]})
+    assert refused["receipt"]["failure_category"] == "changed_integrated_file"
+    assert len(c.docker.runs) == before + 1

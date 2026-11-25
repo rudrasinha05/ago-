@@ -21,6 +21,7 @@ returned as ``needs_founder`` with a plain reason instead of being guessed.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from contextlib import contextmanager
@@ -31,8 +32,9 @@ from ago.backend_contracts import DatabaseConnection, RepositoryScope
 from ago.company_chat import CompanyChat
 from ago.company_engineering import (  # STAGE_FORMATS/missing_stage_labels: used by AI QA
     STAGE_FORMATS, missing_stage_labels, project_test_evidence_text, receipt_text,  # noqa: F401
-    run_candidate_tests, test_runner_available,
+    draft_github_commit_operation, execute_entry, run_candidate_tests, test_runner_available,
 )
+from ago.company_engineering import RevisionConflict, edited_candidate, workspace_snapshot
 from ago.organization_store import OrganizationStore
 from ago.plan_execution import PlanExecution
 from ago.project_delivery import ProjectDelivery
@@ -428,6 +430,189 @@ class StageProgression:
 
     # A 'started' receipt older than this is a crashed/abandoned attempt.
     TEST_STALE_AFTER = timedelta(minutes=10)
+
+    def development_workspace(self, *, tenant_id: str, founder_id: str, project_id: str,
+                              task_id: str, changes: dict | None = None) -> dict:
+        queries = self.repositories.resolve(StageProgressionQueries)
+        with self.db.transaction():
+            # Lock the owned task before reading the edit head, including its first edit.
+            row = queries.select_stage_test_target_22(
+                (tenant_id, project_id, founder_id, task_id)).fetchone()
+            if not row:
+                raise LookupError("Project stage task not found")
+            key = (tenant_id, project_id, task_id, row["run_id"])
+            draft = queries.latest_workspace_revision(key).fetchone()
+            snapshot = workspace_snapshot(row, draft)
+            if changes is None:
+                return snapshot
+            candidate = edited_candidate(snapshot, changes)
+            if candidate["candidate_sha256"] == snapshot["candidate_sha256"]:
+                return snapshot
+            draft = queries.insert_workspace_revision((
+                *key, snapshot["revision"] + 1, json.dumps(candidate), founder_id,
+            )).fetchone()
+            return workspace_snapshot(row, draft)
+
+    def workspace_terminal(self, *, tenant_id: str, founder_id: str, project_id: str,
+                           task_id: str, request: dict | None = None, stop: str | None = None) -> dict:
+        queries = self.repositories.resolve(StageProgressionQueries)
+        with self.db.transaction():
+            current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
+                                                 project_id=project_id, task_id=task_id)
+            key = (tenant_id, project_id, task_id, current["run_id"])
+            if stop:
+                row = queries.stop_terminal((*key, stop)).fetchone()
+                if not row:
+                    raise LookupError("Active terminal run not found")
+                return dict(row)
+            history = queries.terminal_history(key).fetchall()
+            if request is None:
+                return {"attempts": [dict(item) for item in history]}
+            if set(request) != {"run_id", "revision", "candidate_sha256", "attempt_id", "entry"}:
+                raise ValueError("Exact workspace revision, entry and attempt ID required")
+            if any(request[k] != current[k] for k in ("run_id", "revision", "candidate_sha256")):
+                raise RevisionConflict("Workspace changed. Reload before executing.")
+            entry = request["entry"]
+            if entry not in [f["path"] for f in current["files"] if f["path"].startswith("src/")]:
+                raise ValueError("Select a reviewed source file")
+            attempt = str(UUID(str(request["attempt_id"])))
+            for item in history:
+                if str(item["attempt_id"]) == attempt:
+                    if item["entry"] != entry or item["revision"] != current["revision"]:
+                        raise RevisionConflict("Attempt belongs to another command")
+                    return dict(item)
+            if history and history[0]["status"] == "running" and (
+                datetime.now(timezone.utc) - history[0]["started_at"] < self.TEST_STALE_AFTER
+            ):
+                raise RevisionConflict("A command is already running")
+            run_key = (*key, attempt)
+            if not queries.open_terminal((*run_key, current["revision"], current["candidate_sha256"],
+                                          entry)).fetchone():
+                raise RevisionConflict("Attempt already recorded")
+        candidate = edited_candidate(current, {"run_id": current["run_id"],
+            "expected_revision": current["revision"], "files": current["files"]})
+        def output(value):
+            queries.terminal_output((value.replace(chr(0), ""), *run_key))
+        def stopped():
+            return queries.terminal_stop_state(run_key).fetchone()["stop_requested"]
+        try:
+            result = execute_entry(candidate, entry, output, stopped)
+        except (OSError, RuntimeError):
+            result = {"status": "runner_error", "output": "", "exit_code": None}
+        return dict(queries.close_terminal((result["status"], result["output"].replace(chr(0), ""),
+                                            result["exit_code"], *run_key)).fetchone())
+
+    def request_workspace_review(self, *, tenant_id: str, founder_id: str, project_id: str,
+                                 task_id: str, attempt_id: str, reviewer_id: str) -> dict:
+        if founder_id == reviewer_id:
+            raise PermissionError("Assign a separate QA reviewer")
+        with self.db.transaction():
+            current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
+                                                 project_id=project_id, task_id=task_id)
+            record = self.repositories.resolve(StageProgressionQueries).request_workspace_review((
+                str(uuid4()), founder_id, reviewer_id, json.dumps(current), tenant_id, project_id,
+                task_id, current["run_id"], attempt_id, current["revision"], current["candidate_sha256"],
+            )).fetchone()
+            if not record:
+                raise RevisionConflict("Review already requested or current revision lacks a passing test")
+            return dict(record)
+
+    def workspace_review(self, *, tenant_id: str, actor_id: str, review_id: str,
+                         decision: dict | None = None) -> dict:
+        queries = self.repositories.resolve(StageProgressionQueries)
+        if decision is None:
+            row = queries.assigned_workspace_review((tenant_id, review_id, actor_id, actor_id)).fetchone()
+            if not row:
+                raise LookupError("Workspace QA request not found")
+            return dict(row)
+        verdict, notes = decision.get("verdict"), decision.get("notes")
+        if verdict not in ("pass", "fail") or not isinstance(notes, str) or not 15 <= len(notes.strip()) <= 2000:
+            raise ValueError("Provide a verdict and 15-2000 characters of review findings")
+        row = queries.decide_workspace_review((verdict, notes.strip(), tenant_id, review_id, actor_id)).fetchone()
+        if not row:
+            raise PermissionError("Only the assigned reviewer may decide a pending review once")
+        return dict(row)
+
+    def workspace_handoff(self, *, tenant_id: str, founder_id: str, review_id: str,
+                          github_project_id: str, operation_id: str, expected_sha: str, message: str) -> dict:
+        with self.db.transaction():
+            review = self.workspace_review(tenant_id=tenant_id, actor_id=founder_id, review_id=review_id)
+            if review["verdict"] != "pass":
+                raise PermissionError("Independent QA pass required for GitHub handoff")
+            current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
+                project_id=str(review["project_id"]), task_id=str(review["task_id"]))
+            if (current["run_id"] != str(review["run_id"]) or current["revision"] != review["revision"]
+                    or current["candidate_sha256"] != review["candidate_sha256"]):
+                raise RevisionConflict("Workspace changed after QA")
+            candidate = edited_candidate(current, {"run_id": current["run_id"],
+                "expected_revision": current["revision"], "files": current["files"]})
+            operation = draft_github_commit_operation(candidate, project_id=github_project_id,
+                operation_id=operation_id, expected_sha=expected_sha, message=message, workspace=True)
+            return {"github_operation": operation, "candidate_sha256": current["candidate_sha256"],
+                    "workspace_revision": current["revision"], "review_id": review_id,
+                    "reviewer_id": review["reviewer_id"], "test_receipt": review["receipt"],
+                    "github_committed": False}
+
+    def workspace_tests(self, *, tenant_id: str, founder_id: str, project_id: str,
+                        task_id: str, request: dict | None = None) -> dict:
+        queries = self.repositories.resolve(StageProgressionQueries)
+        with self.db.transaction():
+            current = self.development_workspace(tenant_id=tenant_id, founder_id=founder_id,
+                                                 project_id=project_id, task_id=task_id)
+            key = (tenant_id, project_id, task_id, current["run_id"])
+            history = queries.workspace_test_history(key).fetchall()
+            if request is None:
+                return {"attempts": [dict(item) for item in history]}
+            if set(request) != {"attempt_id", "candidate_sha256", "run_id", "revision"}:
+                raise ValueError("Exact workspace revision and attempt_id required")
+            if any(request[k] != current[k] for k in ("candidate_sha256", "run_id", "revision")):
+                raise RevisionConflict("Workspace changed. Reload before running.")
+            attempt = str(UUID(str(request["attempt_id"])))
+            for item in history:
+                if str(item["attempt_id"]) == attempt:
+                    if item["revision"] != current["revision"]:
+                        raise RevisionConflict("Attempt already belongs to another revision")
+                    return dict(item)
+            if history and not history[0]["finished_at"] and (
+                datetime.now(timezone.utc) - history[0]["started_at"] < self.TEST_STALE_AFTER
+            ):
+                raise RevisionConflict("Another test attempt is in progress")
+            inserted = queries.start_workspace_test((*key, attempt, current["revision"],
+                                                      current["candidate_sha256"])).fetchone()
+            if not inserted:
+                raise RevisionConflict("Attempt already recorded")
+        candidate = edited_candidate(current, {"run_id": current["run_id"],
+            "expected_revision": current["revision"], "files": current["files"]})
+        try:
+            # PROJ-016: the unit in progress is tested with everything integrated
+            # before it, also when the Founder edits it in the workspace.
+            whole = self._unit_files(tenant_id=tenant_id, project_id=project_id,
+                                     task_id=task_id, candidate=candidate)
+            receipt = run_candidate_tests(candidate, workspace=True,
+                                          **({"with_files": whole} if whole else {}))
+        except ValueError as refused:
+            receipt = {"kind": "ago_isolated_candidate_test_receipt_v1", "status": "failed",
+                       "candidate_sha256": current["candidate_sha256"], "unittest_cases": 0,
+                       "tests_executed": False, "tests_passed": False,
+                       "failure_category": "changed_integrated_file",
+                       "failure_summary": str(refused)[:900], "docker_exit_code": None}
+        with self.db.transaction():
+            queries.finish_workspace_test((json.dumps(receipt), *key, attempt))
+        return {"attempt_id": attempt, "revision": current["revision"],
+                "candidate_sha256": current["candidate_sha256"], "receipt": receipt}
+
+    def _unit_files(self, *, tenant_id: str, project_id: str, task_id: str,
+                    candidate: dict) -> list[dict] | None:
+        """The complete file set when ``task_id`` builds the unit in progress."""
+        with self.db.transaction():
+            stages = self.repositories.resolve(StageProgressionQueries).select_stages_02(
+                (tenant_id, project_id)).fetchall()
+            impl = next((x for x in stages if x["stage"] == "implementation"), None)
+            if impl is None or str(impl["task_id"] or "") != task_id:
+                return None
+            whole = self.repositories.resolve(ProjectDelivery).files_to_test(
+                tenant_id=tenant_id, project_id=project_id, candidate=candidate)
+        return whole["files"] if whole else None
 
     def candidate_test(self, *, tenant_id: str, founder_id: str, project_id: str,
                        task_id: str) -> dict:

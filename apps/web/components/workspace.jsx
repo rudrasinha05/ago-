@@ -11,6 +11,7 @@ import {Button,Loading,Notice} from '@ago/ui/components';
 import {Dashboard} from './dashboard';
 import {CompanyMap} from './company-map';
 import {ApprovalTopAlerts} from './company-approvals';
+import {WorkspaceReview} from './development-workspace';
 import {useSession} from './session';
 export function Workspace({page}) {
   const {api,me,logout,epoch}=useSession(); const router=useRouter();
@@ -74,6 +75,7 @@ export function Workspace({page}) {
       <main id="screen" ref={screen} tabIndex={-1} className="screen">
         <div className="workspace-toolbar"><p className="muted">{PAGES[page].title} · Your organization</p><Button onClick={()=>refresh().catch(()=>notify('Unable to refresh.'))} disabled={data===null}>Refresh</Button></div>
         {data===null?<Loading />:page==='organization'?<CompanyMap key={me.id} api={api} me={me} data={data} onRefresh={refresh}/>:<><div key={revision} className="workspace-view" onClick={action} dangerouslySetInnerHTML={{__html:renderPage(page,state.current.data,state.current)}} />{page==='overview'&&<Dashboard key={me.id} api={api} me={me} data={data}/>}</>}
+        {page==='governance'&&me.permissions?.includes('qa:review')&&<WorkspaceReview key={me.id} api={api}/>}
       </main>
     </div>
     <dialog id="action-dialog" ref={dialog} aria-labelledby="dialog-title" onClick={e=>{if(e.target===dialog.current || e.target.closest("[data-modal-close]"))dialog.current.close();}}><div id="dialog-content" className="dialog-content" /></dialog>
